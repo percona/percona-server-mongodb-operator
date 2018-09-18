@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func NewHandler() sdk.Handler {
@@ -60,7 +61,28 @@ func newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 				{
 					Name:    "percona-server-mongodb",
 					Image:   "percona/percona-server-mongodb:3.6",
-					Command: []string{},
+					Command: []string{"--port=27017"},
+					Ports: []corev1.ContainerPort{{
+						Name:          "mongodb",
+						HostPort:      int32(27017),
+						ContainerPort: int32(27017),
+						Protocol:      corev1.ProtocolTCP,
+					}},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "mongodb-data",
+						MountPath: "/data/db",
+					}},
+					ReadinessProbe: &corev1.Probe{
+						Handler: corev1.Handler{
+							TCPSocket: &corev1.TCPSocketAction{
+								Port: intstr.FromInt(27017),
+							},
+						},
+						InitialDelaySeconds: int32(60),
+						TimeoutSeconds:      int32(5),
+						PeriodSeconds:       int32(3),
+						FailureThreshold:    int32(5),
+					},
 				},
 			},
 		},
