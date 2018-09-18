@@ -105,5 +105,7 @@ tags
 !.vscode/extensions.json
 .history
 
+# let dep ensure build vendor
+vendor
 
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
