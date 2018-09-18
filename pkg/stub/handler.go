@@ -6,6 +6,7 @@ import (
 
 	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -16,8 +17,10 @@ import (
 )
 
 var (
-	runUser  int64 = 1001
-	runGroup int64 = 1001
+	runUser             int64 = 1001
+	runGroup            int64 = 1001
+	mongodContainerPort int32 = 27017
+	mongodDataDir             = "/data/db"
 )
 
 func NewHandler() sdk.Handler {
@@ -43,24 +46,23 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 func newPSMDBContainer(name string, port int32) corev1.Container {
 	portStr := strconv.Itoa(int(port))
 	return corev1.Container{
-		Name:    name,
-		Image:   "percona/percona-server-mongodb:3.6",
-		Command: []string{"--port=" + portStr},
+		Name:  name,
+		Image: "percona/percona-server-mongodb:3.6",
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "mongodb",
 				HostPort:      port,
-				ContainerPort: port,
+				ContainerPort: mongodContainerPort,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "mongodb-data",
-				MountPath: "/data/db",
+				MountPath: mongodDataDir,
 			},
 		},
-		WorkingDir: "/data/db",
+		WorkingDir: mongodDataDir,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
@@ -101,7 +103,7 @@ func newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 		containers = append(containers, newPSMDBContainer(name, port))
 	}
 
-	return &corev1.Pod{
+	pod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
 			APIVersion: "v1",
@@ -122,4 +124,7 @@ func newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 			Containers: containers,
 		},
 	}
+	spew.Dump(pod)
+
+	return pod
 }
