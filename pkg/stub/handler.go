@@ -17,27 +17,33 @@ import (
 )
 
 var (
-	runUser                int64 = 1001
-	runGroup               int64 = 1001
-	mongodContainerPort    int32 = 27017
-	mongodContainerDataDir       = "/data/db"
-	mongodDataVolumeName         = "mongodb-data"
-	mongodPortName               = "mongodb"
-	mongodImage                  = "percona/percona-server-mongodb:3.6"
+	mongodContainerPort int32 = 27017
 )
 
-func NewHandler() sdk.Handler {
-	return &Handler{}
+type Config struct {
+	PodName          string
+	RunUser          int64
+	RunGroup         int64
+	ContainerDataDir string
+	DataVolumeName   string
+	PortName         string
+	Image            string
+}
+
+func NewHandler(config *Config) sdk.Handler {
+	return &Handler{
+		config: config,
+	}
 }
 
 type Handler struct {
-	// Fill me
+	config *Config
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	switch o := event.Object.(type) {
 	case *v1alpha1.PerconaServerMongoDB:
-		err := sdk.Create(newPSMDBPod(o))
+		err := sdk.Create(h.newPSMDBPod(o))
 		if err != nil && !errors.IsAlreadyExists(err) {
 			logrus.Errorf("failed to create psmdb pod : %v", err)
 			return err
@@ -46,14 +52,14 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	return nil
 }
 
-func newPSMDBContainer(name string, port int32) corev1.Container {
+func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
 	portStr := strconv.Itoa(int(port))
 	return corev1.Container{
 		Name:  name,
-		Image: mongodImage,
+		Image: h.config.Image,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          mongodPortName,
+				Name:          h.config.PortName,
 				HostPort:      port,
 				ContainerPort: mongodContainerPort,
 				Protocol:      corev1.ProtocolTCP,
@@ -61,11 +67,11 @@ func newPSMDBContainer(name string, port int32) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      mongodDataVolumeName,
-				MountPath: mongodContainerDataDir,
+				Name:      h.config.DataVolumeName,
+				MountPath: h.config.ContainerDataDir,
 			},
 		},
-		WorkingDir: mongodContainerDataDir,
+		WorkingDir: h.config.ContainerDataDir,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
@@ -78,8 +84,8 @@ func newPSMDBContainer(name string, port int32) corev1.Container {
 			FailureThreshold:    int32(5),
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  &runUser,
-			RunAsGroup: &runGroup,
+			RunAsUser:  &h.config.RunUser,
+			RunAsGroup: &h.config.RunGroup,
 		},
 		Env: []corev1.EnvVar{
 			{
@@ -91,9 +97,9 @@ func newPSMDBContainer(name string, port int32) corev1.Container {
 }
 
 // newPSMDBPod
-func newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
+func (h *Handler) newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 	labels := map[string]string{
-		"app": "percona-server-mongodb",
+		"app": h.config.PodName,
 	}
 
 	containers := []corev1.Container{}
@@ -103,7 +109,7 @@ func newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 		"percona-server-mongodb-2": 27019,
 	}
 	for name, port := range mongods {
-		containers = append(containers, newPSMDBContainer(name, port))
+		containers = append(containers, h.newPSMDBContainer(name, port))
 	}
 
 	pod := &corev1.Pod{
@@ -112,7 +118,7 @@ func newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "percona-server-mongodb",
+			Name:      h.config.PodName,
 			Namespace: cr.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(cr, schema.GroupVersionKind{

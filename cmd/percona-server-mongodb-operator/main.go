@@ -14,6 +14,15 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
+var (
+	runUser                int64 = 1001
+	runGroup               int64 = 1001
+	mongodContainerDataDir       = "/data/db"
+	mongodDataVolumeName         = "mongodb-data"
+	mongodPortName               = "mongodb"
+	mongodImage                  = "percona/percona-server-mongodb:3.6"
+)
+
 func printVersion() {
 	logrus.Infof("Go Version: %s", runtime.Version())
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
@@ -25,6 +34,15 @@ func main() {
 
 	sdk.ExposeMetricsPort()
 
+	config := &stub.Config{
+		RunUser:          runUser,
+		RunGroup:         runGroup,
+		ContainerDataDir: mongodContainerDataDir,
+		DataVolumeName:   mongodDataVolumeName,
+		PortName:         mongodPortName,
+		Image:            mongodImage,
+	}
+
 	resource := "cache.example.com/v1alpha1"
 	kind := "PerconaServerMongoDB"
 	namespace, err := k8sutil.GetWatchNamespace()
@@ -34,6 +52,6 @@ func main() {
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler())
+	sdk.Handle(stub.NewHandler(config))
 	sdk.Run(context.TODO())
 }
