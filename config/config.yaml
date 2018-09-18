@@ -1,0 +1,3 @@
+apiVersion: cache.example.com/v1alpha1
+kind: PerconaServerMongoDB
+projectName: percona-server-mongodb-operator
