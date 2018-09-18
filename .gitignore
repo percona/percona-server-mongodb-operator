@@ -108,4 +108,7 @@ tags
 # let dep ensure build vendor
 vendor
 
+# ignore build binary
+percona-server-mongodb-operator
+
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
