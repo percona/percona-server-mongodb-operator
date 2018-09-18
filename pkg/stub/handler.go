@@ -17,17 +17,19 @@ import (
 )
 
 var (
-	mongodContainerPort int32 = 27017
+	mongodContainerDataDir       = "/data/db"
+	mongodContainerPort    int32 = 27017
+	mongodDataVolumeName         = "mongodb-data"
+	mongodPortName               = "mongodb"
 )
 
 type Config struct {
-	PodName          string
-	RunUser          int64
-	RunGroup         int64
-	ContainerDataDir string
-	DataVolumeName   string
-	PortName         string
-	Image            string
+	NodeCount   uint
+	PodName     string
+	ReplsetName string
+	RunUser     int64
+	RunGroup    int64
+	Image       string
 }
 
 func NewHandler(config *Config) sdk.Handler {
@@ -59,7 +61,7 @@ func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
 		Image: h.config.Image,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          h.config.PortName,
+				Name:          mongodPortName,
 				HostPort:      port,
 				ContainerPort: mongodContainerPort,
 				Protocol:      corev1.ProtocolTCP,
@@ -67,11 +69,11 @@ func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      h.config.DataVolumeName,
-				MountPath: h.config.ContainerDataDir,
+				Name:      mongodDataVolumeName,
+				MountPath: mongodContainerDataDir,
 			},
 		},
-		WorkingDir: h.config.ContainerDataDir,
+		WorkingDir: mongodContainerDataDir,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
