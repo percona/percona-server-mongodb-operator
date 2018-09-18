@@ -103,6 +103,7 @@ func (h *Handler) newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 	}
 
 	containers := []corev1.Container{}
+	initContainers := []corev1.Container{}
 	mongods := map[string]int32{
 		"percona-server-mongodb-0": 27017,
 		"percona-server-mongodb-1": 27018,
@@ -130,7 +131,8 @@ func (h *Handler) newPSMDBPod(cr *v1alpha1.PerconaServerMongoDB) *corev1.Pod {
 			Labels: labels,
 		},
 		Spec: corev1.PodSpec{
-			Containers: containers,
+			InitContainers: initContainers,
+			Containers:     containers,
 		},
 	}
 	spew.Dump(pod)
