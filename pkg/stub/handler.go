@@ -17,10 +17,13 @@ import (
 )
 
 var (
-	runUser             int64 = 1001
-	runGroup            int64 = 1001
-	mongodContainerPort int32 = 27017
-	mongodDataDir             = "/data/db"
+	runUser                int64 = 1001
+	runGroup               int64 = 1001
+	mongodContainerPort    int32 = 27017
+	mongodContainerDataDir       = "/data/db"
+	mongodDataVolumeName         = "mongodb-data"
+	mongodPortName               = "mongodb"
+	mongodImage                  = "percona/percona-server-mongodb:3.6"
 )
 
 func NewHandler() sdk.Handler {
@@ -47,10 +50,10 @@ func newPSMDBContainer(name string, port int32) corev1.Container {
 	portStr := strconv.Itoa(int(port))
 	return corev1.Container{
 		Name:  name,
-		Image: "percona/percona-server-mongodb:3.6",
+		Image: mongodImage,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "mongodb",
+				Name:          mongodPortName,
 				HostPort:      port,
 				ContainerPort: mongodContainerPort,
 				Protocol:      corev1.ProtocolTCP,
@@ -58,11 +61,11 @@ func newPSMDBContainer(name string, port int32) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "mongodb-data",
-				MountPath: mongodDataDir,
+				Name:      mongodDataVolumeName,
+				MountPath: mongodContainerDataDir,
 			},
 		},
-		WorkingDir: mongodDataDir,
+		WorkingDir: mongodContainerDataDir,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
