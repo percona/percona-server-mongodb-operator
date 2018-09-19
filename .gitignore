@@ -105,9 +105,6 @@ tags
 !.vscode/extensions.json
 .history
 
-# let dep ensure build vendor
-vendor
-
 # ignore build binary
 percona-server-mongodb-operator
 
