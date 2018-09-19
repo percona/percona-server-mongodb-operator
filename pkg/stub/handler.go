@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -56,6 +57,9 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
 	portStr := strconv.Itoa(int(port))
+	cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
+	memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
+	storageQuantity := resource.NewQuantity(8*1024*1024*1024, resource.DecimalSI)
 	return corev1.Container{
 		Name:  name,
 		Image: h.config.Image,
@@ -84,6 +88,13 @@ func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
 			TimeoutSeconds:      int32(5),
 			PeriodSeconds:       int32(3),
 			FailureThreshold:    int32(5),
+		},
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     *cpuQuantity,
+				"memory":  *memoryQuantity,
+				"storage": *storageQuantity,
+			},
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:  &h.config.RunUser,

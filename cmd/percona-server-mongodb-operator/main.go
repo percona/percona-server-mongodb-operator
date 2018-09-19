@@ -29,7 +29,9 @@ func printVersion(appName string, config *stub.Config) {
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	logrus.Infof("operator-sdk Version: %v", sdkVersion.Version)
 	logrus.Infof("%s version: %v", appName, Version)
-	logrus.Infof("percona/percona-server-mongodb version: %v", config.Image)
+	logrus.Infof("\tmongodb image tag: %s", config.Image)
+	logrus.Infof("\tmongodb replset name: %s", config.ReplsetName)
+	logrus.Infof("\tmongodb replset node count: %d", config.NodeCount)
 }
 
 func main() {
