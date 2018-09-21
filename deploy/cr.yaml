@@ -3,4 +3,4 @@ kind: "PerconaServerMongoDB"
 metadata:
   name: "percona-server-mongodb"
 spec:
-  size: 3
+  size: 1 
