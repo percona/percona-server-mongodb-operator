@@ -10,7 +10,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 var (
@@ -114,9 +116,8 @@ func (h *Handler) newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.D
 }
 
 func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
-	//portStr := strconv.Itoa(int(port))
-	//cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
-	//memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
+	cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
+	memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
 	//storageQuantity := resource.NewQuantity(8*1024*1024*1024, resource.DecimalSI)
 	return corev1.Container{
 		Name:  name,
@@ -136,33 +137,27 @@ func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
 		//	},
 		//},
 		WorkingDir: mongodContainerDataDir,
-		//ReadinessProbe: &corev1.Probe{
-		//	Handler: corev1.Handler{
-		//		TCPSocket: &corev1.TCPSocketAction{
-		//			Port: intstr.FromInt(int(port)),
-		//		},
-		//	},
-		//	InitialDelaySeconds: int32(60),
-		//	TimeoutSeconds:      int32(5),
-		//	PeriodSeconds:       int32(3),
-		//	FailureThreshold:    int32(5),
-		//},
-		//Resources: corev1.ResourceRequirements{
-		//	Limits: corev1.ResourceList{
-		//		"cpu":    *cpuQuantity,
-		//		"memory": *memoryQuantity,
-		//		"storage": *storageQuantity,
-		//	},
-		//},
-		//SecurityContext: &corev1.SecurityContext{
-		//	RunAsUser:  &h.config.RunUser,
-		//	RunAsGroup: &h.config.RunGroup,
-		//},
-		//Env: []corev1.EnvVar{
-		//	{
-		//		Name:  "MONGODB_PORT",
-		//		Value: portStr,
-		//	},
-		//},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(port)),
+				},
+			},
+			InitialDelaySeconds: int32(60),
+			TimeoutSeconds:      int32(5),
+			PeriodSeconds:       int32(3),
+			FailureThreshold:    int32(5),
+		},
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    *cpuQuantity,
+				"memory": *memoryQuantity,
+				//		"storage": *storageQuantity,
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:  &h.config.RunUser,
+			RunAsGroup: &h.config.RunGroup,
+		},
 	}
 }

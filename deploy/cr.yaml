@@ -1,4 +1,6 @@
 apiVersion: "cache.example.com/v1alpha1"
 kind: "PerconaServerMongoDB"
 metadata:
-  name: "example"
+  name: "percona-server-mongodb"
+spec:
+  size: 3
