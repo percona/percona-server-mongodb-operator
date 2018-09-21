@@ -35,7 +35,7 @@ func printVersion(appName string, config *stub.Config) {
 }
 
 func main() {
-	config := &stub.Config{}
+	config := &stub.Config{PodName: "percona-server-mongodb"}
 	appName := filepath.Base(os.Args[0])
 	app := kingpin.New(appName, "Kubernetes Operator for Percona Server for MongoDB")
 	app.Flag("mongod-count", "Number of mongod containers to run in the pod").Default("3").UintVar(&config.NodeCount)

@@ -22,8 +22,8 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	// Fill me
+	Size int32 `json:"size"`
 }
 type PerconaServerMongoDBStatus struct {
-	// Fill me
+	Nodes []string `json:"nodes"`
 }
