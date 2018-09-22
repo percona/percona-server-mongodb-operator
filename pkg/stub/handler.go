@@ -66,6 +66,9 @@ func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 }
 
 func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.PerconaServerMongoDBSpec {
+	if spec.Size == 0 {
+		spec.Size = 3
+	}
 	if spec.Image == "" {
 		spec.Image = "percona/percona-server-mongodb:latest"
 	}
