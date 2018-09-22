@@ -15,10 +15,7 @@ import (
 )
 
 var (
-	Version     = "0.0.1"
-	runUser     = "1001"
-	runGroup    = "1001"
-	mongodImage = "percona/percona-server-mongodb:latest"
+	Version = "0.0.1"
 )
 
 func printVersion() {

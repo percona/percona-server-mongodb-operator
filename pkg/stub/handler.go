@@ -17,10 +17,8 @@ import (
 )
 
 var (
-	mongodContainerDataDir       = "/data/db"
-	mongodContainerPort    int32 = 27017
-	mongodDataVolumeName         = "mongodb-data"
-	mongodPortName               = "mongodb"
+	mongodContainerDataDir = "/data/db"
+	mongodPortName         = "mongodb"
 )
 
 func NewHandler() sdk.Handler {
