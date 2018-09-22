@@ -72,6 +72,9 @@ func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.Perco
 	if spec.MongoDB == nil {
 		spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
 	}
+	if spec.MongoDB.ReplsetName == "" {
+		spec.MongoDB.ReplsetName = "rs"
+	}
 	if spec.MongoDB.Port == 0 {
 		spec.MongoDB.Port = int32(27017)
 	}
@@ -126,8 +129,9 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 		Name:  "percona-server-mongodb",
 		Image: m.Spec.Image,
 		Args: []string{
-			"--port" + strconv.Itoa(int(m.Spec.MongoDB.Port)),
-			"--storageEngine" + m.Spec.MongoDB.StorageEngine,
+			"--port=" + strconv.Itoa(int(m.Spec.MongoDB.Port)),
+			"--replSet=" + m.Spec.MongoDB.ReplsetName,
+			"--storageEngine=" + m.Spec.MongoDB.StorageEngine,
 		},
 		Ports: []corev1.ContainerPort{
 			{
