@@ -2,6 +2,7 @@ package stub
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 
@@ -22,21 +23,30 @@ var (
 	mongodPortName               = "mongodb"
 )
 
-type Config struct {
-	NodeCount   uint
-	PodName     string
-	ReplsetName string
-	RunUser     int64
-	RunGroup    int64
-	Image       string
+func NewHandler() sdk.Handler {
+	return &Handler{}
+}
+
+type Handler struct{}
+
+func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
+	switch o := event.Object.(type) {
+	case *v1alpha1.PerconaServerMongoDB:
+		err := sdk.Create(newPSMDBDeployment(o))
+		if err != nil && !errors.IsAlreadyExists(err) {
+			logrus.Errorf("failed to create psmdb pod : %v", err)
+			return err
+		}
+	}
+	return nil
 }
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given memcached CR name.
 func labelsForPerconaServerMongoDB(name string) map[string]string {
 	return map[string]string{
-		"app":          "percona-server-mongodb",
-		"memcached_cr": name,
+		"app":                       "percona-server-mongodb",
+		"percona-server-mongodb_cr": name,
 	}
 }
 
@@ -45,7 +55,7 @@ func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
 	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
 }
 
-// asOwner returns an OwnerReference set as the memcached CR
+// asOwner returns an OwnerReference set as the PerconaServerMongoDB CR
 func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 	trueVar := true
 	return metav1.OwnerReference{
@@ -57,31 +67,9 @@ func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 	}
 }
 
-func NewHandler(config *Config) sdk.Handler {
-	return &Handler{
-		config: config,
-	}
-}
-
-type Handler struct {
-	config *Config
-}
-
-func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
-	switch o := event.Object.(type) {
-	case *v1alpha1.PerconaServerMongoDB:
-		err := sdk.Create(h.newPSMDBDeployment(o))
-		if err != nil && !errors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create psmdb pod : %v", err)
-			return err
-		}
-	}
-	return nil
-}
-
-func (h *Handler) newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
+// newPSMDBDeployment returns a PSMDB deployment
+func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 	ls := labelsForPerconaServerMongoDB(m.Name)
-	replicas := m.Spec.Size
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -92,7 +80,7 @@ func (h *Handler) newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.D
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: &m.Spec.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -101,12 +89,7 @@ func (h *Handler) newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.D
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						h.newPSMDBContainer(
-							"percona-server-mongodb",
-							int32(27017),
-						),
-					},
+					Containers: []corev1.Container{newPSMDBContainer(m)},
 				},
 			},
 		},
@@ -115,32 +98,45 @@ func (h *Handler) newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.D
 	return dep
 }
 
-func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
+func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
+	if m.Spec.Image == "" {
+		m.Spec.Image = "percona/percona-server-mongodb:latest"
+	}
+	if m.Spec.MongoDB == nil {
+		m.Spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
+	}
+	if m.Spec.MongoDB.Port == 0 {
+		m.Spec.MongoDB.Port = int32(27017)
+	} else if m.Spec.MongoDB.StorageEngine == "" {
+		m.Spec.MongoDB.StorageEngine = "wiredTiger"
+	} else if m.Spec.RunGID == 0 {
+		m.Spec.RunGID = int64(1001)
+	} else if m.Spec.RunUID == 0 {
+		m.Spec.RunUID = int64(1001)
+	}
+
 	cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
-	//storageQuantity := resource.NewQuantity(8*1024*1024*1024, resource.DecimalSI)
 	return corev1.Container{
-		Name:  name,
-		Image: h.config.Image,
+		Name:  "percona-server-mongodb",
+		Image: m.Spec.Image,
+		Args: []string{
+			"--port" + strconv.Itoa(int(m.Spec.MongoDB.Port)),
+			"--storageEngine" + m.Spec.MongoDB.StorageEngine,
+		},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      port,
-				ContainerPort: mongodContainerPort,
+				HostPort:      m.Spec.MongoDB.Port,
+				ContainerPort: m.Spec.MongoDB.Port,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
-		//VolumeMounts: []corev1.VolumeMount{
-		//	{
-		//		Name:      mongodDataVolumeName,
-		//		MountPath: mongodContainerDataDir,
-		//	},
-		//},
 		WorkingDir: mongodContainerDataDir,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(port)),
+					Port: intstr.FromInt(int(m.Spec.MongoDB.Port)),
 				},
 			},
 			InitialDelaySeconds: int32(60),
@@ -152,12 +148,11 @@ func (h *Handler) newPSMDBContainer(name string, port int32) corev1.Container {
 			Limits: corev1.ResourceList{
 				"cpu":    *cpuQuantity,
 				"memory": *memoryQuantity,
-				//		"storage": *storageQuantity,
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  &h.config.RunUser,
-			RunAsGroup: &h.config.RunGroup,
+			RunAsUser:  &m.Spec.RunUID,
+			RunAsGroup: &m.Spec.RunGID,
 		},
 	}
 }

@@ -4,3 +4,7 @@ metadata:
   name: "percona-server-mongodb"
 spec:
   size: 1 
+  mongodb:
+    port: 27017
+    storageEngine: wiredTiger
+    replicaSetName: rs0

@@ -21,8 +21,18 @@ type PerconaServerMongoDB struct {
 	Status            PerconaServerMongoDBStatus `json:"status,omitempty"`
 }
 
+type PerconaServerMongoDBSpecMongoDB struct {
+	Port          int32  `json:"port,omitempty"`
+	StorageEngine string `json:"storageEngine,omitempty"`
+	ReplsetName   string `json:"replsetName,omitempty"`
+}
+
 type PerconaServerMongoDBSpec struct {
-	Size int32 `json:"size"`
+	Size    int32                            `json:"size"`
+	Image   string                           `json:"image,omitempty"`
+	MongoDB *PerconaServerMongoDBSpecMongoDB `json:"mongodb,omitempty"`
+	RunGID  int64                            `json:"runGid,omitempty"`
+	RunUID  int64                            `json:"runUid,omitempty"`
 }
 type PerconaServerMongoDBStatus struct {
 	Nodes []string `json:"nodes"`
