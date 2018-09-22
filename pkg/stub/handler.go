@@ -74,11 +74,14 @@ func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.Perco
 	}
 	if spec.MongoDB.Port == 0 {
 		spec.MongoDB.Port = int32(27017)
-	} else if spec.MongoDB.StorageEngine == "" {
+	}
+	if spec.MongoDB.StorageEngine == "" {
 		spec.MongoDB.StorageEngine = "wiredTiger"
-	} else if spec.RunGID == 0 {
+	}
+	if spec.RunGID == 0 {
 		spec.RunGID = int64(1001)
-	} else if spec.RunUID == 0 {
+	}
+	if spec.RunUID == 0 {
 		spec.RunUID = int64(1001)
 	}
 	return spec
