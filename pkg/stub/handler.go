@@ -65,8 +65,28 @@ func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 	}
 }
 
+func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.PerconaServerMongoDBSpec {
+	if spec.Image == "" {
+		spec.Image = "percona/percona-server-mongodb:latest"
+	}
+	if spec.MongoDB == nil {
+		spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
+	}
+	if spec.MongoDB.Port == 0 {
+		spec.MongoDB.Port = int32(27017)
+	} else if spec.MongoDB.StorageEngine == "" {
+		spec.MongoDB.StorageEngine = "wiredTiger"
+	} else if spec.RunGID == 0 {
+		spec.RunGID = int64(1001)
+	} else if spec.RunUID == 0 {
+		spec.RunUID = int64(1001)
+	}
+	return spec
+}
+
 // newPSMDBDeployment returns a PSMDB deployment
 func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
+	m.Spec = addPSMDBSpecDefaults(m.Spec)
 	ls := labelsForPerconaServerMongoDB(m.Name)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -97,22 +117,6 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 }
 
 func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
-	if m.Spec.Image == "" {
-		m.Spec.Image = "percona/percona-server-mongodb:latest"
-	}
-	if m.Spec.MongoDB == nil {
-		m.Spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
-	}
-	if m.Spec.MongoDB.Port == 0 {
-		m.Spec.MongoDB.Port = int32(27017)
-	} else if m.Spec.MongoDB.StorageEngine == "" {
-		m.Spec.MongoDB.StorageEngine = "wiredTiger"
-	} else if m.Spec.RunGID == 0 {
-		m.Spec.RunGID = int64(1001)
-	} else if m.Spec.RunUID == 0 {
-		m.Spec.RunUID = int64(1001)
-	}
-
 	cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
 	return corev1.Container{
