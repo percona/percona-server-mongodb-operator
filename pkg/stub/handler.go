@@ -113,7 +113,7 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{newPSMDBContainer(m)},
+					Containers: []corev1.Container{newPSMDBContainer(m.Spec)},
 				},
 			},
 		},
@@ -122,22 +122,22 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 	return dep
 }
 
-func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
+func newPSMDBContainer(spec v1alpha1.PerconaServerMongoDBSpec) corev1.Container {
 	cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
 	return corev1.Container{
 		Name:  "percona-server-mongodb",
-		Image: m.Spec.Image,
+		Image: spec.Image,
 		Args: []string{
-			"--port=" + strconv.Itoa(int(m.Spec.MongoDB.Port)),
-			"--replSet=" + m.Spec.MongoDB.ReplsetName,
-			"--storageEngine=" + m.Spec.MongoDB.StorageEngine,
+			"--port=" + strconv.Itoa(int(spec.MongoDB.Port)),
+			"--replSet=" + spec.MongoDB.ReplsetName,
+			"--storageEngine=" + spec.MongoDB.StorageEngine,
 		},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      m.Spec.MongoDB.Port,
-				ContainerPort: m.Spec.MongoDB.Port,
+				HostPort:      spec.MongoDB.Port,
+				ContainerPort: spec.MongoDB.Port,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
@@ -145,7 +145,7 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(m.Spec.MongoDB.Port)),
+					Port: intstr.FromInt(int(spec.MongoDB.Port)),
 				},
 			},
 			InitialDelaySeconds: int32(60),
@@ -160,8 +160,8 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  &m.Spec.RunUID,
-			RunAsGroup: &m.Spec.RunGID,
+			RunAsUser:  &spec.RunUID,
+			RunAsGroup: &spec.RunGID,
 		},
 	}
 }
