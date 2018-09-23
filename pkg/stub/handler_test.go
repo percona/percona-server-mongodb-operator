@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -19,4 +20,17 @@ func TestGetWiredTigerCacheSizeGB(t *testing.T) {
 
 	memoryQuantity = resource.NewQuantity(128*gigaByte, resource.DecimalSI)
 	assert.Equal(t, 63.5, getWiredTigerCacheSizeGB(memoryQuantity, 0.5))
+
+	memoryQuantity = resource.NewQuantity(256*gigaByte, resource.DecimalSI)
+	assert.Equal(t, 127.5, getWiredTigerCacheSizeGB(memoryQuantity, 0.5))
+}
+
+func TestAddPSMDBSpecDefaults(t *testing.T) {
+	spec := addPSMDBSpecDefaults(v1alpha1.PerconaServerMongoDBSpec{})
+	assert.Equal(t, int32(3), spec.Size)
+	assert.Equal(t, "percona/percona-server-mongodb:latest", spec.Image)
+	assert.NotNil(t, spec.MongoDB)
+	assert.Equal(t, "wiredTiger", spec.MongoDB.StorageEngine)
+	assert.NotNil(t, spec.MongoDB.WiredTiger)
+	assert.Equal(t, 0.5, spec.MongoDB.WiredTiger.CacheSizeRatio)
 }
