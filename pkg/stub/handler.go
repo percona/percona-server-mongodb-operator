@@ -2,6 +2,7 @@ package stub
 
 import (
 	"context"
+	"math"
 	"strconv"
 
 	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
@@ -14,6 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
+const (
+	gigaByte                 int     = 1024 * 1024 * 1024
+	minWiredTigerCacheSizeGB float64 = 0.25
 )
 
 var (
@@ -91,6 +97,21 @@ func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.Perco
 		spec.RunUID = int64(1001)
 	}
 	return spec
+}
+
+// The WiredTiger internal cache, by default, will use the larger of either 50% of
+// (RAM - 1 GB), or 256 MB. For example, on a system with a total of 4GB of RAM the
+// WiredTiger cache will use 1.5GB of RAM (0.5 * (4 GB - 1 GB) = 1.5 GB).
+//
+// https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
+//
+func getWiredTigerCacheSizeGB(maxBytes int, cacheRatio float64) float64 {
+	size := math.Floor(cacheRatio * float64(maxBytes-gigaByte))
+	sizeGB := size / float64(maxBytes)
+	if sizeGB < minWiredTigerCacheSizeGB {
+		sizeGB = minWiredTigerCacheSizeGB
+	}
+	return sizeGB
 }
 
 // newPSMDBDeployment returns a PSMDB deployment
