@@ -77,7 +77,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 		}
 
-		// Update the Memcached status with the pod names
+		// Update the PerconaServerMongoDB status with the pod names
 		podList := podList()
 		labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(psmdb.Name)).String()
 		listOps := &metav1.ListOptions{LabelSelector: labelSelector}
