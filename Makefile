@@ -9,7 +9,10 @@ IMAGE?=percona/percona-server-mongodb-operator:$(VERSION)
 all: build
 
 test:
-	go test -covermode=atomic -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
+	go test -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
+
+test-cover:
+	go test -covermode=atomic -coverprofile=cover.out -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
 
 pkg/apis/cache/v1alpha1/zz_generated.deepcopy.go: pkg/apis/cache/v1alpha1/doc.go pkg/apis/cache/v1alpha1/register.go pkg/apis/cache/v1alpha1/types.go       
 	$(GOPATH)/bin/operator-sdk generate k8s
@@ -23,4 +26,4 @@ docker:
 	IMAGE=$(IMAGE) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
 
 clean:
-	rm -f percona-server-mongodb-operator 2>/dev/null || true
+	rm -f cover.out 2>/dev/null || true

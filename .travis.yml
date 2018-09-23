@@ -7,6 +7,6 @@ matrix:
   allow_failures:
     - go: master
 script:
-  - make test
+  - make test-cover
 after_success:
   - bash <(curl -s https://codecov.io/bash)
