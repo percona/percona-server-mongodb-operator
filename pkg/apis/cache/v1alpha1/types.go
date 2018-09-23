@@ -21,18 +21,29 @@ type PerconaServerMongoDB struct {
 	Status            PerconaServerMongoDBStatus `json:"status,omitempty"`
 }
 
+type PerconaServerMongoDBSpecMongoDBMMAPv1 struct {
+	NsSize     int  `json:"nsSize,omitempty"`
+	Smallfiles bool `json:"smallfiles,omitempty"`
+}
+
+type PerconaServerMongoDBSpecMongoDBWiredTiger struct {
+	CacheSizeRatio float64 `json:"cacheSizeRatio,omitempty"`
+}
+
 type PerconaServerMongoDBSpecMongoDB struct {
-	Port          int32  `json:"port,omitempty"`
-	StorageEngine string `json:"storageEngine,omitempty"`
-	ReplsetName   string `json:"replsetName,omitempty"`
+	Port          int32                                      `json:"port,omitempty"`
+	StorageEngine string                                     `json:"storageEngine,omitempty"`
+	ReplsetName   string                                     `json:"replsetName,omitempty"`
+	MMAPv1        *PerconaServerMongoDBSpecMongoDBMMAPv1     `json:"mmapv1,omitempty"`
+	WiredTiger    *PerconaServerMongoDBSpecMongoDBWiredTiger `json:"wiredTiger,omitempty"`
 }
 
 type PerconaServerMongoDBSpec struct {
 	Size    int32                            `json:"size"`
 	Image   string                           `json:"image,omitempty"`
-	MongoDB *PerconaServerMongoDBSpecMongoDB `json:"mongodb,omitempty"`
 	RunGID  int64                            `json:"runGid,omitempty"`
 	RunUID  int64                            `json:"runUid,omitempty"`
+	MongoDB *PerconaServerMongoDBSpecMongoDB `json:"mongodb,omitempty"`
 }
 type PerconaServerMongoDBStatus struct {
 	Nodes []string `json:"nodes"`

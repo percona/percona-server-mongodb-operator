@@ -3,13 +3,24 @@ GO_TEST_PATH?=./...
 GO_TEST_EXTRA?=
 GO_BUILD_LDFLAGS?=-w -s
 
-all: percona-server-mongodb-operator
+VERSION?=$(shell awk '/Version =/{print $$3}' version/version.go | tr -d \")
+IMAGE?=percona/percona-server-mongodb-operator:$(VERSION)
+
+all: build
 
 test:
 	go test -covermode=atomic -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
 
-percona-server-mongodb-operator: cmd/percona-server-mongodb-operator/main.go pkg/apis/cache/v1alpha1/*.go pkg/stub/*.go version/version.go
-	go build -ldflags="$(GO_BUILD_LDFLAGS)" -o percona-server-mongodb-operator cmd/percona-server-mongodb-operator/main.go
+pkg/apis/cache/v1alpha1/zz_generated.deepcopy.go: pkg/apis/cache/v1alpha1/doc.go pkg/apis/cache/v1alpha1/register.go pkg/apis/cache/v1alpha1/types.go       
+	operator-sdk generate k8s
+
+tmp/_output/bin/percona-server-mongodb-operator: cmd/percona-server-mongodb-operator/main.go pkg/apis/cache/v1alpha1/zz_generated.deepcopy.go pkg/stub/handler.go version/version.go
+	/bin/bash $(CURDIR)/tmp/build/build.sh
+
+build: tmp/_output/bin/percona-server-mongodb-operator
+
+docker:
+	IMAGE=$(IMAGE) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
 
 clean:
 	rm -f percona-server-mongodb-operator 2>/dev/null || true
