@@ -3,7 +3,7 @@ GO_TEST_PATH?=./...
 GO_TEST_EXTRA?=
 GO_BUILD_LDFLAGS?=-w -s
 
-VERSION?=$(shell awk '/Version =/{print $$3}' version/version.go | tr -d \")
+VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
 IMAGE?=percona/percona-server-mongodb-operator:$(VERSION)
 
 all: build
@@ -12,7 +12,7 @@ test:
 	go test -covermode=atomic -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
 
 pkg/apis/cache/v1alpha1/zz_generated.deepcopy.go: pkg/apis/cache/v1alpha1/doc.go pkg/apis/cache/v1alpha1/register.go pkg/apis/cache/v1alpha1/types.go       
-	operator-sdk generate k8s
+	$(GOPATH)/bin/operator-sdk generate k8s
 
 tmp/_output/bin/percona-server-mongodb-operator: cmd/percona-server-mongodb-operator/main.go pkg/apis/cache/v1alpha1/zz_generated.deepcopy.go pkg/stub/handler.go version/version.go
 	/bin/bash $(CURDIR)/tmp/build/build.sh
