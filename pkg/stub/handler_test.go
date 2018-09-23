@@ -27,10 +27,10 @@ func TestGetWiredTigerCacheSizeGB(t *testing.T) {
 
 func TestAddPSMDBSpecDefaults(t *testing.T) {
 	spec := addPSMDBSpecDefaults(v1alpha1.PerconaServerMongoDBSpec{})
-	assert.Equal(t, int32(3), spec.Size)
-	assert.Equal(t, "percona/percona-server-mongodb:latest", spec.Image)
+	assert.Equal(t, defaultSize, spec.Size)
+	assert.Equal(t, defaultImage, spec.Image)
 	assert.NotNil(t, spec.MongoDB)
-	assert.Equal(t, "wiredTiger", spec.MongoDB.StorageEngine)
+	assert.Equal(t, defaultStorageEngine, spec.MongoDB.StorageEngine)
 	assert.NotNil(t, spec.MongoDB.WiredTiger)
-	assert.Equal(t, 0.5, spec.MongoDB.WiredTiger.CacheSizeRatio)
+	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.MongoDB.WiredTiger.CacheSizeRatio)
 }

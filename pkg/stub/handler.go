@@ -24,8 +24,16 @@ const (
 )
 
 var (
-	mongodContainerDataDir = "/data/db"
-	mongodPortName         = "mongodb"
+	defaultSize                     int32   = 3
+	defaultImage                    string  = "perconalab/percona-server-mongodb:latest"
+	defaultRunUID                   int64   = 1001
+	defaultRunGID                   int64   = 1001
+	defaultReplsetName              string  = "rs"
+	defaultStorageEngine            string  = "wiredTiger"
+	defaultMongodPort               int32   = 27017
+	defaultWiredTigerCacheSizeRatio float64 = 0.5
+	mongodContainerDataDir          string  = "/data/db"
+	mongodPortName                  string  = "mongodb"
 )
 
 func NewHandler() sdk.Handler {
@@ -74,36 +82,36 @@ func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 
 func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.PerconaServerMongoDBSpec {
 	if spec.Size == 0 {
-		spec.Size = 3
+		spec.Size = defaultSize
 	}
 	if spec.Image == "" {
-		spec.Image = "percona/percona-server-mongodb:latest"
+		spec.Image = defaultImage
 	}
 	if spec.MongoDB == nil {
 		spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
 	}
 	if spec.MongoDB.ReplsetName == "" {
-		spec.MongoDB.ReplsetName = "rs"
+		spec.MongoDB.ReplsetName = defaultReplsetName
 	}
 	if spec.MongoDB.Port == 0 {
-		spec.MongoDB.Port = int32(27017)
+		spec.MongoDB.Port = defaultMongodPort
 	}
 	if spec.MongoDB.StorageEngine == "" {
-		spec.MongoDB.StorageEngine = "wiredTiger"
+		spec.MongoDB.StorageEngine = defaultStorageEngine
 	}
 	if spec.MongoDB.StorageEngine == "wiredTiger" {
 		if spec.MongoDB.WiredTiger == nil {
 			spec.MongoDB.WiredTiger = &v1alpha1.PerconaServerMongoDBSpecMongoDBWiredTiger{}
 		}
 		if spec.MongoDB.WiredTiger.CacheSizeRatio == 0 {
-			spec.MongoDB.WiredTiger.CacheSizeRatio = 0.5
+			spec.MongoDB.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
 		}
 	}
 	if spec.RunGID == 0 {
-		spec.RunGID = int64(1001)
+		spec.RunGID = defaultRunGID
 	}
 	if spec.RunUID == 0 {
-		spec.RunUID = int64(1001)
+		spec.RunUID = defaultRunUID
 	}
 	return spec
 }
