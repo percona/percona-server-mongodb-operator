@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 
 	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -45,17 +47,58 @@ type Handler struct{}
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	switch o := event.Object.(type) {
 	case *v1alpha1.PerconaServerMongoDB:
-		err := sdk.Create(newPSMDBDeployment(o))
+		psmdb := o
+
+		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
+		// All secondary resources must have the CR set as their OwnerReference for this to be the case
+		if event.Deleted {
+			return nil
+		}
+
+		// Create the deployment if it doesn't exist
+		dep := newPSMDBDeployment(o)
+		err := sdk.Create(dep)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			logrus.Errorf("failed to create psmdb pod : %v", err)
 			return err
+		}
+
+		// Ensure the deployment size is the same as the spec
+		err = sdk.Get(dep)
+		if err != nil {
+			return fmt.Errorf("failed to get deployment: %v", err)
+		}
+		size := psmdb.Spec.Size
+		if *dep.Spec.Replicas != size {
+			dep.Spec.Replicas = &size
+			err = sdk.Update(dep)
+			if err != nil {
+				return fmt.Errorf("failed to update deployment: %v", err)
+			}
+		}
+
+		// Update the Memcached status with the pod names
+		podList := podList()
+		labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(psmdb.Name)).String()
+		listOps := &metav1.ListOptions{LabelSelector: labelSelector}
+		err = sdk.List(psmdb.Namespace, podList, sdk.WithListOptions(listOps))
+		if err != nil {
+			return fmt.Errorf("failed to list pods: %v", err)
+		}
+		podNames := getPodNames(podList.Items)
+		if !reflect.DeepEqual(podNames, psmdb.Status.Nodes) {
+			psmdb.Status.Nodes = podNames
+			err := sdk.Update(psmdb)
+			if err != nil {
+				return fmt.Errorf("failed to update psmdb status: %v", err)
+			}
 		}
 	}
 	return nil
 }
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
-// belonging to the given memcached CR name.
+// belonging to the given PerconaServerMongoDB CR name.
 func labelsForPerconaServerMongoDB(name string) map[string]string {
 	return map[string]string{
 		"app":                       "percona-server-mongodb",
@@ -80,7 +123,27 @@ func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 	}
 }
 
-func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.PerconaServerMongoDBSpec {
+// podList returns a v1.PodList object
+func podList() *corev1.PodList {
+	return &corev1.PodList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
+	}
+}
+
+// getPodNames returns the pod names of the array of pods passed in
+func getPodNames(pods []corev1.Pod) []string {
+	var podNames []string
+	for _, pod := range pods {
+		podNames = append(podNames, pod.Name)
+	}
+	return podNames
+}
+
+// addPSMDBSpecDefaults sets default values for unset config params
+func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Size == 0 {
 		spec.Size = defaultSize
 	}
@@ -113,7 +176,6 @@ func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.Perco
 	if spec.RunUID == 0 {
 		spec.RunUID = defaultRunUID
 	}
-	return spec
 }
 
 // The WiredTiger internal cache, by default, will use the larger of either 50% of
@@ -133,7 +195,8 @@ func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) 
 
 // newPSMDBDeployment returns a PSMDB deployment
 func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
-	m.Spec = addPSMDBSpecDefaults(m.Spec)
+	addPSMDBSpecDefaults(&m.Spec)
+
 	ls := labelsForPerconaServerMongoDB(m.Name)
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
