@@ -22,8 +22,8 @@ tmp/_output/bin/percona-server-mongodb-operator: pkg/apis/cache/v1alpha1/zz_gene
 
 build: tmp/_output/bin/percona-server-mongodb-operator
 
-docker:
-	IMAGE=$(IMAGE) GO_LDFLAGS=$(GO_LDFLAGS) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
+docker: tmp/_output/bin/percona-server-mongodb-operator
+	IMAGE=$(IMAGE) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
 
 clean:
 	rm -f cover.out 2>/dev/null || true
