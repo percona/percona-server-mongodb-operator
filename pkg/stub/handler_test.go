@@ -9,7 +9,10 @@ import (
 )
 
 func TestGetWiredTigerCacheSizeGB(t *testing.T) {
-	memoryQuantity := resource.NewQuantity(gigaByte, resource.DecimalSI)
+	memoryQuantity := resource.NewQuantity(gigaByte/2, resource.DecimalSI)
+	assert.Equal(t, 0.25, getWiredTigerCacheSizeGB(memoryQuantity, 0.5))
+
+	memoryQuantity = resource.NewQuantity(1*gigaByte, resource.DecimalSI)
 	assert.Equal(t, 0.25, getWiredTigerCacheSizeGB(memoryQuantity, 0.5))
 
 	memoryQuantity = resource.NewQuantity(4*gigaByte, resource.DecimalSI)
@@ -26,7 +29,10 @@ func TestGetWiredTigerCacheSizeGB(t *testing.T) {
 }
 
 func TestAddPSMDBSpecDefaults(t *testing.T) {
-	spec := addPSMDBSpecDefaults(v1alpha1.PerconaServerMongoDBSpec{})
+	spec := v1alpha1.PerconaServerMongoDBSpec{}
+
+	addPSMDBSpecDefaults(&spec)
+
 	assert.Equal(t, defaultSize, spec.Size)
 	assert.Equal(t, defaultImage, spec.Image)
 	assert.NotNil(t, spec.MongoDB)
