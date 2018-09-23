@@ -2,6 +2,7 @@ package stub
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 
@@ -90,6 +91,14 @@ func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.Perco
 	if spec.MongoDB.StorageEngine == "" {
 		spec.MongoDB.StorageEngine = "wiredTiger"
 	}
+	if spec.MongoDB.StorageEngine == "wiredTiger" {
+		if spec.MongoDB.WiredTiger == nil {
+			spec.MongoDB.WiredTiger = &v1alpha1.PerconaServerMongoDBSpecMongoDBWiredTiger{}
+		}
+		if spec.MongoDB.WiredTiger.CacheSizeRatio == 0 {
+			spec.MongoDB.WiredTiger.CacheSizeRatio = 0.5
+		}
+	}
 	if spec.RunGID == 0 {
 		spec.RunGID = int64(1001)
 	}
@@ -149,19 +158,29 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
+
+	mongoSpec := m.Spec.MongoDB
+	args := []string{
+		"--port=" + strconv.Itoa(int(mongoSpec.Port)),
+		"--replSet=" + mongoSpec.ReplsetName,
+		"--storageEngine=" + mongoSpec.StorageEngine,
+	}
+	if mongoSpec.StorageEngine == "wiredTiger" {
+		args = append(args, fmt.Sprintf(
+			"--wiredTigerCacheSizeGB=%.2f",
+			getWiredTigerCacheSizeGB(memoryQuantity, mongoSpec.WiredTiger.CacheSizeRatio)),
+		)
+	}
+
 	return corev1.Container{
 		Name:  m.Name,
 		Image: m.Spec.Image,
-		Args: []string{
-			"--port=" + strconv.Itoa(int(m.Spec.MongoDB.Port)),
-			"--replSet=" + m.Spec.MongoDB.ReplsetName,
-			"--storageEngine=" + m.Spec.MongoDB.StorageEngine,
-		},
+		Args:  args,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      m.Spec.MongoDB.Port,
-				ContainerPort: m.Spec.MongoDB.Port,
+				HostPort:      mongoSpec.Port,
+				ContainerPort: mongoSpec.Port,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
@@ -169,7 +188,7 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(m.Spec.MongoDB.Port)),
+					Port: intstr.FromInt(int(mongoSpec.Port)),
 				},
 			},
 			InitialDelaySeconds: int32(60),
