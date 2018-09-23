@@ -4,7 +4,7 @@ GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
-IMAGE?=percona/percona-server-mongodb-operator:$(VERSION)
+IMAGE?=perconalab/percona-server-mongodb-operator:$(VERSION)
 
 all: build
 
