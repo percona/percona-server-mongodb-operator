@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	gigaByte                 int     = 1024 * 1024 * 1024
+	gigaByte                 int64   = 1024 * 1024 * 1024
 	minWiredTigerCacheSizeGB float64 = 0.25
 )
 
@@ -105,9 +105,9 @@ func addPSMDBSpecDefaults(spec v1alpha1.PerconaServerMongoDBSpec) v1alpha1.Perco
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
 //
-func getWiredTigerCacheSizeGB(maxBytes int, cacheRatio float64) float64 {
-	size := math.Floor(cacheRatio * float64(maxBytes-gigaByte))
-	sizeGB := size / float64(maxBytes)
+func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) float64 {
+	size := math.Floor(cacheRatio * float64(maxMemory.Value()-gigaByte))
+	sizeGB := size / float64(gigaByte)
 	if sizeGB < minWiredTigerCacheSizeGB {
 		sizeGB = minWiredTigerCacheSizeGB
 	}
