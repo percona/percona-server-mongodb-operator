@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+GO_LDFLAGS="$GO_LDFLAGS"
+
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -15,4 +17,4 @@ PROJECT_NAME="percona-server-mongodb-operator"
 REPO_PATH="github.com/timvaillancourt/percona-server-mongodb-operator"
 BUILD_PATH="${REPO_PATH}/cmd/${PROJECT_NAME}"
 echo "building "${PROJECT_NAME}"..."
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${BIN_DIR}/${PROJECT_NAME} $BUILD_PATH
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${GO_LDFLAGS}" -o ${BIN_DIR}/${PROJECT_NAME} $BUILD_PATH
