@@ -11,6 +11,7 @@ import (
 	stub "github.com/timvaillancourt/percona-server-mongodb-operator/pkg/stub"
 	version "github.com/timvaillancourt/percona-server-mongodb-operator/version"
 
+	mongodbOT "github.com/percona/mongodb-orchestration-tools"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
@@ -23,7 +24,8 @@ func printVersion() {
 	logrus.Infof("Go Version: %s", runtime.Version())
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	logrus.Infof("operator-sdk Version: %v", sdkVersion.Version)
-	logrus.Infof("percona-server-mongodb-operator version: %v", version.Version)
+	logrus.Infof("perconalab/percona-server-mongodb-operator Version: %v", version.Version)
+	logrus.Infof("\tpercona/mongodb-orchestration-tools Version: %v", mongodbOT.Version)
 }
 
 func main() {
