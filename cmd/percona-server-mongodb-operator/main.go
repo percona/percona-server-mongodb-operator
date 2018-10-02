@@ -50,7 +50,7 @@ func main() {
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler())
+	sdk.Handle(stub.NewHandler("mongodb"))
 	sdk.Run(context.TODO())
 
 	quit <- true
