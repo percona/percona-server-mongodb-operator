@@ -135,6 +135,7 @@ func getMongoURI(pods []corev1.Pod, portName string) string {
 			}
 			mongoPort := strconv.Itoa(int(port.HostPort))
 			hosts = append(hosts, pod.Status.HostIP+":"+mongoPort)
+			break
 		}
 	}
 	if len(hosts) > 0 {
