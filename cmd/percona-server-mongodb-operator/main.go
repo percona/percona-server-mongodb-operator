@@ -11,6 +11,10 @@ import (
 	stub "github.com/timvaillancourt/percona-server-mongodb-operator/pkg/stub"
 	version "github.com/timvaillancourt/percona-server-mongodb-operator/version"
 
+	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
+	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
+	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
+
 	"github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
@@ -32,9 +36,21 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("failed to get watch namespace: %v", err)
 	}
+
+	source := &podk8s.Task{}
+	quit := make(chan bool, 1)
+	watchdog := watchdog.New(&wdConfig.Config{
+		ReplsetPoll:    5 * time.Second,
+		ReplsetTimeout: 10 * time.Second,
+		MetricsPort:    "10000",
+	}, &quit, source)
+	go watchdog.Run()
+
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
 	sdk.Handle(stub.NewHandler())
 	sdk.Run(context.TODO())
+
+	quit <- true
 }

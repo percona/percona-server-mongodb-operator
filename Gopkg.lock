@@ -20,6 +20,27 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
+  name = "github.com/alecthomas/kingpin"
+  packages = ["."]
+  revision = "947dcec5ba9c011838740e680966fd7087a71d0d"
+  version = "v2.2.6"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/alecthomas/template"
+  packages = [
+    ".",
+    "parse"
+  ]
+  revision = "a0175ee3bccc567396460bf5acd36800cb10c49c"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/alecthomas/units"
+  packages = ["."]
+  revision = "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
+
+[[projects]]
   branch = "master"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
@@ -141,6 +162,22 @@
   version = "v1.1.5"
 
 [[projects]]
+  name = "github.com/klauspost/compress"
+  packages = [
+    "flate",
+    "gzip",
+    "zlib"
+  ]
+  revision = "b939724e787a27c0005cabe3f78e7ed7987ac74f"
+  version = "v1.4.0"
+
+[[projects]]
+  name = "github.com/klauspost/cpuid"
+  packages = ["."]
+  revision = "ae7887de9fa5d2db4eaa8174a7eff2c1ac00f2da"
+  version = "v1.1"
+
+[[projects]]
   branch = "master"
   name = "github.com/mailru/easyjson"
   packages = [
@@ -179,6 +216,25 @@
     "version"
   ]
   revision = "85500b662bfd9b4f2dfea3d2625e2851d2255727"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/percona/mongodb-orchestration-tools"
+  packages = [
+    ".",
+    "internal/db",
+    "internal/dcos",
+    "internal/dcos/api",
+    "pkg/db",
+    "pkg/pod",
+    "pkg/pod/dcos",
+    "pkg/pod/k8s",
+    "watchdog",
+    "watchdog/config",
+    "watchdog/replset",
+    "watchdog/watcher"
+  ]
+  revision = "4ef6df4778701aaca449eb52f0b212111b2bb9ad"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
@@ -235,21 +291,35 @@
   version = "v1.0.2"
 
 [[projects]]
-  name = "github.com/stretchr/objx"
-  packages = ["."]
-  revision = "477a77ecc69700c7cdeb1fa9e129548e1c1c393c"
-  version = "v0.1.1"
-
-[[projects]]
   name = "github.com/stretchr/testify"
-  packages = [
-    ".",
-    "assert",
-    "http",
-    "mock"
-  ]
+  packages = ["assert"]
   revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
   version = "v1.2.2"
+
+[[projects]]
+  name = "github.com/timvaillancourt/go-mongodb-replset"
+  packages = [
+    "config",
+    "status"
+  ]
+  revision = "173aaa3b66aff9a03babec116e1f5a2570b8e4be"
+  version = "0.2.0"
+
+[[projects]]
+  name = "github.com/valyala/bytebufferpool"
+  packages = ["."]
+  revision = "e746df99fe4a3986f4d4f79e13c1e0117ce9c2f7"
+  version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/valyala/fasthttp"
+  packages = [
+    ".",
+    "fasthttputil",
+    "stackless"
+  ]
+  revision = "e5f51c11919d4f66400334047b897ef0a94c6f3c"
+  version = "v20180529"
 
 [[projects]]
   branch = "release-branch.go1.11"
@@ -351,6 +421,18 @@
   packages = ["."]
   revision = "d2d2541c53f18d2a059457998ce2876cc8e67cbf"
   version = "v0.9.1"
+
+[[projects]]
+  branch = "v2"
+  name = "gopkg.in/mgo.v2"
+  packages = [
+    ".",
+    "bson",
+    "internal/json",
+    "internal/sasl",
+    "internal/scram"
+  ]
+  revision = "9856a29383ce1c59f308dd1cf0363a79b5bef6b5"
 
 [[projects]]
   name = "gopkg.in/yaml.v2"
@@ -561,6 +643,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "04c6faf6b658a3d7c024527f25e19dc811e2087b1f467bc874c31b70048a925a"
+  inputs-digest = "07c23dd4bfb5d2c05e7cd8f2c043ffc2b1521b60f3c1acefed98e9ec07b1bb61"
   solver-name = "gps-cdcl"
   solver-version = 1

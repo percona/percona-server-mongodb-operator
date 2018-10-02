@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 
@@ -117,4 +119,23 @@ func getPodNames(pods []corev1.Pod) []string {
 		podNames = append(podNames, pod.Name)
 	}
 	return podNames
+}
+
+// getMongoURI returns the mongodb uri containing the host/port of each pod
+func getMongoURI(pods []corev1.Pod) string {
+	var hosts []string
+	for _, pod := range pods {
+		hostIP := pod.Status.HostIP
+		container := pod.Spec.Containers[0]
+		for _, port := range container.Ports {
+			if port.Name == "mongodb" {
+				mongoPort := strconv.Itoa(int(port.HostPort))
+				hosts = append(hosts, hostIP+":"+mongoPort)
+			}
+		}
+	}
+	if len(hosts) > 0 {
+		return "mongodb://" + strings.Join(hosts, ",")
+	}
+	return ""
 }
