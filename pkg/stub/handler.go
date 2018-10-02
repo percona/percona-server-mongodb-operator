@@ -72,6 +72,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return fmt.Errorf("failed to update psmdb status: %v", err)
 			}
 		}
+		psmdb.Status.Uri = getMongoURI(podList.Items, "mongodb")
 	}
 	return nil
 }
@@ -122,16 +123,18 @@ func getPodNames(pods []corev1.Pod) []string {
 }
 
 // getMongoURI returns the mongodb uri containing the host/port of each pod
-func getMongoURI(pods []corev1.Pod) string {
+func getMongoURI(pods []corev1.Pod, portName string) string {
 	var hosts []string
 	for _, pod := range pods {
-		hostIP := pod.Status.HostIP
-		container := pod.Spec.Containers[0]
-		for _, port := range container.Ports {
-			if port.Name == "mongodb" {
-				mongoPort := strconv.Itoa(int(port.HostPort))
-				hosts = append(hosts, hostIP+":"+mongoPort)
+		if pod.Status.HostIP == "" && len(pod.Spec.Containers) != 1 {
+			continue
+		}
+		for _, port := range pod.Spec.Containers[0].Ports {
+			if port.Name != portName {
+				continue
 			}
+			mongoPort := strconv.Itoa(int(port.HostPort))
+			hosts = append(hosts, pod.Status.HostIP+":"+mongoPort)
 		}
 	}
 	if len(hosts) > 0 {

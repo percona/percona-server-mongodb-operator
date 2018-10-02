@@ -40,6 +40,7 @@ func TestGetMongoURI(t *testing.T) {
 			},
 		},
 	}
-	assert.Equal(t, "mongodb://1.2.3.4:27017,1.2.3.5:27017,1.2.3.6:27017", getMongoURI(pods))
-	assert.Equal(t, "", getMongoURI([]corev1.Pod{}))
+	assert.Equal(t, "mongodb://1.2.3.4:27017,1.2.3.5:27017,1.2.3.6:27017", getMongoURI(pods, "mongodb"))
+	assert.Equal(t, "", getMongoURI(pods, "doesntexist"))
+	assert.Equal(t, "", getMongoURI([]corev1.Pod{}, "mongodb"))
 }

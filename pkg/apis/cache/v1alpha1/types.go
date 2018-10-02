@@ -47,4 +47,5 @@ type PerconaServerMongoDBSpec struct {
 }
 type PerconaServerMongoDBStatus struct {
 	Nodes []string `json:"nodes"`
+	Uri   string   `json:"uri"`
 }

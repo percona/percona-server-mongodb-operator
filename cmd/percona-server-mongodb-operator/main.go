@@ -37,9 +37,10 @@ func main() {
 		logrus.Fatalf("failed to get watch namespace: %v", err)
 	}
 
-	source := &podk8s.Task{}
+	source := &podk8s.Pods{}
 	quit := make(chan bool, 1)
 	watchdog := watchdog.New(&wdConfig.Config{
+		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 10 * time.Second,
 		MetricsPort:    "10000",
