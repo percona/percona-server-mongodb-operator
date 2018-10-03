@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	frameworkTagName = "dcosFramework"
+	serviceTagName = "serviceName"
 )
 
 // State is a struct reflecting the state of a MongoDB Replica Set
@@ -219,7 +219,7 @@ func (s *State) AddConfigMembers(session *mgo.Session, configManager rsConfig.Ma
 	for _, mongod := range members {
 		member := rsConfig.NewMember(mongod.Name())
 		member.Tags = &rsConfig.ReplsetTags{
-			frameworkTagName: mongod.FrameworkName,
+			serviceTagName: mongod.ServiceName,
 		}
 		if len(s.Config.Members) >= MaxMembers {
 			log.Errorf("Maximum replset member count reached, cannot add member")
@@ -234,8 +234,8 @@ func (s *State) AddConfigMembers(session *mgo.Session, configManager rsConfig.Ma
 			member.Hidden = true
 			member.Priority = 0
 			member.Tags = &rsConfig.ReplsetTags{
-				"backup":         "true",
-				frameworkTagName: mongod.FrameworkName,
+				"backup":       "true",
+				serviceTagName: mongod.ServiceName,
 			}
 			member.Votes = 0
 		}

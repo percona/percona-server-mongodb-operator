@@ -31,14 +31,14 @@ var SDKClientName = "dcos"
 
 var (
 	DefaultHTTPTimeout   = "5s"
-	DefaultSchedulerHost = "api." + dcos.DefaultFrameworkName + ".marathon.l4lb.thisdcos.directory"
+	DefaultSchedulerHost = "api." + dcos.DefaultServiceName + ".marathon.l4lb.thisdcos.directory"
 	ErrEmptyBody         = errors.New("got empty body")
 	ErrNonSuccessCode    = errors.New("got non-success code")
 )
 
 // SDKClient is an HTTP client for the DC/OS SDK API
 type SDKClient struct {
-	FrameworkName string
+	ServiceName string
 	config        *Config
 	scheme        HTTPScheme
 }
@@ -46,7 +46,7 @@ type SDKClient struct {
 // New creates a new SDKClient struct configured for use with the DC/OS SDK API
 func New(frameworkName string, config *Config) *SDKClient {
 	c := &SDKClient{
-		FrameworkName: frameworkName,
+		ServiceName: frameworkName,
 		config:        config,
 		scheme:        HTTPSchemePlain,
 	}

@@ -82,7 +82,7 @@ func (w *Watchdog) podMongodFetcher(podName string, wg *sync.WaitGroup) {
 			continue
 		}
 
-		mongod, err := replset.NewMongod(task, w.config.FrameworkName, podName)
+		mongod, err := replset.NewMongod(task, w.config.ServiceName, podName)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"task":  task.Name(),
@@ -151,10 +151,10 @@ func (w *Watchdog) fetchPods() {
 
 func (w *Watchdog) Run() {
 	log.WithFields(log.Fields{
-		"version":   tools.Version,
-		"framework": w.config.FrameworkName,
-		"go":        runtime.Version(),
-		"source":    w.podSource.Name(),
+		"version": tools.Version,
+		"service": w.config.ServiceName,
+		"go":      runtime.Version(),
+		"source":  w.podSource.Name(),
 	}).Info("Starting watchdog")
 
 	w.fetchPods()

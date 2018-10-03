@@ -234,7 +234,7 @@
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "606c1066749cbeb9dbf458eabcfa6c683a98e904"
+  revision = "6e4310be3f2dc117f324aba4d3a45f1c99bc473e"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
