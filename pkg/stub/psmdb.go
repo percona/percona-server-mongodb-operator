@@ -145,6 +145,12 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "MONGODB_REPLSET",
+				Value: "rs",
+			},
+		},
 		WorkingDir: mongodContainerDataDir,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
