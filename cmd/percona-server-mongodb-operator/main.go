@@ -45,7 +45,6 @@ func main() {
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 10 * time.Second,
-		MetricsPort:    "10000",
 	}, &quit, source)
 	go watchdog.Run()
 

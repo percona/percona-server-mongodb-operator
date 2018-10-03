@@ -15,33 +15,30 @@
 package watchdog
 
 import (
-	"net/http"
 	"runtime"
 	"sync"
 	"time"
 
-	dcosmongotools "github.com/percona/mongodb-orchestration-tools"
+	tools "github.com/percona/mongodb-orchestration-tools"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	"github.com/percona/mongodb-orchestration-tools/watchdog/config"
 	"github.com/percona/mongodb-orchestration-tools/watchdog/replset"
 	"github.com/percona/mongodb-orchestration-tools/watchdog/watcher"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	metricsPath        = "/metrics"
-	DefaultMetricsPort = "8080"
-)
-
 var (
-	apiFetches = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Subsystem: "api",
+	sourceFetches = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Subsystem: "source",
 		Name:      "fetches_total",
 		Help:      "API fetches",
 	}, []string{"type"})
 )
+
+func init() {
+	prometheus.MustRegister(sourceFetches)
+}
 
 type Watchdog struct {
 	config         *config.Config
@@ -62,15 +59,6 @@ func New(config *config.Config, quit *chan bool, podSource pod.Source) *Watchdog
 	}
 }
 
-func (w *Watchdog) runPrometheusMetricsServer() {
-	log.WithFields(log.Fields{
-		"port": w.config.MetricsPort,
-		"path": metricsPath,
-	}).Info("Starting Prometheus metrics server")
-	http.Handle(metricsPath, promhttp.Handler())
-	log.Fatal(http.ListenAndServe(":"+w.config.MetricsPort, nil))
-}
-
 func (w *Watchdog) podMongodFetcher(podName string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -86,7 +74,7 @@ func (w *Watchdog) podMongodFetcher(podName string, wg *sync.WaitGroup) {
 		}).Error("Error fetching pod tasks")
 		return
 	}
-	apiFetches.With(prometheus.Labels{"type": "get_pod_tasks"}).Inc()
+	sourceFetches.With(prometheus.Labels{"type": "get_pod_tasks"}).Inc()
 
 	for _, task := range tasks {
 		if !task.IsTaskType(pod.TaskTypeMongod) {
@@ -137,7 +125,7 @@ func (w *Watchdog) fetchPods() {
 		}).Error("Error fetching pod list")
 		return
 	}
-	apiFetches.With(prometheus.Labels{"type": "get_pods"}).Inc()
+	sourceFetches.WithLabelValues("get_pods").Inc()
 
 	if pods == nil {
 		log.Debug("Found no pods from source")
@@ -163,15 +151,11 @@ func (w *Watchdog) fetchPods() {
 
 func (w *Watchdog) Run() {
 	log.WithFields(log.Fields{
-		"version":   dcosmongotools.Version,
+		"version":   tools.Version,
 		"framework": w.config.FrameworkName,
 		"go":        runtime.Version(),
 		"source":    w.podSource.Name(),
 	}).Info("Starting watchdog")
-
-	// run the prometheus metrics server
-	prometheus.MustRegister(apiFetches)
-	go w.runPrometheusMetricsServer()
 
 	w.fetchPods()
 

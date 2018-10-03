@@ -45,7 +45,7 @@ const (
 	EnvMongoDBChangeUserNewPassword    = "MONGODB_CHANGE_USER_NEW_PASSWORD"
 	EnvMongoDBWiredTigerCacheSizeRatio = "MONGODB_STORAGE_WIREDTIGER_ENGINE_CONFIG_CACHE_SIZE_RATIO"
 
-	EnvWatchdogMetricsPort = "WATCHDOG_METRICS_PORT"
+	EnvWatchdogMetricsListen = "WATCHDOG_METRICS_LISTEN"
 
 	EnvPMMEnabled                    = "PMM_ENABLED"
 	EnvPMMEnableQueryAnalytics       = "PMM_ENABLE_QUERY_ANALYTICS"

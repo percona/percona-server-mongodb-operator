@@ -12,8 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tools
+package k8s
 
-const (
-	Version = "0.4.1"
+import (
+	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 )
+
+type Pods struct{}
+
+func (p *Pods) Name() string {
+	return "k8s"
+}
+
+func (p *Pods) GetPodURL() string {
+	return "operator-sdk"
+}
+
+func (p *Pods) GetPods() (*pod.Pods, error) {
+	return &pod.Pods{}, nil
+}
+
+func (p *Pods) GetPodTasks(podName string) ([]pod.Task, error) {
+	return []pod.Task{}, nil
+}

@@ -30,6 +30,8 @@ var (
 	}
 	DefaultReplsetPoll    = "5s"
 	DefaultReplsetTimeout = "3s"
+	DefaultMetricsListen  = ":8080"
+	DefaultMetricsPath    = "/metrics"
 )
 
 // Watchdog Configuration
@@ -43,5 +45,4 @@ type Config struct {
 	SSL            *db.SSLConfig
 	ReplsetPoll    time.Duration
 	ReplsetTimeout time.Duration
-	MetricsPort    string
 }
