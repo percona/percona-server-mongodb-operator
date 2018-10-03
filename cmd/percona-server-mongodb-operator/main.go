@@ -5,11 +5,11 @@ import (
 	"runtime"
 	"time"
 
+	stub "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub"
+	version "github.com/Percona-Lab/percona-server-mongodb-operator/version"
 	sdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	k8sutil "github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
-	stub "github.com/timvaillancourt/percona-server-mongodb-operator/pkg/stub"
-	version "github.com/timvaillancourt/percona-server-mongodb-operator/version"
 
 	mongodbOT "github.com/percona/mongodb-orchestration-tools"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
@@ -43,11 +43,6 @@ func main() {
 		logrus.Fatalf("failed to get operator name: %v", err)
 	}
 
-	operatorName, err := k8sutil.GetOperatorName()
-	if err != nil {
-		logrus.Fatalf("failed to get operator name: %v", err)
-	}
-
 	source := &podk8s.Pods{}
 	quit := make(chan bool, 1)
 	watchdog := watchdog.New(&wdConfig.Config{
@@ -55,7 +50,6 @@ func main() {
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 10 * time.Second,
-		FrameworkName:  operatorName,
 	}, &quit, source)
 	go watchdog.Run()
 

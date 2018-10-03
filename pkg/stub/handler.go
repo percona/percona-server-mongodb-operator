@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
-	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"

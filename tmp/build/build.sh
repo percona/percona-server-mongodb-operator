@@ -14,7 +14,7 @@ fi
 BIN_DIR="$(pwd)/tmp/_output/bin"
 mkdir -p ${BIN_DIR}
 PROJECT_NAME="percona-server-mongodb-operator"
-REPO_PATH="github.com/timvaillancourt/percona-server-mongodb-operator"
+REPO_PATH="github.com/Percona-Lab/percona-server-mongodb-operator"
 BUILD_PATH="${REPO_PATH}/cmd/${PROJECT_NAME}"
 echo "building "${PROJECT_NAME}"..."
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${GO_LDFLAGS}" -o ${BIN_DIR}/${PROJECT_NAME} $BUILD_PATH

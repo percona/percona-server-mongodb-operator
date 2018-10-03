@@ -6,7 +6,7 @@ set -o pipefail
 
 vendor/k8s.io/code-generator/generate-groups.sh \
 deepcopy \
-github.com/timvaillancourt/percona-server-mongodb-operator/pkg/generated \
-github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis \
+github.com/Percona-Lab/percona-server-mongodb-operator/pkg/generated \
+github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis \
 cache:v1alpha1 \
 --go-header-file "./tmp/codegen/boilerplate.go.txt"
