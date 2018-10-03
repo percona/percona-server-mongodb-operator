@@ -39,9 +39,15 @@ func main() {
 		logrus.Fatalf("failed to get watch namespace: %v", err)
 	}
 
+	operatorName, err := k8sutil.GetOperatorName()
+	if err != nil {
+		logrus.Fatalf("failed to get operator name: %v", err)
+	}
+
 	source := &podk8s.Pods{}
 	quit := make(chan bool, 1)
 	watchdog := watchdog.New(&wdConfig.Config{
+		ServiceName:    operatorName,
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 10 * time.Second,
