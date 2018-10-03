@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -17,13 +18,15 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func NewHandler(portName string) sdk.Handler {
+func NewHandler(pods *podk8s.Pods, portName string) sdk.Handler {
 	return &Handler{
+		pods:     pods,
 		portName: portName,
 	}
 }
 
 type Handler struct {
+	pods     *podk8s.Pods
 	portName string
 }
 

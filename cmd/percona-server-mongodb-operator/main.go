@@ -38,6 +38,10 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("failed to get watch namespace: %v", err)
 	}
+	operatorName, err := k8sutil.GetOperatorName()
+	if err != nil {
+		logrus.Fatalf("failed to get operator name: %v", err)
+	}
 
 	operatorName, err := k8sutil.GetOperatorName()
 	if err != nil {
@@ -51,13 +55,14 @@ func main() {
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 10 * time.Second,
+		FrameworkName:  operatorName,
 	}, &quit, source)
 	go watchdog.Run()
 
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler("mongodb"))
+	sdk.Handle(stub.NewHandler(source, "mongodb"))
 	sdk.Run(context.TODO())
 
 	quit <- true
