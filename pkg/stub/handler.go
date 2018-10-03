@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/timvaillancourt/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
 
@@ -15,11 +17,15 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func NewHandler() sdk.Handler {
-	return &Handler{}
+func NewHandler(portName string) sdk.Handler {
+	return &Handler{
+		portName: portName,
+	}
 }
 
-type Handler struct{}
+type Handler struct {
+	portName string
+}
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	switch o := event.Object.(type) {
@@ -54,7 +60,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 		}
 
-		// Update the PerconaServerMongoDB status with the pod names
+		// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri
 		podList := podList()
 		labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(psmdb.Name)).String()
 		listOps := &metav1.ListOptions{LabelSelector: labelSelector}
@@ -70,6 +76,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return fmt.Errorf("failed to update psmdb status: %v", err)
 			}
 		}
+		psmdb.Status.Uri = getMongoURI(podList.Items, h.portName)
 	}
 	return nil
 }
@@ -117,4 +124,26 @@ func getPodNames(pods []corev1.Pod) []string {
 		podNames = append(podNames, pod.Name)
 	}
 	return podNames
+}
+
+// getMongoURI returns the mongodb uri containing the host/port of each pod
+func getMongoURI(pods []corev1.Pod, portName string) string {
+	var hosts []string
+	for _, pod := range pods {
+		if pod.Status.HostIP == "" && len(pod.Spec.Containers) >= 1 {
+			continue
+		}
+		for _, port := range pod.Spec.Containers[0].Ports {
+			if port.Name != portName {
+				continue
+			}
+			mongoPort := strconv.Itoa(int(port.HostPort))
+			hosts = append(hosts, pod.Status.HostIP+":"+mongoPort)
+			break
+		}
+	}
+	if len(hosts) > 0 {
+		return "mongodb://" + strings.Join(hosts, ",")
+	}
+	return ""
 }
