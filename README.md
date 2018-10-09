@@ -6,6 +6,8 @@
 
 # Run
 
+## Run External Operator
+1. Install [github.com/operator-framework/operator-sdk](https://github.com/operator-framework/operator-sdk#quick-start)
 1. Deploy the CRD:
     ```
     $ kubectl create -f deploy/crd.yaml
