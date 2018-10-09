@@ -14,10 +14,10 @@ test:
 test-cover:
 	GOCACHE=$(GOCACHE) go test -covermode=atomic -coverprofile=cover.out -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
 
-pkg/apis/cache/v1alpha1/zz_generated.deepcopy.go: pkg/apis/cache/v1alpha1/doc.go pkg/apis/cache/v1alpha1/register.go pkg/apis/cache/v1alpha1/types.go       
+pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go: pkg/apis/psmdb/v1alpha1/doc.go pkg/apis/psmdb/v1alpha1/register.go pkg/apis/psmdb/v1alpha1/types.go       
 	$(GOPATH)/bin/operator-sdk generate k8s
 
-tmp/_output/bin/percona-server-mongodb-operator: pkg/apis/cache/v1alpha1/zz_generated.deepcopy.go pkg/stub/handler.go version/version.go cmd/percona-server-mongodb-operator/main.go
+tmp/_output/bin/percona-server-mongodb-operator: pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go pkg/stub/handler.go version/version.go cmd/percona-server-mongodb-operator/main.go
 	GO_LDFLAGS="$(GO_LDFLAGS)" /bin/bash $(CURDIR)/tmp/build/build.sh
 
 build: tmp/_output/bin/percona-server-mongodb-operator

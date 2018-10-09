@@ -10,7 +10,7 @@ import (
 
 const (
 	version   = "v1alpha1"
-	groupName = "cache.example.com"
+	groupName = "psmdb.percona.com"
 )
 
 var (

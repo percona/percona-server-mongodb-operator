@@ -32,7 +32,7 @@ func main() {
 	printVersion()
 	sdk.ExposeMetricsPort()
 
-	resource := "cache.example.com/v1alpha1"
+	resource := "psmdb.percona.com/v1alpha1"
 	kind := "PerconaServerMongoDB"
 	namespace, err := k8sutil.GetWatchNamespace()
 	if err != nil {

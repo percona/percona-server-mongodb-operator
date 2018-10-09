@@ -8,5 +8,5 @@ vendor/k8s.io/code-generator/generate-groups.sh \
 deepcopy \
 github.com/Percona-Lab/percona-server-mongodb-operator/pkg/generated \
 github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis \
-cache:v1alpha1 \
+psmdb:v1alpha1 \
 --go-header-file "./tmp/codegen/boilerplate.go.txt"

@@ -5,7 +5,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -107,7 +107,8 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{newPSMDBContainer(m)},
+					HostNetwork: true,
+					Containers:  []corev1.Container{newPSMDBContainer(m)},
 				},
 			},
 		},

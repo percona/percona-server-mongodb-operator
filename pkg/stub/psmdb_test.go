@@ -3,7 +3,7 @@ package stub
 import (
 	"testing"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/cache/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/resource"
 )

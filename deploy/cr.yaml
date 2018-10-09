@@ -1,4 +1,4 @@
-apiVersion: "cache.example.com/v1alpha1"
+apiVersion: "psmdb.percona.com/v1alpha1"
 kind: "PerconaServerMongoDB"
 metadata:
   name: "percona-server-mongodb"

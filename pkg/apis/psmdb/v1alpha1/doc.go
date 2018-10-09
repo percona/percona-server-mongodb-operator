@@ -1,3 +1,3 @@
 // +k8s:deepcopy-gen=package
-// +groupName=cache.example.com
+// +groupName=psmdb.percona.com
 package v1alpha1

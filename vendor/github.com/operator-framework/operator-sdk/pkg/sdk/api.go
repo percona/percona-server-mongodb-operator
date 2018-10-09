@@ -34,7 +34,7 @@ var (
 // apiVersion for a resource is of the format "Group/Version" except for the "Core" group whose APIVersion is just "v1". For e.g:
 //   - Deployments have Group "apps" and Version "v1beta2" giving the APIVersion "apps/v1beta2"
 //   - Pods have Group "Core" and Version "v1" giving the APIVersion "v1"
-//   - The custom resource Memcached might have Group "cache.example.com" and Version "v1alpha1" giving the APIVersion "cache.example.com/v1alpha1"
+//   - The custom resource Memcached might have Group "psmdb.percona.com" and Version "v1alpha1" giving the APIVersion "psmdb.percona.com/v1alpha1"
 // kind is the Kind of the resource, e.g "Pod" for pods
 // resyncPeriod is the time period for how often an event with the latest resource version will be sent to the handler, even if there is no change.
 //   - 0 means no periodic events will be sent
