@@ -7,14 +7,14 @@
 # Run
 
 1. Deploy the CRD:
-```
-$ kubectl create -f deploy/crd.yaml
-```
+    ```
+    $ kubectl create -f deploy/crd.yaml
+    ```
 1. Start the Operator *(external to kubernetes)*
-```
-$ OPERATOR_NAME=<name> operator-sdk up local
-```
+    ```
+    $ OPERATOR_NAME=<name> operator-sdk up local
+    ```
 1. Create the Percona Server for MongoDB CR:
-```
-$ kubectl apply -f deploy/cr.yaml
-```
+    ```
+    $ kubectl apply -f deploy/cr.yaml
+    ```
