@@ -107,8 +107,8 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					HostNetwork: true,
-					Containers:  []corev1.Container{newPSMDBContainer(m)},
+					//			HostNetwork: true,
+					Containers: []corev1.Container{newPSMDBContainer(m)},
 				},
 			},
 		},

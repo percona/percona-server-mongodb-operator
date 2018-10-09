@@ -38,9 +38,9 @@ func (c *SDKClient) getEndpointsURL() string {
 }
 
 // GetEndpoints returns a slice of DC/OS SDK Service Endpoints
-func (c *SDKClient) GetEndpoints() (*Endpoints, error) {
-	endpoints := &Endpoints{}
-	err := c.get(c.getEndpointsURL(), endpoints)
+func (c *SDKClient) Endpoints() ([]string, error) {
+	endpoints := []string{}
+	err := c.get(c.getEndpointsURL(), &endpoints)
 	return endpoints, err
 }
 

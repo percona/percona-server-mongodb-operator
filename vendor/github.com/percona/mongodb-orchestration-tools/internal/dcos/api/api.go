@@ -43,9 +43,9 @@ type Config struct {
 // Client is an interface describing a DC/OS SDK API Client
 type Client interface {
 	Name() string
-	GetPodURL() string
-	GetPods() (*pod.Pods, error)
-	GetPodTasks(podName string) ([]pod.Task, error)
-	GetEndpoints() (*Endpoints, error)
+	URL() string
+	Pods() ([]string, error)
+	GetTasks(podName string) ([]pod.Task, error)
+	Endpoints() ([]string, error)
 	GetEndpoint(endpointName string) (*Endpoint, error)
 }

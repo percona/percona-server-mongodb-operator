@@ -66,7 +66,7 @@ func (w *Watchdog) podMongodFetcher(podName string, wg *sync.WaitGroup) {
 		"pod": podName,
 	}).Info("Getting tasks for pod")
 
-	tasks, err := w.podSource.GetPodTasks(podName)
+	tasks, err := w.podSource.GetTasks(podName)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"pod":   podName,
@@ -114,13 +114,13 @@ func (w *Watchdog) doIgnorePod(podName string) bool {
 func (w *Watchdog) fetchPods() {
 	log.WithFields(log.Fields{
 		"source": w.podSource.Name(),
-		"url":    w.podSource.GetPodURL(),
+		"url":    w.podSource.URL(),
 	}).Info("Getting pods from source")
 
-	pods, err := w.podSource.GetPods()
+	pods, err := w.podSource.Pods()
 	if err != nil {
 		log.WithFields(log.Fields{
-			"url":   w.podSource.GetPodURL(),
+			"url":   w.podSource.URL(),
 			"error": err,
 		}).Error("Error fetching pod list")
 		return
@@ -136,7 +136,7 @@ func (w *Watchdog) fetchPods() {
 
 	// get updated pods list
 	var wg sync.WaitGroup
-	for _, podName := range *w.activePods.Get() {
+	for _, podName := range w.activePods.Get() {
 		if w.doIgnorePod(podName) {
 			log.WithFields(log.Fields{"pod": podName}).Debug("Pod matches ignorePod list, skipping")
 			continue

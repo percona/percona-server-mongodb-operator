@@ -6,9 +6,12 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
+	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
+	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
@@ -18,16 +21,25 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func NewHandler(pods *podk8s.Pods, portName string) sdk.Handler {
+func NewHandler(portName string) sdk.Handler {
 	return &Handler{
-		pods:     pods,
-		portName: portName,
+		pods:         podk8s.NewPods([]corev1.Pod{}, "mongodb"),
+		portName:     portName,
+		watchdogQuit: make(chan bool, 1),
 	}
 }
 
 type Handler struct {
-	pods     *podk8s.Pods
-	portName string
+	pods         *podk8s.Pods
+	portName     string
+	watchdog     *watchdog.Watchdog
+	watchdogQuit chan bool
+}
+
+func (h *Handler) Close() {
+	if h.watchdog != nil {
+		h.watchdogQuit <- true
+	}
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
@@ -39,6 +51,17 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
 			return nil
+		}
+
+		// Start the watchdog if it has not been started
+		if h.watchdog == nil {
+			h.watchdog = watchdog.New(&wdConfig.Config{
+				ServiceName:    psmdb.Namespace,
+				APIPoll:        5 * time.Second,
+				ReplsetPoll:    5 * time.Second,
+				ReplsetTimeout: 10 * time.Second,
+			}, &h.watchdogQuit, h.pods)
+			go h.watchdog.Run()
 		}
 
 		// Create the deployment if it doesn't exist
@@ -71,15 +94,16 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		if err != nil {
 			return fmt.Errorf("failed to list pods: %v", err)
 		}
+		h.pods.SetPods(podList.Items)
 		podNames := getPodNames(podList.Items)
 		if !reflect.DeepEqual(podNames, psmdb.Status.Nodes) {
 			psmdb.Status.Nodes = podNames
+			psmdb.Status.Uri = getMongoURI(podList.Items, h.portName)
 			err := sdk.Update(psmdb)
 			if err != nil {
 				return fmt.Errorf("failed to update psmdb status: %v", err)
 			}
 		}
-		psmdb.Status.Uri = getMongoURI(podList.Items, h.portName)
 	}
 	return nil
 }

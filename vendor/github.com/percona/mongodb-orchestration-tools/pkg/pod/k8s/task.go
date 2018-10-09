@@ -15,50 +15,81 @@
 package k8s
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
+	corev1 "k8s.io/api/core/v1"
 )
 
-type TaskState string
+type TaskState struct {
+	status corev1.PodStatus
+}
 
-var (
-	TaskStateRunning TaskState = "running"
-	TaskStateStopped TaskState = "stopped"
-)
+func NewTaskState(status corev1.PodStatus) *TaskState {
+	return &TaskState{status}
+}
 
-func (s TaskState) String() string {
-	return string(s)
+func (ts TaskState) String() string {
+	return string(ts.status.Phase)
 }
 
 type Task struct {
-	state *TaskState
+	pod      *corev1.Pod
+	portName string
 }
 
-func (task *Task) State() pod.TaskState {
-	return task.state
+func NewTask(pod corev1.Pod, portName string) *Task {
+	return &Task{
+		pod:      &pod,
+		portName: portName,
+	}
 }
 
-func (task *Task) HasState() bool {
-	return false
+func (t *Task) State() pod.TaskState {
+	return NewTaskState(t.pod.Status)
 }
 
-func (task *Task) Name() string {
-	return "test"
+func (t *Task) HasState() bool {
+	return t.pod.Status.Phase != ""
 }
 
-func (task *Task) IsRunning() bool {
-	return false
+func (t *Task) Name() string {
+	return t.pod.Name
 }
 
-func (task *Task) IsTaskType(taskType pod.TaskType) bool {
-	return false
+func (t *Task) IsRunning() bool {
+	return t.pod.Status.Phase == corev1.PodRunning
 }
 
-func (task *Task) GetMongoAddr() (*db.Addr, error) {
-	addr := &db.Addr{}
-	return addr, nil
+func (t *Task) IsTaskType(taskType pod.TaskType) bool {
+	return taskType == pod.TaskTypeMongod
 }
 
-func (task *Task) GetMongoReplsetName() (string, error) {
-	return "rs", nil
+func (t *Task) GetMongoAddr() (*db.Addr, error) {
+	for _, container := range t.pod.Spec.Containers {
+		fmt.Printf("Container ports: %v\n", container.Ports)
+		for _, port := range container.Ports {
+			if port.Name == t.portName {
+				return &db.Addr{
+					//Host: port.HostIP,
+					Host: t.pod.Status.HostIP,
+					Port: int(port.HostPort),
+				}, nil
+			}
+		}
+	}
+	return nil, errors.New("could not find mongodb address")
+}
+
+func (t *Task) GetMongoReplsetName() (string, error) {
+	for _, container := range t.pod.Spec.Containers {
+		for _, env := range container.Env {
+			if env.Name == "MONGODB_REPLSET" {
+				return env.Value, nil
+			}
+		}
+	}
+	return "", errors.New("could not find mongodb replset name")
 }

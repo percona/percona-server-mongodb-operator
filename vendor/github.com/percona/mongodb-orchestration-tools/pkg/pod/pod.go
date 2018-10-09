@@ -16,33 +16,22 @@ package pod
 
 import "sync"
 
-type Pods []string
-
-func (p Pods) HasPod(name string) bool {
-	for _, pod := range p {
-		if pod == name {
-			return true
-		}
-	}
-	return false
-}
-
 type ActivePods struct {
 	sync.Mutex
-	pods *Pods
+	pods []string
 }
 
 func NewActivePods() *ActivePods {
-	return &ActivePods{pods: &Pods{}}
+	return &ActivePods{}
 }
 
-func (p *ActivePods) Get() *Pods {
+func (p *ActivePods) Get() []string {
 	p.Lock()
 	defer p.Unlock()
 	return p.pods
 }
 
-func (p *ActivePods) Set(pods *Pods) {
+func (p *ActivePods) Set(pods []string) {
 	p.Lock()
 	defer p.Unlock()
 	p.pods = pods
@@ -51,12 +40,17 @@ func (p *ActivePods) Set(pods *Pods) {
 func (p *ActivePods) Has(name string) bool {
 	p.Lock()
 	defer p.Unlock()
-	return p.pods.HasPod(name)
+	for _, podName := range p.pods {
+		if name == podName {
+			return true
+		}
+	}
+	return false
 }
 
 type Source interface {
 	Name() string
-	GetPodURL() string
-	GetPods() (*Pods, error)
-	GetPodTasks(podName string) ([]Task, error)
+	URL() string
+	Pods() ([]string, error)
+	GetTasks(podName string) ([]Task, error)
 }

@@ -12,9 +12,6 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 
 	mongodbOT "github.com/percona/mongodb-orchestration-tools"
-	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
-	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
-	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 
 	"github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -38,26 +35,10 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("failed to get watch namespace: %v", err)
 	}
-	operatorName, err := k8sutil.GetOperatorName()
-	if err != nil {
-		logrus.Fatalf("failed to get operator name: %v", err)
-	}
-
-	source := &podk8s.Pods{}
-	quit := make(chan bool, 1)
-	watchdog := watchdog.New(&wdConfig.Config{
-		ServiceName:    operatorName,
-		APIPoll:        5 * time.Second,
-		ReplsetPoll:    5 * time.Second,
-		ReplsetTimeout: 10 * time.Second,
-	}, &quit, source)
-	go watchdog.Run()
 
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler(source, "mongodb"))
+	sdk.Handle(stub.NewHandler("mongodb"))
 	sdk.Run(context.TODO())
-
-	quit <- true
 }

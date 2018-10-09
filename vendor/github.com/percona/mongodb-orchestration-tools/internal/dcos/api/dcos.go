@@ -39,16 +39,16 @@ var (
 // SDKClient is an HTTP client for the DC/OS SDK API
 type SDKClient struct {
 	ServiceName string
-	config        *Config
-	scheme        HTTPScheme
+	config      *Config
+	scheme      HTTPScheme
 }
 
 // New creates a new SDKClient struct configured for use with the DC/OS SDK API
 func New(frameworkName string, config *Config) *SDKClient {
 	c := &SDKClient{
 		ServiceName: frameworkName,
-		config:        config,
-		scheme:        HTTPSchemePlain,
+		config:      config,
+		scheme:      HTTPSchemePlain,
 	}
 	if config.Secure {
 		c.scheme = HTTPSchemeSecure
