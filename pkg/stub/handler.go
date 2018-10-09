@@ -34,6 +34,7 @@ type Handler struct {
 	portName     string
 	watchdog     *watchdog.Watchdog
 	watchdogQuit chan bool
+	initialised  bool
 }
 
 func (h *Handler) Close() {
@@ -94,7 +95,6 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		if err != nil {
 			return fmt.Errorf("failed to list pods: %v", err)
 		}
-		h.pods.SetPods(podList.Items)
 		podNames := getPodNames(podList.Items)
 		if !reflect.DeepEqual(podNames, psmdb.Status.Nodes) {
 			psmdb.Status.Nodes = podNames
@@ -104,6 +104,19 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return fmt.Errorf("failed to update psmdb status: %v", err)
 			}
 		}
+
+		// Update the pods list that is read by the watchdog
+		h.pods.SetPods(podList.Items)
+
+		// Initialise the replset
+		//if !h.initialised && len(podList.Items) > 0 {
+		//	for _, pod := range podList.Items {
+		//		if pod.Status.Phase == corev1.PodRunning {
+		//			fmt.Printf("First pod: %v\n", podList.Items[0].Name)
+		//		}
+		//	}
+		//	//h.initialised = true
+		//}
 	}
 	return nil
 }

@@ -107,8 +107,10 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					//			HostNetwork: true,
-					Containers: []corev1.Container{newPSMDBContainer(m)},
+					HostNetwork: true,
+					Containers: []corev1.Container{
+						newPSMDBContainer(m),
+					},
 				},
 			},
 		},
@@ -166,8 +168,8 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 		},
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
-				"cpu":    *cpuQuantity,
-				"memory": *memoryQuantity,
+				corev1.ResourceCPU:    *cpuQuantity,
+				corev1.ResourceMemory: *memoryQuantity,
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{

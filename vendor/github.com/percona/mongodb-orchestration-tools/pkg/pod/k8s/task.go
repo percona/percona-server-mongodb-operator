@@ -16,7 +16,6 @@ package k8s
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
@@ -69,11 +68,9 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
 	for _, container := range t.pod.Spec.Containers {
-		fmt.Printf("Container ports: %v\n", container.Ports)
 		for _, port := range container.Ports {
 			if port.Name == t.portName {
 				return &db.Addr{
-					//Host: port.HostIP,
 					Host: t.pod.Status.HostIP,
 					Port: int(port.HostPort),
 				}, nil
