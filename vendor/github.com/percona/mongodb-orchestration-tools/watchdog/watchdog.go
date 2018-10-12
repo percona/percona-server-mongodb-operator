@@ -45,11 +45,11 @@ type Watchdog struct {
 	podSource      pod.Source
 	watcherManager watcher.Manager
 	quit           *chan bool
-	activePods     *pod.ActivePods
+	activePods     *pod.Pods
 }
 
 func New(config *config.Config, quit *chan bool, podSource pod.Source) *Watchdog {
-	activePods := pod.NewActivePods()
+	activePods := pod.NewPods()
 	return &Watchdog{
 		config:         config,
 		podSource:      podSource,

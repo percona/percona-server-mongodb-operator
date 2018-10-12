@@ -37,10 +37,10 @@ type WatcherManager struct {
 	stop       *chan bool
 	quitChans  map[string]chan bool
 	watchers   map[string]*Watcher
-	activePods *pod.ActivePods
+	activePods *pod.Pods
 }
 
-func NewManager(config *config.Config, stop *chan bool, activePods *pod.ActivePods) *WatcherManager {
+func NewManager(config *config.Config, stop *chan bool, activePods *pod.Pods) *WatcherManager {
 	return &WatcherManager{
 		config:     config,
 		stop:       stop,

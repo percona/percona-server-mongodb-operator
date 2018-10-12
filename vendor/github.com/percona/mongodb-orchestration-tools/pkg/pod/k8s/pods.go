@@ -56,7 +56,6 @@ func (p *Pods) Pods() ([]string, error) {
 	for _, pod := range p.pods {
 		pods = append(pods, pod.Name)
 	}
-
 	return pods, nil
 }
 
@@ -66,9 +65,6 @@ func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 
 	tasks := make([]pod.Task, 0)
 	for _, pod := range p.pods {
-		if pod.Name != podName {
-			continue
-		}
 		tasks = append(tasks, NewTask(pod, p.portName))
 	}
 	return tasks, nil

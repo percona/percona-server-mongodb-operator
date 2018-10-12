@@ -43,10 +43,10 @@ type Watcher struct {
 	state         *replset.State
 	quit          *chan bool
 	running       bool
-	activePods    *pod.ActivePods
+	activePods    *pod.Pods
 }
 
-func New(rs *replset.Replset, config *config.Config, quit *chan bool, activePods *pod.ActivePods) *Watcher {
+func New(rs *replset.Replset, config *config.Config, quit *chan bool, activePods *pod.Pods) *Watcher {
 	return &Watcher{
 		config:     config,
 		replset:    rs,

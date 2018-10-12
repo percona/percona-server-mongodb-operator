@@ -234,7 +234,7 @@
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "7a3adebbb6f8b0d2d958b2e1c32cf19334d0c89f"
+  revision = "6876bda08a2cf385d4a8cc13c9eb2af501471c2e"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
@@ -643,6 +643,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bf6a1cdace2b3d5f84de915542efcdbc1069fda37104abd29553c23d192e4b4d"
+  inputs-digest = "74959c1031781785a64c17796edbe2096ec907fb3e891bf33a21f070e58d5cba"
   solver-name = "gps-cdcl"
   solver-version = 1

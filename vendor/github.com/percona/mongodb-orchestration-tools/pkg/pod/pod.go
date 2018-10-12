@@ -16,28 +16,28 @@ package pod
 
 import "sync"
 
-type ActivePods struct {
+type Pods struct {
 	sync.Mutex
 	pods []string
 }
 
-func NewActivePods() *ActivePods {
-	return &ActivePods{}
+func NewPods() *Pods {
+	return &Pods{}
 }
 
-func (p *ActivePods) Get() []string {
+func (p *Pods) Get() []string {
 	p.Lock()
 	defer p.Unlock()
 	return p.pods
 }
 
-func (p *ActivePods) Set(pods []string) {
+func (p *Pods) Set(pods []string) {
 	p.Lock()
 	defer p.Unlock()
 	p.pods = pods
 }
 
-func (p *ActivePods) Has(name string) bool {
+func (p *Pods) Has(name string) bool {
 	p.Lock()
 	defer p.Unlock()
 	for _, podName := range p.pods {

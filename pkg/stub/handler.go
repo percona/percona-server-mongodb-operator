@@ -109,24 +109,24 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// Update the pods list that is read by the watchdog
 		h.pods.SetPods(podList.Items)
 
-		// Initialise the replset
-		//		if !h.initialised && len(podList.Items) == int(size) {
-		//			logrus.Info("Initiating replset")
-		//
-		//			job := newPSMDBReplsetInitJob(o)
-		//			err = sdk.Create(job)
-		//			if err != nil && !errors.IsAlreadyExists(err) {
-		//				logrus.Errorf("failed to create psmdb replset init job: %v", err)
-		//				return err
-		//			}
-		//
-		//			err = sdk.Get(job)
-		//			if err != nil {
-		//				return fmt.Errorf("failed to get psmdb replset init job: %v", err)
-		//			}
-		//
-		//			h.initialised = true
-		//		}
+		// Initiate the replset
+		if !h.initialised && len(podList.Items) >= 1 {
+			logrus.Info("Initiating replset")
+
+			job := newPSMDBReplsetInitJob(o)
+			err = sdk.Create(job)
+			if err != nil && !errors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb replset init job: %v", err)
+				return err
+			}
+
+			err = sdk.Get(job)
+			if err != nil {
+				return fmt.Errorf("failed to get psmdb replset init job: %v", err)
+			}
+
+			h.initialised = true
+		}
 	}
 	return nil
 }

@@ -128,7 +128,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					Affinity:    newPSMDBPodAffinity(ls),
-					HostNetwork: false,
+					HostNetwork: true,
 					Containers: []corev1.Container{
 						newPSMDBMongodContainer(m),
 					},
@@ -181,9 +181,9 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 	}
 }
 
-func newPSMDBReplsetInitJob(m *v1alpha1.PerconaServerMongoDB) batchv1.Job {
+func newPSMDBReplsetInitJob(m *v1alpha1.PerconaServerMongoDB) *batchv1.Job {
 	ls := labelsForPerconaServerMongoDB(m.Name)
-	return batchv1.Job{
+	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
 			Kind:       "Job",
@@ -193,15 +193,17 @@ func newPSMDBReplsetInitJob(m *v1alpha1.PerconaServerMongoDB) batchv1.Job {
 			Namespace: m.Namespace,
 		},
 		Spec: batchv1.JobSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: ls,
-			},
+			//			Selector: &metav1.LabelSelector{
+			//				MatchLabels: ls,
+			//			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					HostNetwork: false,
+					HostNetwork:   true,
+					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
+					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
 							Name:            "replset-init",

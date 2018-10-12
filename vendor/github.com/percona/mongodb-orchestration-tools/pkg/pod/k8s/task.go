@@ -22,6 +22,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const MongodContainerName string = "mongod"
+
 type TaskState struct {
 	status corev1.PodStatus
 }
@@ -63,7 +65,15 @@ func (t *Task) IsRunning() bool {
 }
 
 func (t *Task) IsTaskType(taskType pod.TaskType) bool {
-	return taskType == pod.TaskTypeMongod
+	switch taskType {
+	case pod.TaskTypeMongod:
+		for _, container := range t.pod.Spec.Containers {
+			if container.Name == MongodContainerName {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
