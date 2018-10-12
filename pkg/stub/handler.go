@@ -65,25 +65,25 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			go h.watchdog.Run()
 		}
 
-		// Create the deployment if it doesn't exist
-		dep := newPSMDBDeployment(o)
-		err := sdk.Create(dep)
+		// Create the StatefulSet if it doesn't exist
+		set := newPSMDBStatefulSet(o)
+		err := sdk.Create(set)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			logrus.Errorf("failed to create psmdb pod : %v", err)
 			return err
 		}
 
-		// Ensure the deployment size is the same as the spec
-		err = sdk.Get(dep)
+		// Ensure the stateful set size is the same as the spec
+		err = sdk.Get(set)
 		if err != nil {
-			return fmt.Errorf("failed to get deployment: %v", err)
+			return fmt.Errorf("failed to get stateful set: %v", err)
 		}
 		size := psmdb.Spec.Size
-		if *dep.Spec.Replicas != size {
-			dep.Spec.Replicas = &size
-			err = sdk.Update(dep)
+		if *set.Spec.Replicas != size {
+			set.Spec.Replicas = &size
+			err = sdk.Update(set)
 			if err != nil {
-				return fmt.Errorf("failed to update deployment: %v", err)
+				return fmt.Errorf("failed to update stateful set: %v", err)
 			}
 		}
 
@@ -95,6 +95,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		if err != nil {
 			return fmt.Errorf("failed to list pods: %v", err)
 		}
+
 		podNames := getPodNames(podList.Items)
 		if !reflect.DeepEqual(podNames, psmdb.Status.Nodes) {
 			psmdb.Status.Nodes = podNames
@@ -109,14 +110,23 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		h.pods.SetPods(podList.Items)
 
 		// Initialise the replset
-		//if !h.initialised && len(podList.Items) > 0 {
-		//	for _, pod := range podList.Items {
-		//		if pod.Status.Phase == corev1.PodRunning {
-		//			fmt.Printf("First pod: %v\n", podList.Items[0].Name)
+		//		if !h.initialised && len(podList.Items) == int(size) {
+		//			logrus.Info("Initiating replset")
+		//
+		//			job := newPSMDBReplsetInitJob(o)
+		//			err = sdk.Create(job)
+		//			if err != nil && !errors.IsAlreadyExists(err) {
+		//				logrus.Errorf("failed to create psmdb replset init job: %v", err)
+		//				return err
+		//			}
+		//
+		//			err = sdk.Get(job)
+		//			if err != nil {
+		//				return fmt.Errorf("failed to get psmdb replset init job: %v", err)
+		//			}
+		//
+		//			h.initialised = true
 		//		}
-		//	}
-		//	//h.initialised = true
-		//}
 	}
 	return nil
 }

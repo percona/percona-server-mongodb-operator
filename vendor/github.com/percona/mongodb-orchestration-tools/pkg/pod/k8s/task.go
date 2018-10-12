@@ -71,7 +71,7 @@ func (t *Task) GetMongoAddr() (*db.Addr, error) {
 		for _, port := range container.Ports {
 			if port.Name == t.portName {
 				return &db.Addr{
-					Host: t.pod.Status.HostIP,
+					Host: t.pod.Name,
 					Port: int(port.HostPort),
 				}, nil
 			}

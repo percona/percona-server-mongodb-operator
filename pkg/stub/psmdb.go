@@ -8,6 +8,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,6 +67,25 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.RunUID == 0 {
 		spec.RunUID = defaultRunUID
 	}
+	//	if len(spec.Credentials) < 1 {
+	//		spec.Credentials = []v1alpha1.PerconaServerMongoDBSpecCredential{
+	//			{
+	//				Username: "clusterAdmin",
+	//				Password: "clusterAdminPassword",
+	//				Role:     "clusterAdmin",
+	//			},
+	//			{
+	//				Username: "clusterMonitor",
+	//				Password: "clusterMonitorPassword",
+	//				Role:     "clusterMonitor",
+	//			},
+	//			{
+	//				Username: "userAdmin",
+	//				Password: "userAdminPassword",
+	//				Role:     "userAdmin",
+	//			},
+	//		}
+	//	}
 }
 
 // The WiredTiger internal cache, by default, will use the larger of either 50% of
@@ -83,21 +103,20 @@ func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) 
 	return sizeGB
 }
 
-// newPSMDBDeployment returns a PSMDB deployment
-func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
+// newPSMDBStatefulSet returns a PSMDB stateful set
+func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 	addPSMDBSpecDefaults(&m.Spec)
-
 	ls := labelsForPerconaServerMongoDB(m.Name)
-	dep := &appsv1.Deployment{
+	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
-			Kind:       "Deployment",
+			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Name,
 			Namespace: m.Namespace,
 		},
-		Spec: appsv1.DeploymentSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Replicas: &m.Spec.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
@@ -109,17 +128,76 @@ func newPSMDBDeployment(m *v1alpha1.PerconaServerMongoDB) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					HostNetwork: true,
 					Containers: []corev1.Container{
-						newPSMDBContainer(m),
+						newPSMDBMongodContainer(m),
 					},
 				},
 			},
 		},
 	}
-	addOwnerRefToObject(dep, asOwner(m))
-	return dep
+	addOwnerRefToObject(set, asOwner(m))
+	return set
 }
 
-func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
+func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
+	mSpec := m.Spec.MongoDB
+	return []corev1.EnvVar{
+		{
+			Name:  "MONGODB_PRIMARY_ADDR",
+			Value: "127.0.0.1:" + strconv.Itoa(int(mSpec.Port)),
+		},
+		{
+			Name:  "MONGODB_REPLSET",
+			Value: mSpec.ReplsetName,
+		},
+		{
+			Name:  "MONGODB_USER_ADMIN_USER",
+			Value: "userAdmin",
+		},
+		{
+			Name:  "MONGODB_USER_ADMIN_PASSWORD",
+			Value: "admin123456",
+		},
+	}
+}
+
+func newPSMDBReplsetInitJob(m *v1alpha1.PerconaServerMongoDB) batchv1.Job {
+	ls := labelsForPerconaServerMongoDB(m.Name)
+	return batchv1.Job{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "batch/v1",
+			Kind:       "Job",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.Name,
+			Namespace: m.Namespace,
+		},
+		Spec: batchv1.JobSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: ls,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: ls,
+				},
+				Spec: corev1.PodSpec{
+					HostNetwork: true,
+					Containers: []corev1.Container{
+						{
+							Name:            m.Name + "-replset-init",
+							Command:         []string{"dcos-mongodb-controller"},
+							Args:            []string{"replset", "init"},
+							Image:           "perconalab/mongodb-orchestration-tools:0.4.1-dcos",
+							ImagePullPolicy: corev1.PullAlways,
+							Env:             newPSMDBContainerEnv(m),
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	cpuQuantity := resource.NewQuantity(1, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(1024*1024*1024, resource.DecimalSI)
 
@@ -137,9 +215,10 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:  m.Name,
-		Image: m.Spec.Image,
-		Args:  args,
+		Name:            m.Name,
+		Image:           m.Spec.Image,
+		ImagePullPolicy: corev1.PullAlways,
+		Args:            args,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
@@ -148,10 +227,14 @@ func newPSMDBContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
-		Env: []corev1.EnvVar{
+		Env: newPSMDBContainerEnv(m),
+		EnvFrom: []corev1.EnvFromSource{
 			{
-				Name:  "MONGODB_REPLSET",
-				Value: "rs",
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "percona-server-mongodb",
+					},
+				},
 			},
 		},
 		WorkingDir: mongodContainerDataDir,

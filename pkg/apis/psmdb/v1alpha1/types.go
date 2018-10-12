@@ -38,13 +38,25 @@ type PerconaServerMongoDBSpecMongoDB struct {
 	WiredTiger    *PerconaServerMongoDBSpecMongoDBWiredTiger `json:"wiredTiger,omitempty"`
 }
 
-type PerconaServerMongoDBSpec struct {
-	Size    int32                            `json:"size"`
-	Image   string                           `json:"image,omitempty"`
-	RunGID  int64                            `json:"runGid,omitempty"`
-	RunUID  int64                            `json:"runUid,omitempty"`
-	MongoDB *PerconaServerMongoDBSpecMongoDB `json:"mongodb,omitempty"`
+type PerconaServerMongoDBSpecCredential struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+	Source   string `json:"source,omitempty"`
 }
+
+type PerconaServerMongoDBSpec struct {
+	Size           int32                                `json:"size"`
+	Image          string                               `json:"image,omitempty"`
+	RunGID         int64                                `json:"runGid,omitempty"`
+	RunUID         int64                                `json:"runUid,omitempty"`
+	UserAdmin      *PerconaServerMongoDBSpecCredential  `json:"userAdmin,omitempty"`
+	ClusterAdmin   *PerconaServerMongoDBSpecCredential  `json:"clusterAdmin,omitempty"`
+	ClusterMonitor *PerconaServerMongoDBSpecCredential  `json:"clusterMonitor,omitempty"`
+	AddUsers       []PerconaServerMongoDBSpecCredential `json:"addCredentials,omitempty"`
+	MongoDB        *PerconaServerMongoDBSpecMongoDB     `json:"mongodb,omitempty"`
+}
+
 type PerconaServerMongoDBStatus struct {
 	Nodes []string `json:"nodes"`
 	Uri   string   `json:"uri"`

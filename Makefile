@@ -26,4 +26,4 @@ docker: tmp/_output/bin/percona-server-mongodb-operator
 	IMAGE=$(IMAGE) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
 
 clean:
-	rm -f cover.out 2>/dev/null || true
+	rm -rf cover.out tmp/_output 2>/dev/null || true
