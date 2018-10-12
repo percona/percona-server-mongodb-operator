@@ -117,7 +117,8 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &m.Spec.Size,
+			ServiceName: m.Name,
+			Replicas:    &m.Spec.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -126,7 +127,8 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					HostNetwork: true,
+					Affinity:    newPSMDBPodAffinity(ls),
+					HostNetwork: false,
 					Containers: []corev1.Container{
 						newPSMDBMongodContainer(m),
 					},
@@ -136,6 +138,25 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 	}
 	addOwnerRefToObject(set, asOwner(m))
 	return set
+}
+
+func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
+	return &corev1.Affinity{
+		// prefer to run mongo instances on separate hostnames
+		PodAntiAffinity: &corev1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: ls,
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+			},
+		},
+	}
 }
 
 func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
@@ -180,10 +201,10 @@ func newPSMDBReplsetInitJob(m *v1alpha1.PerconaServerMongoDB) batchv1.Job {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					HostNetwork: true,
+					HostNetwork: false,
 					Containers: []corev1.Container{
 						{
-							Name:            m.Name + "-replset-init",
+							Name:            "replset-init",
 							Command:         []string{"dcos-mongodb-controller"},
 							Args:            []string{"replset", "init"},
 							Image:           "perconalab/mongodb-orchestration-tools:0.4.1-dcos",
@@ -215,7 +236,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 	}
 
 	return corev1.Container{
-		Name:            m.Name,
+		Name:            "mongod",
 		Image:           m.Spec.Image,
 		ImagePullPolicy: corev1.PullAlways,
 		Args:            args,
