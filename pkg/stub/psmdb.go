@@ -127,8 +127,9 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:    newPSMDBPodAffinity(ls),
-					HostNetwork: true,
+					Affinity:      newPSMDBPodAffinity(ls),
+					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
+					RestartPolicy: corev1.RestartPolicyAlways,
 					Containers: []corev1.Container{
 						newPSMDBMongodContainer(m),
 					},
@@ -201,7 +202,6 @@ func newPSMDBReplsetInitJob(m *v1alpha1.PerconaServerMongoDB) *batchv1.Job {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					HostNetwork:   true,
 					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{

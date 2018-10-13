@@ -1,5 +1,5 @@
 GOCACHE?=off
-GO_TEST_PATH?=./...
+GO_TEST_PATH?=./pkg/...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
 
@@ -9,7 +9,7 @@ IMAGE?=perconalab/percona-server-mongodb-operator:$(VERSION)
 all: build
 
 test:
-	GOCACHE=$(GOCACHE) go test -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
+	GOCACHE=$(GOCACHE) go test -covermode=atomic -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
 
 test-cover:
 	GOCACHE=$(GOCACHE) go test -covermode=atomic -coverprofile=cover.out -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
