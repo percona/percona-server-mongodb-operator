@@ -183,12 +183,18 @@ func getMongoURI(pods []corev1.Pod, portName string) string {
 		if pod.Status.HostIP == "" && len(pod.Spec.Containers) >= 1 {
 			continue
 		}
-		for _, port := range pod.Spec.Containers[0].Ports {
-			if port.Name != portName {
+		for _, container := range pod.Spec.Containers {
+			if container.Name != mongodContainerName {
 				continue
 			}
-			mongoPort := strconv.Itoa(int(port.HostPort))
-			hosts = append(hosts, pod.Status.HostIP+":"+mongoPort)
+			for _, port := range container.Ports {
+				if port.Name != portName {
+					continue
+				}
+				mongoPort := strconv.Itoa(int(port.HostPort))
+				hosts = append(hosts, pod.Status.HostIP+":"+mongoPort)
+				break
+			}
 			break
 		}
 	}

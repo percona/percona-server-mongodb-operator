@@ -30,6 +30,7 @@ var (
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
 	mongodContainerDataDir          string  = "/data/db"
+	mongodContainerName             string  = "mongod"
 	mongodPortName                  string  = "mongodb"
 )
 
@@ -238,7 +239,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 	}
 
 	return corev1.Container{
-		Name:            "mongod",
+		Name:            mongodContainerName,
 		Image:           m.Spec.Image,
 		ImagePullPolicy: corev1.PullAlways,
 		Args:            args,

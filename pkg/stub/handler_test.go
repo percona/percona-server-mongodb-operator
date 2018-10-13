@@ -11,12 +11,20 @@ func TestGetMongoURI(t *testing.T) {
 	spec := corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
+				Name: mongodContainerName,
 				Ports: []corev1.ContainerPort{
 					{
 						Name:     "mongodb",
 						HostPort: int32(27017),
 					},
+					{
+						Name:     "not-mongodb",
+						HostPort: int32(99999),
+					},
 				},
+			},
+			{
+				Name: "not-mongod",
 			},
 		},
 	}
