@@ -278,6 +278,10 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 				corev1.ResourceCPU:    *cpuQuantity,
 				corev1.ResourceMemory: *memoryQuantity,
 			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    *cpuQuantity,
+				corev1.ResourceMemory: *memoryQuantity,
+			},
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:  &m.Spec.RunUID,
