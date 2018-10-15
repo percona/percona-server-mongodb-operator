@@ -16,7 +16,10 @@ import (
 
 // stolen from https://github.com/saada/mongodb-operator/blob/master/pkg/stub/handler.go
 // v2 of the api should have features for doing this, I would like to move to that later
-func execMongoCommandInContainer(pod corev1.Pod, containerName, mongoCmd string) error {
+//
+// See: https://github.com/kubernetes/client-go/issues/45
+//
+func execMongoCommandsInContainer(pod corev1.Pod, containerName string, mongoCmds []string) error {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig: %v", err)
@@ -60,6 +63,7 @@ func execMongoCommandInContainer(pod corev1.Pod, containerName, mongoCmd string)
 			"/usr/bin/mongo",
 			"--port=" + containerPort,
 			"--quiet",
+			"admin",
 		},
 		Stdout: true,
 		Stderr: true,
@@ -76,6 +80,7 @@ func execMongoCommandInContainer(pod corev1.Pod, containerName, mongoCmd string)
 		stdErr bytes.Buffer
 		stdIn  bytes.Buffer
 	)
+	mongoCmd := strings.Join(mongoCmds, "; ")
 	_, err = stdIn.WriteString(mongoCmd)
 	if err != nil {
 		return err

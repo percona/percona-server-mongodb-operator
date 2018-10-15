@@ -126,7 +126,14 @@ func (h *Handler) handleReplsetInit(pods []corev1.Pod) error {
 
 		logrus.Infof("Initiating replset on pod: %s", pod.Name)
 
-		err := execMongoCommandInContainer(pod, mongodContainerName, "rs.initiate()")
+		err := execMongoCommandsInContainer(
+			pod,
+			mongodContainerName,
+			[]string{
+				"rs.initiate()",
+				"db.createUser({ user: \"admin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",
+			},
+		)
 		if err != nil {
 			return err
 		}
