@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -130,8 +129,16 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 					Affinity:      newPSMDBPodAffinity(ls),
 					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
 					RestartPolicy: corev1.RestartPolicyAlways,
+					InitContainers: []corev1.Container{
+						newPSMDBInitContainer(m),
+					},
 					Containers: []corev1.Container{
 						newPSMDBMongodContainer(m),
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "tools",
+						},
 					},
 				},
 			},
@@ -179,6 +186,31 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 			Name:  "MONGODB_USER_ADMIN_PASSWORD",
 			Value: "admin123456",
 		},
+		{
+			Name:  "MONGODB_CLUSTER_MONITOR_USER",
+			Value: "userAdmin",
+		},
+		{
+			Name:  "MONGODB_CLUSTER_MONITOR_PASSWORD",
+			Value: "admin123456",
+		},
+	}
+}
+
+func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
+	return corev1.Container{
+		Name:  "init",
+		Image: "busybox",
+		Command: []string{
+			"/bin/sh", "-c",
+			"wget -P /tools https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck && chmod +x /tools/mongodb-healthcheck",
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "tools",
+				MountPath: "/tools",
+			},
+		},
 	}
 }
 
@@ -224,15 +256,32 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 			},
 		},
 		WorkingDir: mongodContainerDataDir,
+		LivenessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/tools/mongodb-healthcheck",
+						"readiness",
+					},
+				},
+			},
+			InitialDelaySeconds: int32(30),
+			TimeoutSeconds:      int32(5),
+			PeriodSeconds:       int32(3),
+			FailureThreshold:    int32(5),
+		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(mongoSpec.Port)),
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/tools/mongodb-healthcheck",
+						"health",
+					},
 				},
 			},
 			InitialDelaySeconds: int32(60),
 			TimeoutSeconds:      int32(5),
-			PeriodSeconds:       int32(3),
+			PeriodSeconds:       int32(5),
 			FailureThreshold:    int32(5),
 		},
 		Resources: corev1.ResourceRequirements{
@@ -248,6 +297,13 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:  &m.Spec.RunUID,
 			RunAsGroup: &m.Spec.RunGID,
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "tools",
+				MountPath: "/tools",
+				ReadOnly:  true,
+			},
 		},
 	}
 }
