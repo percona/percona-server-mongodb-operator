@@ -118,6 +118,9 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	return nil
 }
 
+// handleReplsetInit exec the replset initiation steps on the first
+// running mongod pod using a 'mongo' shell from within the container,
+// required for using localhostAuthBypass when MongoDB auth is enabled
 func (h *Handler) handleReplsetInit(pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || pod.Status.Phase != corev1.PodRunning {
@@ -131,7 +134,7 @@ func (h *Handler) handleReplsetInit(pods []corev1.Pod) error {
 			mongodContainerName,
 			[]string{
 				"rs.initiate()",
-				"db.createUser({ user: \"admin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",
+				"db.createUser({ user: \"userAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",
 			},
 		)
 		if err != nil {
