@@ -13,6 +13,7 @@ rules:
   - ""
   resources:
   - pods
+  - pods/exec
   - services
   - endpoints
   - persistentvolumeclaims
@@ -28,12 +29,6 @@ rules:
   - daemonsets
   - replicasets
   - statefulsets
-  verbs:
-  - "*"
-- apiGroups:
-  - batch
-  resources:
-  - jobs
   verbs:
   - "*"
 

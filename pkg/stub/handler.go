@@ -54,17 +54,6 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			return nil
 		}
 
-		// Start the watchdog if it has not been started
-		if h.watchdog == nil {
-			h.watchdog = watchdog.New(&wdConfig.Config{
-				ServiceName:    psmdb.Namespace,
-				APIPoll:        5 * time.Second,
-				ReplsetPoll:    5 * time.Second,
-				ReplsetTimeout: 10 * time.Second,
-			}, &h.watchdogQuit, h.pods)
-			go h.watchdog.Run()
-		}
-
 		// Create the StatefulSet if it doesn't exist
 		set := newPSMDBStatefulSet(o)
 		err := sdk.Create(set)
@@ -111,24 +100,52 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 		// Initiate the replset
 		if !h.initialised && len(podList.Items) >= 1 {
-			logrus.Info("Initiating replset")
-
-			job := newPSMDBReplsetInitJob(o)
-			err = sdk.Create(job)
-			if err != nil && !errors.IsAlreadyExists(err) {
-				logrus.Errorf("failed to create psmdb replset init job: %v", err)
-				return err
-			}
-
-			err = sdk.Get(job)
+			err = h.handleReplsetInit(podList.Items)
 			if err != nil {
-				return fmt.Errorf("failed to get psmdb replset init job: %v", err)
+				logrus.Errorf("failed to init replset: %v", err)
+			} else if h.watchdog == nil {
+				// Start the watchdog if it has not been started
+				h.watchdog = watchdog.New(&wdConfig.Config{
+					ServiceName:    psmdb.Namespace,
+					APIPoll:        5 * time.Second,
+					ReplsetPoll:    5 * time.Second,
+					ReplsetTimeout: 10 * time.Second,
+				}, &h.watchdogQuit, h.pods)
+				go h.watchdog.Run()
 			}
-
-			h.initialised = true
 		}
 	}
 	return nil
+}
+
+func (h *Handler) handleReplsetInit(pods []corev1.Pod) error {
+	for _, pod := range pods {
+		if !isMongodPod(pod) || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		logrus.Infof("Initiating replset on pod: %s", pod.Name)
+
+		err := execMongoCommandInContainer(pod, mongodContainerName, "rs.initiate()")
+		if err != nil {
+			return err
+		}
+
+		h.initialised = true
+		return nil
+	}
+	return fmt.Errorf("could not initiate replset")
+}
+
+// isMongodPod returns a boolean reflecting if a pod
+// is running a mongod container
+func isMongodPod(pod corev1.Pod) bool {
+	for _, container := range pod.Spec.Containers {
+		if container.Name == mongodContainerName {
+			return true
+		}
+	}
+	return false
 }
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources

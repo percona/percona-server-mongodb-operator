@@ -227,6 +227,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 
 	mongoSpec := m.Spec.MongoDB
 	args := []string{
+		"--auth",
 		"--port=" + strconv.Itoa(int(mongoSpec.Port)),
 		"--replSet=" + mongoSpec.ReplsetName,
 		"--storageEngine=" + mongoSpec.StorageEngine,
