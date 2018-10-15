@@ -58,7 +58,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		set := newPSMDBStatefulSet(o)
 		err := sdk.Create(set)
 		if err != nil && !errors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create psmdb pod : %v", err)
+			logrus.Errorf("failed to create psmdb pod: %v", err)
 			return err
 		}
 
@@ -74,6 +74,14 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			if err != nil {
 				return fmt.Errorf("failed to update stateful set: %v", err)
 			}
+		}
+
+		// Create the PSMDB service
+		service := newPSMDBService(o)
+		err = sdk.Create(service)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			logrus.Errorf("failed to create psmdb service: %v", err)
+			return err
 		}
 
 		// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri

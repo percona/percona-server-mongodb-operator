@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -27,6 +28,7 @@ var (
 	defaultStorageEngine            string  = "wiredTiger"
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
+	defaultOperationProfilingSlowMs int     = 100
 	mongodContainerDataDir          string  = "/data/db"
 	mongodContainerName             string  = "mongod"
 	mongodPortName                  string  = "mongodb"
@@ -58,6 +60,11 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 		}
 		if spec.MongoDB.WiredTiger.CacheSizeRatio == 0 {
 			spec.MongoDB.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+		}
+	}
+	if spec.MongoDB.OperationProfiling == nil {
+		spec.MongoDB.OperationProfiling = &v1alpha1.PerconaServerMongoDBSpecMongoDBOperationProfiling{
+			SlowMs: defaultOperationProfilingSlowMs,
 		}
 	}
 	if spec.RunGID == 0 {
@@ -171,10 +178,6 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 	mSpec := m.Spec.MongoDB
 	return []corev1.EnvVar{
 		{
-			Name:  "MONGODB_PRIMARY_ADDR",
-			Value: "127.0.0.1:" + strconv.Itoa(int(mSpec.Port)),
-		},
-		{
 			Name:  "MONGODB_REPLSET",
 			Value: mSpec.ReplsetName,
 		},
@@ -220,10 +223,13 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 
 	mongoSpec := m.Spec.MongoDB
 	args := []string{
+		"--bind_ip_all",
 		"--auth",
 		"--port=" + strconv.Itoa(int(mongoSpec.Port)),
 		"--replSet=" + mongoSpec.ReplsetName,
 		"--storageEngine=" + mongoSpec.StorageEngine,
+		"--slowms=" + strconv.Itoa(int(mongoSpec.OperationProfiling.SlowMs)),
+		"--profile=1",
 	}
 	if mongoSpec.StorageEngine == "wiredTiger" {
 		args = append(args, fmt.Sprintf(
@@ -306,4 +312,29 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 			},
 		},
 	}
+}
+
+// newPSMDBService returns a core/v1 API Service
+func newPSMDBService(m *v1alpha1.PerconaServerMongoDB) *corev1.Service {
+	ls := labelsForPerconaServerMongoDB(m.Name)
+	service := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.Name,
+			Namespace: m.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{{
+				Port:       m.Spec.MongoDB.Port,
+				TargetPort: intstr.FromInt(int(m.Spec.MongoDB.Port)),
+			}},
+			ClusterIP: "None",
+			Selector:  ls,
+		},
+	}
+	addOwnerRefToObject(service, asOwner(m))
+	return service
 }

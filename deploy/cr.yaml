@@ -9,3 +9,5 @@ spec:
     port: 27017
     storageEngine: wiredTiger
     replicaSetName: rs0
+    operationProfiling:
+      slowMs: 80

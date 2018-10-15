@@ -30,12 +30,17 @@ type PerconaServerMongoDBSpecMongoDBWiredTiger struct {
 	CacheSizeRatio float64 `json:"cacheSizeRatio,omitempty"`
 }
 
+type PerconaServerMongoDBSpecMongoDBOperationProfiling struct {
+	SlowMs int `json:"slowMs,omitempty"`
+}
+
 type PerconaServerMongoDBSpecMongoDB struct {
-	Port          int32                                      `json:"port,omitempty"`
-	StorageEngine string                                     `json:"storageEngine,omitempty"`
-	ReplsetName   string                                     `json:"replsetName,omitempty"`
-	MMAPv1        *PerconaServerMongoDBSpecMongoDBMMAPv1     `json:"mmapv1,omitempty"`
-	WiredTiger    *PerconaServerMongoDBSpecMongoDBWiredTiger `json:"wiredTiger,omitempty"`
+	Port               int32                                              `json:"port,omitempty"`
+	StorageEngine      string                                             `json:"storageEngine,omitempty"`
+	ReplsetName        string                                             `json:"replsetName,omitempty"`
+	MMAPv1             *PerconaServerMongoDBSpecMongoDBMMAPv1             `json:"mmapv1,omitempty"`
+	WiredTiger         *PerconaServerMongoDBSpecMongoDBWiredTiger         `json:"wiredTiger,omitempty"`
+	OperationProfiling *PerconaServerMongoDBSpecMongoDBOperationProfiling `json:"operationProfiling,omitempty"`
 }
 
 type PerconaServerMongoDBSpecCredential struct {
