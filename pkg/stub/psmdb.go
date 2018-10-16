@@ -31,7 +31,10 @@ var (
 	defaultOperationProfilingSlowMs int     = 100
 	mongodContainerDataDir          string  = "/data/db"
 	mongodContainerName             string  = "mongod"
+	mongodDataVolClaimName          string  = "mongod-data"
+	mongodToolsVolName              string  = "mongodb-tools"
 	mongodPortName                  string  = "mongodb"
+	mongodbHealthcheckUrl           string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
@@ -93,6 +96,10 @@ func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) 
 // newPSMDBStatefulSet returns a PSMDB stateful set
 func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 	addPSMDBSpecDefaults(&m.Spec)
+
+	storageQuantity := resource.NewQuantity(5, resource.DecimalSI)
+	volumeMode := corev1.PersistentVolumeBlock
+
 	ls := labelsForPerconaServerMongoDB(m.Name)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -125,7 +132,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "tools",
+							Name: mongodToolsVolName,
 						},
 						{
 							Name: m.Name + "-" + MongoDBKeySecretName,
@@ -135,6 +142,24 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 								},
 							},
 						},
+					},
+				},
+			},
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: mongodDataVolClaimName,
+					},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes: []corev1.PersistentVolumeAccessMode{
+							corev1.ReadWriteOnce,
+						},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: *storageQuantity,
+							},
+						},
+						VolumeMode: &volumeMode,
 					},
 				},
 			},
@@ -174,17 +199,23 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 }
 
 func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
+	uid := strconv.Itoa(int(defaultRunUID))
+	gid := strconv.Itoa(int(defaultRunGID))
 	return corev1.Container{
 		Name:  "init",
 		Image: "busybox",
 		Command: []string{
 			"/bin/sh", "-c",
-			"wget -P /tools https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck && chmod +x /tools/mongodb-healthcheck",
+			"wget -P /tools " + mongodbHealthcheckUrl + " && chmod +x /tools/mongodb-healthcheck && chown " + uid + ":" + gid + " " + mongodContainerDataDir,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "tools",
+				Name:      mongodToolsVolName,
 				MountPath: "/tools",
+			},
+			{
+				Name:      mongodDataVolClaimName,
+				MountPath: mongodContainerDataDir,
 			},
 		},
 	}
@@ -279,9 +310,13 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "tools",
+				Name:      mongodToolsVolName,
 				MountPath: "/tools",
 				ReadOnly:  true,
+			},
+			{
+				Name:      mongodDataVolClaimName,
+				MountPath: mongodContainerDataDir,
 			},
 			{
 				Name:      m.Name + "-" + MongoDBKeySecretName,
