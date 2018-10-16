@@ -8,6 +8,6 @@ spec:
   mongodb:
     port: 27017
     storageEngine: wiredTiger
-    replicaSetName: rs0
+    replsetName: rs0
     operationProfiling:
       slowMs: 80

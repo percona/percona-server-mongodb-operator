@@ -11,6 +11,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	MongoDBSecretsDirName = "mongodb-secrets"
+	MongoDBSecretsDir     = "/etc/mongodb-secrets"
+	MongoDBKeySecretName  = "mongodb-key"
+)
+
 func generateMongoDBKey() (string, error) {
 	b := make([]byte, 768)
 	_, err := rand.Read(b)
@@ -31,11 +37,11 @@ func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) (*corev1.Secret, e
 			Kind:       "Secret",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-mongodb-key",
+			Name:      m.Name + "-" + MongoDBKeySecretName,
 			Namespace: m.Namespace,
 		},
 		StringData: map[string]string{
-			"key": key,
+			MongoDBKeySecretName: key,
 		},
 	}, nil
 }
