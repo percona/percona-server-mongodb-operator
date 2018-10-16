@@ -127,6 +127,14 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 						{
 							Name: "tools",
 						},
+						{
+							Name: "mongodb-key",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: m.Name + "-mongodb-key",
+								},
+							},
+						},
 					},
 				},
 			},
@@ -273,6 +281,11 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 			{
 				Name:      "tools",
 				MountPath: "/tools",
+				ReadOnly:  true,
+			},
+			{
+				Name:      "mongodb-key",
+				MountPath: "/etc/mongodb-secret",
 				ReadOnly:  true,
 			},
 		},

@@ -56,9 +56,24 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			return nil
 		}
 
+		// Create the mongodb internal auth key if it doesn't exist
+		logrus.Info("generating a mongodb key")
+		authKey, err := newPSMDBMongoKeySecret(o)
+		if err != nil {
+			logrus.Errorf("failed to generate psmdb auth key: %v", err)
+			return err
+		}
+		logrus.Info("creating mongodb key secret")
+		err = sdk.Create(authKey)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			logrus.Errorf("failed to create psmdb auth key: %v", err)
+			return err
+		}
+
 		// Create the StatefulSet if it doesn't exist
+		logrus.Info("starting mongodb statefulset")
 		set := newPSMDBStatefulSet(o)
-		err := sdk.Create(set)
+		err = sdk.Create(set)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			logrus.Errorf("failed to create psmdb pod: %v", err)
 			return err
