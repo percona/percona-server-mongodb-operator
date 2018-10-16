@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -21,11 +19,15 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// ReplsetInitWait is the duration to wait to initiate the replset
+var ReplsetInitWait = 10 * time.Second
+
 func NewHandler(serviceName, namespaceName, portName string) sdk.Handler {
 	return &Handler{
 		pods:         podk8s.NewPods(serviceName, namespaceName, portName),
 		portName:     portName,
 		serviceName:  serviceName,
+		startedAt:    time.Now(),
 		watchdogQuit: make(chan bool, 1),
 	}
 }
@@ -37,6 +39,7 @@ type Handler struct {
 	watchdog     *watchdog.Watchdog
 	watchdogQuit chan bool
 	initialised  bool
+	startedAt    time.Time
 }
 
 func (h *Handler) Close() {
@@ -57,13 +60,11 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
-		logrus.Info("generating a mongodb key")
 		authKey, err := newPSMDBMongoKeySecret(o)
 		if err != nil {
 			logrus.Errorf("failed to generate psmdb auth key: %v", err)
 			return err
 		}
-		logrus.Info("creating mongodb key secret")
 		err = sdk.Create(authKey)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			logrus.Errorf("failed to create psmdb auth key: %v", err)
@@ -71,7 +72,6 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 
 		// Create the StatefulSet if it doesn't exist
-		logrus.Info("starting mongodb statefulset")
 		set := newPSMDBStatefulSet(o)
 		err = sdk.Create(set)
 		if err != nil && !errors.IsAlreadyExists(err) {
@@ -123,86 +123,35 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// Update the pods list that is read by the watchdog
 		h.pods.SetPods(podList.Items)
 
-		// Initiate the replset
-		if !h.initialised && len(podList.Items) >= 1 {
+		// Initiate the replset if it hasn't already been initiated + there are pods +
+		// we have waited the ReplsetInitWait period since starting
+		if !h.initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
 			err = h.handleReplsetInit(psmdb, podList.Items)
 			if err != nil {
 				logrus.Errorf("failed to init replset: %v", err)
 			} else if h.watchdog == nil {
+				// load username/password from secrets
+				secret, err := getPSMDBSecret(psmdb, psmdb.Name+"-users")
+				if err != nil {
+					logrus.Errorf("failed to load psmdb user secrets: %v", err)
+					return err
+				}
+				fmt.Printf("%v %v", secret.StringData, secret.Data)
+
 				// Start the watchdog if it has not been started
 				h.watchdog = watchdog.New(&wdConfig.Config{
 					Username:       "userAdmin",
 					Password:       "admin123456",
 					ServiceName:    psmdb.Namespace,
-					APIPoll:        10 * time.Second,
-					ReplsetPoll:    5 * time.Second,
-					ReplsetTimeout: 10 * time.Second,
+					APIPoll:        15 * time.Second,
+					ReplsetPoll:    10 * time.Second,
+					ReplsetTimeout: 5 * time.Second,
 				}, &h.watchdogQuit, h.pods)
 				go h.watchdog.Run()
 			}
 		}
 	}
 	return nil
-}
-
-// handleReplsetInit exec the replset initiation steps on the first
-// running mongod pod using a 'mongo' shell from within the container,
-// required for using localhostAuthBypass when MongoDB auth is enabled
-func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod) error {
-	for _, pod := range pods {
-		if !isMongodPod(pod) || pod.Status.Phase != corev1.PodRunning {
-			continue
-		}
-
-		var containerRunning bool
-		for _, container := range pod.Status.ContainerStatuses {
-			if container.Name == mongodContainerName {
-				containerRunning = container.State.Running != nil
-				break
-			}
-		}
-		if !containerRunning {
-			continue
-		}
-
-		logrus.Infof("Initiating replset on pod: %s", pod.Name)
-
-		err := execMongoCommandsInContainer(
-			pod,
-			mongodContainerName,
-			[]string{
-				fmt.Sprintf("rs.initiate({_id:\"%s\", version:1, members:[{_id:0, host:\"%s\"}]})",
-					m.Spec.MongoDB.ReplsetName,
-					pod.Name+"."+m.Name+"."+m.Namespace+".svc.cluster.local:"+strconv.Itoa(int(m.Spec.MongoDB.Port)),
-				),
-				"db.createUser({ user: \"userAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",
-			},
-		)
-		if err != nil {
-			return err
-		}
-
-		m.Status.Initialised = true
-		err = sdk.Update(m)
-		if err != nil {
-			return fmt.Errorf("failed to update psmdb status: %v", err)
-		}
-		h.initialised = true
-
-		return nil
-	}
-	return fmt.Errorf("could not initiate replset")
-}
-
-// isMongodPod returns a boolean reflecting if a pod
-// is running a mongod container
-func isMongodPod(pod corev1.Pod) bool {
-	for _, container := range pod.Spec.Containers {
-		if container.Name == mongodContainerName {
-			return true
-		}
-	}
-	return false
 }
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
@@ -248,32 +197,4 @@ func getPodNames(pods []corev1.Pod) []string {
 		podNames = append(podNames, pod.Name)
 	}
 	return podNames
-}
-
-// getMongoURI returns the mongodb uri containing the host/port of each pod
-func getMongoURI(pods []corev1.Pod, portName string) string {
-	var hosts []string
-	for _, pod := range pods {
-		if pod.Status.HostIP == "" && len(pod.Spec.Containers) >= 1 {
-			continue
-		}
-		for _, container := range pod.Spec.Containers {
-			if container.Name != mongodContainerName {
-				continue
-			}
-			for _, port := range container.Ports {
-				if port.Name != portName {
-					continue
-				}
-				mongoPort := strconv.Itoa(int(port.HostPort))
-				hosts = append(hosts, pod.Status.HostIP+":"+mongoPort)
-				break
-			}
-			break
-		}
-	}
-	if len(hosts) > 0 {
-		return "mongodb://" + strings.Join(hosts, ",")
-	}
-	return ""
 }

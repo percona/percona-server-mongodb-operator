@@ -16,13 +16,17 @@ package k8s
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
 )
 
-const MongodContainerName string = "mongod"
+const (
+	MongodContainerName     string = "mongod"
+	ClusterServiceDNSSuffix string = "svc.cluster.local"
+)
 
 type TaskState struct {
 	status corev1.PodStatus
@@ -33,18 +37,22 @@ func NewTaskState(status corev1.PodStatus) *TaskState {
 }
 
 func (ts TaskState) String() string {
-	return string(ts.status.Phase)
+	return strings.ToUpper(string(ts.status.Phase))
 }
 
 type Task struct {
-	pod      *corev1.Pod
-	portName string
+	pod         *corev1.Pod
+	portName    string
+	serviceName string
+	namespace   string
 }
 
-func NewTask(pod corev1.Pod, portName string) *Task {
+func NewTask(pod corev1.Pod, serviceName, namespace, portName string) *Task {
 	return &Task{
-		pod:      &pod,
-		portName: portName,
+		pod:         &pod,
+		namespace:   namespace,
+		portName:    portName,
+		serviceName: serviceName,
 	}
 }
 
@@ -61,7 +69,15 @@ func (t *Task) Name() string {
 }
 
 func (t *Task) IsRunning() bool {
-	return t.pod.Status.Phase == corev1.PodRunning
+	if t.pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+	for _, container := range t.pod.Status.ContainerStatuses {
+		if container.State.Running == nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *Task) IsTaskType(taskType pod.TaskType) bool {
@@ -76,14 +92,15 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 	return false
 }
 
+func (t *Task) getMongoHost() string {
+	return t.pod.Name + "." + t.serviceName + "." + t.namespace + "." + ClusterServiceDNSSuffix
+}
+
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
 	for _, container := range t.pod.Spec.Containers {
 		for _, port := range container.Ports {
 			if port.Name == t.portName {
-				return &db.Addr{
-					Host: t.pod.Name,
-					Port: int(port.HostPort),
-				}, nil
+				return &db.Addr{Host: t.getMongoHost(), Port: int(port.HostPort)}, nil
 			}
 		}
 	}

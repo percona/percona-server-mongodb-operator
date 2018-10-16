@@ -19,7 +19,7 @@ import (
 //
 // See: https://github.com/kubernetes/client-go/issues/45
 //
-func execMongoCommandsInContainer(pod corev1.Pod, containerName string, mongoCmds []string) error {
+func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, username, password string) error {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig: %v", err)
@@ -52,6 +52,16 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName string, mongoCmd
 		return fmt.Errorf("cannot find mongod port")
 	}
 
+	cmd := []string{
+		"/usr/bin/mongo",
+		"--port=" + containerPort,
+		"--quiet",
+		"admin",
+	}
+	if username != "" && password != "" {
+		cmd = append(cmd, "--username="+username, "--password="+password)
+	}
+
 	req := client.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(pod.Name).
@@ -59,15 +69,10 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName string, mongoCmd
 		SubResource("exec")
 	req.VersionedParams(&corev1.PodExecOptions{
 		Container: containerName,
-		Command: []string{
-			"/usr/bin/mongo",
-			"--port=" + containerPort,
-			"--quiet",
-			"admin",
-		},
-		Stdout: true,
-		Stderr: true,
-		Stdin:  true,
+		Command:   cmd,
+		Stdout:    true,
+		Stderr:    true,
+		Stdin:     true,
 	}, scheme.ParameterCodec)
 
 	exec, err := remotecommand.NewSPDYExecutor(cfg, "POST", req.URL())
@@ -80,7 +85,6 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName string, mongoCmd
 		stdErr bytes.Buffer
 		stdIn  bytes.Buffer
 	)
-	mongoCmd := strings.Join(mongoCmds, "; ")
 	_, err = stdIn.WriteString(mongoCmd)
 	if err != nil {
 		return err
@@ -97,7 +101,7 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName string, mongoCmd
 		"container": containerName,
 	}).Infof("running mongo command '%s'", mongoCmd)
 
-	logrus.Infof("mongostdout: %s", strings.TrimSpace(stdOut.String()))
+	logrus.Infof("mongo stdout: %s", strings.TrimSpace(stdOut.String()))
 	if stdErr.Len() > 0 {
 		logrus.Errorf("mongo stderr: %s", strings.TrimSpace(stdErr.String()))
 	}

@@ -21,17 +21,21 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func NewPods(pods []corev1.Pod, portName string) *Pods {
+func NewPods(serviceName, namespace, portName string) *Pods {
 	return &Pods{
-		pods:     pods,
-		portName: portName,
+		pods:        make([]corev1.Pod, 0),
+		namespace:   namespace,
+		portName:    portName,
+		serviceName: serviceName,
 	}
 }
 
 type Pods struct {
 	sync.Mutex
-	pods     []corev1.Pod
-	portName string
+	namespace   string
+	pods        []corev1.Pod
+	portName    string
+	serviceName string
 }
 
 func (p *Pods) Name() string {
@@ -65,7 +69,7 @@ func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 
 	tasks := make([]pod.Task, 0)
 	for _, pod := range p.pods {
-		tasks = append(tasks, NewTask(pod, p.portName))
+		tasks = append(tasks, NewTask(pod, p.serviceName, p.namespace, p.portName))
 	}
 	return tasks, nil
 }
