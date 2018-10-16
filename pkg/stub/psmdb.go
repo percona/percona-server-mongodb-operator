@@ -73,25 +73,6 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.RunUID == 0 {
 		spec.RunUID = defaultRunUID
 	}
-	//	if len(spec.Credentials) < 1 {
-	//		spec.Credentials = []v1alpha1.PerconaServerMongoDBSpecCredential{
-	//			{
-	//				Username: "clusterAdmin",
-	//				Password: "clusterAdminPassword",
-	//				Role:     "clusterAdmin",
-	//			},
-	//			{
-	//				Username: "clusterMonitor",
-	//				Password: "clusterMonitorPassword",
-	//				Role:     "clusterMonitor",
-	//			},
-	//			{
-	//				Username: "userAdmin",
-	//				Password: "userAdminPassword",
-	//				Role:     "userAdmin",
-	//			},
-	//		}
-	//	}
 }
 
 // The WiredTiger internal cache, by default, will use the larger of either 50% of
@@ -119,7 +100,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name,
+			Name:      m.Name + "-" + m.Spec.MongoDB.ReplsetName,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -181,22 +162,6 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 			Name:  "MONGODB_REPLSET",
 			Value: mSpec.ReplsetName,
 		},
-		{
-			Name:  "MONGODB_USER_ADMIN_USER",
-			Value: "userAdmin",
-		},
-		{
-			Name:  "MONGODB_USER_ADMIN_PASSWORD",
-			Value: "admin123456",
-		},
-		{
-			Name:  "MONGODB_CLUSTER_MONITOR_USER",
-			Value: "userAdmin",
-		},
-		{
-			Name:  "MONGODB_CLUSTER_MONITOR_PASSWORD",
-			Value: "admin123456",
-		},
 	}
 }
 
@@ -238,17 +203,16 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 		)
 	}
 
+	falsePtr := false
 	return corev1.Container{
-		Name:            mongodContainerName,
-		Image:           m.Spec.Image,
-		ImagePullPolicy: corev1.PullAlways,
-		Args:            args,
+		Name:  mongodContainerName,
+		Image: m.Spec.Image,
+		Args:  args,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
 				HostPort:      mongoSpec.Port,
 				ContainerPort: mongoSpec.Port,
-				Protocol:      corev1.ProtocolTCP,
 			},
 		},
 		Env: newPSMDBContainerEnv(m),
@@ -256,8 +220,9 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "percona-server-mongodb",
+						Name: "percona-server-mongodb-users",
 					},
+					Optional: &falsePtr,
 				},
 			},
 		},
@@ -271,7 +236,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 					},
 				},
 			},
-			InitialDelaySeconds: int32(30),
+			InitialDelaySeconds: int32(20),
 			TimeoutSeconds:      int32(5),
 			PeriodSeconds:       int32(3),
 			FailureThreshold:    int32(5),
@@ -285,10 +250,10 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 					},
 				},
 			},
-			InitialDelaySeconds: int32(60),
+			InitialDelaySeconds: int32(30),
 			TimeoutSeconds:      int32(5),
-			PeriodSeconds:       int32(5),
-			FailureThreshold:    int32(5),
+			PeriodSeconds:       int32(10),
+			FailureThreshold:    int32(6),
 		},
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
@@ -327,10 +292,12 @@ func newPSMDBService(m *v1alpha1.PerconaServerMongoDB) *corev1.Service {
 			Namespace: m.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{{
-				Port:       m.Spec.MongoDB.Port,
-				TargetPort: intstr.FromInt(int(m.Spec.MongoDB.Port)),
-			}},
+			Ports: []corev1.ServicePort{
+				{
+					Port:       m.Spec.MongoDB.Port,
+					TargetPort: intstr.FromInt(int(m.Spec.MongoDB.Port)),
+				},
+			},
 			ClusterIP: "None",
 			Selector:  ls,
 		},

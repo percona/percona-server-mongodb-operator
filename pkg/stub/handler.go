@@ -21,10 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func NewHandler(portName string) sdk.Handler {
+func NewHandler(serviceName, namespaceName, portName string) sdk.Handler {
 	return &Handler{
-		pods:         podk8s.NewPods([]corev1.Pod{}, "mongodb"),
+		pods:         podk8s.NewPods(serviceName, namespaceName, portName),
 		portName:     portName,
+		serviceName:  serviceName,
 		watchdogQuit: make(chan bool, 1),
 	}
 }
@@ -32,6 +33,7 @@ func NewHandler(portName string) sdk.Handler {
 type Handler struct {
 	pods         *podk8s.Pods
 	portName     string
+	serviceName  string
 	watchdog     *watchdog.Watchdog
 	watchdogQuit chan bool
 	initialised  bool
@@ -108,14 +110,16 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 		// Initiate the replset
 		if !h.initialised && len(podList.Items) >= 1 {
-			err = h.handleReplsetInit(podList.Items)
+			err = h.handleReplsetInit(psmdb, podList.Items)
 			if err != nil {
 				logrus.Errorf("failed to init replset: %v", err)
 			} else if h.watchdog == nil {
 				// Start the watchdog if it has not been started
 				h.watchdog = watchdog.New(&wdConfig.Config{
+					Username:       "userAdmin",
+					Password:       "admin123456",
 					ServiceName:    psmdb.Namespace,
-					APIPoll:        5 * time.Second,
+					APIPoll:        10 * time.Second,
 					ReplsetPoll:    5 * time.Second,
 					ReplsetTimeout: 10 * time.Second,
 				}, &h.watchdogQuit, h.pods)
@@ -129,9 +133,20 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 // handleReplsetInit exec the replset initiation steps on the first
 // running mongod pod using a 'mongo' shell from within the container,
 // required for using localhostAuthBypass when MongoDB auth is enabled
-func (h *Handler) handleReplsetInit(pods []corev1.Pod) error {
+func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		var containerRunning bool
+		for _, container := range pod.Status.ContainerStatuses {
+			if container.Name == mongodContainerName {
+				containerRunning = container.State.Running != nil
+				break
+			}
+		}
+		if !containerRunning {
 			continue
 		}
 
@@ -141,7 +156,10 @@ func (h *Handler) handleReplsetInit(pods []corev1.Pod) error {
 			pod,
 			mongodContainerName,
 			[]string{
-				"rs.initiate()",
+				fmt.Sprintf("rs.initiate({_id:\"%s\", version:1, members:[{_id:0, host:\"%s\"}]})",
+					m.Spec.MongoDB.ReplsetName,
+					pod.Name+"."+m.Name+"."+m.Namespace+".svc.cluster.local:"+strconv.Itoa(int(m.Spec.MongoDB.Port)),
+				),
 				"db.createUser({ user: \"userAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",
 			},
 		)
@@ -149,7 +167,13 @@ func (h *Handler) handleReplsetInit(pods []corev1.Pod) error {
 			return err
 		}
 
+		m.Status.Initialised = true
+		err = sdk.Update(m)
+		if err != nil {
+			return fmt.Errorf("failed to update psmdb status: %v", err)
+		}
 		h.initialised = true
+
 		return nil
 	}
 	return fmt.Errorf("could not initiate replset")
