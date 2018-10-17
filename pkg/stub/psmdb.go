@@ -102,7 +102,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + m.Spec.MongoDB.ReplsetName,
+			Name:      m.Spec.MongoDB.ReplsetName,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
