@@ -6,15 +6,21 @@
 
 # Run
 
-## Run External Operator
-1. Install [github.com/operator-framework/operator-sdk](https://github.com/operator-framework/operator-sdk#quick-start)
-1. Deploy the CRD:
+## Run the Operator
+1. Add the 'psmdb' Namespace to Kubernetes:
     ```
+    $ kubectl create namespace psmdb
+    namespace/psmdb created
+    ```
+1. Add the MongoDB Users secrets to Kubernetes. **For Production use update mongodb-users.yaml with new passwords!!!**
+    ```
+    $ kubectl create -f deploy/mongodb-users.yaml
+    ```
+1. Start the percona-serrver-mongodb-operator within Kubernetes:
+    ```
+    $ kubectl create -f deploy/rbac.yaml
     $ kubectl create -f deploy/crd.yaml
-    ```
-1. Start the Operator *(external to kubernetes)*
-    ```
-    $ OPERATOR_NAME=<name> operator-sdk up local
+    $ kubectl create -f deploy/operator.yaml
     ```
 1. Create the Percona Server for MongoDB CR:
     ```
