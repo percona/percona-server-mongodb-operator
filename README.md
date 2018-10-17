@@ -25,3 +25,25 @@
     ```
     $ kubectl apply -f deploy/cr.yaml
     ```
+1. Add a readWrite user for an application *(requires 'mongo' shell)*:
+    ```
+    $ mongo -u userAdmin -p admin123456 --host=rs0-0.percona-server-mongodb.psmdb.svc.cluster.local admin
+    rs0:PRIMARY> db.createUser({user: "app", pwd: "myAppPassword", roles: [ { db: "myApp", role: "readWrite" } ] })
+    Successfully added user: {
+    	"user" : "app",
+    	"roles" : [
+    		{
+    			"db" : "myApp",
+    			"role" : "readWrite"
+    		}
+    	]
+    }
+    ```
+1. Insert a test document in the 'myApp' database as the new application user:
+    ```
+    $ mongo -u myApp -p myAppPassword --host=rs0-0.percona-server-mongodb.psmdb.svc.cluster.local admin
+    rs0:PRIMARY> use myApp
+    switched to db myApp
+    rs0:PRIMARY> db.test.insert({x:1})
+    WriteResult({ "nInserted" : 1 })
+    ```
