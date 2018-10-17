@@ -15,7 +15,7 @@
     ```
     $ kubectl create -f deploy/mongodb-users.yaml
     ```
-1. Start the percona-serrver-mongodb-operator within Kubernetes:
+1. Start the percona-server-mongodb-operator within Kubernetes:
     ```
     $ kubectl create -f deploy/rbac.yaml
     $ kubectl create -f deploy/crd.yaml
