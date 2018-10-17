@@ -35,6 +35,9 @@ type PerconaServerMongoDBSpecMongoDBOperationProfiling struct {
 }
 
 type PerconaServerMongoDBSpecMongoDB struct {
+	Cpus               int64                                              `json:"cpus,omitempty"`
+	Memory             int64                                              `json:"memory,omitempty"`
+	Storage            int64                                              `json:"storage,omitempty"`
 	Port               int32                                              `json:"port,omitempty"`
 	StorageEngine      string                                             `json:"storageEngine,omitempty"`
 	ReplsetName        string                                             `json:"replsetName,omitempty"`

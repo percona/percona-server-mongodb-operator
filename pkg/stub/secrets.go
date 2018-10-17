@@ -23,7 +23,7 @@ func generateMongoDBKey() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(b), err
+	return base64.StdEncoding.EncodeToString(b), err
 }
 
 func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) (*corev1.Secret, error) {
