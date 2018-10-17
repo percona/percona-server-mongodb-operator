@@ -10,9 +10,8 @@
 1. Add the 'psmdb' Namespace to Kubernetes:
     ```
     $ kubectl create namespace psmdb
-    namespace/psmdb created
     ```
-1. Add the MongoDB Users secrets to Kubernetes. **For Production use update mongodb-users.yaml with new passwords!!!**
+1. Add the MongoDB Users secrets to Kubernetes. **Update mongodb-users.yaml with new passwords!!!**
     ```
     $ kubectl create -f deploy/mongodb-users.yaml
     ```
