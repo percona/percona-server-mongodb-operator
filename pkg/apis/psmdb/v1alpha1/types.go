@@ -49,7 +49,6 @@ type PerconaServerMongoDBSpecMongoDB struct {
 type PerconaServerMongoDBSpec struct {
 	Size    int32                            `json:"size"`
 	Image   string                           `json:"image,omitempty"`
-	RunGID  int64                            `json:"runGid,omitempty"`
 	RunUID  int64                            `json:"runUid,omitempty"`
 	MongoDB *PerconaServerMongoDBSpecMongoDB `json:"mongodb,omitempty"`
 }

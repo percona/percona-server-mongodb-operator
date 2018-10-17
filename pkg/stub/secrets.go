@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	MongoDBSecretsDirName = "mongodb-secrets"
-	MongoDBSecretsDir     = "/etc/mongodb-secrets"
-	MongoDBKeySecretName  = "mongodb-key"
+	mongoDBSecretsDirName = "mongodb-secrets"
+	mongoDBSecretsDir     = "/etc/mongodb-secrets"
+	mongoDBKeySecretName  = "mongodb-key"
 )
 
 func generateMongoDBKey() (string, error) {
@@ -37,11 +37,11 @@ func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) (*corev1.Secret, e
 			Kind:       "Secret",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + MongoDBKeySecretName,
+			Name:      m.Name + "-" + mongoDBKeySecretName,
 			Namespace: m.Namespace,
 		},
 		StringData: map[string]string{
-			MongoDBKeySecretName: key,
+			mongoDBKeySecretName: key,
 		},
 	}, nil
 }

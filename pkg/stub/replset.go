@@ -51,6 +51,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 
 		// add other users using the new admin user
 		addUserCmds := []string{
+			"db.createUser({ user: \"clusterAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"clusterAdmin\" }]})",
 			"db.createUser({ user: \"clusterMonitor\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"clusterMonitor\" }]})",
 		}
 		for _, cmd := range addUserCmds {

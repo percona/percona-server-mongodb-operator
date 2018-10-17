@@ -130,18 +130,17 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			if err != nil {
 				logrus.Errorf("failed to init replset: %v", err)
 			} else if h.watchdog == nil {
-				// load username/password from secrets
+				// load username/password from secret
 				secret, err := getPSMDBSecret(psmdb, psmdb.Name+"-users")
 				if err != nil {
 					logrus.Errorf("failed to load psmdb user secrets: %v", err)
 					return err
 				}
-				fmt.Printf("%v %v", secret.StringData, secret.Data)
 
 				// Start the watchdog if it has not been started
 				h.watchdog = watchdog.New(&wdConfig.Config{
-					Username:       "userAdmin",
-					Password:       "admin123456",
+					Username:       string(secret.Data["MONGODB_CLUSTER_ADMIN_USER"]),
+					Password:       string(secret.Data["MONGODB_CLUSTER_ADMIN_PASSWORD"]),
 					ServiceName:    psmdb.Namespace,
 					APIPoll:        15 * time.Second,
 					ReplsetPoll:    10 * time.Second,

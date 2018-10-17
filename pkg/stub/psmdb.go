@@ -24,7 +24,6 @@ var (
 	defaultSize                     int32   = 3
 	defaultImage                    string  = "perconalab/percona-server-mongodb:latest"
 	defaultRunUID                   int64   = 1001
-	defaultRunGID                   int64   = 1001
 	defaultReplsetName              string  = "rs"
 	defaultStorageEngine            string  = "wiredTiger"
 	defaultMongodPort               int32   = 27017
@@ -70,9 +69,6 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 		spec.MongoDB.OperationProfiling = &v1alpha1.PerconaServerMongoDBSpecMongoDBOperationProfiling{
 			SlowMs: defaultOperationProfilingSlowMs,
 		}
-	}
-	if spec.RunGID == 0 {
-		spec.RunGID = defaultRunGID
 	}
 	if spec.RunUID == 0 {
 		spec.RunUID = defaultRunUID
@@ -142,10 +138,10 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 							Name: mongodToolsVolName,
 						},
 						{
-							Name: m.Name + "-" + MongoDBKeySecretName,
+							Name: m.Name + "-" + mongoDBKeySecretName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: m.Name + "-" + MongoDBKeySecretName,
+									SecretName: m.Name + "-" + mongoDBKeySecretName,
 								},
 							},
 						},
@@ -208,22 +204,19 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 }
 
 func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
-	uid := strconv.Itoa(int(defaultRunUID))
-	gid := strconv.Itoa(int(defaultRunGID))
-
 	// download mongodb-healthcheck, copy internal auth key and setup ownership+permissions
-	bashCmds := []string{
+	cmds := []string{
 		"wget -P /mongodb " + mongodbHealthcheckUrl,
 		"chmod +x /mongodb/mongodb-healthcheck",
-		"cp " + MongoDBSecretsDir + "/" + MongoDBKeySecretName + " /mongodb/mongodb.key",
-		"chown " + uid + ":" + gid + " " + mongodContainerDataDir + " /mongodb/mongodb.key",
+		"cp " + mongoDBSecretsDir + "/" + mongoDBKeySecretName + " /mongodb/mongodb.key",
+		"chown " + strconv.Itoa(int(defaultRunUID)) + " " + mongodContainerDataDir + " /mongodb/mongodb.key",
 		"chmod 0400 /mongodb/mongodb.key",
 	}
 	return corev1.Container{
 		Name:  "init",
 		Image: "busybox",
 		Command: []string{
-			"/bin/sh", "-c", strings.Join(bashCmds, " && "),
+			"/bin/sh", "-c", strings.Join(cmds, " && "),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -235,8 +228,8 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 				MountPath: mongodContainerDataDir,
 			},
 			{
-				Name:      m.Name + "-" + MongoDBKeySecretName,
-				MountPath: MongoDBSecretsDir,
+				Name:      m.Name + "-" + mongoDBKeySecretName,
+				MountPath: mongoDBSecretsDir,
 			},
 		},
 	}
@@ -297,10 +290,10 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 					},
 				},
 			},
-			InitialDelaySeconds: int32(20),
-			TimeoutSeconds:      int32(5),
-			PeriodSeconds:       int32(3),
-			FailureThreshold:    int32(5),
+			InitialDelaySeconds: int32(30),
+			TimeoutSeconds:      int32(2),
+			PeriodSeconds:       int32(5),
+			FailureThreshold:    int32(3),
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -311,10 +304,10 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 					},
 				},
 			},
-			InitialDelaySeconds: int32(30),
-			TimeoutSeconds:      int32(5),
-			PeriodSeconds:       int32(10),
-			FailureThreshold:    int32(6),
+			InitialDelaySeconds: int32(40),
+			TimeoutSeconds:      int32(3),
+			PeriodSeconds:       int32(5),
+			FailureThreshold:    int32(5),
 		},
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
@@ -327,8 +320,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  &m.Spec.RunUID,
-			RunAsGroup: &m.Spec.RunGID,
+			RunAsUser: &m.Spec.RunUID,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
