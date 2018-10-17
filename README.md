@@ -25,6 +25,13 @@
     ```
     $ kubectl apply -f deploy/cr.yaml
     ```
+1. Wait for the operator and replica set pod reach Running state:
+    ```
+    $ kubectl --namespace=psmdb get pods
+    NAME                                               READY   STATUS    RESTARTS   AGE
+    percona-server-mongodb-operator-754846f95d-z4vh9   1/1     Running   0          17m
+    rs0-0                                              1/1     Running   0          17m
+    ``` 
 1. Add a readWrite user for an application *(requires 'mongo' shell)*:
     ```
     $ mongo -u userAdmin -p admin123456 --host=rs0-0.percona-server-mongodb.psmdb.svc.cluster.local admin
