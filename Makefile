@@ -2,6 +2,7 @@ GOCACHE?=off
 GO_TEST_PATH?=./pkg/...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
+UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
 IMAGE?=perconalab/percona-server-mongodb-operator:$(VERSION)
@@ -19,6 +20,7 @@ pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go: pkg/apis/psmdb/v1alpha1/doc.go
 
 tmp/_output/bin/percona-server-mongodb-operator: pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go pkg/apis/psmdb/v1alpha1/*.go pkg/stub/*.go version/version.go cmd/percona-server-mongodb-operator/main.go
 	GO_LDFLAGS="$(GO_LDFLAGS)" /bin/bash $(CURDIR)/tmp/build/build.sh
+	[ -x $(UPX_PATH) ] && $(UPX_PATH) -q tmp/_output/bin/percona-server-mongodb-operator
 
 build: tmp/_output/bin/percona-server-mongodb-operator
 

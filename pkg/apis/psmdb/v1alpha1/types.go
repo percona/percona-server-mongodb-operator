@@ -39,6 +39,7 @@ type PerconaServerMongoDBSpecMongoDB struct {
 	Memory             int64                                              `json:"memory,omitempty"`
 	Storage            int64                                              `json:"storage,omitempty"`
 	Port               int32                                              `json:"port,omitempty"`
+	HostPort           int32                                              `json:"hostPort,omitempty"`
 	StorageEngine      string                                             `json:"storageEngine,omitempty"`
 	ReplsetName        string                                             `json:"replsetName,omitempty"`
 	MMAPv1             *PerconaServerMongoDBSpecMongoDBMMAPv1             `json:"mmapv1,omitempty"`

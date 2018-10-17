@@ -69,6 +69,9 @@ func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 
 	tasks := make([]pod.Task, 0)
 	for _, pod := range p.pods {
+		if pod.Name != podName {
+			continue
+		}
 		tasks = append(tasks, NewTask(pod, p.serviceName, p.namespace, p.portName))
 	}
 	return tasks, nil

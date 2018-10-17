@@ -66,17 +66,25 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			return err
 		}
 		err = sdk.Create(authKey)
-		if err != nil && !errors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create psmdb auth key: %v", err)
-			return err
+		if err != nil {
+			if !errors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb auth key: %v", err)
+				return err
+			}
+		} else {
+			logrus.Info("created mongodb auth key secret")
 		}
 
 		// Create the StatefulSet if it doesn't exist
 		set := newPSMDBStatefulSet(o)
 		err = sdk.Create(set)
-		if err != nil && !errors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create psmdb pod: %v", err)
-			return err
+		if err != nil {
+			if !errors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb pod: %v", err)
+				return err
+			}
+		} else {
+			logrus.Infof("created mongodb stateful set for replica set: %s", psmdb.Spec.MongoDB.ReplsetName)
 		}
 
 		// Ensure the stateful set size is the same as the spec
@@ -86,6 +94,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 		size := psmdb.Spec.Size
 		if *set.Spec.Replicas != size {
+			logrus.Infof("setting replicas to %d for replica set", size, psmdb.Spec.MongoDB.ReplsetName)
 			set.Spec.Replicas = &size
 			err = sdk.Update(set)
 			if err != nil {
@@ -96,20 +105,23 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// Create the PSMDB service
 		service := newPSMDBService(o)
 		err = sdk.Create(service)
-		if err != nil && !errors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create psmdb service: %v", err)
-			return err
+		if err != nil {
+			if !errors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb service: %v", err)
+				return err
+			}
+		} else {
+			logrus.Infof("created mongodb service for replica set: %s", psmdb.Spec.MongoDB.ReplsetName)
 		}
 
 		// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri
 		podList := podList()
-		labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(psmdb.Name)).String()
+		labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(psmdb)).String()
 		listOps := &metav1.ListOptions{LabelSelector: labelSelector}
 		err = sdk.List(psmdb.Namespace, podList, sdk.WithListOptions(listOps))
 		if err != nil {
 			return fmt.Errorf("failed to list pods: %v", err)
 		}
-
 		podNames := getPodNames(podList.Items)
 		if !reflect.DeepEqual(podNames, psmdb.Status.Nodes) {
 			psmdb.Status.Nodes = podNames
@@ -142,9 +154,9 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 					ServiceName:    psmdb.Name,
 					Username:       string(secret.Data["MONGODB_CLUSTER_ADMIN_USER"]),
 					Password:       string(secret.Data["MONGODB_CLUSTER_ADMIN_PASSWORD"]),
-					APIPoll:        15 * time.Second,
-					ReplsetPoll:    10 * time.Second,
-					ReplsetTimeout: 5 * time.Second,
+					APIPoll:        5 * time.Second,
+					ReplsetPoll:    5 * time.Second,
+					ReplsetTimeout: 3 * time.Second,
 				}, &h.watchdogQuit, h.pods)
 				go h.watchdog.Run()
 			}
@@ -155,10 +167,11 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
-func labelsForPerconaServerMongoDB(name string) map[string]string {
+func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB) map[string]string {
 	return map[string]string{
 		"app":                       "percona-server-mongodb",
-		"percona-server-mongodb_cr": name,
+		"percona-server-mongodb_cr": m.Name,
+		"replset":                   m.Spec.MongoDB.ReplsetName,
 	}
 }
 

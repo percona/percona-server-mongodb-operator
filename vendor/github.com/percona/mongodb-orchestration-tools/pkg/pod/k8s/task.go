@@ -99,9 +99,17 @@ func (t *Task) getMongoHost() string {
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
 	for _, container := range t.pod.Spec.Containers {
 		for _, port := range container.Ports {
-			if port.Name == t.portName {
-				return &db.Addr{Host: t.getMongoHost(), Port: int(port.HostPort)}, nil
+			if port.Name != t.portName {
+				continue
 			}
+			addr := &db.Addr{
+				Host: t.getMongoHost(),
+				Port: int(port.HostPort),
+			}
+			if addr.Port == 0 {
+				addr.Port = int(port.ContainerPort)
+			}
+			return addr, nil
 		}
 	}
 	return nil, errors.New("could not find mongodb address")

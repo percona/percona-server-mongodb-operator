@@ -95,7 +95,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 	addPSMDBSpecDefaults(&m.Spec)
 	storageQuantity := resource.NewQuantity(m.Spec.MongoDB.Storage, resource.DecimalSI)
 
-	ls := labelsForPerconaServerMongoDB(m.Name)
+	ls := labelsForPerconaServerMongoDB(m)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -237,7 +237,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 
 func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	mongoSpec := m.Spec.MongoDB
-	cpuQuantity := resource.NewQuantity(mongoSpec.Cpus, resource.DecimalSI)
+	//cpuQuantity := resource.NewQuantity(mongoSpec.Cpus, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(mongoSpec.Memory*1024*1024, resource.DecimalSI)
 
 	args := []string{
@@ -265,7 +265,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      mongoSpec.Port,
+				HostPort:      mongoSpec.HostPort,
 				ContainerPort: mongoSpec.Port,
 			},
 		},
@@ -287,37 +287,35 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 					Command: []string{
 						"/mongodb/mongodb-healthcheck",
 						"readiness",
+						"--replset=",
 					},
 				},
 			},
-			InitialDelaySeconds: int32(30),
+			InitialDelaySeconds: int32(45),
 			TimeoutSeconds:      int32(2),
-			PeriodSeconds:       int32(5),
-			FailureThreshold:    int32(3),
-		},
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/mongodb/mongodb-healthcheck",
-						"health",
-					},
-				},
-			},
-			InitialDelaySeconds: int32(40),
-			TimeoutSeconds:      int32(3),
 			PeriodSeconds:       int32(5),
 			FailureThreshold:    int32(5),
 		},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(mongoSpec.Port)),
+				},
+			},
+			InitialDelaySeconds: int32(15),
+			TimeoutSeconds:      int32(3),
+			PeriodSeconds:       int32(5),
+			FailureThreshold:    int32(6),
+		},
 		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    *cpuQuantity,
-				corev1.ResourceMemory: *memoryQuantity,
-			},
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    *cpuQuantity,
-				corev1.ResourceMemory: *memoryQuantity,
-			},
+			//Limits: corev1.ResourceList{
+			//	corev1.ResourceCPU:    *cpuQuantity,
+			//	corev1.ResourceMemory: *memoryQuantity,
+			//},
+			//Requests: corev1.ResourceList{
+			//	corev1.ResourceCPU:    *cpuQuantity,
+			//	corev1.ResourceMemory: *memoryQuantity,
+			//},
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser: &m.Spec.RunUID,
@@ -338,7 +336,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 
 // newPSMDBService returns a core/v1 API Service
 func newPSMDBService(m *v1alpha1.PerconaServerMongoDB) *corev1.Service {
-	ls := labelsForPerconaServerMongoDB(m.Name)
+	ls := labelsForPerconaServerMongoDB(m)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",

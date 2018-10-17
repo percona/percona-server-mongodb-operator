@@ -4,14 +4,15 @@ metadata:
   name: "percona-server-mongodb"
   namespace: "psmdb"
 spec:
-  size: 1 
+  size: 3 
   image: percona/percona-server-mongodb:3.6
   mongodb:
     cpus: 1
-    memory: 1024
+    memory: 512
     storage: 5
     port: 27017
-    storageEngine: wiredTiger
+    hostPort: 0
     replsetName: rs0
+    storageEngine: wiredTiger
     operationProfiling:
-      slowMs: 80
+      slowMs: 100
