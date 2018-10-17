@@ -2,6 +2,7 @@ kind: Role
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
   name: percona-server-mongodb-operator
+  namespace: psmdb
 rules:
 - apiGroups:
   - psmdb.percona.com
@@ -38,6 +39,7 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
   name: default-account-percona-server-mongodb-operator
+  namespace: psmdb
 subjects:
 - kind: ServiceAccount
   name: default

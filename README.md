@@ -6,17 +6,44 @@
 
 # Run
 
-## Run External Operator
-1. Install [github.com/operator-framework/operator-sdk](https://github.com/operator-framework/operator-sdk#quick-start)
-1. Deploy the CRD:
+## Run the Operator
+1. Add the 'psmdb' Namespace to Kubernetes:
     ```
+    $ kubectl create namespace psmdb
+    ```
+1. Add the MongoDB Users secrets to Kubernetes. **Update mongodb-users.yaml with new passwords!!!**
+    ```
+    $ kubectl create -f deploy/mongodb-users.yaml
+    ```
+1. Start the percona-server-mongodb-operator within Kubernetes:
+    ```
+    $ kubectl create -f deploy/rbac.yaml
     $ kubectl create -f deploy/crd.yaml
-    ```
-1. Start the Operator *(external to kubernetes)*
-    ```
-    $ OPERATOR_NAME=<name> operator-sdk up local
+    $ kubectl create -f deploy/operator.yaml
     ```
 1. Create the Percona Server for MongoDB CR:
     ```
     $ kubectl apply -f deploy/cr.yaml
+    ```
+1. Add a readWrite user for an application *(requires 'mongo' shell)*:
+    ```
+    $ mongo -u userAdmin -p admin123456 --host=rs0-0.percona-server-mongodb.psmdb.svc.cluster.local admin
+    rs0:PRIMARY> db.createUser({user: "app", pwd: "myAppPassword", roles: [ { db: "myApp", role: "readWrite" } ] })
+    Successfully added user: {
+    	"user" : "app",
+    	"roles" : [
+    		{
+    			"db" : "myApp",
+    			"role" : "readWrite"
+    		}
+    	]
+    }
+    ```
+1. Insert a test document in the 'myApp' database as the new application user:
+    ```
+    $ mongo -u myApp -p myAppPassword --host=rs0-0.percona-server-mongodb.psmdb.svc.cluster.local admin
+    rs0:PRIMARY> use myApp
+    switched to db myApp
+    rs0:PRIMARY> db.test.insert({x:1})
+    WriteResult({ "nInserted" : 1 })
     ```
