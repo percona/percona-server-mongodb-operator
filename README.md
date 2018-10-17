@@ -4,6 +4,12 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/Percona-Lab/percona-server-mongodb-operator)](https://goreportcard.com/report/github.com/Percona-Lab/percona-server-mongodb-operator)
 [![codecov](https://codecov.io/gh/Percona-Lab/percona-server-mongodb-operator/branch/master/graph/badge.svg)](https://codecov.io/gh/Percona-Lab/percona-server-mongodb-operator)
 
+A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) based on the [Operator SDK](https://github.com/operator-framework/operator-sdk).
+
+# DISCLAIMER
+
+**This code is incomplete, expect major issues and changes until this repo has stabilised!**
+
 # Run
 
 ## Run the Operator
@@ -32,10 +38,16 @@
     percona-server-mongodb-operator-754846f95d-z4vh9   1/1     Running   0          17m
     rs0-0                                              1/1     Running   0          17m
     ``` 
-1. Add a readWrite user for an application *(requires 'mongo' shell)*:
+1. Add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(requires 'mongo' shell, mongo --host= field may vary for your situation)*:
     ```
     $ mongo -u userAdmin -p admin123456 --host=rs0-0.percona-server-mongodb.psmdb.svc.cluster.local admin
-    rs0:PRIMARY> db.createUser({user: "app", pwd: "myAppPassword", roles: [ { db: "myApp", role: "readWrite" } ] })
+    rs0:PRIMARY> db.createUser({
+        user: "app",
+        pwd: "myAppPassword",
+        roles: [
+          { db: "myApp", role: "readWrite" }
+        ]
+    })
     Successfully added user: {
     	"user" : "app",
     	"roles" : [
@@ -46,11 +58,13 @@
     	]
     }
     ```
-1. Insert a test document in the 'myApp' database as the new application user:
+1. Insert and retrieve a test document in the 'myApp' database as the new application user:
     ```
     $ mongo -u myApp -p myAppPassword --host=rs0-0.percona-server-mongodb.psmdb.svc.cluster.local admin
     rs0:PRIMARY> use myApp
     switched to db myApp
-    rs0:PRIMARY> db.test.insert({x:1})
+    rs0:PRIMARY> db.test.insert({ x: 1 })
     WriteResult({ "nInserted" : 1 })
+    rs0:PRIMARY> db.test.findOne()
+    { "_id" : ObjectId("5bc74ef05c0ec73be760fcf9"), "x" : 1 }
     ```
