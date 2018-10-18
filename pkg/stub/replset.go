@@ -15,7 +15,7 @@ import (
 // handleReplsetInit exec the replset initiation steps on the first
 // running mongod pod using a 'mongo' shell from within the container,
 // required for using localhostAuthBypass when MongoDB auth is enabled
-func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod) error {
+func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod, replset *v1alpha1.PerconaServerMongoDBReplset) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || pod.Status.Phase != corev1.PodRunning {
 			continue
@@ -32,12 +32,12 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 			continue
 		}
 
-		logrus.Infof("Initiating replset on pod: %s", pod.Name)
+		logrus.Infof("Initiating replset %s on pod: %s", replset.Name, pod.Name)
 
 		// init replset and add the first admin user (with localhostBypassAuth exception)
 		initCmds := []string{
 			fmt.Sprintf("rs.initiate({_id:\"%s\", version:1, members:[{_id:0, host:\"%s\"}]})",
-				m.Spec.MongoDB.ReplsetName,
+				replset.Name,
 				pod.Name+"."+m.Name+"."+m.Namespace+".svc.cluster.local:"+strconv.Itoa(int(m.Spec.MongoDB.Port)),
 			),
 			"db.createUser({ user: \"userAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",

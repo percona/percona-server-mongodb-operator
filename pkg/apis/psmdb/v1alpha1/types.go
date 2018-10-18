@@ -34,6 +34,12 @@ type PerconaServerMongoDBSpecMongoDBOperationProfiling struct {
 	SlowMs int `json:"slowMs,omitempty"`
 }
 
+type PerconaServerMongoDBReplset struct {
+	Name      string `json:"name,omitempty"`
+	Size      int32  `json:"size,omitempty"`
+	Configsvr bool   `json:"configsvr,omitempty"`
+}
+
 type PerconaServerMongoDBSpecMongoDB struct {
 	Cpus               int64                                              `json:"cpus,omitempty"`
 	Memory             int64                                              `json:"memory,omitempty"`
@@ -41,7 +47,8 @@ type PerconaServerMongoDBSpecMongoDB struct {
 	Port               int32                                              `json:"port,omitempty"`
 	HostPort           int32                                              `json:"hostPort,omitempty"`
 	StorageEngine      string                                             `json:"storageEngine,omitempty"`
-	ReplsetName        string                                             `json:"replsetName,omitempty"`
+	Sharding           bool                                               `json:"sharding,omitempty"`
+	Replsets           []*PerconaServerMongoDBReplset                     `json:"replsets,omitempty"`
 	MMAPv1             *PerconaServerMongoDBSpecMongoDBMMAPv1             `json:"mmapv1,omitempty"`
 	WiredTiger         *PerconaServerMongoDBSpecMongoDBWiredTiger         `json:"wiredTiger,omitempty"`
 	OperationProfiling *PerconaServerMongoDBSpecMongoDBOperationProfiling `json:"operationProfiling,omitempty"`

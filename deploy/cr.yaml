@@ -12,7 +12,9 @@ spec:
     storage: 5
     port: 27017
     hostPort: 0
-    replsetName: rs0
+    replsets:
+    - name: rs0
+      size: 3
     storageEngine: wiredTiger
     operationProfiling:
       slowMs: 100
