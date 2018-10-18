@@ -21,16 +21,16 @@ type PerconaServerMongoDB struct {
 	Status            PerconaServerMongoDBStatus `json:"status,omitempty"`
 }
 
-type PerconaServerMongoDBSpecMongoDBMMAPv1 struct {
+type PerconaServerMongoDBMongodMMAPv1 struct {
 	NsSize     int  `json:"nsSize,omitempty"`
 	Smallfiles bool `json:"smallfiles,omitempty"`
 }
 
-type PerconaServerMongoDBSpecMongoDBWiredTiger struct {
+type PerconaServerMongoDBMongodWiredTiger struct {
 	CacheSizeRatio float64 `json:"cacheSizeRatio,omitempty"`
 }
 
-type PerconaServerMongoDBSpecMongoDBOperationProfiling struct {
+type PerconaServerMongoDBMongodOperationProfiling struct {
 	SlowMs int `json:"slowMs,omitempty"`
 }
 
@@ -40,28 +40,50 @@ type PerconaServerMongoDBReplset struct {
 	Configsvr bool   `json:"configsvr,omitempty"`
 }
 
-type PerconaServerMongoDBSpecMongoDB struct {
-	Cpus               int64                                              `json:"cpus,omitempty"`
-	Memory             int64                                              `json:"memory,omitempty"`
-	Storage            int64                                              `json:"storage,omitempty"`
-	Port               int32                                              `json:"port,omitempty"`
-	HostPort           int32                                              `json:"hostPort,omitempty"`
-	StorageEngine      string                                             `json:"storageEngine,omitempty"`
-	Sharding           bool                                               `json:"sharding,omitempty"`
-	Replsets           []*PerconaServerMongoDBReplset                     `json:"replsets,omitempty"`
-	MMAPv1             *PerconaServerMongoDBSpecMongoDBMMAPv1             `json:"mmapv1,omitempty"`
-	WiredTiger         *PerconaServerMongoDBSpecMongoDBWiredTiger         `json:"wiredTiger,omitempty"`
-	OperationProfiling *PerconaServerMongoDBSpecMongoDBOperationProfiling `json:"operationProfiling,omitempty"`
+type PerconaServerMongoDBMongos struct {
+	Size     int32 `json:"size,omitempty"`
+	Cpus     int64 `json:"cpus,omitempty"`
+	Memory   int64 `json:"memory,omitempty"`
+	Storage  int64 `json:"storage,omitempty"`
+	Port     int32 `json:"port,omitempty"`
+	HostPort int32 `json:"hostPort,omitempty"`
+}
+
+type PerconaServerMongoDBSharding struct {
+	Enabled   bool                         `json:"enabled,omitempty"`
+	Configsvr *PerconaServerMongoDBReplset `json:"configsvr,omitempty"`
+	Mongos    *PerconaServerMongoDBMongos  `json:"mongos,omitempty"`
+}
+
+type PerconaServerMongoDBMongod struct {
+	Cpus               int64                                         `json:"cpus,omitempty"`
+	Memory             int64                                         `json:"memory,omitempty"`
+	Storage            int64                                         `json:"storage,omitempty"`
+	Port               int32                                         `json:"port,omitempty"`
+	HostPort           int32                                         `json:"hostPort,omitempty"`
+	StorageEngine      string                                        `json:"storageEngine,omitempty"`
+	Sharding           *PerconaServerMongoDBSharding                 `json:"sharding,omitempty"`
+	Replsets           []*PerconaServerMongoDBReplset                `json:"replsets,omitempty"`
+	MMAPv1             *PerconaServerMongoDBMongodMMAPv1             `json:"mmapv1,omitempty"`
+	WiredTiger         *PerconaServerMongoDBMongodWiredTiger         `json:"wiredTiger,omitempty"`
+	OperationProfiling *PerconaServerMongoDBMongodOperationProfiling `json:"operationProfiling,omitempty"`
 }
 
 type PerconaServerMongoDBSpec struct {
-	Image   string                           `json:"image,omitempty"`
-	RunUID  int64                            `json:"runUid,omitempty"`
-	MongoDB *PerconaServerMongoDBSpecMongoDB `json:"mongodb,omitempty"`
+	Image    string                         `json:"image,omitempty"`
+	RunUID   int64                          `json:"runUid,omitempty"`
+	Mongod   *PerconaServerMongoDBMongod    `json:"mongod,omitempty"`
+	Sharding *PerconaServerMongoDBSharding  `json:"sharding,omitempty"`
+	Replsets []*PerconaServerMongoDBReplset `json:"replsets,omitempty"`
+}
+
+type PerconaServerMongoDBStatusReplset struct {
+	Name        string `json:"name,omitempty"`
+	Initialised bool   `json:"initialised,omitempty"`
+	Uri         string `json:"uri,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
-	Initialised bool     `json:"initialised"`
-	Nodes       []string `json:"nodes"`
-	Uri         string   `json:"uri"`
+	Replsets []*PerconaServerMongoDBStatusReplset `json:"replsets"`
+	Nodes    []string                             `json:"nodes"`
 }

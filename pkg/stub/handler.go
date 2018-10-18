@@ -89,15 +89,15 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			return err
 		}
 
-		replsets := psmdb.Spec.MongoDB.Replsets
-		if psmdb.Spec.MongoDB.Sharding {
+		replsets := psmdb.Spec.Mongod.Replsets
+		if psmdb.Spec.Sharding.Enabled {
 			replsets = append(replsets, &v1alpha1.PerconaServerMongoDBReplset{
 				Name:      configSvrReplsetName,
 				Configsvr: true,
 				Size:      int32(3),
 			})
 		}
-		for _, replset := range replsets {
+		for _, replset := range psmdb.Spec.Replsets {
 			// Create the StatefulSet if it doesn't exist
 			set := newPSMDBStatefulSet(o, replset)
 			err = sdk.Create(set)

@@ -38,7 +38,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 		initCmds := []string{
 			fmt.Sprintf("rs.initiate({_id:\"%s\", version:1, members:[{_id:0, host:\"%s\"}]})",
 				replset.Name,
-				pod.Name+"."+m.Name+"."+m.Namespace+".svc.cluster.local:"+strconv.Itoa(int(m.Spec.MongoDB.Port)),
+				pod.Name+"."+m.Name+"."+m.Namespace+".svc.cluster.local:"+strconv.Itoa(int(m.Spec.Mongod.Port)),
 			),
 			"db.createUser({ user: \"userAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",
 		}

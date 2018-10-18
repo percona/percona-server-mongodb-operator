@@ -40,8 +40,8 @@ var (
 
 // addPSMDBSpecDefaults sets default values for unset config params
 func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
-	if len(spec.MongoDB.Replsets) == 0 {
-		spec.MongoDB.Replsets = []*v1alpha1.PerconaServerMongoDBReplset{
+	if len(spec.Mongod.Replsets) == 0 {
+		spec.Mongod.Replsets = []*v1alpha1.PerconaServerMongoDBReplset{
 			{
 				Name: defaultReplsetName,
 				Size: defaultSize,
@@ -51,25 +51,25 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Image == "" {
 		spec.Image = defaultImage
 	}
-	if spec.MongoDB == nil {
-		spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
+	if spec.Mongod == nil {
+		spec.Mongod = &v1alpha1.PerconaServerMongoDBMongod{}
 	}
-	if spec.MongoDB.Port == 0 {
-		spec.MongoDB.Port = defaultMongodPort
+	if spec.Mongod.Port == 0 {
+		spec.Mongod.Port = defaultMongodPort
 	}
-	if spec.MongoDB.StorageEngine == "" {
-		spec.MongoDB.StorageEngine = defaultStorageEngine
+	if spec.Mongod.StorageEngine == "" {
+		spec.Mongod.StorageEngine = defaultStorageEngine
 	}
-	if spec.MongoDB.StorageEngine == "wiredTiger" {
-		if spec.MongoDB.WiredTiger == nil {
-			spec.MongoDB.WiredTiger = &v1alpha1.PerconaServerMongoDBSpecMongoDBWiredTiger{}
+	if spec.Mongod.StorageEngine == "wiredTiger" {
+		if spec.Mongod.WiredTiger == nil {
+			spec.Mongod.WiredTiger = &v1alpha1.PerconaServerMongoDBMongodWiredTiger{}
 		}
-		if spec.MongoDB.WiredTiger.CacheSizeRatio == 0 {
-			spec.MongoDB.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+		if spec.Mongod.WiredTiger.CacheSizeRatio == 0 {
+			spec.Mongod.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
 		}
 	}
-	if spec.MongoDB.OperationProfiling == nil {
-		spec.MongoDB.OperationProfiling = &v1alpha1.PerconaServerMongoDBSpecMongoDBOperationProfiling{
+	if spec.Mongod.OperationProfiling == nil {
+		spec.Mongod.OperationProfiling = &v1alpha1.PerconaServerMongoDBMongodOperationProfiling{
 			SlowMs: defaultOperationProfilingSlowMs,
 		}
 	}
@@ -96,7 +96,7 @@ func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) 
 // newPSMDBStatefulSet returns a PSMDB stateful set
 func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.PerconaServerMongoDBReplset) *appsv1.StatefulSet {
 	addPSMDBSpecDefaults(&m.Spec)
-	storageQuantity := resource.NewQuantity(m.Spec.MongoDB.Storage, resource.DecimalSI)
+	storageQuantity := resource.NewQuantity(m.Spec.Mongod.Storage, resource.DecimalSI)
 
 	ls := labelsForPerconaServerMongoDB(m)
 	set := &appsv1.StatefulSet{
@@ -238,7 +238,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 }
 
 func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.PerconaServerMongoDBReplset) corev1.Container {
-	mongoSpec := m.Spec.MongoDB
+	mongoSpec := m.Spec.Mongod
 	//cpuQuantity := resource.NewQuantity(mongoSpec.Cpus, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(mongoSpec.Memory*1024*1024, resource.DecimalSI)
 
@@ -258,7 +258,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 			getWiredTigerCacheSizeGB(memoryQuantity, mongoSpec.WiredTiger.CacheSizeRatio)),
 		)
 	}
-	if mongoSpec.Sharding {
+	if m.Spec.Sharding.Enabled {
 		if replset.Configsvr {
 			args = append(args, "--configsvr")
 		} else {
@@ -358,8 +358,8 @@ func newPSMDBService(m *v1alpha1.PerconaServerMongoDB) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Port:       m.Spec.MongoDB.Port,
-					TargetPort: intstr.FromInt(int(m.Spec.MongoDB.Port)),
+					Port:       m.Spec.Mongod.Port,
+					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Port)),
 				},
 			},
 			ClusterIP: "None",
