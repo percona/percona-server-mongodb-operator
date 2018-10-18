@@ -155,7 +155,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return err
 			}
 		} else {
-			logrus.Info("created mongodb service")
+			logrus.Infof("created %s service", psmdb.Name)
 		}
 
 		// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri
