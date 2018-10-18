@@ -66,7 +66,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 		if err != nil {
 			return fmt.Errorf("failed to update psmdb status: %v", err)
 		}
-		h.initialised = true
+		h.initialised[replset.Name] = true
 
 		return nil
 	}

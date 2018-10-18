@@ -40,15 +40,6 @@ var (
 
 // addPSMDBSpecDefaults sets default values for unset config params
 func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
-	if spec.Size == 0 {
-		spec.Size = defaultSize
-	}
-	if spec.Image == "" {
-		spec.Image = defaultImage
-	}
-	if spec.MongoDB == nil {
-		spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
-	}
 	if len(spec.MongoDB.Replsets) == 0 {
 		spec.MongoDB.Replsets = []*v1alpha1.PerconaServerMongoDBReplset{
 			{
@@ -56,6 +47,12 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 				Size: defaultSize,
 			},
 		}
+	}
+	if spec.Image == "" {
+		spec.Image = defaultImage
+	}
+	if spec.MongoDB == nil {
+		spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
 	}
 	if spec.MongoDB.Port == 0 {
 		spec.MongoDB.Port = defaultMongodPort
@@ -97,7 +94,7 @@ func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) 
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string) *appsv1.StatefulSet {
+func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.PerconaServerMongoDBReplset) *appsv1.StatefulSet {
 	addPSMDBSpecDefaults(&m.Spec)
 	storageQuantity := resource.NewQuantity(m.Spec.MongoDB.Storage, resource.DecimalSI)
 
@@ -108,12 +105,12 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string) *
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      replsetName,
+			Name:      replset.Name,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: m.Name,
-			Replicas:    &m.Spec.Size,
+			Replicas:    &replset.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -129,7 +126,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string) *
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, replsetName),
+						newPSMDBMongodContainer(m, replset),
 					},
 					SecurityContext: &corev1.PodSecurityContext{
 						//Sysctls: []corev1.Sysctl{
@@ -199,11 +196,11 @@ func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
 	}
 }
 
-func newPSMDBContainerEnv(replsetName string) []corev1.EnvVar {
+func newPSMDBContainerEnv(replset *v1alpha1.PerconaServerMongoDBReplset) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "MONGODB_REPLSET",
-			Value: replsetName,
+			Value: replset.Name,
 		},
 	}
 }
@@ -240,7 +237,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	}
 }
 
-func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replsetName string) corev1.Container {
+func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.PerconaServerMongoDBReplset) corev1.Container {
 	mongoSpec := m.Spec.MongoDB
 	//cpuQuantity := resource.NewQuantity(mongoSpec.Cpus, resource.DecimalSI)
 	memoryQuantity := resource.NewQuantity(mongoSpec.Memory*1024*1024, resource.DecimalSI)
@@ -250,7 +247,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replsetName strin
 		"--auth",
 		"--keyFile=/mongodb/mongodb.key",
 		"--port=" + strconv.Itoa(int(mongoSpec.Port)),
-		"--replSet=" + replsetName,
+		"--replSet=" + replset.Name,
 		"--storageEngine=" + mongoSpec.StorageEngine,
 		"--slowms=" + strconv.Itoa(int(mongoSpec.OperationProfiling.SlowMs)),
 		"--profile=1",
@@ -262,7 +259,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replsetName strin
 		)
 	}
 	if mongoSpec.Sharding {
-		if replsetName == configSvrReplsetName {
+		if replset.Configsvr {
 			args = append(args, "--configsvr")
 		} else {
 			args = append(args, "--shardsvr")
@@ -281,7 +278,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replsetName strin
 				ContainerPort: mongoSpec.Port,
 			},
 		},
-		Env: newPSMDBContainerEnv(replsetName),
+		Env: newPSMDBContainerEnv(replset),
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{

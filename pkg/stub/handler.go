@@ -99,7 +99,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 		for _, replset := range replsets {
 			// Create the StatefulSet if it doesn't exist
-			set := newPSMDBStatefulSet(o, replset.Name)
+			set := newPSMDBStatefulSet(o, replset)
 			err = sdk.Create(set)
 			if err != nil {
 				if !errors.IsAlreadyExists(err) {
@@ -115,10 +115,9 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			if err != nil {
 				return fmt.Errorf("failed to get stateful set for replset %s: %v", replset.Name, err)
 			}
-			size := psmdb.Spec.Size
-			if *set.Spec.Replicas != size {
-				logrus.Infof("setting replicas to %d for replica set %s", size, replset.Name)
-				set.Spec.Replicas = &size
+			if *set.Spec.Replicas != replset.Size {
+				logrus.Infof("setting replicas to %d for replica set %s", replset.Size, replset.Name)
+				set.Spec.Replicas = &replset.Size
 				err = sdk.Update(set)
 				if err != nil {
 					return fmt.Errorf("failed to update stateful set for replica set %s: %v", replset.Name, err)
