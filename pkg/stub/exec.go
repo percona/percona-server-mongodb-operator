@@ -19,7 +19,7 @@ import (
 //
 // See: https://github.com/kubernetes/client-go/issues/45
 //
-func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, username, password string) error {
+func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) error {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig: %v", err)
@@ -52,16 +52,6 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, usern
 		return fmt.Errorf("cannot find mongod port")
 	}
 
-	cmd := []string{
-		"/usr/bin/mongo",
-		"--port=" + containerPort,
-		"--quiet",
-		"admin",
-	}
-	if username != "" && password != "" {
-		cmd = append(cmd, "--username="+username, "--password="+password)
-	}
-
 	req := client.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(pod.Name).
@@ -72,7 +62,6 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, usern
 		Command:   cmd,
 		Stdout:    true,
 		Stderr:    true,
-		Stdin:     true,
 	}, scheme.ParameterCodec)
 
 	exec, err := remotecommand.NewSPDYExecutor(cfg, "POST", req.URL())
@@ -83,27 +72,22 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, usern
 	var (
 		stdOut bytes.Buffer
 		stdErr bytes.Buffer
-		stdIn  bytes.Buffer
 	)
-	_, err = stdIn.WriteString(mongoCmd)
-	if err != nil {
-		return err
-	}
 
 	err = exec.Stream(remotecommand.StreamOptions{
 		Stdout: &stdOut,
 		Stderr: &stdErr,
-		Stdin:  &stdIn,
 	})
 
 	logrus.WithFields(logrus.Fields{
 		"pod":       pod.Name,
 		"container": containerName,
-	}).Infof("running mongo command '%s'", mongoCmd)
+		"command":   cmd,
+	}).Info("running command in pod container")
 
-	logrus.Infof("mongo stdout: %s", strings.TrimSpace(stdOut.String()))
+	logrus.Infof("command stdout: %s", strings.TrimSpace(stdOut.String()))
 	if stdErr.Len() > 0 {
-		logrus.Errorf("mongo stderr: %s", strings.TrimSpace(stdErr.String()))
+		logrus.Errorf("command stderr: %s", strings.TrimSpace(stdErr.String()))
 	}
 
 	if err != nil {
