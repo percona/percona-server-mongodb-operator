@@ -34,6 +34,7 @@ var (
 	mongodDataVolClaimName          string  = "mongod-data"
 	mongodToolsVolName              string  = "mongodb-tools"
 	mongodPortName                  string  = "mongodb"
+	mongodbInitiatorUrl             string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/k8s-mongodb-initiator"
 	mongodbHealthcheckUrl           string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
 )
 
@@ -200,6 +201,10 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 			Name:  "MONGODB_REPLSET",
 			Value: mSpec.ReplsetName,
 		},
+		{
+			Name:  "MONGODB_PORT",
+			Value: strconv.Itoa(int(mSpec.Port)),
+		},
 	}
 }
 
@@ -207,7 +212,8 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	// download mongodb-healthcheck, copy internal auth key and setup ownership+permissions
 	cmds := []string{
 		"wget -P /mongodb " + mongodbHealthcheckUrl,
-		"chmod +x /mongodb/mongodb-healthcheck",
+		"wget -P /mongodb " + mongodbInitiatorUrl,
+		"chmod +x /mongodb/mongodb-healthcheck /mongodb/k8s-mongodb-initiator",
 		"cp " + mongoDBSecretsDir + "/" + mongoDBKeySecretName + " /mongodb/mongodb.key",
 		"chown " + strconv.Itoa(int(defaultRunUID)) + " " + mongodContainerDataDir + " /mongodb/mongodb.key",
 		"chmod 0400 /mongodb/mongodb.key",
@@ -286,8 +292,8 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/mongodb/mongodb-healthcheck",
-						"readiness",
-						"--replset=",
+						"k8s",
+						"liveness",
 					},
 				},
 			},
