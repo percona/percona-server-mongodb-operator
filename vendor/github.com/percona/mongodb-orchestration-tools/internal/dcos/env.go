@@ -15,7 +15,6 @@
 package dcos
 
 const (
-	EnvServiceName      = "FRAMEWORK_NAME"
 	EnvFrameworkHost    = "FRAMEWORK_HOST"
 	EnvPodName          = "POD_NAME"
 	EnvTaskName         = "TASK_NAME"
@@ -25,21 +24,7 @@ const (
 
 	EnvMongoDBMemoryMB                 = "MONGODB_MEM"
 	EnvMongoDBPrimaryAddr              = "MONGODB_PRIMARY_ADDR"
-	EnvMongoDBPort                     = "MONGODB_PORT"
-	EnvMongoDBReplset                  = "MONGODB_REPLSET"
-	EnvMongoDBNetSSLEnabled            = "MONGODB_NET_SSL_ENABLED"
-	EnvMongoDBNetSSLInsecure           = "MONGODB_NET_SSL_INSECURE"
-	EnvMongoDBNetSSLPEMKeyFile         = "MONGODB_NET_SSL_PEM_KEY_FILE"
-	EnvMongoDBNetSSLCAFile             = "MONGODB_NET_SSL_CA_FILE"
 	EnvMongoDBMongodEndpointName       = "MONGODB_MONGOD_ENDPOINT_NAME"
-	EnvMongoDBBackupUser               = "MONGODB_BACKUP_USER"
-	EnvMongoDBBackupPassword           = "MONGODB_BACKUP_PASSWORD"
-	EnvMongoDBClusterAdminUser         = "MONGODB_CLUSTER_ADMIN_USER"
-	EnvMongoDBClusterAdminPassword     = "MONGODB_CLUSTER_ADMIN_PASSWORD"
-	EnvMongoDBClusterMonitorUser       = "MONGODB_CLUSTER_MONITOR_USER"
-	EnvMongoDBClusterMonitorPassword   = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	EnvMongoDBUserAdminUser            = "MONGODB_USER_ADMIN_USER"
-	EnvMongoDBUserAdminPassword        = "MONGODB_USER_ADMIN_PASSWORD"
 	EnvMongoDBChangeUserDb             = "MONGODB_CHANGE_USER_DB"
 	EnvMongoDBChangeUserUsername       = "MONGODB_CHANGE_USER_USERNAME"
 	EnvMongoDBChangeUserNewPassword    = "MONGODB_CHANGE_USER_NEW_PASSWORD"

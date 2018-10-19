@@ -58,6 +58,9 @@ func (p *Pods) Pods() ([]string, error) {
 
 	pods := []string{}
 	for _, pod := range p.pods {
+		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
+			continue
+		}
 		pods = append(pods, pod.Name)
 	}
 	return pods, nil

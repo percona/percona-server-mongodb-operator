@@ -15,6 +15,5 @@
 package dcos
 
 const (
-	DefaultServiceName             = "percona-server-mongodb"
 	DefaultMongoDBMongodEndpointName = "mongo-port"
 )
