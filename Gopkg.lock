@@ -234,6 +234,7 @@
     "internal/db",
     "internal/dcos",
     "internal/dcos/api",
+    "pkg",
     "pkg/db",
     "pkg/pod",
     "pkg/pod/dcos",
@@ -243,7 +244,7 @@
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "b24b186d865da46ac99977e4993a8b2b02c5db9c"
+  revision = "c70880882ad255a06cb9e33865acaad89c574ec6"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
@@ -659,6 +660,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1d321d259ee2a7998557ee5aab4f7f261ec7124b124adbc17a595b3646d92384"
+  inputs-digest = "c91523542bff90227fba9596b4281c0071a4af0625b6567315e8c67bf8257ad1"
   solver-name = "gps-cdcl"
   solver-version = 1

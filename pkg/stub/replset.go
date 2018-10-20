@@ -34,35 +34,16 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 
 		logrus.Infof("Initiating replset on pod: %s", pod.Name)
 
-		// init replset and add the first admin user (with localhostBypassAuth exception)
-		initCmds := []string{
-			fmt.Sprintf("rs.initiate({_id:\"%s\", version:1, members:[{_id:0, host:\"%s\"}]})",
-				m.Spec.MongoDB.ReplsetName,
-				pod.Name+"."+m.Name+"."+m.Namespace+".svc.cluster.local:"+strconv.Itoa(int(m.Spec.MongoDB.Port)),
-			),
-			"db.createUser({ user: \"userAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"root\" }]})",
-		}
-		for _, cmd := range initCmds {
-			err := execMongoCommandsInContainer(pod, mongodContainerName, cmd, "", "")
-			if err != nil {
-				return err
-			}
-		}
-
-		// add other users using the new admin user
-		addUserCmds := []string{
-			"db.createUser({ user: \"clusterAdmin\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"clusterAdmin\" }]})",
-			"db.createUser({ user: \"clusterMonitor\", pwd: \"admin123456\", roles: [{ db: \"admin\", role: \"clusterMonitor\" }]})",
-		}
-		for _, cmd := range addUserCmds {
-			err := execMongoCommandsInContainer(pod, mongodContainerName, cmd, "userAdmin", "admin123456")
-			if err != nil {
-				return err
-			}
+		err := execCommandInContainer(pod, mongodContainerName, []string{
+			"/mongodb/k8s-mongodb-initiator",
+			"init",
+		})
+		if err != nil {
+			return err
 		}
 
 		m.Status.Initialised = true
-		err := sdk.Update(m)
+		err = sdk.Update(m)
 		if err != nil {
 			return fmt.Errorf("failed to update psmdb status: %v", err)
 		}

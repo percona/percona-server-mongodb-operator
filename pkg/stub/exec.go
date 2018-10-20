@@ -1,8 +1,10 @@
 package stub
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -14,12 +16,25 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// printOutput outputs stdout/stderr log buffers from commands
+func printOutputBuffer(r io.Reader, cmd, pod string) error {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		fmt.Printf("%s (%s): %s\n", cmd, pod, strings.TrimSpace(scanner.Text()))
+	}
+	if err := scanner.Err(); err != nil {
+		logrus.Errorf("Error printing output from %s (%s): %v", cmd, pod, err)
+		return err
+	}
+	return nil
+}
+
 // stolen from https://github.com/saada/mongodb-operator/blob/master/pkg/stub/handler.go
 // v2 of the api should have features for doing this, I would like to move to that later
 //
 // See: https://github.com/kubernetes/client-go/issues/45
 //
-func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, username, password string) error {
+func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) error {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig: %v", err)
@@ -44,22 +59,12 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, usern
 	// find the mongod port
 	var containerPort string
 	for _, port := range container.Ports {
-		if port.Name == "mongodb" {
+		if port.Name == mongodPortName {
 			containerPort = strconv.Itoa(int(port.ContainerPort))
 		}
 	}
 	if containerPort == "" {
-		return fmt.Errorf("cannot find mongod port")
-	}
-
-	cmd := []string{
-		"/usr/bin/mongo",
-		"--port=" + containerPort,
-		"--quiet",
-		"admin",
-	}
-	if username != "" && password != "" {
-		cmd = append(cmd, "--username="+username, "--password="+password)
+		return fmt.Errorf("cannot find mongod port with name: %s", mongodPortName)
 	}
 
 	req := client.CoreV1().RESTClient().Post().
@@ -72,7 +77,6 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, usern
 		Command:   cmd,
 		Stdout:    true,
 		Stderr:    true,
-		Stdin:     true,
 	}, scheme.ParameterCodec)
 
 	exec, err := remotecommand.NewSPDYExecutor(cfg, "POST", req.URL())
@@ -83,31 +87,32 @@ func execMongoCommandsInContainer(pod corev1.Pod, containerName, mongoCmd, usern
 	var (
 		stdOut bytes.Buffer
 		stdErr bytes.Buffer
-		stdIn  bytes.Buffer
 	)
-	_, err = stdIn.WriteString(mongoCmd)
-	if err != nil {
-		return err
-	}
-
 	err = exec.Stream(remotecommand.StreamOptions{
 		Stdout: &stdOut,
 		Stderr: &stdErr,
-		Stdin:  &stdIn,
 	})
 
 	logrus.WithFields(logrus.Fields{
 		"pod":       pod.Name,
 		"container": containerName,
-	}).Infof("running mongo command '%s'", mongoCmd)
+		"command":   cmd[0],
+	}).Info("running command in container")
 
-	logrus.Infof("mongo stdout: %s", strings.TrimSpace(stdOut.String()))
-	if stdErr.Len() > 0 {
-		logrus.Errorf("mongo stderr: %s", strings.TrimSpace(stdErr.String()))
+	// print stdout
+	logrus.Infof("%s stdout:", cmd[0])
+	err = printOutputBuffer(&stdOut, cmd[0], pod.Name)
+	if err != nil {
+		return err
 	}
 
-	if err != nil {
-		return fmt.Errorf("could not execute: %v", err)
+	// print stderr, if exists
+	if stdErr.Len() > 0 {
+		logrus.Errorf("%s stderr:", cmd[0])
+		err = printOutputBuffer(&stdErr, cmd[0], pod.Name)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

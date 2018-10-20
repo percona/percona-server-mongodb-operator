@@ -28,6 +28,10 @@ const (
 	ClusterServiceDNSSuffix string = "svc.cluster.local"
 )
 
+func GetMongoHost(pod, service, namespace string) string {
+	return pod + "." + service + "." + namespace + "." + ClusterServiceDNSSuffix
+}
+
 type TaskState struct {
 	status corev1.PodStatus
 }
@@ -92,10 +96,6 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 	return false
 }
 
-func (t *Task) getMongoHost() string {
-	return t.pod.Name + "." + t.serviceName + "." + t.namespace + "." + ClusterServiceDNSSuffix
-}
-
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
 	for _, container := range t.pod.Spec.Containers {
 		for _, port := range container.Ports {
@@ -103,7 +103,7 @@ func (t *Task) GetMongoAddr() (*db.Addr, error) {
 				continue
 			}
 			addr := &db.Addr{
-				Host: t.getMongoHost(),
+				Host: GetMongoHost(t.pod.Name, t.serviceName, t.namespace),
 				Port: int(port.HostPort),
 			}
 			if addr.Port == 0 {
