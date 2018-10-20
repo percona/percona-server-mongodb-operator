@@ -95,11 +95,11 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 		size := psmdb.Spec.Size
 		if *set.Spec.Replicas != size {
-			logrus.Infof("setting replicas to %d for replica set", size, psmdb.Spec.MongoDB.ReplsetName)
+			logrus.Infof("setting replicas to %d for replica set: %s", size, psmdb.Spec.MongoDB.ReplsetName)
 			set.Spec.Replicas = &size
 			err = sdk.Update(set)
 			if err != nil {
-				return fmt.Errorf("failed to update stateful set: %v", err)
+				return fmt.Errorf("failed to update stateful set for replset %s: %v", psmdb.Spec.MongoDB.ReplsetName, err)
 			}
 		}
 
