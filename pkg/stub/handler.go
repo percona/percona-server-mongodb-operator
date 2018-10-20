@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
@@ -152,8 +153,8 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				// Start the watchdog if it has not been started
 				h.watchdog = watchdog.New(&wdConfig.Config{
 					ServiceName:    psmdb.Name,
-					Username:       string(secret.Data["MONGODB_CLUSTER_ADMIN_USER"]),
-					Password:       string(secret.Data["MONGODB_CLUSTER_ADMIN_PASSWORD"]),
+					Username:       string(secret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+					Password:       string(secret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 					APIPoll:        5 * time.Second,
 					ReplsetPoll:    5 * time.Second,
 					ReplsetTimeout: 3 * time.Second,
