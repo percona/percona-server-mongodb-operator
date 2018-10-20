@@ -227,6 +227,7 @@ func (s *State) AddConfigMembers(session *mgo.Session, configManager rsConfig.Ma
 		}
 		if s.VotingMembers() >= MaxVotingMembers {
 			log.Infof("Max replset voting members reached, disabling votes for new config member: %s", mongod.Name())
+			member.Priority = 0
 			member.Votes = 0
 		}
 		if mongod.IsBackupNode() {
