@@ -37,7 +37,6 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 		err := execCommandInContainer(pod, mongodContainerName, []string{
 			"/mongodb/k8s-mongodb-initiator",
 			"init",
-			"--delay=0s",
 		})
 		if err != nil {
 			return err
