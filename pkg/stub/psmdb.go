@@ -8,6 +8,7 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
+	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -198,12 +199,12 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 	mSpec := m.Spec.MongoDB
 	return []corev1.EnvVar{
 		{
-			Name:  "MONGODB_REPLSET",
-			Value: mSpec.ReplsetName,
+			Name:  motPkg.EnvMongoDBPort,
+			Value: strconv.Itoa(int(mSpec.Port)),
 		},
 		{
-			Name:  "MONGODB_PORT",
-			Value: strconv.Itoa(int(mSpec.Port)),
+			Name:  motPkg.EnvMongoDBReplset,
+			Value: mSpec.ReplsetName,
 		},
 	}
 }
