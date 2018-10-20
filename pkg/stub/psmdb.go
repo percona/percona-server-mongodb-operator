@@ -9,6 +9,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
+	k8sPod "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -198,6 +199,14 @@ func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
 func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 	mSpec := m.Spec.MongoDB
 	return []corev1.EnvVar{
+		{
+			Name:  motPkg.EnvServiceName,
+			Value: m.Name,
+		},
+		{
+			Name:  k8sPod.EnvNamespace,
+			Value: m.Namespace,
+		},
 		{
 			Name:  motPkg.EnvMongoDBPort,
 			Value: strconv.Itoa(int(mSpec.Port)),
