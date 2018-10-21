@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -16,14 +17,32 @@ import (
 )
 
 // printOutput outputs stdout/stderr log buffers from commands
-func printOutputBuffer(r io.Reader, cmd, pod string) error {
+func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		fmt.Printf("%s (%s): %s\n", cmd, pod, strings.TrimSpace(scanner.Text()))
+		fmt.Fprintf(out, "%s (%s): %s\n", cmd, pod, strings.TrimSpace(scanner.Text()))
 	}
 	if err := scanner.Err(); err != nil {
+		logrus.SetOutput(out)
 		logrus.Errorf("Error printing output from %s (%s): %v", cmd, pod, err)
 		return err
+	}
+	return nil
+}
+
+// printCommandOutput handles printing the stderr and stdout output of a remote command
+func printCommandOutput(cmd, pod string, stdOut, stdErr *bytes.Buffer, out io.Writer) error {
+	logrus.Infof("%s stdout:", cmd)
+	err := printOutputBuffer(cmd, pod, stdErr, out)
+	if err != nil {
+		return err
+	}
+	if stdErr.Len() > 0 {
+		logrus.Errorf("%s stderr:", cmd)
+		err = printOutputBuffer(cmd, pod, stdErr, out)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -53,7 +72,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 	// find the mongod port
 	containerPort := getMongodPort(container)
 	if containerPort == "" {
-		return fmt.Errorf("cannot find mongod port in container %s", container.Name)
+		return fmt.Errorf("cannot find mongod port in container: %s", container.Name)
 	}
 
 	req := client.CoreV1().RESTClient().Post().
@@ -70,7 +89,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 
 	exec, err := remotecommand.NewSPDYExecutor(cfg, "POST", req.URL())
 	if err != nil {
-		return fmt.Errorf("failed to run pod exec: %v", err)
+		return fmt.Errorf("failed to run exec in pod %s: %v", pod.Name, err)
 	}
 
 	var (
@@ -82,7 +101,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 		Stderr: &stdErr,
 	})
 	if err != nil {
-		logrus.Errorf("error running remote command: %v", err)
+		logrus.Errorf("error running remote command %s: %v", cmd[0], err)
 		return err
 	}
 
@@ -92,21 +111,5 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 		"command":   cmd[0],
 	}).Info("running command in container")
 
-	// print stdout
-	logrus.Infof("%s stdout:", cmd[0])
-	err = printOutputBuffer(&stdOut, cmd[0], pod.Name)
-	if err != nil {
-		return err
-	}
-
-	// print stderr, if exists
-	if stdErr.Len() > 0 {
-		logrus.Errorf("%s stderr:", cmd[0])
-		err = printOutputBuffer(&stdErr, cmd[0], pod.Name)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return printCommandOutput(cmd[0], pod.Name, &stdOut, &stdErr, os.Stdout)
 }
