@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -27,26 +26,6 @@ func printOutputBuffer(r io.Reader, cmd, pod string) error {
 		return err
 	}
 	return nil
-}
-
-// getContainer returns a container, if it exists
-func getContainer(pod corev1.Pod, containerName string) *corev1.Container {
-	for _, cont := range pod.Spec.Containers {
-		if cont.Name == containerName {
-			return &cont
-		}
-	}
-	return nil
-}
-
-// getMongodPort returns the mongod port number as a string
-func getMongodPort(container *corev1.Container) string {
-	for _, port := range container.Ports {
-		if port.Name == mongodPortName {
-			return strconv.Itoa(int(port.ContainerPort))
-		}
-	}
-	return ""
 }
 
 // execCommandInContainer runs a shell command inside a running container. This code is
