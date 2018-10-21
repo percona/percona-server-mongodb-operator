@@ -84,7 +84,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 		"wget -P /mongodb " + mongodbInitiatorUrl,
 		"chmod +x /mongodb/mongodb-healthcheck /mongodb/k8s-mongodb-initiator",
 		"cp " + mongoDBSecretsDir + "/" + mongoDBKeySecretName + " /mongodb/mongodb.key",
-		"chown " + strconv.Itoa(int(defaultRunUID)) + " " + mongodContainerDataDir + " /mongodb/mongodb.key",
+		"chown " + strconv.Itoa(int(m.Spec.RunUID)) + " " + mongodContainerDataDir + " /mongodb/mongodb.key",
 		"chmod 0400 /mongodb/mongodb.key",
 	}
 	return corev1.Container{
