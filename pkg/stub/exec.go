@@ -29,8 +29,29 @@ func printOutputBuffer(r io.Reader, cmd, pod string) error {
 	return nil
 }
 
-// stolen from https://github.com/saada/mongodb-operator/blob/master/pkg/stub/handler.go
-// v2 of the api should have features for doing this, I would like to move to that later
+// getContainer returns a container, if it exists
+func getContainer(pod corev1.Pod, containerName string) *corev1.Container {
+	for _, cont := range pod.Spec.Containers {
+		if cont.Name == containerName {
+			return &cont
+		}
+	}
+	return nil
+}
+
+// getMongodPort returns the mongod port number as a string
+func getMongodPort(container *corev1.Container) string {
+	for _, port := range container.Ports {
+		if port.Name == mongodPortName {
+			return strconv.Itoa(int(port.ContainerPort))
+		}
+	}
+	return ""
+}
+
+// execCommandInContainer runs a shell command inside a running container. This code is
+// stolen from https://github.com/saada/mongodb-operator/blob/master/pkg/stub/handler.go.
+// v2 of the core api should have features for doing this, move to using that later
 //
 // See: https://github.com/kubernetes/client-go/issues/45
 //
@@ -45,26 +66,15 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 	}
 
 	// find the mongod container
-	var container *corev1.Container
-	for _, cont := range pod.Spec.Containers {
-		if cont.Name == containerName {
-			container = &cont
-			break
-		}
-	}
+	container := getContainer(pod, containerName)
 	if container == nil {
 		return nil
 	}
 
 	// find the mongod port
-	var containerPort string
-	for _, port := range container.Ports {
-		if port.Name == mongodPortName {
-			containerPort = strconv.Itoa(int(port.ContainerPort))
-		}
-	}
+	containerPort := getMongodPort(container)
 	if containerPort == "" {
-		return fmt.Errorf("cannot find mongod port with name: %s", mongodPortName)
+		return fmt.Errorf("cannot find mongod port in container %s", container.Name)
 	}
 
 	req := client.CoreV1().RESTClient().Post().
@@ -92,6 +102,10 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 		Stdout: &stdOut,
 		Stderr: &stdErr,
 	})
+	if err != nil {
+		logrus.Errorf("error running remote command: %v", err)
+		return err
+	}
 
 	logrus.WithFields(logrus.Fields{
 		"pod":       pod.Name,
