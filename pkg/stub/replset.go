@@ -12,28 +12,37 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// isContainerRunning returns a boolean reflecting if a container
+// (and pod) are in a running state
+func isContainerRunning(pod corev1.Pod, containerName string) bool {
+	if pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.Name == containerName && container.State.Running != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // handleReplsetInit exec the replset initiation steps on the first
 // running mongod pod using a 'mongo' shell from within the container,
 // required for using localhostAuthBypass when MongoDB auth is enabled
 func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod) error {
 	for _, pod := range pods {
-		if !isMongodPod(pod) || pod.Status.Phase != corev1.PodRunning {
-			continue
-		}
-
-		var containerRunning bool
-		for _, container := range pod.Status.ContainerStatuses {
-			if container.Name == mongodContainerName {
-				containerRunning = container.State.Running != nil
-				break
-			}
-		}
-		if !containerRunning {
+		if !isMongodPod(pod) || !isContainerRunning(pod, mongodContainerName) {
 			continue
 		}
 
 		logrus.Infof("Initiating replset on pod: %s", pod.Name)
 
+		// Run the k8s-mongodb-initiator from within the first running container
+		// this must be ran from within the running container to utilise the MongoDB
+		// Localhost Exeception.
+		//
+		// See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
+		//
 		err := execCommandInContainer(pod, mongodContainerName, []string{
 			"/mongodb/k8s-mongodb-initiator",
 			"init",
@@ -42,6 +51,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 			return err
 		}
 
+		// update status after replset init
 		m.Status.Initialised = true
 		err = sdk.Update(m)
 		if err != nil {
