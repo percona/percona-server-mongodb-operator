@@ -22,6 +22,11 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
     ```
     kubectl create -f deploy/mongodb-users.yaml
     ```
+ 
+1. Extra step (for Google Kubernetes Engine ONLY!!!)
+    ```
+    kubectl create clusterrolebinding cluster-admin-binding1 --clusterrole=cluster-admin --user=<myname@example.org>
+    ```
 1. Start the percona-server-mongodb-operator within Kubernetes:
     ```
     kubectl create -f deploy/rbac.yaml
