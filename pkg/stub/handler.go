@@ -70,13 +70,13 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// Create the StatefulSet if it doesn't exist
 		set, err := newPSMDBStatefulSet(o)
 		if err != nil {
-			logrus.Error("failed to create stateful set object: %v", err)
+			logrus.Errorf("failed to create stateful set object for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			return err
 		}
 		err = sdk.Create(set)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
-				logrus.Errorf("failed to create psmdb pod: %v", err)
+				logrus.Errorf("failed to create stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 				return err
 			}
 		} else {
@@ -84,17 +84,17 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				"limit_cpu":     psmdb.Spec.Mongod.Limits.Cpu,
 				"limit_memory":  psmdb.Spec.Mongod.Limits.Memory,
 				"limit_storage": psmdb.Spec.Mongod.Limits.Storage,
-			}).Infof("created stateful set for replica set: %s", psmdb.Spec.Mongod.ReplsetName)
+			}).Infof("created stateful set for replset: %s", psmdb.Spec.Mongod.ReplsetName)
 		}
 
 		// Ensure the stateful set size is the same as the spec
 		err = sdk.Get(set)
 		if err != nil {
-			return fmt.Errorf("failed to get stateful set: %v", err)
+			return fmt.Errorf("failed to get stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 		}
-		size := psmdb.Spec.Size
+		size := psmdb.Spec.Mongod.Size
 		if *set.Spec.Replicas != size {
-			logrus.Infof("setting replicas to %d for replica set: %s", size, psmdb.Spec.Mongod.ReplsetName)
+			logrus.Infof("setting replicas to %d for replset: %s", size, psmdb.Spec.Mongod.ReplsetName)
 			set.Spec.Replicas = &size
 			err = sdk.Update(set)
 			if err != nil {
@@ -111,7 +111,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return err
 			}
 		} else {
-			logrus.Infof("created mongodb service for replica set: %s", psmdb.Spec.Mongod.ReplsetName)
+			logrus.Infof("created mongodb service for replset: %s", psmdb.Spec.Mongod.ReplsetName)
 		}
 
 		// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri
@@ -120,7 +120,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		listOps := &metav1.ListOptions{LabelSelector: labelSelector}
 		err = sdk.List(psmdb.Namespace, podList, sdk.WithListOptions(listOps))
 		if err != nil {
-			return fmt.Errorf("failed to list pods: %v", err)
+			return fmt.Errorf("failed to list pods for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 		}
 		podNames := getPodNames(podList.Items)
 		if len(psmdb.Status.Replsets) == 0 {
@@ -131,11 +131,11 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 		}
 		if !reflect.DeepEqual(podNames, psmdb.Status.Replsets[0].Members) {
-			psmdb.Status.Replsets[0].Uri = getMongoURI(podList.Items, h.portName)
 			psmdb.Status.Replsets[0].Members = podNames
+			psmdb.Status.Replsets[0].Uri = getMongoURI(podList.Items, h.portName)
 			err := sdk.Update(psmdb)
 			if err != nil {
-				return fmt.Errorf("failed to update psmdb status: %v", err)
+				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			}
 		}
 
@@ -147,15 +147,17 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		if !psmdb.Status.Replsets[0].Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
 			err = h.handleReplsetInit(psmdb, podList.Items)
 			if err != nil {
-				logrus.Errorf("failed to init replset: %v", err)
+				logrus.Errorf("failed to init replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
+				return nil
 			}
 
 			// update status after replset init
 			psmdb.Status.Replsets[0].Initialised = true
 			err = sdk.Update(psmdb)
 			if err != nil {
-				return fmt.Errorf("failed to update psmdb status: %v", err)
+				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			}
+			logrus.Infof("changed state to initialised for replset %s", psmdb.Spec.Mongod.ReplsetName)
 
 			if h.watchdog == nil {
 				// load username/password from secret

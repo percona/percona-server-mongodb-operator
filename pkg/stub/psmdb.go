@@ -10,9 +10,12 @@ import (
 )
 
 var (
-	defaultSize                     int32   = 3
+	defaultMongodSize               int32   = 3
 	defaultImage                    string  = "perconalab/percona-server-mongodb:latest"
 	defaultRunUID                   int64   = 1001
+	defaultKeySecretName            string  = "percona-server-mongodb-key"
+	defaultUsersSecretName          string  = "percona-server-mongodb-users"
+	defaultVolumeClassName          string  = "standard"
 	defaultReplsetName              string  = "rs"
 	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
 	defaultMongodPort               int32   = 27017
@@ -30,11 +33,17 @@ var (
 
 // addPSMDBSpecDefaults sets default values for unset config params
 func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
-	if spec.Size == 0 {
-		spec.Size = defaultSize
-	}
 	if spec.Image == "" {
 		spec.Image = defaultImage
+	}
+	if spec.Secrets == nil {
+		spec.Secrets = &v1alpha1.Secrets{}
+	}
+	if spec.Secrets.Key == "" {
+		spec.Secrets.Key = defaultKeySecretName
+	}
+	if spec.Secrets.Users == "" {
+		spec.Secrets.Users = defaultUsersSecretName
 	}
 	if spec.Mongod == nil {
 		spec.Mongod = &v1alpha1.MongodSpec{}
@@ -42,8 +51,14 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Mongod.ReplsetName == "" {
 		spec.Mongod.ReplsetName = defaultReplsetName
 	}
+	if spec.Mongod.Size == 0 {
+		spec.Mongod.Size = defaultMongodSize
+	}
 	if spec.Mongod.Port == 0 {
 		spec.Mongod.Port = defaultMongodPort
+	}
+	if spec.Mongod.VolumeClassName == "" {
+		spec.Mongod.VolumeClassName = defaultVolumeClassName
 	}
 	if spec.Mongod.StorageEngine == "" {
 		spec.Mongod.StorageEngine = defaultStorageEngine
@@ -71,9 +86,17 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
 
-	resources, err := parseSpecResources(m)
+	limits, err := parseSpecResourceRequirements(m.Spec.Mongod.Limits)
 	if err != nil {
 		return nil, err
+	}
+	requests, err := parseSpecResourceRequirements(m.Spec.Mongod.Requests)
+	if err != nil {
+		return nil, err
+	}
+	resources := &corev1.ResourceRequirements{
+		Limits:   limits,
+		Requests: requests,
 	}
 
 	ls := labelsForPerconaServerMongoDB(m)
@@ -88,7 +111,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: m.Name,
-			Replicas:    &m.Spec.Size,
+			Replicas:    &m.Spec.Mongod.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -119,10 +142,10 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 							Name: mongodToolsVolName,
 						},
 						{
-							Name: m.Name + "-" + mongoDBKeySecretName,
+							Name: m.Spec.Secrets.Key,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: m.Name + "-" + mongoDBKeySecretName,
+									SecretName: m.Spec.Secrets.Key,
 								},
 							},
 						},
@@ -140,9 +163,10 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 						},
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: resources.Requests[corev1.ResourceStorage],
+								corev1.ResourceStorage: resources.Limits[corev1.ResourceStorage],
 							},
 						},
+						StorageClassName: &m.Spec.Mongod.VolumeClassName,
 					},
 				},
 			},

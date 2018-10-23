@@ -22,10 +22,15 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Size   int32       `json:"size"`
-	Image  string      `json:"image,omitempty"`
-	RunUID int64       `json:"runUid,omitempty"`
-	Mongod *MongodSpec `json:"mongod,omitempty"`
+	Image   string      `json:"image,omitempty"`
+	RunUID  int64       `json:"runUid,omitempty"`
+	Mongod  *MongodSpec `json:"mongod,omitempty"`
+	Secrets *Secrets    `json:"secrets,omitempty"`
+}
+
+type Secrets struct {
+	Key   string `json:"key,omitempty"`
+	Users string `json:"users,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
@@ -58,9 +63,9 @@ type MongodSpecOperationProfiling struct {
 }
 
 type ResourceSpecRequirements struct {
-	Cpu     float64 `json:"cpu,omitempty"`
-	Memory  string  `json:"memory,omitempty"`
-	Storage string  `json:"storage,omitempty"`
+	Cpu     string `json:"cpu,omitempty"`
+	Memory  string `json:"memory,omitempty"`
+	Storage string `json:"storage,omitempty"`
 }
 
 type ResourcesSpec struct {
@@ -78,9 +83,11 @@ var (
 
 type MongodSpec struct {
 	*ResourcesSpec     `json:"resources,omitempty"`
+	Size               int32                         `json:"size"`
 	ReplsetName        string                        `json:"replsetName,omitempty"`
 	Port               int32                         `json:"port,omitempty"`
 	HostPort           int32                         `json:"hostPort,omitempty"`
+	VolumeClassName    string                        `json:"volumeClassName,omitempty"`
 	StorageEngine      StorageEngine                 `json:"storageEngine,omitempty"`
 	InMemory           *MongodSpecInMemory           `json:"inMemory,omitempty"`
 	MMAPv1             *MongodSpecMMAPv1             `json:"mmapv1,omitempty"`

@@ -83,7 +83,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 		"wget -P /mongodb " + mongodbHealthcheckUrl,
 		"wget -P /mongodb " + mongodbInitiatorUrl,
 		"chmod +x /mongodb/mongodb-healthcheck /mongodb/k8s-mongodb-initiator",
-		"cp " + mongoDBSecretsDir + "/" + mongoDBKeySecretName + " /mongodb/mongodb.key",
+		"cp " + mongoDBSecretsDir + "/" + mongoDbSecretMongoKeyVal + " /mongodb/mongodb.key",
 		"chown " + strconv.Itoa(int(m.Spec.RunUID)) + " " + mongodContainerDataDir + " /mongodb/mongodb.key",
 		"chmod 0400 /mongodb/mongodb.key",
 	}
@@ -103,7 +103,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 				MountPath: mongodContainerDataDir,
 			},
 			{
-				Name:      m.Name + "-" + mongoDBKeySecretName,
+				Name:      m.Spec.Secrets.Key,
 				MountPath: mongoDBSecretsDir,
 			},
 		},
@@ -163,7 +163,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "percona-server-mongodb-users",
+						Name: m.Spec.Secrets.Users,
 					},
 					Optional: &falsePtr,
 				},
@@ -191,12 +191,21 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 					Port: intstr.FromInt(int(mongod.Port)),
 				},
 			},
-			InitialDelaySeconds: int32(15),
-			TimeoutSeconds:      int32(3),
-			PeriodSeconds:       int32(5),
-			FailureThreshold:    int32(6),
+			InitialDelaySeconds: int32(10),
+			TimeoutSeconds:      int32(2),
+			PeriodSeconds:       int32(3),
+			FailureThreshold:    int32(8),
 		},
-		Resources: *resources,
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resources.Limits[corev1.ResourceCPU],
+				corev1.ResourceMemory: resources.Limits[corev1.ResourceMemory],
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resources.Requests[corev1.ResourceCPU],
+				corev1.ResourceMemory: resources.Requests[corev1.ResourceMemory],
+			},
+		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &truePtr,
 			RunAsUser:    &m.Spec.RunUID,

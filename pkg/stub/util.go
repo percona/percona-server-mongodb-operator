@@ -2,6 +2,8 @@ package stub
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
@@ -56,47 +58,40 @@ func getPodNames(pods []corev1.Pod) []string {
 	return podNames
 }
 
-func parseSpecResources(m *v1alpha1.PerconaServerMongoDB) (*corev1.ResourceRequirements, error) {
-	limitsCpu, err := resource.ParseQuantity(fmt.Sprintf("%.1f", m.Spec.Mongod.Limits.Cpu))
-	if err != nil {
-		return nil, err
+func parseSpecResourceRequirements(rsr *v1alpha1.ResourceSpecRequirements) (corev1.ResourceList, error) {
+	rl := corev1.ResourceList{}
+
+	if rsr.Cpu != "" {
+		cpu := rsr.Cpu
+		if !strings.HasSuffix(cpu, "m") {
+			cpuFloat64, err := strconv.ParseFloat(cpu, 64)
+			if err != nil {
+				return nil, err
+			}
+			cpu = fmt.Sprintf("%.1f", cpuFloat64)
+		}
+		cpuQuantity, err := resource.ParseQuantity(cpu)
+		if err != nil {
+			return nil, err
+		}
+		rl[corev1.ResourceCPU] = cpuQuantity
 	}
 
-	limitsMemory, err := resource.ParseQuantity(m.Spec.Mongod.Limits.Memory)
-	if err != nil {
-		return nil, err
+	if rsr.Memory != "" {
+		memoryQuantity, err := resource.ParseQuantity(rsr.Memory)
+		if err != nil {
+			return nil, err
+		}
+		rl[corev1.ResourceMemory] = memoryQuantity
 	}
 
-	limitsStorage, err := resource.ParseQuantity(m.Spec.Mongod.Limits.Storage)
-	if err != nil {
-		return nil, err
+	if rsr.Storage != "" {
+		storageQuantity, err := resource.ParseQuantity(rsr.Storage)
+		if err != nil {
+			return nil, err
+		}
+		rl[corev1.ResourceStorage] = storageQuantity
 	}
 
-	requestsCpu, err := resource.ParseQuantity(fmt.Sprintf("%.1f", m.Spec.Mongod.Requests.Cpu))
-	if err != nil {
-		return nil, err
-	}
-
-	requestsMemory, err := resource.ParseQuantity(m.Spec.Mongod.Requests.Memory)
-	if err != nil {
-		return nil, err
-	}
-
-	requestsStorage, err := resource.ParseQuantity(m.Spec.Mongod.Requests.Storage)
-	if err != nil {
-		return nil, err
-	}
-
-	return &corev1.ResourceRequirements{
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:     limitsCpu,
-			corev1.ResourceMemory:  limitsMemory,
-			corev1.ResourceStorage: limitsStorage,
-		},
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:     requestsCpu,
-			corev1.ResourceMemory:  requestsMemory,
-			corev1.ResourceStorage: requestsStorage,
-		},
-	}, nil
+	return rl, nil
 }
