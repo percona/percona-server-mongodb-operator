@@ -22,7 +22,7 @@ func printVersion() {
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	logrus.Infof("operator-sdk Version: %v", sdkVersion.Version)
 	logrus.Infof("perconalab/percona-server-mongodb-operator Version: %v", version.Version)
-	logrus.Infof("\tpercona/mongodb-orchestration-tools Version: %v", mongodbOT.Version)
+	logrus.Infof("percona/mongodb-orchestration-tools Version: %v", mongodbOT.Version)
 }
 
 func main() {
@@ -37,8 +37,8 @@ func main() {
 	}
 
 	resyncPeriod := time.Duration(5) * time.Second
-	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
+	logrus.Infof("Watching %s, %s, %s, %s", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler("percona-server-mongodb", namespace, "mongodb"))
+	sdk.Handle(stub.NewHandler())
 	sdk.Run(context.TODO())
 }

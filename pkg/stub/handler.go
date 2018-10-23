@@ -21,11 +21,8 @@ import (
 
 var ReplsetInitWait = 10 * time.Second
 
-func NewHandler(serviceName, namespaceName, portName string) sdk.Handler {
+func NewHandler() sdk.Handler {
 	return &Handler{
-		pods:         podk8s.NewPods(serviceName, namespaceName, portName),
-		portName:     portName,
-		serviceName:  serviceName,
 		startedAt:    time.Now(),
 		watchdogQuit: make(chan bool, 1),
 	}
@@ -33,8 +30,6 @@ func NewHandler(serviceName, namespaceName, portName string) sdk.Handler {
 
 type Handler struct {
 	pods         *podk8s.Pods
-	portName     string
-	serviceName  string
 	watchdog     *watchdog.Watchdog
 	watchdogQuit chan bool
 	startedAt    time.Time
@@ -132,7 +127,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 		if !reflect.DeepEqual(podNames, psmdb.Status.Replsets[0].Members) {
 			psmdb.Status.Replsets[0].Members = podNames
-			psmdb.Status.Replsets[0].Uri = getMongoURI(podList.Items, h.portName)
+			psmdb.Status.Replsets[0].Uri = getMongoURI(podList.Items, mongodPortName)
 			err := sdk.Update(psmdb)
 			if err != nil {
 				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
@@ -140,6 +135,9 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 
 		// Update the pods list that is read by the watchdog
+		if h.pods == nil {
+			h.pods = podk8s.NewPods(psmdb.Name, psmdb.Namespace, mongodPortName)
+		}
 		h.pods.SetPods(podList.Items)
 
 		// Initiate the replset if it hasn't already been initiated + there are pods +
