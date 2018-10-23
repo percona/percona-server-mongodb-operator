@@ -1,8 +1,7 @@
-apiVersion: "psmdb.percona.com/v1alpha1"
-kind: "PerconaServerMongoDB"
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDB
 metadata:
-  name: "percona-server-mongodb"
-  namespace: "psmdb"
+  name: my-cluster-name
 spec:
   image: percona/percona-server-mongodb:3.6
   secrets:
