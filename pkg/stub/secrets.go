@@ -12,11 +12,15 @@ import (
 )
 
 const (
-	mongoDBSecretsDirName = "mongodb-secrets"
-	mongoDBSecretsDir     = "/etc/mongodb-secrets"
-	mongoDBKeySecretName  = "mongodb-key"
+	mongoDBSecretsDirName    = "mongodb-secrets"
+	mongoDBSecretsDir        = "/etc/mongodb-secrets"
+	mongoDbSecretMongoKeyVal = "mongodb-key"
 )
 
+// generateMongoDBKey generates a 1024 byte-length random key for MongoDB Internal Authentication
+//
+// See: https://docs.mongodb.com/manual/core/security-internal-authentication/#keyfiles
+//
 func generateMongoDBKey() (string, error) {
 	b := make([]byte, 768)
 	_, err := rand.Read(b)
@@ -26,6 +30,8 @@ func generateMongoDBKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(b), err
 }
 
+// newPSMDBMongoKeySecret returns a Core API Secret structure containing a new MongoDB Internal
+// Authentication key
 func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) (*corev1.Secret, error) {
 	key, err := generateMongoDBKey()
 	if err != nil {
@@ -37,15 +43,16 @@ func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) (*corev1.Secret, e
 			Kind:       "Secret",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + mongoDBKeySecretName,
+			Name:      m.Spec.Secrets.Key,
 			Namespace: m.Namespace,
 		},
 		StringData: map[string]string{
-			mongoDBKeySecretName: key,
+			mongoDbSecretMongoKeyVal: key,
 		},
 	}, nil
 }
 
+// getPSMDBSecret retrieves a Kubernetes Secret
 func getPSMDBSecret(m *v1alpha1.PerconaServerMongoDB, secretName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{

@@ -7,7 +7,6 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
-	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -50,14 +49,6 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 		if err != nil {
 			return err
 		}
-
-		// update status after replset init
-		m.Status.Initialised = true
-		err = sdk.Update(m)
-		if err != nil {
-			return fmt.Errorf("failed to update psmdb status: %v", err)
-		}
-		h.initialised = true
 
 		return nil
 	}

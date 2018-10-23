@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// ReplsetInitWait is the duration to wait to initiate the replset
 var ReplsetInitWait = 10 * time.Second
 
 func NewHandler(serviceName, namespaceName, portName string) sdk.Handler {
@@ -38,14 +37,7 @@ type Handler struct {
 	serviceName  string
 	watchdog     *watchdog.Watchdog
 	watchdogQuit chan bool
-	initialised  bool
 	startedAt    time.Time
-}
-
-func (h *Handler) Close() {
-	if h.watchdog != nil {
-		h.watchdogQuit <- true
-	}
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
@@ -76,29 +68,37 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 
 		// Create the StatefulSet if it doesn't exist
-		set := newPSMDBStatefulSet(o)
+		set, err := newPSMDBStatefulSet(o)
+		if err != nil {
+			logrus.Errorf("failed to create stateful set object for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
+			return err
+		}
 		err = sdk.Create(set)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
-				logrus.Errorf("failed to create psmdb pod: %v", err)
+				logrus.Errorf("failed to create stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 				return err
 			}
 		} else {
-			logrus.Infof("created mongodb stateful set for replica set: %s", psmdb.Spec.MongoDB.ReplsetName)
+			logrus.WithFields(logrus.Fields{
+				"limit_cpu":     psmdb.Spec.Mongod.Limits.Cpu,
+				"limit_memory":  psmdb.Spec.Mongod.Limits.Memory,
+				"limit_storage": psmdb.Spec.Mongod.Limits.Storage,
+			}).Infof("created stateful set for replset: %s", psmdb.Spec.Mongod.ReplsetName)
 		}
 
 		// Ensure the stateful set size is the same as the spec
 		err = sdk.Get(set)
 		if err != nil {
-			return fmt.Errorf("failed to get stateful set: %v", err)
+			return fmt.Errorf("failed to get stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 		}
-		size := psmdb.Spec.Size
+		size := psmdb.Spec.Mongod.Size
 		if *set.Spec.Replicas != size {
-			logrus.Infof("setting replicas to %d for replica set: %s", size, psmdb.Spec.MongoDB.ReplsetName)
+			logrus.Infof("setting replicas to %d for replset: %s", size, psmdb.Spec.Mongod.ReplsetName)
 			set.Spec.Replicas = &size
 			err = sdk.Update(set)
 			if err != nil {
-				return fmt.Errorf("failed to update stateful set for replset %s: %v", psmdb.Spec.MongoDB.ReplsetName, err)
+				return fmt.Errorf("failed to update stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			}
 		}
 
@@ -111,7 +111,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return err
 			}
 		} else {
-			logrus.Infof("created mongodb service for replica set: %s", psmdb.Spec.MongoDB.ReplsetName)
+			logrus.Infof("created mongodb service for replset: %s", psmdb.Spec.Mongod.ReplsetName)
 		}
 
 		// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri
@@ -120,15 +120,22 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		listOps := &metav1.ListOptions{LabelSelector: labelSelector}
 		err = sdk.List(psmdb.Namespace, podList, sdk.WithListOptions(listOps))
 		if err != nil {
-			return fmt.Errorf("failed to list pods: %v", err)
+			return fmt.Errorf("failed to list pods for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 		}
 		podNames := getPodNames(podList.Items)
-		if !reflect.DeepEqual(podNames, psmdb.Status.Nodes) {
-			psmdb.Status.Nodes = podNames
-			psmdb.Status.Uri = getMongoURI(podList.Items, h.portName)
+		if len(psmdb.Status.Replsets) == 0 {
+			psmdb.Status.Replsets = []*v1alpha1.ReplsetStatus{
+				{
+					Name: psmdb.Spec.Mongod.ReplsetName,
+				},
+			}
+		}
+		if !reflect.DeepEqual(podNames, psmdb.Status.Replsets[0].Members) {
+			psmdb.Status.Replsets[0].Members = podNames
+			psmdb.Status.Replsets[0].Uri = getMongoURI(podList.Items, h.portName)
 			err := sdk.Update(psmdb)
 			if err != nil {
-				return fmt.Errorf("failed to update psmdb status: %v", err)
+				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			}
 		}
 
@@ -137,11 +144,22 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 		// Initiate the replset if it hasn't already been initiated + there are pods +
 		// we have waited the ReplsetInitWait period since starting
-		if !h.initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
+		if !psmdb.Status.Replsets[0].Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
 			err = h.handleReplsetInit(psmdb, podList.Items)
 			if err != nil {
-				logrus.Errorf("failed to init replset: %v", err)
-			} else if h.watchdog == nil {
+				logrus.Errorf("failed to init replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
+				return nil
+			}
+
+			// update status after replset init
+			psmdb.Status.Replsets[0].Initialised = true
+			err = sdk.Update(psmdb)
+			if err != nil {
+				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
+			}
+			logrus.Infof("changed state to initialised for replset %s", psmdb.Spec.Mongod.ReplsetName)
+
+			if h.watchdog == nil {
 				// load username/password from secret
 				secret, err := getPSMDBSecret(psmdb, psmdb.Name+"-users")
 				if err != nil {
