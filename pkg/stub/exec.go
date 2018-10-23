@@ -34,7 +34,7 @@ func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 // printCommandOutput handles printing the stderr and stdout output of a remote command
 func printCommandOutput(cmd, pod string, stdOut, stdErr *bytes.Buffer, out io.Writer) error {
 	logrus.Infof("%s stdout:", cmd)
-	err := printOutputBuffer(cmd, pod, stdErr, out)
+	err := printOutputBuffer(cmd, pod, stdOut, out)
 	if err != nil {
 		return err
 	}
