@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: percona-server-mongodb-operator
-  namespace: psmdb
 spec:
   replicas: 1
   selector:
@@ -28,4 +27,4 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: OPERATOR_NAME
-              value: "percona-server-mongodb-operator"
+              value: percona-server-mongodb-operator
