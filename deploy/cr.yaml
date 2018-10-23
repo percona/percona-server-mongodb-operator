@@ -12,13 +12,14 @@ spec:
     hostPort: 0
     resources:
       limits:
-        cpu: 1
+        cpu: 1.0
         memory: 0.5Gi
-        storage: 3Gi
+        storage: 2Gi
       requests:
         cpu: 0.5
         memory: 0.5Gi
         storage: 1Gi
     storageEngine: wiredTiger
     operationProfiling:
+      mode: slowOp
       slowMs: 100

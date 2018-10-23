@@ -39,9 +39,6 @@ func main() {
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-
-	handler := stub.NewHandler("percona-server-mongodb", namespace, "mongodb")
-	defer handler.Close()
-	sdk.Handle(handler)
+	sdk.Handle(stub.NewHandler("percona-server-mongodb", namespace, "mongodb"))
 	sdk.Run(context.TODO())
 }

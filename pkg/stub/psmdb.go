@@ -5,7 +5,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -15,9 +14,10 @@ var (
 	defaultImage                    string  = "perconalab/percona-server-mongodb:latest"
 	defaultRunUID                   int64   = 1001
 	defaultReplsetName              string  = "rs"
-	defaultStorageEngine            string  = "wiredTiger"
+	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
+	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
 	defaultOperationProfilingSlowMs int     = 100
 	mongodContainerDataDir          string  = "/data/db"
 	mongodContainerName             string  = "mongod"
@@ -36,29 +36,30 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Image == "" {
 		spec.Image = defaultImage
 	}
-	if spec.MongoDB == nil {
-		spec.MongoDB = &v1alpha1.PerconaServerMongoDBSpecMongoDB{}
+	if spec.Mongod == nil {
+		spec.Mongod = &v1alpha1.MongodSpec{}
 	}
-	if spec.MongoDB.ReplsetName == "" {
-		spec.MongoDB.ReplsetName = defaultReplsetName
+	if spec.Mongod.ReplsetName == "" {
+		spec.Mongod.ReplsetName = defaultReplsetName
 	}
-	if spec.MongoDB.Port == 0 {
-		spec.MongoDB.Port = defaultMongodPort
+	if spec.Mongod.Port == 0 {
+		spec.Mongod.Port = defaultMongodPort
 	}
-	if spec.MongoDB.StorageEngine == "" {
-		spec.MongoDB.StorageEngine = defaultStorageEngine
+	if spec.Mongod.StorageEngine == "" {
+		spec.Mongod.StorageEngine = defaultStorageEngine
 	}
-	if spec.MongoDB.StorageEngine == "wiredTiger" {
-		if spec.MongoDB.WiredTiger == nil {
-			spec.MongoDB.WiredTiger = &v1alpha1.PerconaServerMongoDBSpecMongoDBWiredTiger{}
+	if spec.Mongod.StorageEngine == v1alpha1.StorageEngineWiredTiger {
+		if spec.Mongod.WiredTiger == nil {
+			spec.Mongod.WiredTiger = &v1alpha1.MongodSpecWiredTiger{}
 		}
-		if spec.MongoDB.WiredTiger.CacheSizeRatio == 0 {
-			spec.MongoDB.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+		if spec.Mongod.WiredTiger.CacheSizeRatio == 0 {
+			spec.Mongod.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
 		}
 	}
-	if spec.MongoDB.OperationProfiling == nil {
-		spec.MongoDB.OperationProfiling = &v1alpha1.PerconaServerMongoDBSpecMongoDBOperationProfiling{
-			SlowMs: defaultOperationProfilingSlowMs,
+	if spec.Mongod.OperationProfiling == nil {
+		spec.Mongod.OperationProfiling = &v1alpha1.MongodSpecOperationProfiling{
+			Mode:              defaultOperationProfilingMode,
+			SlowOpThresholdMs: defaultOperationProfilingSlowMs,
 		}
 	}
 	if spec.RunUID == 0 {
@@ -67,9 +68,13 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
+func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
-	storageQuantity := resource.NewQuantity(m.Spec.MongoDB.Storage, resource.DecimalSI)
+
+	resources, err := parseSpecResources(m)
+	if err != nil {
+		return nil, err
+	}
 
 	ls := labelsForPerconaServerMongoDB(m)
 	set := &appsv1.StatefulSet{
@@ -78,7 +83,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Spec.MongoDB.ReplsetName,
+			Name:      m.Spec.Mongod.ReplsetName,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -99,7 +104,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m),
+						newPSMDBMongodContainer(m, resources),
 					},
 					SecurityContext: &corev1.PodSecurityContext{
 						//Sysctls: []corev1.Sysctl{
@@ -135,7 +140,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 						},
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: *storageQuantity,
+								corev1.ResourceStorage: resources.Requests[corev1.ResourceStorage],
 							},
 						},
 						Selector: &metav1.LabelSelector{
@@ -147,7 +152,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 		},
 	}
 	addOwnerRefToObject(set, asOwner(m))
-	return set
+	return set, nil
 }
 
 func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
@@ -184,8 +189,8 @@ func newPSMDBService(m *v1alpha1.PerconaServerMongoDB) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Port:       m.Spec.MongoDB.Port,
-					TargetPort: intstr.FromInt(int(m.Spec.MongoDB.Port)),
+					Port:       m.Spec.Mongod.Port,
+					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Port)),
 				},
 			},
 			ClusterIP: "None",

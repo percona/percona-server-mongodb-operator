@@ -11,7 +11,6 @@ import (
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	k8sPod "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -46,7 +45,8 @@ func getMongodPort(container *corev1.Container) string {
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
 //
-func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) float64 {
+func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64) float64 {
+	maxMemory := resourceList[corev1.ResourceMemory]
 	size := math.Floor(cacheRatio * float64(maxMemory.Value()-gigaByte))
 	sizeGB := size / float64(gigaByte)
 	if sizeGB < minWiredTigerCacheSizeGB {
@@ -56,7 +56,7 @@ func getWiredTigerCacheSizeGB(maxMemory *resource.Quantity, cacheRatio float64) 
 }
 
 func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
-	mSpec := m.Spec.MongoDB
+	mSpec := m.Spec.Mongod
 	return []corev1.EnvVar{
 		{
 			Name:  motPkg.EnvServiceName,
@@ -110,29 +110,43 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	}
 }
 
-func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
-	mongoSpec := m.Spec.MongoDB
-	//cpuQuantity := resource.NewQuantity(mongoSpec.Cpus, resource.DecimalSI)
-	memoryQuantity := resource.NewQuantity(mongoSpec.Memory*1024*1024, resource.DecimalSI)
+func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1.ResourceRequirements) corev1.Container {
+	mongod := m.Spec.Mongod
 
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
 		"--keyFile=/mongodb/mongodb.key",
-		"--port=" + strconv.Itoa(int(mongoSpec.Port)),
-		"--replSet=" + mongoSpec.ReplsetName,
-		"--storageEngine=" + mongoSpec.StorageEngine,
-		"--slowms=" + strconv.Itoa(int(mongoSpec.OperationProfiling.SlowMs)),
-		"--profile=1",
+		"--port=" + strconv.Itoa(int(mongod.Port)),
+		"--replSet=" + mongod.ReplsetName,
+		"--storageEngine=" + string(mongod.StorageEngine),
 	}
-	if mongoSpec.StorageEngine == "wiredTiger" {
-		args = append(args, fmt.Sprintf(
-			"--wiredTigerCacheSizeGB=%.2f",
-			getWiredTigerCacheSizeGB(memoryQuantity, mongoSpec.WiredTiger.CacheSizeRatio)),
+
+	switch mongod.OperationProfiling.Mode {
+	case v1alpha1.OperationProfilingModeAll:
+		args = append(args, "--profile=2")
+	case v1alpha1.OperationProfilingModeSlowOp:
+		args = append(args,
+			"--slowms="+strconv.Itoa(int(mongod.OperationProfiling.SlowOpThresholdMs)),
+			"--profile=1",
 		)
 	}
 
+	switch mongod.StorageEngine {
+	case v1alpha1.StorageEngineWiredTiger:
+		args = append(args, fmt.Sprintf(
+			"--wiredTigerCacheSizeGB=%.2f",
+			getWiredTigerCacheSizeGB(resources.Limits, mongod.WiredTiger.CacheSizeRatio),
+		))
+	case v1alpha1.StorageEngineInMemory:
+		args = append(args, fmt.Sprintf(
+			"--inMemorySizeGB=%.2f",
+			getWiredTigerCacheSizeGB(resources.Limits, mongod.InMemory.SizeRatio),
+		))
+	}
+
 	falsePtr := false
+	truePtr := true
 	return corev1.Container{
 		Name:  mongodContainerName,
 		Image: m.Spec.Image,
@@ -140,8 +154,8 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      mongoSpec.HostPort,
-				ContainerPort: mongoSpec.Port,
+				HostPort:      mongod.HostPort,
+				ContainerPort: mongod.Port,
 			},
 		},
 		Env: newPSMDBContainerEnv(m),
@@ -174,7 +188,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(mongoSpec.Port)),
+					Port: intstr.FromInt(int(mongod.Port)),
 				},
 			},
 			InitialDelaySeconds: int32(15),
@@ -182,18 +196,10 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container 
 			PeriodSeconds:       int32(5),
 			FailureThreshold:    int32(6),
 		},
-		Resources: corev1.ResourceRequirements{
-			//Limits: corev1.ResourceList{
-			//	corev1.ResourceCPU:    *cpuQuantity,
-			//	corev1.ResourceMemory: *memoryQuantity,
-			//},
-			//Requests: corev1.ResourceList{
-			//	corev1.ResourceCPU:    *cpuQuantity,
-			//	corev1.ResourceMemory: *memoryQuantity,
-			//},
-		},
+		Resources: *resources,
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser: &m.Spec.RunUID,
+			RunAsNonRoot: &truePtr,
+			RunAsUser:    &m.Spec.RunUID,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{

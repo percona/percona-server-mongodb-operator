@@ -41,14 +41,26 @@ type MongodSpecWiredTiger struct {
 	CacheSizeRatio float64 `json:"cacheSizeRatio,omitempty"`
 }
 
+type MongodSpecInMemory struct {
+	SizeRatio float64 `json:"sizeRatio,omitempty"`
+}
+
+type OperationProfilingMode string
+
+var (
+	OperationProfilingModeAll    OperationProfilingMode = "all"
+	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
+)
+
 type MongodSpecOperationProfiling struct {
-	SlowMs int `json:"slowMs,omitempty"`
+	Mode              OperationProfilingMode `json:"mode,omitempty"`
+	SlowOpThresholdMs int                    `json:"slowMs,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
-	Cpu     string `json:"cpu,omitempty"`
-	Memory  string `json:"memory,omitempty"`
-	Storage string `json:"storage,omitempty"`
+	Cpu     float64 `json:"cpu,omitempty"`
+	Memory  string  `json:"memory,omitempty"`
+	Storage string  `json:"storage,omitempty"`
 }
 
 type ResourcesSpec struct {
@@ -56,15 +68,24 @@ type ResourcesSpec struct {
 	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
 }
 
+type StorageEngine string
+
+var (
+	StorageEngineWiredTiger StorageEngine = "wiredTiger"
+	StorageEngineInMemory   StorageEngine = "inMemory"
+	StorageEngineMMAPV1     StorageEngine = "mmapv1"
+)
+
 type MongodSpec struct {
-	*ResourceSpecRequirements `json:"resources,omitempty"`
-	Port                      int32                         `json:"port,omitempty"`
-	HostPort                  int32                         `json:"hostPort,omitempty"`
-	StorageEngine             string                        `json:"storageEngine,omitempty"`
-	ReplsetName               string                        `json:"replsetName,omitempty"`
-	MMAPv1                    *MongodSpecMMAPv1             `json:"mmapv1,omitempty"`
-	WiredTiger                *MongodSpecWiredTiger         `json:"wiredTiger,omitempty"`
-	OperationProfiling        *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
+	*ResourcesSpec     `json:"resources,omitempty"`
+	ReplsetName        string                        `json:"replsetName,omitempty"`
+	Port               int32                         `json:"port,omitempty"`
+	HostPort           int32                         `json:"hostPort,omitempty"`
+	StorageEngine      StorageEngine                 `json:"storageEngine,omitempty"`
+	InMemory           *MongodSpecInMemory           `json:"inMemory,omitempty"`
+	MMAPv1             *MongodSpecMMAPv1             `json:"mmapv1,omitempty"`
+	WiredTiger         *MongodSpecWiredTiger         `json:"wiredTiger,omitempty"`
+	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
 }
 
 type MongosSpec struct {
