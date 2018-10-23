@@ -18,6 +18,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
@@ -118,7 +119,7 @@ func (t *Task) GetMongoAddr() (*db.Addr, error) {
 func (t *Task) GetMongoReplsetName() (string, error) {
 	for _, container := range t.pod.Spec.Containers {
 		for _, env := range container.Env {
-			if env.Name == "MONGODB_REPLSET" {
+			if env.Name == pkg.EnvMongoDBReplset {
 				return env.Value, nil
 			}
 		}

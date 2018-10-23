@@ -15,27 +15,33 @@
 package k8s
 
 import (
+	"os"
 	"sync"
 
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	EnvKubernetesHost = "KUBERNETES_SERVICE_HOST"
+	EnvKubernetesPort = "KUBERNETES_SERVICE_PORT"
+)
+
 func NewPods(serviceName, namespace, portName string) *Pods {
 	return &Pods{
-		pods:        make([]corev1.Pod, 0),
 		namespace:   namespace,
-		portName:    portName,
 		serviceName: serviceName,
+		portName:    portName,
+		pods:        make([]corev1.Pod, 0),
 	}
 }
 
 type Pods struct {
 	sync.Mutex
 	namespace   string
-	pods        []corev1.Pod
-	portName    string
 	serviceName string
+	portName    string
+	pods        []corev1.Pod
 }
 
 func (p *Pods) Name() string {
@@ -43,7 +49,12 @@ func (p *Pods) Name() string {
 }
 
 func (p *Pods) URL() string {
-	return "operator-sdk"
+	host := os.Getenv(EnvKubernetesHost)
+	port := os.Getenv(EnvKubernetesPort)
+	if host == "" || port == "" {
+		return ""
+	}
+	return "tcp://" + host + ":" + port
 }
 
 func (p *Pods) SetPods(pods []corev1.Pod) {
