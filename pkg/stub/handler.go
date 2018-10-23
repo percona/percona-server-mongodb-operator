@@ -161,7 +161,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 			if h.watchdog == nil {
 				// load username/password from secret
-				secret, err := getPSMDBSecret(psmdb, psmdb.Name+"-users")
+				secret, err := getPSMDBSecret(psmdb, psmdb.Spec.Secrets.Users)
 				if err != nil {
 					logrus.Errorf("failed to load psmdb user secrets: %v", err)
 					return err
