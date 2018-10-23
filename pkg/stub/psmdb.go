@@ -138,9 +138,6 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) *appsv1.StatefulSet {
 								corev1.ResourceStorage: *storageQuantity,
 							},
 						},
-						Selector: &metav1.LabelSelector{
-							MatchLabels: ls,
-						},
 					},
 				},
 			},
