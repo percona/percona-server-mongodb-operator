@@ -81,25 +81,28 @@ func (h *Handler) ensureMongoDBAuthKey(m *v1alpha1.PerconaServerMongoDB) error {
 }
 
 func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
-	if h.watchdog == nil {
-		// load username/password from secret
-		secret, err := getPSMDBSecret(m, m.Spec.Secrets.Users)
-		if err != nil {
-			logrus.Errorf("failed to load psmdb user secrets: %v", err)
-			return err
-		}
-
-		// Start the watchdog if it has not been started
-		h.watchdog = watchdog.New(&wdConfig.Config{
-			ServiceName:    m.Name,
-			Username:       string(secret.Data[motPkg.EnvMongoDBClusterAdminUser]),
-			Password:       string(secret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
-			APIPoll:        5 * time.Second,
-			ReplsetPoll:    5 * time.Second,
-			ReplsetTimeout: 3 * time.Second,
-		}, &h.watchdogQuit, h.pods)
-		go h.watchdog.Run()
+	if h.watchdog != nil {
+		return nil
 	}
+
+	// load username/password from secret
+	secret, err := getPSMDBSecret(m, m.Spec.Secrets.Users)
+	if err != nil {
+		logrus.Errorf("failed to load psmdb user secrets: %v", err)
+		return err
+	}
+
+	// Start the watchdog if it has not been started
+	h.watchdog = watchdog.New(&wdConfig.Config{
+		ServiceName:    m.Name,
+		Username:       string(secret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+		Password:       string(secret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+		APIPoll:        5 * time.Second,
+		ReplsetPoll:    5 * time.Second,
+		ReplsetTimeout: 3 * time.Second,
+	}, &h.watchdogQuit, h.pods)
+	go h.watchdog.Run()
+
 	return nil
 }
 
@@ -161,18 +164,6 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 		}
 
-		// Create the PSMDB service
-		service := newPSMDBService(o)
-		err = sdk.Create(service)
-		if err != nil {
-			if !errors.IsAlreadyExists(err) {
-				logrus.Errorf("failed to create psmdb service: %v", err)
-				return err
-			}
-		} else {
-			logrus.Infof("created service %s for replset: %s", service.Name, psmdb.Spec.Mongod.ReplsetName)
-		}
-
 		// Update the PSMDB status
 		podList, err := h.updateStatus(o)
 		if err != nil {
@@ -202,6 +193,18 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			if err != nil {
 				return fmt.Errorf("failed to start watchdog: %v", err)
 			}
+		}
+
+		// Create the PSMDB service
+		service := newPSMDBService(o)
+		err = sdk.Create(service)
+		if err != nil {
+			if !errors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb service: %v", err)
+				return err
+			}
+		} else {
+			logrus.Infof("created service %s", service.Name)
 		}
 	}
 	return nil
