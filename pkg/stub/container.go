@@ -17,6 +17,7 @@ import (
 const (
 	gigaByte                 int64   = 1024 * 1024 * 1024
 	minWiredTigerCacheSizeGB float64 = 0.25
+	dockerImageBase          string  = "percona/percona-server-mongodb"
 )
 
 // getContainer returns a container, if it exists
@@ -149,7 +150,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 	truePtr := true
 	return corev1.Container{
 		Name:  mongodContainerName,
-		Image: m.Spec.Image,
+		Image: dockerImageBase + ":" + m.Spec.Version,
 		Args:  args,
 		Ports: []corev1.ContainerPort{
 			{

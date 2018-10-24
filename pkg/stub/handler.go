@@ -11,6 +11,7 @@ import (
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
@@ -35,6 +36,76 @@ type Handler struct {
 	startedAt    time.Time
 }
 
+func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB) (*corev1.PodList, error) {
+	// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri
+	podList := podList()
+	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m)).String()
+	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
+	err := sdk.List(m.Namespace, podList, sdk.WithListOptions(listOps))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods for replset %s: %v", m.Spec.Mongod.ReplsetName, err)
+	}
+	podNames := getPodNames(podList.Items)
+	if len(m.Status.Replsets) == 0 {
+		m.Status.Replsets = []*v1alpha1.ReplsetStatus{
+			{
+				Name: m.Spec.Mongod.ReplsetName,
+			},
+		}
+	}
+	if !reflect.DeepEqual(podNames, m.Status.Replsets[0].Members) {
+		m.Status.Replsets[0].Members = podNames
+		m.Status.Replsets[0].Uri = getMongoURI(podList.Items, mongodPortName)
+		err := sdk.Update(m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update status for replset %s: %v", m.Spec.Mongod.ReplsetName, err)
+		}
+	}
+
+	// Update the pods list that is read by the watchdog
+	if h.pods == nil {
+		h.pods = podk8s.NewPods(m.Name, m.Namespace, mongodPortName)
+	}
+	h.pods.SetPods(podList.Items)
+
+	return podList, nil
+}
+
+func (h *Handler) ensureMongoDBAuthKey(m *v1alpha1.PerconaServerMongoDB) error {
+	authKey, err := newPSMDBMongoKeySecret(m)
+	if err != nil {
+		logrus.Errorf("failed to generate psmdb auth key: %v", err)
+		return err
+	}
+	return sdk.Create(authKey)
+}
+
+func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
+	if h.watchdog != nil {
+		return nil
+	}
+
+	// load username/password from secret
+	secret, err := getPSMDBSecret(m, m.Spec.Secrets.Users)
+	if err != nil {
+		logrus.Errorf("failed to load psmdb user secrets: %v", err)
+		return err
+	}
+
+	// Start the watchdog if it has not been started
+	h.watchdog = watchdog.New(&wdConfig.Config{
+		ServiceName:    m.Name,
+		Username:       string(secret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+		Password:       string(secret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+		APIPoll:        5 * time.Second,
+		ReplsetPoll:    5 * time.Second,
+		ReplsetTimeout: 3 * time.Second,
+	}, &h.watchdogQuit, h.pods)
+	go h.watchdog.Run()
+
+	return nil
+}
+
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	switch o := event.Object.(type) {
 	case *v1alpha1.PerconaServerMongoDB:
@@ -47,12 +118,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
-		authKey, err := newPSMDBMongoKeySecret(o)
-		if err != nil {
-			logrus.Errorf("failed to generate psmdb auth key: %v", err)
-			return err
-		}
-		err = sdk.Create(authKey)
+		err := h.ensureMongoDBAuthKey(o)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create psmdb auth key: %v", err)
@@ -76,6 +142,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 		} else {
 			logrus.WithFields(logrus.Fields{
+				"size":          psmdb.Spec.Mongod.Size,
 				"limit_cpu":     psmdb.Spec.Mongod.Limits.Cpu,
 				"limit_memory":  psmdb.Spec.Mongod.Limits.Memory,
 				"limit_storage": psmdb.Spec.Mongod.Limits.Storage,
@@ -97,48 +164,12 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 		}
 
-		// Create the PSMDB service
-		service := newPSMDBService(o)
-		err = sdk.Create(service)
+		// Update the PSMDB status
+		podList, err := h.updateStatus(o)
 		if err != nil {
-			if !errors.IsAlreadyExists(err) {
-				logrus.Errorf("failed to create psmdb service: %v", err)
-				return err
-			}
-		} else {
-			logrus.Infof("created mongodb service for replset: %s", psmdb.Spec.Mongod.ReplsetName)
+			logrus.Errorf("failed to update psmdb status: %v", err)
+			return err
 		}
-
-		// Update the PerconaServerMongoDB status with the pod names and pod mongodb uri
-		podList := podList()
-		labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(psmdb)).String()
-		listOps := &metav1.ListOptions{LabelSelector: labelSelector}
-		err = sdk.List(psmdb.Namespace, podList, sdk.WithListOptions(listOps))
-		if err != nil {
-			return fmt.Errorf("failed to list pods for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
-		}
-		podNames := getPodNames(podList.Items)
-		if len(psmdb.Status.Replsets) == 0 {
-			psmdb.Status.Replsets = []*v1alpha1.ReplsetStatus{
-				{
-					Name: psmdb.Spec.Mongod.ReplsetName,
-				},
-			}
-		}
-		if !reflect.DeepEqual(podNames, psmdb.Status.Replsets[0].Members) {
-			psmdb.Status.Replsets[0].Members = podNames
-			psmdb.Status.Replsets[0].Uri = getMongoURI(podList.Items, mongodPortName)
-			err := sdk.Update(psmdb)
-			if err != nil {
-				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
-			}
-		}
-
-		// Update the pods list that is read by the watchdog
-		if h.pods == nil {
-			h.pods = podk8s.NewPods(psmdb.Name, psmdb.Namespace, mongodPortName)
-		}
-		h.pods.SetPods(podList.Items)
 
 		// Initiate the replset if it hasn't already been initiated + there are pods +
 		// we have waited the ReplsetInitWait period since starting
@@ -157,25 +188,23 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 			logrus.Infof("changed state to initialised for replset %s", psmdb.Spec.Mongod.ReplsetName)
 
-			if h.watchdog == nil {
-				// load username/password from secret
-				secret, err := getPSMDBSecret(psmdb, psmdb.Spec.Secrets.Users)
-				if err != nil {
-					logrus.Errorf("failed to load psmdb user secrets: %v", err)
-					return err
-				}
-
-				// Start the watchdog if it has not been started
-				h.watchdog = watchdog.New(&wdConfig.Config{
-					ServiceName:    psmdb.Name,
-					Username:       string(secret.Data[motPkg.EnvMongoDBClusterAdminUser]),
-					Password:       string(secret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
-					APIPoll:        5 * time.Second,
-					ReplsetPoll:    5 * time.Second,
-					ReplsetTimeout: 3 * time.Second,
-				}, &h.watchdogQuit, h.pods)
-				go h.watchdog.Run()
+			// ensure the watchdog is started
+			err = h.ensureWatchdog(o)
+			if err != nil {
+				return fmt.Errorf("failed to start watchdog: %v", err)
 			}
+		}
+
+		// Create the PSMDB service
+		service := newPSMDBService(o)
+		err = sdk.Create(service)
+		if err != nil {
+			if !errors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb service: %v", err)
+				return err
+			}
+		} else {
+			logrus.Infof("created service %s", service.Name)
 		}
 	}
 	return nil

@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
 spec:
-  image: percona/percona-server-mongodb:3.6
+  version: "3.6"
   secrets:
     key: percona-server-mongodb-key
     users: percona-server-mongodb-users

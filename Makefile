@@ -2,6 +2,8 @@ GOCACHE?=off
 GO_TEST_PATH?=./pkg/...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
+GIT_COMMIT?=$(shell git rev-parse HEAD)
+GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
@@ -19,7 +21,7 @@ pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go: pkg/apis/psmdb/v1alpha1/doc.go
 	$(GOPATH)/bin/operator-sdk generate k8s
 
 tmp/_output/bin/percona-server-mongodb-operator: pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go pkg/apis/psmdb/v1alpha1/*.go pkg/stub/*.go version/version.go cmd/percona-server-mongodb-operator/main.go
-	GO_LDFLAGS="$(GO_LDFLAGS)" /bin/bash $(CURDIR)/tmp/build/build.sh
+	GO_LDFLAGS="$(GO_LDFLAGS)" GIT_COMMIT=$(GIT_COMMIT) GIT_BRANCH=$(GIT_BRANCH) /bin/bash $(CURDIR)/tmp/build/build.sh
 	[ -x $(UPX_PATH) ] && $(UPX_PATH) -q tmp/_output/bin/percona-server-mongodb-operator
 
 build: tmp/_output/bin/percona-server-mongodb-operator

@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	defaultMongodSize               int32   = 3
-	defaultImage                    string  = "perconalab/percona-server-mongodb:latest"
+	defaultVersion                  string  = "latest"
 	defaultRunUID                   int64   = 1001
 	defaultKeySecretName            string  = "percona-server-mongodb-key"
 	defaultUsersSecretName          string  = "percona-server-mongodb-users"
+	defaultMongodSize               int32   = 3
 	defaultVolumeClassName          string  = "standard"
 	defaultReplsetName              string  = "rs"
 	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
@@ -33,8 +33,8 @@ var (
 
 // addPSMDBSpecDefaults sets default values for unset config params
 func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
-	if spec.Image == "" {
-		spec.Image = defaultImage
+	if spec.Version == "" {
+		spec.Version = defaultVersion
 	}
 	if spec.Secrets == nil {
 		spec.Secrets = &v1alpha1.Secrets{}

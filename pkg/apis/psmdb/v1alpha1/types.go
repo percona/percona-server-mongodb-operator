@@ -22,7 +22,7 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Image   string      `json:"image,omitempty"`
+	Version string      `json:"version,omitempty"`
 	RunUID  int64       `json:"runUid,omitempty"`
 	Mongod  *MongodSpec `json:"mongod,omitempty"`
 	Secrets *Secrets    `json:"secrets,omitempty"`

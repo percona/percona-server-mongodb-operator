@@ -17,11 +17,16 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
+var (
+	GitCommit string
+	GitBranch string
+)
+
 func printVersion() {
 	logrus.Infof("Go Version: %s", runtime.Version())
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	logrus.Infof("operator-sdk Version: %v", sdkVersion.Version)
-	logrus.Infof("perconalab/percona-server-mongodb-operator Version: %v", version.Version)
+	logrus.Infof("perconalab/percona-server-mongodb-operator Version: %v, git commit: %s (branch: %s)", version.Version, GitCommit, GitBranch)
 	logrus.Infof("percona/mongodb-orchestration-tools Version: %v", mongodbOT.Version)
 }
 
