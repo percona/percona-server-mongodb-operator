@@ -24,4 +24,3 @@ spec:
     operationProfiling:
       mode: slowOp
       slowMs: 100
-    volumeClassName: standard
