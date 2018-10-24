@@ -34,7 +34,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 			continue
 		}
 
-		logrus.Infof("Initiating replset on pod: %s", pod.Name)
+		logrus.Infof("Initiating replset on running pod: %s", pod.Name)
 
 		// Run the k8s-mongodb-initiator from within the first running container
 		// this must be ran from within the running container to utilise the MongoDB
