@@ -44,10 +44,10 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
     percona-server-mongodb-operator-754846f95d-z4vh9   1/1     Running   0          17m
     rs0-0                                              1/1     Running   0          17m
     ``` 
-1. From a Kubernetes container with the 'mongo' shell, add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(requires 'mongo' shell, mongo --host= field may vary for your situation)*:
+1. From a *'mongo'* shell add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(mongo --host= field may vary for your situation - host must be PRIMARY)*:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
-    mongodb@percona-client:/$ mongo -u userAdmin -p admin123456 --host=my-cluster-name admin
+    mongodb@percona-client:/$ mongo -u userAdmin -p admin123456 --host=rs0-0.my-cluster-name admin
     rs0:PRIMARY> db.createUser({
         user: "app",
         pwd: "myAppPassword",
@@ -65,10 +65,10 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
     	]
     }
     ```
-1. Again from a Kubernetes container with the 'mongo' shell, insert and retrieve a test document in the 'myApp' database as the new application user:
+1. Again from a *'mongo'* shell, insert and retrieve a test document in the *'myApp'* database as the new application user:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
-    mongodb@percona-client:/$ mongo -u app -p myAppPassword --host=my-cluster-name admin
+    mongodb@percona-client:/$ mongo -u app -p myAppPassword --host=rs0-0.my-cluster-name admin
     rs0:PRIMARY> use myApp
     switched to db myApp
     rs0:PRIMARY> db.test.insert({ x: 1 })
