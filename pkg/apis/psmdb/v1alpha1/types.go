@@ -22,13 +22,13 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Version string      `json:"version,omitempty"`
-	RunUID  int64       `json:"runUid,omitempty"`
-	Mongod  *MongodSpec `json:"mongod,omitempty"`
-	Secrets *Secrets    `json:"secrets,omitempty"`
+	Version string       `json:"version,omitempty"`
+	RunUID  int64        `json:"runUid,omitempty"`
+	Mongod  *MongodSpec  `json:"mongod,omitempty"`
+	Secrets *SecretsSpec `json:"secrets,omitempty"`
 }
 
-type Secrets struct {
+type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
 }
@@ -87,7 +87,7 @@ type MongodSpec struct {
 	ReplsetName        string                        `json:"replsetName,omitempty"`
 	Port               int32                         `json:"port,omitempty"`
 	HostPort           int32                         `json:"hostPort,omitempty"`
-	VolumeClassName    string                        `json:"volumeClassName,omitempty"`
+	StorageClassName   string                        `json:"storageClassName,omitempty"`
 	StorageEngine      StorageEngine                 `json:"storageEngine,omitempty"`
 	InMemory           *MongodSpecInMemory           `json:"inMemory,omitempty"`
 	MMAPv1             *MongodSpecMMAPv1             `json:"mmapv1,omitempty"`

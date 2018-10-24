@@ -20,8 +20,7 @@ import (
 func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		//fmt.Fprintf(out, "%s (%s): %s\n", cmd, pod, strings.TrimSpace(scanner.Text()))
-		fmt.Printf("%s (%s): %s\n", cmd, pod, strings.TrimSpace(scanner.Text()))
+		fmt.Fprintf(out, "%s (%s): %s\n", cmd, pod, strings.TrimSpace(scanner.Text()))
 	}
 	if err := scanner.Err(); err != nil {
 		logrus.SetOutput(out)
@@ -33,6 +32,7 @@ func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 
 // printCommandOutput handles printing the stderr and stdout output of a remote command
 func printCommandOutput(cmd, pod string, stdOut, stdErr *bytes.Buffer, out io.Writer) error {
+	logrus.SetOutput(out)
 	logrus.Infof("%s stdout:", cmd)
 	err := printOutputBuffer(cmd, pod, stdOut, out)
 	if err != nil {
