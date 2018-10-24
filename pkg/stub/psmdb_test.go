@@ -35,7 +35,7 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 
 	addPSMDBSpecDefaults(&spec)
 
-	assert.Equal(t, defaultImage, spec.Image)
+	assert.Equal(t, defaultVersion, spec.Version)
 	assert.NotNil(t, spec.Mongod)
 	assert.Equal(t, defaultMongodSize, spec.Mongod.Size)
 	assert.Equal(t, defaultStorageEngine, spec.Mongod.StorageEngine)
