@@ -17,6 +17,7 @@ func TestPrintCommandOutput(t *testing.T) {
 	printCommandOutput("test", t.Name(), &stdout, &stderr, &output)
 	assert.Regexp(t, "test stdout\n$", output.String())
 	assert.NotRegexp(t, "stderr\n$", output.String())
+	output.Reset()
 
 	_, err = stderr.WriteString("test stderr")
 	assert.NoError(t, err)

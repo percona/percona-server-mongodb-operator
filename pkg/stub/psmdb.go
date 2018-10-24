@@ -15,7 +15,6 @@ var (
 	defaultKeySecretName            string  = "percona-server-mongodb-key"
 	defaultUsersSecretName          string  = "percona-server-mongodb-users"
 	defaultMongodSize               int32   = 3
-	defaultVolumeClassName          string  = "standard"
 	defaultReplsetName              string  = "rs"
 	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
 	defaultMongodPort               int32   = 27017
@@ -37,7 +36,7 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 		spec.Version = defaultVersion
 	}
 	if spec.Secrets == nil {
-		spec.Secrets = &v1alpha1.Secrets{}
+		spec.Secrets = &v1alpha1.SecretsSpec{}
 	}
 	if spec.Secrets.Key == "" {
 		spec.Secrets.Key = defaultKeySecretName
@@ -56,9 +55,6 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	}
 	if spec.Mongod.Port == 0 {
 		spec.Mongod.Port = defaultMongodPort
-	}
-	if spec.Mongod.VolumeClassName == "" {
-		spec.Mongod.VolumeClassName = defaultVolumeClassName
 	}
 	if spec.Mongod.StorageEngine == "" {
 		spec.Mongod.StorageEngine = defaultStorageEngine
@@ -80,6 +76,29 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.RunUID == 0 {
 		spec.RunUID = defaultRunUID
 	}
+}
+
+// newPSMDBMongodVolumeClaim returns a Persistent Volume Claim for Mongod data
+func newPSMDBMongodVolumeClaim(m *v1alpha1.PerconaServerMongoDB, claimName string, resources *corev1.ResourceRequirements) corev1.PersistentVolumeClaim {
+	vc := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: claimName,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resources.Limits[corev1.ResourceStorage],
+				},
+			},
+		},
+	}
+	if m.Spec.Mongod.StorageClassName != "" {
+		vc.Spec.StorageClassName = &m.Spec.Mongod.StorageClassName
+	}
+	return vc
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
@@ -153,22 +172,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: mongodDataVolClaimName,
-					},
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{
-							corev1.ReadWriteOnce,
-						},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: resources.Limits[corev1.ResourceStorage],
-							},
-						},
-						StorageClassName: &m.Spec.Mongod.VolumeClassName,
-					},
-				},
+				newPSMDBMongodVolumeClaim(m, mongodDataVolClaimName, resources),
 			},
 		},
 	}
