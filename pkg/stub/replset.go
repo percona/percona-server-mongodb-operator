@@ -52,7 +52,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 
 		return nil
 	}
-	return fmt.Errorf("could not initiate replset")
+	return fmt.Errorf("no %s containers in running state", mongodContainerName)
 }
 
 // isMongodPod returns a boolean reflecting if a pod
