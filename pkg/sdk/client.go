@@ -5,15 +5,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-type Client interface {
-	Create(object opSdk.Object) error
-	Patch(object opSdk.Object, pt types.PatchType, patch []byte) error
-	Update(object opSdk.Object) error
-	Delete(object opSdk.Object, opts ...opSdk.DeleteOption) error
-	Get(into opSdk.Object, opts ...opSdk.GetOption) error
-	List(namespace string, into opSdk.Object, opts ...opSdk.ListOption)
-}
-
 type SDKClient struct{}
 
 func NewClient() *SDKClient {
@@ -42,4 +33,8 @@ func (c *SDKClient) Get(into opSdk.Object, opts ...opSdk.GetOption) error {
 
 func (c *SDKClient) List(namespace string, into opSdk.Object, opts ...opSdk.ListOption) error {
 	return opSdk.List(namespace, into, opts...)
+}
+
+func (c *SDKClient) Handle(handler Handler) {
+	return opSdk.Handle(handler)
 }
