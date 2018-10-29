@@ -7,14 +7,16 @@ import (
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
+
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
-	corev1 "k8s.io/api/core/v1"
 
-	"github.com/operator-framework/operator-sdk/pkg/sdk"
+	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -22,14 +24,16 @@ import (
 
 var ReplsetInitWait = 10 * time.Second
 
-func NewHandler() sdk.Handler {
+func NewHandler(client sdk.Client) opSdk.Handler {
 	return &Handler{
+		client:       client,
 		startedAt:    time.Now(),
 		watchdogQuit: make(chan bool, 1),
 	}
 }
 
 type Handler struct {
+	client       sdk.Client
 	pods         *podk8s.Pods
 	watchdog     *watchdog.Watchdog
 	watchdogQuit chan bool
@@ -41,7 +45,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB) (*corev1.PodLis
 	podList := podList()
 	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m)).String()
 	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
-	err := sdk.List(m.Namespace, podList, sdk.WithListOptions(listOps))
+	err := h.client.List(m.Namespace, podList, opSdk.WithListOptions(listOps))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods for replset %s: %v", m.Spec.Mongod.ReplsetName, err)
 	}
@@ -56,7 +60,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB) (*corev1.PodLis
 	if !reflect.DeepEqual(podNames, m.Status.Replsets[0].Members) {
 		m.Status.Replsets[0].Members = podNames
 		m.Status.Replsets[0].Uri = getMongoURI(podList.Items, mongodPortName)
-		err := sdk.Update(m)
+		err := h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", m.Spec.Mongod.ReplsetName, err)
 		}
@@ -77,7 +81,7 @@ func (h *Handler) ensureMongoDBAuthKey(m *v1alpha1.PerconaServerMongoDB) error {
 		logrus.Errorf("failed to generate psmdb auth key: %v", err)
 		return err
 	}
-	return sdk.Create(authKey)
+	return h.client.Create(authKey)
 }
 
 func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
@@ -106,7 +110,7 @@ func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
 	return nil
 }
 
-func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
+func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 	switch o := event.Object.(type) {
 	case *v1alpha1.PerconaServerMongoDB:
 		psmdb := o
@@ -134,7 +138,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			logrus.Errorf("failed to create stateful set object for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			return err
 		}
-		err = sdk.Create(set)
+		err = h.client.Create(set)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
@@ -150,7 +154,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 
 		// Ensure the stateful set size is the same as the spec
-		err = sdk.Get(set)
+		err = h.client.Get(set)
 		if err != nil {
 			return fmt.Errorf("failed to get stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 		}
@@ -158,7 +162,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		if *set.Spec.Replicas != size {
 			logrus.Infof("setting replicas to %d for replset: %s", size, psmdb.Spec.Mongod.ReplsetName)
 			set.Spec.Replicas = &size
-			err = sdk.Update(set)
+			err = h.client.Update(set)
 			if err != nil {
 				return fmt.Errorf("failed to update stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			}
@@ -182,7 +186,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 			// update status after replset init
 			psmdb.Status.Replsets[0].Initialised = true
-			err = sdk.Update(psmdb)
+			err = h.client.Update(psmdb)
 			if err != nil {
 				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
 			}
@@ -197,7 +201,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 		// Create the PSMDB service
 		service := newPSMDBService(o)
-		err = sdk.Create(service)
+		err = h.client.Create(service)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create psmdb service: %v", err)
