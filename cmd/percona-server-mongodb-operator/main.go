@@ -13,7 +13,7 @@ import (
 
 	mongodbOT "github.com/percona/mongodb-orchestration-tools"
 
-	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
+	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
 	"github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -34,6 +34,7 @@ func printVersion() {
 
 func main() {
 	printVersion()
+	sdk := pkgSdk.NewClient()
 	opSdk.ExposeMetricsPort()
 
 	resource := "psmdb.percona.com/v1alpha1"
@@ -46,6 +47,6 @@ func main() {
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %s", resource, kind, namespace, resyncPeriod)
 	opSdk.Watch(resource, kind, namespace, resyncPeriod)
-	opSdk.Handle(stub.NewHandler(sdk.NewClient()))
+	opSdk.Handle(stub.NewHandler(sdk))
 	opSdk.Run(context.TODO())
 }

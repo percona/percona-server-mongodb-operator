@@ -45,7 +45,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB) (*corev1.PodLis
 	podList := podList()
 	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m)).String()
 	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
-	err := h.client.List(m.Namespace, podList, opSdk.WithListOptions(listOps))
+	err := h.client.List(m.Namespace, podList, h.client.WithListOptions(listOps))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods for replset %s: %v", m.Spec.Mongod.ReplsetName, err)
 	}

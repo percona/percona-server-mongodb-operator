@@ -4,6 +4,7 @@ import (
 	"context"
 
 	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -14,9 +15,8 @@ type Client interface {
 	Delete(object opSdk.Object, opts ...opSdk.DeleteOption) error
 	Get(into opSdk.Object, opts ...opSdk.GetOption) error
 	List(namespace string, into opSdk.Object, opts ...opSdk.ListOption)
-	Handle(handler Handler)
-}
-
-type Handler interface {
-	Handle(ctx context.Context, event opSdk.Event) error
+	WithListOptions(metaListOptions *metav1.ListOptions) opSdk.ListOption
+	Handle(handler opSdk.Handler)
+	Run(ctx context.Context)
+	ExposeMetricsPort()
 }

@@ -2,6 +2,7 @@ package sdk
 
 import (
 	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -35,6 +36,6 @@ func (c *SDKClient) List(namespace string, into opSdk.Object, opts ...opSdk.List
 	return opSdk.List(namespace, into, opts...)
 }
 
-func (c *SDKClient) Handle(handler Handler) {
-	return opSdk.Handle(handler)
+func (c *SDKClient) WithListOptions(metaListOptions *metav1.ListOptions) opSdk.ListOption {
+	return opSdk.WithListOptions(metaListOptions)
 }
