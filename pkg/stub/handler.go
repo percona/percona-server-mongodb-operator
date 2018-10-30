@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
+	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 
-	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
+	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -24,7 +24,7 @@ import (
 
 var ReplsetInitWait = 10 * time.Second
 
-func NewHandler(client sdk.Client) opSdk.Handler {
+func NewHandler(client pkgSdk.Client) sdk.Handler {
 	return &Handler{
 		client:       client,
 		startedAt:    time.Now(),
@@ -33,7 +33,7 @@ func NewHandler(client sdk.Client) opSdk.Handler {
 }
 
 type Handler struct {
-	client       sdk.Client
+	client       pkgSdk.Client
 	pods         *podk8s.Pods
 	watchdog     *watchdog.Watchdog
 	watchdogQuit chan bool
@@ -45,7 +45,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB) (*corev1.PodLis
 	podList := podList()
 	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m)).String()
 	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
-	err := h.client.List(m.Namespace, podList, h.client.WithListOptions(listOps))
+	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(listOps))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods for replset %s: %v", m.Spec.Mongod.ReplsetName, err)
 	}
@@ -110,7 +110,7 @@ func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
 	return nil
 }
 
-func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
+func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	switch o := event.Object.(type) {
 	case *v1alpha1.PerconaServerMongoDB:
 		psmdb := o

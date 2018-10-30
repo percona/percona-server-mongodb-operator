@@ -67,7 +67,7 @@ func (_m *Client) Get(into sdk.Object, opts ...sdk.GetOption) error {
 }
 
 // List provides a mock function with given fields: namespace, into, opts
-func (_m *Client) List(namespace string, into sdk.Object, opts ...sdk.ListOption) {
+func (_m *Client) List(namespace string, into sdk.Object, opts ...sdk.ListOption) error {
 	_va := make([]interface{}, len(opts))
 	for _i := range opts {
 		_va[_i] = opts[_i]
@@ -75,7 +75,16 @@ func (_m *Client) List(namespace string, into sdk.Object, opts ...sdk.ListOption
 	var _ca []interface{}
 	_ca = append(_ca, namespace, into)
 	_ca = append(_ca, _va...)
-	_m.Called(_ca...)
+	ret := _m.Called(_ca...)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, sdk.Object, ...sdk.ListOption) error); ok {
+		r0 = rf(namespace, into, opts...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // Patch provides a mock function with given fields: object, pt, patch
