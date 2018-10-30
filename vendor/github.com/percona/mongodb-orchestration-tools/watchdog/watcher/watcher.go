@@ -246,7 +246,10 @@ func (rw *Watcher) replsetConfigRemover(remove []*rsConfig.Member) error {
 				"replset": rw.replset.Name,
 				"host":    member.Host,
 			}).Info("Removing removed/scaled-down replset member")
-			rw.replset.RemoveMember(member.Host)
+			err := rw.replset.RemoveMember(member.Host)
+			if err != nil {
+				return err
+			}
 		}
 		err := rw.state.RemoveConfigMembers(session, rsConfig.New(session), remove)
 		if err != nil {
@@ -273,7 +276,11 @@ func (rw *Watcher) UpdateMongod(mongod *replset.Mongod) {
 	} else {
 		log.WithFields(fields).Info("Adding new mongod task")
 	}
-	rw.replset.UpdateMember(mongod)
+
+	err := rw.replset.UpdateMember(mongod)
+	if err != nil {
+		log.WithError(err).Errorf("Cannot update member %s", mongod.Name())
+	}
 }
 
 func (rw *Watcher) setRunning(running bool) {

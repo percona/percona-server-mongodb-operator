@@ -15,6 +15,7 @@
 package replset
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/percona/mongodb-orchestration-tools/internal/db"
@@ -52,19 +53,27 @@ func (r *Replset) getAddrs() []string {
 }
 
 // UpdateMember adds/updates the state of a MongoDB instance in a Replica Set
-func (r *Replset) UpdateMember(member *Mongod) {
+func (r *Replset) UpdateMember(member *Mongod) error {
 	r.Lock()
 	defer r.Unlock()
 
+	if !r.HasMember(member.Name()) && len(r.members) >= MaxMembers {
+		return errors.New("maximum members reached")
+	}
 	r.members[member.Name()] = member
+	return nil
 }
 
 // RemoveMember removes the state of a MongoDB instance from a Replica Set
-func (r *Replset) RemoveMember(name string) {
+func (r *Replset) RemoveMember(name string) error {
 	r.Lock()
 	defer r.Unlock()
 
+	if !r.HasMember(name) {
+		return errors.New("member does not exist")
+	}
 	delete(r.members, name)
+	return nil
 }
 
 // HasMember returns a boolean reflecting whether or not the state of a MongoDB instance exists in Replica Set
