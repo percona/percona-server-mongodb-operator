@@ -41,8 +41,10 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
     ```
     $ kubectl get pods
     NAME                                               READY   STATUS    RESTARTS   AGE
-    percona-server-mongodb-operator-754846f95d-z4vh9   1/1     Running   0          17m
-    rs0-0                                              1/1     Running   0          17m
+    my-cluster-name-rs0-0                              1/1     Running   0          8m
+    my-cluster-name-rs0-1                              1/1     Running   0          8m
+    my-cluster-name-rs0-2                              1/1     Running   0          7m
+    percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
     ``` 
 1. From a *'mongo'* shell add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(mongo --host= field may vary for your situation - host must be PRIMARY)*:
     ```
