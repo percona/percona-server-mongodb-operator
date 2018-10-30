@@ -214,6 +214,7 @@ func newPSMDBService(m *v1alpha1.PerconaServerMongoDB) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
+					Name:       mongodPortName,
 					Port:       m.Spec.Mongod.Port,
 					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Port)),
 				},
