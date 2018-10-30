@@ -37,7 +37,7 @@ func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) (*corev1.Secret, e
 	if err != nil {
 		return nil, err
 	}
-	return &corev1.Secret{
+	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Secret",
@@ -49,7 +49,9 @@ func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) (*corev1.Secret, e
 		StringData: map[string]string{
 			mongoDbSecretMongoKeyVal: key,
 		},
-	}, nil
+	}
+	addOwnerRefToObject(secret, asOwner(m))
+	return secret, nil
 }
 
 // getPSMDBSecret retrieves a Kubernetes Secret
@@ -65,8 +67,5 @@ func getPSMDBSecret(m *v1alpha1.PerconaServerMongoDB, secretName string) (*corev
 		},
 	}
 	err := sdk.Get(secret)
-	if err != nil {
-		return nil, err
-	}
-	return secret, nil
+	return secret, err
 }
