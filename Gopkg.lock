@@ -129,6 +129,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/google/btree"
+  packages = ["."]
+  revision = "4030bb1f1f0c35b30ca7009e9ebd06849dd45306"
+
+[[projects]]
+  branch = "master"
   name = "github.com/google/gofuzz"
   packages = ["."]
   revision = "24818f796faf91cd76ec7bddd72458fbced7a6c1"
@@ -144,6 +150,15 @@
   version = "v0.2.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/gregjones/httpcache"
+  packages = [
+    ".",
+    "diskcache"
+  ]
+  revision = "9cad4c3443a7200dd6400aef47183728de563a38"
+
+[[projects]]
   name = "github.com/hashicorp/golang-lru"
   packages = [
     ".",
@@ -151,12 +166,6 @@
   ]
   revision = "20f1fb78b0740ba8c3cb143a61e86ba5c8669768"
   version = "v0.5.0"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/howeyc/gopass"
-  packages = ["."]
-  revision = "bf9dde6d0d2c004a008c27aaee91170c786f6db8"
 
 [[projects]]
   name = "github.com/imdario/mergo"
@@ -215,7 +224,6 @@
   version = "1.0.1"
 
 [[projects]]
-  branch = "master"
   name = "github.com/operator-framework/operator-sdk"
   packages = [
     "pkg/k8sclient",
@@ -224,10 +232,10 @@
     "pkg/util/k8sutil",
     "version"
   ]
-  revision = "85500b662bfd9b4f2dfea3d2625e2851d2255727"
+  revision = "e5a0ab096e1a7c0e6b937d2b41707eccb82c3c77"
+  version = "v0.0.7"
 
 [[projects]]
-  branch = "master"
   name = "github.com/percona/mongodb-orchestration-tools"
   packages = [
     ".",
@@ -245,6 +253,18 @@
     "watchdog/watcher"
   ]
   revision = "d78c8f13f8d7b2e29bd33799fc851e5ea85f9217"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/petar/GoLLRB"
+  packages = ["llrb"]
+  revision = "53be0d36a84c2a886ca057d34b6aa4468df9ccb4"
+
+[[projects]]
+  name = "github.com/peterbourgon/diskv"
+  packages = ["."]
+  revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
+  version = "v2.0.1"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
@@ -477,14 +497,17 @@
     "rbac/v1alpha1",
     "rbac/v1beta1",
     "scheduling/v1alpha1",
+    "scheduling/v1beta1",
     "settings/v1alpha1",
     "storage/v1",
     "storage/v1alpha1",
     "storage/v1beta1"
   ]
-  revision = "73d903622b7391f3312dcbac6483fed484e185f8"
+  revision = "37c5ce6f2f592fbbd798bb86a8814d0918b3abe1"
+  version = "kubernetes-1.11.4"
 
 [[projects]]
+  branch = "release-1.11"
   name = "k8s.io/apimachinery"
   packages = [
     "pkg/api/errors",
@@ -530,7 +553,7 @@
     "third_party/forked/golang/netutil",
     "third_party/forked/golang/reflect"
   ]
-  revision = "302974c03f7e50f16561ba237db776ab93594ef6"
+  revision = "8ee1a638bafa4ae9691077e690cb45dd54f45111"
 
 [[projects]]
   name = "k8s.io/client-go"
@@ -564,17 +587,20 @@
     "kubernetes/typed/rbac/v1alpha1",
     "kubernetes/typed/rbac/v1beta1",
     "kubernetes/typed/scheduling/v1alpha1",
+    "kubernetes/typed/scheduling/v1beta1",
     "kubernetes/typed/settings/v1alpha1",
     "kubernetes/typed/storage/v1",
     "kubernetes/typed/storage/v1alpha1",
     "kubernetes/typed/storage/v1beta1",
     "pkg/apis/clientauthentication",
     "pkg/apis/clientauthentication/v1alpha1",
+    "pkg/apis/clientauthentication/v1beta1",
     "pkg/version",
     "plugin/pkg/client/auth/exec",
     "plugin/pkg/client/auth/gcp",
     "rest",
     "rest/watch",
+    "restmapper",
     "third_party/forked/golang/template",
     "tools/auth",
     "tools/cache",
@@ -590,6 +616,7 @@
     "transport/spdy",
     "util/buffer",
     "util/cert",
+    "util/connrotation",
     "util/exec",
     "util/flowcontrol",
     "util/homedir",
@@ -598,9 +625,11 @@
     "util/retry",
     "util/workqueue"
   ]
-  revision = "989be4278f353e42f26c416c53757d16fcff77db"
+  revision = "3db8bfc8858dc9a5d6e7ef5817f58a7ca30b0c6a"
+  version = "kubernetes-1.11.4"
 
 [[projects]]
+  branch = "release-1.11"
   name = "k8s.io/code-generator"
   packages = [
     "cmd/client-gen",
@@ -628,7 +657,7 @@
     "cmd/openapi-gen/args",
     "pkg/util"
   ]
-  revision = "7ead8f38b01cf8653249f5af80ce7b2c8aba12e2"
+  revision = "8c97d6ab64da020f8b151e9d3ed8af3172f5c390"
 
 [[projects]]
   branch = "master"
@@ -660,6 +689,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c91523542bff90227fba9596b4281c0071a4af0625b6567315e8c67bf8257ad1"
+  inputs-digest = "32e856af550a23ddc8be54818975bb9d0b52c2456fff4d61d180cc82cf3e6305"
   solver-name = "gps-cdcl"
   solver-version = 1
