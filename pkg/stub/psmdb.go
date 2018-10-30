@@ -78,8 +78,8 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	}
 }
 
-// newPSMDBMongodVolumeClaim returns a Persistent Volume Claim for Mongod data
-func newPSMDBMongodVolumeClaim(m *v1alpha1.PerconaServerMongoDB, claimName string, resources *corev1.ResourceRequirements) corev1.PersistentVolumeClaim {
+// newPSMDBMongodVolumeClaims returns a Persistent Volume Claims for Mongod pod
+func newPSMDBMongodVolumeClaims(m *v1alpha1.PerconaServerMongoDB, claimName string, resources *corev1.ResourceRequirements) []corev1.PersistentVolumeClaim {
 	vc := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: claimName,
@@ -98,7 +98,7 @@ func newPSMDBMongodVolumeClaim(m *v1alpha1.PerconaServerMongoDB, claimName strin
 	if m.Spec.Mongod.StorageClassName != "" {
 		vc.Spec.StorageClassName = &m.Spec.Mongod.StorageClassName
 	}
-	return vc
+	return []corev1.PersistentVolumeClaim{vc}
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
@@ -125,7 +125,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Spec.Mongod.ReplsetName,
+			Name:      m.Name + "-" + m.Spec.Mongod.ReplsetName,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -171,9 +171,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 					},
 				},
 			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				newPSMDBMongodVolumeClaim(m, mongodDataVolClaimName, resources),
-			},
+			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, mongodDataVolClaimName, resources),
 		},
 	}
 	addOwnerRefToObject(set, asOwner(m))

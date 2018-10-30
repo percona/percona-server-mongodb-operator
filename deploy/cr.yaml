@@ -5,8 +5,8 @@ metadata:
 spec:
   version: "3.6"
   secrets:
-    key: percona-server-mongodb-key
-    users: percona-server-mongodb-users
+    key: my-cluster-name-mongodb-key
+    users: my-cluster-name-mongodb-users
   mongod:
     size: 3
     replsetName: rs0

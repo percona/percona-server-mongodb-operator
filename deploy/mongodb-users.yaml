@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: percona-server-mongodb-users
+  name: my-cluster-name-mongodb-users
 type: Opaque
 data:
   MONGODB_BACKUP_USER: YmFja3Vw
