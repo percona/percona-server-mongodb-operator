@@ -18,27 +18,27 @@ func (c *SDKClient) Create(object opSdk.Object) error {
 	return opSdk.Create(object)
 }
 
-// Patch wraps the operator-sdk Create function
+// Patch wraps the operator-sdk Patch function
 func (c *SDKClient) Patch(object opSdk.Object, pt types.PatchType, patch []byte) error {
 	return opSdk.Patch(object, pt, patch)
 }
 
-// Update wraps the operator-sdk Create function
+// Update wraps the operator-sdk Update function
 func (c *SDKClient) Update(object opSdk.Object) error {
 	return opSdk.Update(object)
 }
 
-// Delete wraps the operator-sdk Create function
+// Delete wraps the operator-sdk Delete function
 func (c *SDKClient) Delete(object opSdk.Object, opts ...opSdk.DeleteOption) error {
 	return opSdk.Delete(object, opts...)
 }
 
-// Get wraps the operator-sdk Create function
+// Get wraps the operator-sdk Get function
 func (c *SDKClient) Get(into opSdk.Object, opts ...opSdk.GetOption) error {
 	return opSdk.Get(into, opts...)
 }
 
-// List wraps the operator-sdk Create function
+// List wraps the operator-sdk List function
 func (c *SDKClient) List(namespace string, into opSdk.Object, opts ...opSdk.ListOption) error {
 	return opSdk.List(namespace, into, opts...)
 }
