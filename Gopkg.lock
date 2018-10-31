@@ -328,8 +328,17 @@
   version = "v1.0.3"
 
 [[projects]]
+  name = "github.com/stretchr/objx"
+  packages = ["."]
+  revision = "477a77ecc69700c7cdeb1fa9e129548e1c1c393c"
+  version = "v0.1.1"
+
+[[projects]]
   name = "github.com/stretchr/testify"
-  packages = ["assert"]
+  packages = [
+    "assert",
+    "mock"
+  ]
   revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
   version = "v1.2.2"
 
@@ -390,13 +399,13 @@
   revision = "8527f56f71077909d6ead7facfe18fbf05ebdf83"
 
 [[projects]]
-  branch = "master"
+  branch = "release-branch.go1.11"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows"
   ]
-  revision = "7e31e0c00fa05cb5fbf4347b585621d6709e19a4"
+  revision = "98c5dad5d1a0e8a73845ecc8897d0bd56586511d"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -697,6 +706,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0f439c0de297a89c55613d94b3b91f38196d61865d86d80433ebd8c587ce1b64"
+  inputs-digest = "faddb420d27ffdc98d91fda0a8153dc2a83c12322155ce37027647d3975c1e33"
   solver-name = "gps-cdcl"
   solver-version = 1

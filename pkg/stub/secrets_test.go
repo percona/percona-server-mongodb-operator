@@ -3,11 +3,54 @@ package stub
 import (
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk/mocks"
+
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestGenerateMongoDBKey(t *testing.T) {
-	str, err := generateMongoDBKey()
+func TestNewPSMDBMongoKeySecret(t *testing.T) {
+	secret := newPSMDBMongoKeySecret(&v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.Name(),
+			Namespace: "test",
+		},
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Secrets: &v1alpha1.SecretsSpec{
+				Key: t.Name(),
+			},
+		},
+	})
+	assert.NotNil(t, secret)
+	assert.Equal(t, t.Name(), secret.Name)
+	assert.Len(t, secret.StringData[mongoDbSecretMongoKeyVal], 1024)
+}
+
+func TestGetPSMDBSecret(t *testing.T) {
+	psmdb := &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.Name(),
+			Namespace: "test",
+		},
+	}
+
+	// make mock SDK return secret with test mongoDbSecretMongoKeyVal key
+	sdk := &mocks.Client{}
+	sdk.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil).Run(func(args mock.Arguments) {
+		obj := args.Get(0).(*corev1.Secret)
+		obj.Data = map[string][]byte{
+			mongoDbSecretMongoKeyVal: []byte(t.Name()),
+		}
+	})
+
+	// call getPSMDBSecret() to get secret from mock SDK
+	secret, err := getPSMDBSecret(psmdb, sdk, mongoDbSecretMongoKeyVal)
 	assert.NoError(t, err)
-	assert.Len(t, str, 1024)
+
+	// test secret returned from mock SDK
+	assert.Len(t, secret.Data, 1)
+	assert.Equal(t, []byte(t.Name()), secret.Data[mongoDbSecretMongoKeyVal])
 }
