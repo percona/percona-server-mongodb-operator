@@ -1,5 +1,5 @@
 GOCACHE?=off
-GO_TEST_PATH?=./pkg/...
+GO_TEST_PATH?=./pkg/stub/...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
 GIT_COMMIT?=$(shell git rev-parse HEAD)

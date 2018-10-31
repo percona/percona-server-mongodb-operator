@@ -59,7 +59,6 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB) (*corev1.PodLis
 	}
 	if !reflect.DeepEqual(podNames, m.Status.Replsets[0].Members) {
 		m.Status.Replsets[0].Members = podNames
-		m.Status.Replsets[0].Uri = getMongoURI(podList.Items, mongodPortName)
 		err := h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", m.Spec.Mongod.ReplsetName, err)
