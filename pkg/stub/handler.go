@@ -71,15 +71,6 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB) (*corev1.PodLis
 	return podList, nil
 }
 
-func (h *Handler) ensureMongoDBAuthKey(m *v1alpha1.PerconaServerMongoDB) error {
-	authKey, err := newPSMDBMongoKeySecret(m)
-	if err != nil {
-		logrus.Errorf("failed to generate psmdb auth key: %v", err)
-		return err
-	}
-	return sdk.Create(authKey)
-}
-
 func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
 	if h.watchdog != nil {
 		return nil
@@ -118,7 +109,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
-		err := h.ensureMongoDBAuthKey(o)
+		err := sdk.Create(newPSMDBMongoKeySecret(o))
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create psmdb auth key: %v", err)
