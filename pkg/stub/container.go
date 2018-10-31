@@ -44,6 +44,10 @@ func getMongodPort(container *corev1.Container) string {
 // (RAM - 1 GB), or 256 MB. For example, on a system with a total of 4GB of RAM the
 // WiredTiger cache will use 1.5GB of RAM (0.5 * (4 GB - 1 GB) = 1.5 GB).
 //
+// In normal situations WiredTiger does this default-sizing correctly but under Docker
+// containers WiredTiger fails to detect the memory limit of the Docker container. We
+// explicitly set the WiredTiger cache size to fix this.
+//
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
 //
 func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64) float64 {
