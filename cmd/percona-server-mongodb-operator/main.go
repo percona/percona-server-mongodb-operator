@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"time"
 
+	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 	stub "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub"
 	version "github.com/Percona-Lab/percona-server-mongodb-operator/version"
 	sdk "github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -44,6 +45,6 @@ func main() {
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %s", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler())
+	sdk.Handle(stub.NewHandler(pkgSdk.NewClient()))
 	sdk.Run(context.TODO())
 }
