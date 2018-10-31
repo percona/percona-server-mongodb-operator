@@ -63,4 +63,22 @@ func TestParseSpecResourceRequirements(t *testing.T) {
 	assert.NoError(t, err)
 	cpu = parsed[corev1.ResourceCPU]
 	assert.Equal(t, "2", cpu.String())
+
+	// test bad cpu format
+	_, err = parseSpecResourceRequirements(&v1alpha1.ResourceSpecRequirements{
+		Cpu: "& ^^^ %%",
+	})
+	assert.Error(t, err)
+
+	// test bad memory format
+	_, err = parseSpecResourceRequirements(&v1alpha1.ResourceSpecRequirements{
+		Memory: "& ! !!!!",
+	})
+	assert.Error(t, err)
+
+	// test bad storage format
+	_, err = parseSpecResourceRequirements(&v1alpha1.ResourceSpecRequirements{
+		Storage: "!!!&&&&",
+	})
+	assert.Error(t, err)
 }

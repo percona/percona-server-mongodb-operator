@@ -12,6 +12,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+var (
+	falseVar = false
+	trueVar  = true
+)
+
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
 func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB) map[string]string {
@@ -29,7 +34,6 @@ func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
 
 // asOwner returns an OwnerReference set as the PerconaServerMongoDB CR
 func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
-	trueVar := true
 	return metav1.OwnerReference{
 		APIVersion: m.APIVersion,
 		Kind:       m.Kind,

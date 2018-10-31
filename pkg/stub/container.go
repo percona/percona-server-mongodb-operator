@@ -40,6 +40,20 @@ func getMongodPort(container *corev1.Container) string {
 	return ""
 }
 
+// isContainerAndPodRunning returns a boolean reflecting if
+// a container and pod are in a running state
+func isContainerAndPodRunning(pod corev1.Pod, containerName string) bool {
+	if pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.Name == containerName && container.State.Running != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // The WiredTiger internal cache, by default, will use the larger of either 50% of
 // (RAM - 1 GB), or 256 MB. For example, on a system with a total of 4GB of RAM the
 // WiredTiger cache will use 1.5GB of RAM (0.5 * (4 GB - 1 GB) = 1.5 GB).
@@ -146,8 +160,6 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 		))
 	}
 
-	falsePtr := false
-	truePtr := true
 	return corev1.Container{
 		Name:  mongodContainerName,
 		Image: dockerImageBase + ":" + m.Spec.Version,
@@ -166,7 +178,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: m.Spec.Secrets.Users,
 					},
-					Optional: &falsePtr,
+					Optional: &falseVar,
 				},
 			},
 		},
@@ -208,7 +220,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: &truePtr,
+			RunAsNonRoot: &trueVar,
 			RunAsUser:    &m.Spec.RunUID,
 		},
 		VolumeMounts: []corev1.VolumeMount{

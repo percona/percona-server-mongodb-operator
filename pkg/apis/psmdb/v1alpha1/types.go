@@ -104,7 +104,6 @@ type MongosSpec struct {
 type ReplsetStatus struct {
 	Name        string   `json:"name,omitempty"`
 	Members     []string `json:"members,omitempty"`
-	Uri         string   `json:"uri,omitempty"`
 	Configsvr   bool     `json:"configsvr,omitempty"`
 	Initialised bool     `json:"initialised,omitempty"`
 }
