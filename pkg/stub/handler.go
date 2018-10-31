@@ -81,7 +81,7 @@ func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
 	}
 
 	// load username/password from secret
-	secret, err := getPSMDBSecret(m, m.Spec.Secrets.Users)
+	secret, err := getPSMDBSecret(m, h.client, m.Spec.Secrets.Users)
 	if err != nil {
 		logrus.Errorf("failed to load psmdb user secrets: %v", err)
 		return err

@@ -7,6 +7,8 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk/mocks"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,5 +30,27 @@ func TestNewPSMDBMongoKeySecret(t *testing.T) {
 }
 
 func TestGetPSMDBSecret(t *testing.T) {
+	psmdb := &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.Name(),
+			Namespace: "test",
+		},
+	}
+
+	// make mock SDK return secret with test mongoDbSecretMongoKeyVal key
 	sdk := &mocks.Client{}
+	sdk.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil).Run(func(args mock.Arguments) {
+		obj := args.Get(0).(*corev1.Secret)
+		obj.Data = map[string][]byte{
+			mongoDbSecretMongoKeyVal: []byte(t.Name()),
+		}
+	})
+
+	// call getPSMDBSecret() to get secret from mock SDK
+	secret, err := getPSMDBSecret(psmdb, sdk, mongoDbSecretMongoKeyVal)
+	assert.NoError(t, err)
+
+	// test secret returned from mock SDK
+	assert.Len(t, secret.Data, 1)
+	assert.Equal(t, []byte(t.Name()), secret.Data[mongoDbSecretMongoKeyVal])
 }
