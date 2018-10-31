@@ -167,6 +167,7 @@ func (w *Watchdog) Run() {
 		case <-*w.quit:
 			log.Info("Stopping watchers")
 			ticker.Stop()
+			w.watcherManager.Close()
 			return
 		}
 	}

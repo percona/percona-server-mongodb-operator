@@ -12,6 +12,10 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
 
 # Run
 
+## Requirements
+
+This code was developed/tested for Kubernetes version 1.10 to 1.11 only!
+
 ## Run the Operator
 1. Add the 'psmdb' Namespace to Kubernetes:
     ```
