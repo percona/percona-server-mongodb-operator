@@ -2,7 +2,6 @@ package stub
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -70,11 +69,14 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
+			logrus.Infof("Received deleted event for %s", psmdb.Name)
+			h.watchdogQuit <- true
+			h.watchdog = nil
 			return nil
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
-		err := sdk.Create(newPSMDBMongoKeySecret(o))
+		err := h.client.Create(newPSMDBMongoKeySecret(o))
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create psmdb auth key: %v", err)
@@ -84,18 +86,16 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			logrus.Info("created mongodb auth key secret")
 		}
 
-		// Ensure replica sets exist (in parallel goroutines so it doesn't take forever)
-		var wg sync.WaitGroup
+		// Ensure all replica sets exist. When sharding is supported this
+		// loop will create the cluster shards and config server replset
 		replsetNames := []string{psmdb.Spec.Mongod.ReplsetName}
 		for _, replsetName := range replsetNames {
-			wg.Add(1)
-			err = h.ensureReplset(psmdb, replsetName, &wg)
+			err = h.ensureReplset(psmdb, replsetName)
 			if err != nil {
 				logrus.Errorf("failed to ensure replset %s: %v", replsetName, err)
 				return err
 			}
 		}
-		wg.Wait()
 	}
 	return nil
 }

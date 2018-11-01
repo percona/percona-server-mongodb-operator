@@ -3,7 +3,6 @@ package stub
 import (
 	"fmt"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -87,20 +86,15 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replsetName str
 	return podList, nil
 }
 
-// ensureReplset ensures resources for a PSMDB replset exist
-func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName string, wg *sync.WaitGroup) error {
-	defer wg.Done()
-
-	// Create the StatefulSet if it doesn't exist
+// ensureReplsetStatefulSet ensures a StatefulSet exists
+func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string) error {
 	set, err := newPSMDBStatefulSet(m, replsetName, nil)
 	if err != nil {
-		logrus.Errorf("failed to create stateful set object for replset %s: %v", replsetName, err)
 		return err
 	}
 	err = h.client.Create(set)
 	if err != nil {
 		if !errors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create stateful set for replset %s: %v", replsetName, err)
 			return err
 		}
 	} else {
@@ -125,6 +119,18 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName st
 		if err != nil {
 			return fmt.Errorf("failed to update stateful set for replset %s: %v", replsetName, err)
 		}
+	}
+
+	return nil
+}
+
+// ensureReplset ensures resources for a PSMDB replset exist
+func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName string) error {
+	// Create the StatefulSet if it doesn't exist
+	err := h.ensureReplsetStatefulSet(m, replsetName)
+	if err != nil {
+		logrus.Errorf("failed to create stateful set for replset %s: %v", replsetName, err)
+		return err
 	}
 
 	// Update the PSMDB status
