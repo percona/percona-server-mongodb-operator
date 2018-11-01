@@ -25,12 +25,14 @@ import (
 )
 
 const (
-	MongodContainerName     string = "mongod"
-	ClusterServiceDNSSuffix string = "svc.cluster.local"
+	mongodContainerName     string = "mongod"
+	mongosContainerName     string = "mongos"
+	mongodbPortName         string = "mongodb"
+	clusterServiceDNSSuffix string = "svc.cluster.local"
 )
 
-func GetMongoHost(pod, service, namespace string) string {
-	return pod + "." + service + "." + namespace + "." + ClusterServiceDNSSuffix
+func GetMongoHost(pod, service, replset, namespace string) string {
+	return strings.Join([]string{pod, service + "-" + replset, namespace, clusterServiceDNSSuffix}, ".")
 }
 
 type TaskState struct {
@@ -47,16 +49,14 @@ func (ts TaskState) String() string {
 
 type Task struct {
 	pod         *corev1.Pod
-	portName    string
 	serviceName string
 	namespace   string
 }
 
-func NewTask(pod corev1.Pod, serviceName, namespace, portName string) *Task {
+func NewTask(pod corev1.Pod, serviceName, namespace string) *Task {
 	return &Task{
 		pod:         &pod,
 		namespace:   namespace,
-		portName:    portName,
 		serviceName: serviceName,
 	}
 }
@@ -86,12 +86,18 @@ func (t *Task) IsRunning() bool {
 }
 
 func (t *Task) IsTaskType(taskType pod.TaskType) bool {
+	var containerName string
 	switch taskType {
 	case pod.TaskTypeMongod:
-		for _, container := range t.pod.Spec.Containers {
-			if container.Name == MongodContainerName {
-				return true
-			}
+		containerName = mongodContainerName
+	case pod.TaskTypeMongos:
+		containerName = mongosContainerName
+	default:
+		return false
+	}
+	for _, container := range t.pod.Spec.Containers {
+		if container.Name == containerName {
+			return true
 		}
 	}
 	return false
@@ -100,11 +106,15 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
 	for _, container := range t.pod.Spec.Containers {
 		for _, port := range container.Ports {
-			if port.Name != t.portName {
+			if port.Name != mongodbPortName {
 				continue
 			}
+			replset, err := t.GetMongoReplsetName()
+			if err != nil {
+				return nil, err
+			}
 			addr := &db.Addr{
-				Host: GetMongoHost(t.pod.Name, t.serviceName, t.namespace),
+				Host: GetMongoHost(t.pod.Name, t.serviceName, replset, t.namespace),
 				Port: int(port.HostPort),
 			}
 			if addr.Port == 0 {

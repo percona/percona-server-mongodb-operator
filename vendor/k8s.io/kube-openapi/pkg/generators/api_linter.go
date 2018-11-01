@@ -33,9 +33,14 @@ import (
 
 const apiViolationFileType = "api-violation"
 
-type apiViolationFile struct{}
+type apiViolationFile struct {
+	// Since our file actually is unrelated to the package structure, use a
+	// path that hasn't been mangled by the framework.
+	unmangledPath string
+}
 
-func (apiViolationFile) AssembleFile(f *generator.File, path string) error {
+func (a apiViolationFile) AssembleFile(f *generator.File, path string) error {
+	path = a.unmangledPath
 	glog.V(2).Infof("Assembling file %q", path)
 	if path == "-" {
 		_, err := io.Copy(os.Stdout, &f.Body)
@@ -51,11 +56,12 @@ func (apiViolationFile) AssembleFile(f *generator.File, path string) error {
 	return err
 }
 
-func (apiViolationFile) VerifyFile(f *generator.File, path string) error {
+func (a apiViolationFile) VerifyFile(f *generator.File, path string) error {
 	if path == "-" {
 		// Nothing to verify against.
 		return nil
 	}
+	path = a.unmangledPath
 
 	formatted := f.Body.Bytes()
 	existing, err := ioutil.ReadFile(path)
@@ -82,23 +88,21 @@ func (apiViolationFile) VerifyFile(f *generator.File, path string) error {
 	return fmt.Errorf("output for %q differs; first existing/expected diff: \n  %q\n  %q", path, string(eDiff), string(fDiff))
 }
 
-func newAPIViolationGen(reportFilename string) *apiViolationGen {
+func newAPIViolationGen() *apiViolationGen {
 	return &apiViolationGen{
-		reportFilename: reportFilename,
-		linter:         newAPILinter(),
+		linter: newAPILinter(),
 	}
 }
 
 type apiViolationGen struct {
 	generator.DefaultGen
 
-	linter         *apiLinter
-	reportFilename string
+	linter *apiLinter
 }
 
 func (v *apiViolationGen) FileType() string { return apiViolationFileType }
 func (v *apiViolationGen) Filename() string {
-	return v.reportFilename
+	return "this file is ignored by the file assembler"
 }
 
 func (v *apiViolationGen) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {

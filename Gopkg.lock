@@ -258,7 +258,7 @@
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "1aa364c0c454883e656b53d6c71a57d4a9fc4d31"
+  revision = "e64e668d6d516e4f224e936adca9fae3c97932f7"
 
 [[projects]]
   branch = "master"
@@ -318,8 +318,8 @@
 [[projects]]
   name = "github.com/sirupsen/logrus"
   packages = ["."]
-  revision = "ad15b42461921f1fb3529b058c6786c6a45d5162"
-  version = "v1.1.1"
+  revision = "bcd833dfe83d3cebad139e4a29ed79cb2318bf95"
+  version = "v1.2.0"
 
 [[projects]]
   name = "github.com/spf13/pflag"
@@ -384,7 +384,7 @@
     "http2/hpack",
     "idna"
   ]
-  revision = "c44066c5c816ec500d459a2a324a753f78531ae0"
+  revision = "e11730110bbd884bbf19550bfafe9d69519ce29e"
 
 [[projects]]
   branch = "master"
@@ -396,16 +396,16 @@
     "jws",
     "jwt"
   ]
-  revision = "8527f56f71077909d6ead7facfe18fbf05ebdf83"
+  revision = "c453e0c757598fd055e170a3a359263c91e13153"
 
 [[projects]]
-  branch = "release-branch.go1.11"
+  branch = "master"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows"
   ]
-  revision = "98c5dad5d1a0e8a73845ecc8897d0bd56586511d"
+  revision = "9b800f95dbbc54abff0acf7ee32d88ba4e328c89"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -444,7 +444,7 @@
     "internal/fastwalk",
     "internal/gopathwalk"
   ]
-  revision = "6c7e314b6563ee0a4dc169c7ee9960e0b709c035"
+  revision = "45ff765b4815d34d8b80220fd05c79063b185ce1"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -460,8 +460,8 @@
     "internal/urlfetch",
     "urlfetch"
   ]
-  revision = "ae0ab99deb4dc413a2b4bd6c8bdd0eb67f1e4d06"
-  version = "v1.2.0"
+  revision = "4a4468ece617fc8205e99368fa2200e9d1fad421"
+  version = "v1.3.0"
 
 [[projects]]
   name = "gopkg.in/inf.v0"
@@ -701,11 +701,11 @@
     "pkg/generators/rules",
     "pkg/util/sets"
   ]
-  revision = "0d1aeffe1c68f49accbd05c185ae534fe1372a3f"
+  revision = "72693cb1fadd73ae2742f6fe29af77d1aecdd8cd"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "faddb420d27ffdc98d91fda0a8153dc2a83c12322155ce37027647d3975c1e33"
+  inputs-digest = "2a9b3d9619e50cbad40a4f1ad650cde3ffa7d7ed15f9f932be6133721ad0d323"
   solver-name = "gps-cdcl"
   solver-version = 1
