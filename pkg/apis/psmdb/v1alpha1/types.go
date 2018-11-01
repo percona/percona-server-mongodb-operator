@@ -28,6 +28,13 @@ type PerconaServerMongoDBSpec struct {
 	Secrets *SecretsSpec `json:"secrets,omitempty"`
 }
 
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
+
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
@@ -52,7 +59,7 @@ type MongodSpecInMemory struct {
 
 type OperationProfilingMode string
 
-var (
+const (
 	OperationProfilingModeAll    OperationProfilingMode = "all"
 	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
 )
@@ -75,7 +82,7 @@ type ResourcesSpec struct {
 
 type StorageEngine string
 
-var (
+const (
 	StorageEngineWiredTiger StorageEngine = "wiredTiger"
 	StorageEngineInMemory   StorageEngine = "inMemory"
 	StorageEngineMMAPV1     StorageEngine = "mmapv1"

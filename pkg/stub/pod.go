@@ -1,0 +1,52 @@
+package stub
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// podList returns a v1.PodList object
+func podList() *corev1.PodList {
+	return &corev1.PodList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
+	}
+}
+
+// getPodNames returns the pod names of the array of pods passed in
+func getPodNames(pods []corev1.Pod) []string {
+	var podNames []string
+	for _, pod := range pods {
+		podNames = append(podNames, pod.Name)
+	}
+	return podNames
+}
+
+// isMongodPod returns a boolean reflecting if a pod
+// is running a mongod container
+func isMongodPod(pod corev1.Pod) bool {
+	container := getContainer(pod, mongodContainerName)
+	return container != nil
+}
+
+// newPSMDBPodAffinity returns an Affinity configuration that aims to
+// avoid deploying more than one pod on the same kubelet hostname
+func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
+	return &corev1.Affinity{
+		PodAntiAffinity: &corev1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: ls,
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+			},
+		},
+	}
+}

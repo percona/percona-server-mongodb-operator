@@ -102,7 +102,7 @@ func newPSMDBMongodVolumeClaims(m *v1alpha1.PerconaServerMongoDB, claimName stri
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet, error) {
+func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
 
 	limits, err := parseSpecResourceRequirements(m.Spec.Mongod.Limits)
@@ -125,7 +125,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + m.Spec.Mongod.ReplsetName,
+			Name:      m.Name + "-" + replsetName,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -140,21 +140,12 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      newPSMDBPodAffinity(ls),
-					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					InitContainers: []corev1.Container{
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, resources),
-					},
-					SecurityContext: &corev1.PodSecurityContext{
-						//Sysctls: []corev1.Sysctl{
-						//	{
-						//		Name:  "vm.swappiness",
-						//		Value: "1",
-						//	},
-						//},
+						newPSMDBMongodContainer(m, replsetName, clusterRole, resources),
 					},
 					Volumes: []corev1.Volume{
 						{
@@ -176,25 +167,6 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 	}
 	addOwnerRefToObject(set, asOwner(m))
 	return set, nil
-}
-
-func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
-	return &corev1.Affinity{
-		// prefer to run mongo instances on separate hostnames
-		PodAntiAffinity: &corev1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-				{
-					Weight: 100,
-					PodAffinityTerm: corev1.PodAffinityTerm{
-						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: ls,
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
-				},
-			},
-		},
-	}
 }
 
 // newPSMDBService returns a core/v1 API Service

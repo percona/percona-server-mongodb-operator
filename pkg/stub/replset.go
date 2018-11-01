@@ -12,13 +12,13 @@ import (
 // handleReplsetInit exec the replset initiation steps on the first
 // running mongod pod using a 'mongo' shell from within the container,
 // required for using localhostAuthBypass when MongoDB auth is enabled
-func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod) error {
+func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replsetName string, pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, mongodContainerName) {
 			continue
 		}
 
-		logrus.Infof("Initiating replset on running pod: %s", pod.Name)
+		logrus.Infof("Initiating replset %s on running pod: %s", replsetName, pod.Name)
 
 		// Run the k8s-mongodb-initiator from within the first running container
 		// this must be ran from within the running container to utilise the MongoDB
@@ -37,15 +37,4 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, pods []cor
 		return nil
 	}
 	return fmt.Errorf("no %s containers in running state", mongodContainerName)
-}
-
-// isMongodPod returns a boolean reflecting if a pod
-// is running a mongod container
-func isMongodPod(pod corev1.Pod) bool {
-	for _, container := range pod.Spec.Containers {
-		if container.Name == mongodContainerName {
-			return true
-		}
-	}
-	return false
 }

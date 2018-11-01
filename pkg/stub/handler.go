@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -122,72 +123,18 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			logrus.Info("created mongodb auth key secret")
 		}
 
-		// Create the StatefulSet if it doesn't exist
-		set, err := newPSMDBStatefulSet(o)
-		if err != nil {
-			logrus.Errorf("failed to create stateful set object for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
-			return err
-		}
-		err = h.client.Create(set)
-		if err != nil {
-			if !errors.IsAlreadyExists(err) {
-				logrus.Errorf("failed to create stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
+		// Ensure replica sets exist (in parallel goroutines so it doesn't take forever)
+		var wg sync.WaitGroup
+		replsetNames := []string{psmdb.Spec.Mongod.ReplsetName}
+		for _, replsetName := range replsetNames {
+			wg.Add(1)
+			err = h.ensureReplset(psmdb, replsetName, &wg)
+			if err != nil {
+				logrus.Errorf("failed to ensure replset %s: %v", replsetName, err)
 				return err
 			}
-		} else {
-			logrus.WithFields(logrus.Fields{
-				"size":          psmdb.Spec.Mongod.Size,
-				"limit_cpu":     psmdb.Spec.Mongod.Limits.Cpu,
-				"limit_memory":  psmdb.Spec.Mongod.Limits.Memory,
-				"limit_storage": psmdb.Spec.Mongod.Limits.Storage,
-			}).Infof("created stateful set for replset: %s", psmdb.Spec.Mongod.ReplsetName)
 		}
-
-		// Ensure the stateful set size is the same as the spec
-		err = h.client.Get(set)
-		if err != nil {
-			return fmt.Errorf("failed to get stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
-		}
-		size := psmdb.Spec.Mongod.Size
-		if *set.Spec.Replicas != size {
-			logrus.Infof("setting replicas to %d for replset: %s", size, psmdb.Spec.Mongod.ReplsetName)
-			set.Spec.Replicas = &size
-			err = h.client.Update(set)
-			if err != nil {
-				return fmt.Errorf("failed to update stateful set for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
-			}
-		}
-
-		// Update the PSMDB status
-		podList, err := h.updateStatus(o)
-		if err != nil {
-			logrus.Errorf("failed to update psmdb status: %v", err)
-			return err
-		}
-
-		// Initiate the replset if it hasn't already been initiated + there are pods +
-		// we have waited the ReplsetInitWait period since starting
-		if !psmdb.Status.Replsets[0].Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
-			err = h.handleReplsetInit(psmdb, podList.Items)
-			if err != nil {
-				logrus.Errorf("failed to init replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
-				return nil
-			}
-
-			// update status after replset init
-			psmdb.Status.Replsets[0].Initialised = true
-			err = h.client.Update(psmdb)
-			if err != nil {
-				return fmt.Errorf("failed to update status for replset %s: %v", psmdb.Spec.Mongod.ReplsetName, err)
-			}
-			logrus.Infof("changed state to initialised for replset %s", psmdb.Spec.Mongod.ReplsetName)
-
-			// ensure the watchdog is started
-			err = h.ensureWatchdog(o)
-			if err != nil {
-				return fmt.Errorf("failed to start watchdog: %v", err)
-			}
-		}
+		wg.Wait()
 
 		// Create the PSMDB service
 		service := newPSMDBService(o)
@@ -199,6 +146,78 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 		} else {
 			logrus.Infof("created service %s", service.Name)
+		}
+	}
+	return nil
+}
+
+func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName string, wg *sync.WaitGroup) error {
+	defer wg.Done()
+
+	// Create the StatefulSet if it doesn't exist
+	set, err := newPSMDBStatefulSet(m, replsetName, nil)
+	if err != nil {
+		logrus.Errorf("failed to create stateful set object for replset %s: %v", replsetName, err)
+		return err
+	}
+	err = h.client.Create(set)
+	if err != nil {
+		if !errors.IsAlreadyExists(err) {
+			logrus.Errorf("failed to create stateful set for replset %s: %v", replsetName, err)
+			return err
+		}
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"size":          m.Spec.Mongod.Size,
+			"limit_cpu":     m.Spec.Mongod.Limits.Cpu,
+			"limit_memory":  m.Spec.Mongod.Limits.Memory,
+			"limit_storage": m.Spec.Mongod.Limits.Storage,
+		}).Infof("created stateful set for replset: %s", replsetName)
+	}
+
+	// Ensure the stateful set size is the same as the spec
+	err = h.client.Get(set)
+	if err != nil {
+		return fmt.Errorf("failed to get stateful set for replset %s: %v", replsetName, err)
+	}
+	size := m.Spec.Mongod.Size
+	if *set.Spec.Replicas != size {
+		logrus.Infof("setting replicas to %d for replset: %s", size, replsetName)
+		set.Spec.Replicas = &size
+		err = h.client.Update(set)
+		if err != nil {
+			return fmt.Errorf("failed to update stateful set for replset %s: %v", replsetName, err)
+		}
+	}
+
+	// Update the PSMDB status
+	podList, err := h.updateStatus(m)
+	if err != nil {
+		logrus.Errorf("failed to update psmdb status for replset %s: %v", replsetName, err)
+		return err
+	}
+
+	// Initiate the replset if it hasn't already been initiated + there are pods +
+	// we have waited the ReplsetInitWait period since starting
+	if !m.Status.Replsets[0].Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
+		err = h.handleReplsetInit(m, replsetName, podList.Items)
+		if err != nil {
+			logrus.Errorf("failed to init replset %s: %v", replsetName, err)
+			return nil
+		}
+
+		// update status after replset init
+		m.Status.Replsets[0].Initialised = true
+		err = h.client.Update(m)
+		if err != nil {
+			return fmt.Errorf("failed to update status for replset %s: %v", replsetName, err)
+		}
+		logrus.Infof("changed state to initialised for replset %s", replsetName)
+
+		// ensure the watchdog is started
+		err = h.ensureWatchdog(m)
+		if err != nil {
+			return fmt.Errorf("failed to start watchdog: %v", err)
 		}
 	}
 	return nil

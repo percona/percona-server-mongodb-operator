@@ -74,7 +74,8 @@ func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float
 	return sizeGB
 }
 
-func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
+// newPSMDBContainerEnv returns environment variables for a container
+func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replsetName string) []corev1.EnvVar {
 	mSpec := m.Spec.Mongod
 	return []corev1.EnvVar{
 		{
@@ -91,7 +92,7 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 		},
 		{
 			Name:  motPkg.EnvMongoDBReplset,
-			Value: mSpec.ReplsetName,
+			Value: replsetName,
 		},
 	}
 }
@@ -129,7 +130,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	}
 }
 
-func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1.ResourceRequirements) corev1.Container {
+func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replsetName string, clusterRole *v1alpha1.ClusterRole, resources *corev1.ResourceRequirements) corev1.Container {
 	mongod := m.Spec.Mongod
 
 	args := []string{
@@ -137,8 +138,17 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 		"--auth",
 		"--keyFile=/mongodb/mongodb.key",
 		"--port=" + strconv.Itoa(int(mongod.Port)),
-		"--replSet=" + mongod.ReplsetName,
+		"--replSet=" + replsetName,
 		"--storageEngine=" + string(mongod.StorageEngine),
+	}
+
+	if clusterRole != nil {
+		switch *clusterRole {
+		case v1alpha1.ClusterRoleConfigSvr:
+			args = append(args, "--configsvr")
+		case v1alpha1.ClusterRoleShardSvr:
+			args = append(args, "--shardsvr")
+		}
 	}
 
 	switch mongod.OperationProfiling.Mode {
@@ -175,7 +185,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 				ContainerPort: mongod.Port,
 			},
 		},
-		Env: newPSMDBContainerEnv(m),
+		Env: newPSMDBContainerEnv(m, replsetName),
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
