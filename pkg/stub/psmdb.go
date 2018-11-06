@@ -47,12 +47,6 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Mongod == nil {
 		spec.Mongod = &v1alpha1.MongodSpec{}
 	}
-	if spec.Mongod.ReplsetName == "" {
-		spec.Mongod.ReplsetName = defaultReplsetName
-	}
-	if spec.Mongod.Size == 0 {
-		spec.Mongod.Size = defaultMongodSize
-	}
 	if spec.Mongod.Port == 0 {
 		spec.Mongod.Port = defaultMongodPort
 	}
@@ -73,13 +67,25 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 			SlowOpThresholdMs: defaultOperationProfilingSlowMs,
 		}
 	}
+	if len(spec.Replsets) == 0 {
+		spec.Replsets = []*v1alpha1.ReplsetSpec{{
+			Name: defaultReplsetName,
+			Size: defaultMongodSize,
+		}}
+	} else {
+		for _, replset := range spec.Replsets {
+			if replset.Size == 0 {
+				replset.Size = defaultMongodSize
+			}
+		}
+	}
 	if spec.RunUID == 0 {
 		spec.RunUID = defaultRunUID
 	}
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
+func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
 
 	limits, err := parseSpecResourceRequirements(m.Spec.Mongod.Limits)
@@ -95,19 +101,19 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string, c
 		Requests: requests,
 	}
 
-	ls := labelsForPerconaServerMongoDB(m, replsetName)
+	ls := labelsForPerconaServerMongoDB(m, replset.Name)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + replsetName,
+			Name:      m.Name + "-" + replset.Name,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: m.Name + "-" + replsetName,
-			Replicas:    &m.Spec.Mongod.Size,
+			ServiceName: m.Name + "-" + replset.Name,
+			Replicas:    &replset.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -122,7 +128,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string, c
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, replsetName, clusterRole, resources),
+						newPSMDBMongodContainer(m, replset.Name, clusterRole, resources),
 					},
 					Volumes: []corev1.Volume{
 						{

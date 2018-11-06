@@ -15,6 +15,16 @@ func podList() *corev1.PodList {
 	}
 }
 
+// getContainer returns a container, if it exists
+func getContainer(pod corev1.Pod, containerName string) *corev1.Container {
+	for _, cont := range pod.Spec.Containers {
+		if cont.Name == containerName {
+			return &cont
+		}
+	}
+	return nil
+}
+
 // getPodNames returns the pod names of the array of pods passed in
 func getPodNames(pods []corev1.Pod) []string {
 	var podNames []string
@@ -31,7 +41,20 @@ func isMongodPod(pod corev1.Pod) bool {
 	return container != nil
 }
 
-// newPSMDBPodAffinity returns an Affinity configuration that aims to
+// isPodReady returns a boolean reflecting if a pod is in a "ready" state
+func isPodReady(pod corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Status != corev1.ConditionTrue {
+			continue
+		}
+		if condition.Type == corev1.PodReady {
+			return true
+		}
+	}
+	return false
+}
+
+// newPSMDBPodAeeinity returns an Affinity configuration that aims to
 // avoid deploying more than one pod on the same kubelet hostname
 func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
 	return &corev1.Affinity{

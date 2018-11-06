@@ -22,10 +22,11 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Version string       `json:"version,omitempty"`
-	RunUID  int64        `json:"runUid,omitempty"`
-	Mongod  *MongodSpec  `json:"mongod,omitempty"`
-	Secrets *SecretsSpec `json:"secrets,omitempty"`
+	Version  string         `json:"version,omitempty"`
+	RunUID   int64          `json:"runUid,omitempty"`
+	Mongod   *MongodSpec    `json:"mongod,omitempty"`
+	Replsets []*ReplsetSpec `json:"replsets,omitempty"`
+	Secrets  *SecretsSpec   `json:"secrets,omitempty"`
 }
 
 type ClusterRole string
@@ -88,10 +89,14 @@ const (
 	StorageEngineMMAPV1     StorageEngine = "mmapv1"
 )
 
+type ReplsetSpec struct {
+	Name string `json:"name"`
+	Size int32  `json:"size"`
+	//Mongod *MongodSpec `json:"mongod"`
+}
+
 type MongodSpec struct {
 	*ResourcesSpec     `json:"resources,omitempty"`
-	Size               int32                         `json:"size"`
-	ReplsetName        string                        `json:"replsetName,omitempty"`
 	Port               int32                         `json:"port,omitempty"`
 	HostPort           int32                         `json:"hostPort,omitempty"`
 	StorageClassName   string                        `json:"storageClassName,omitempty"`
@@ -110,7 +115,7 @@ type MongosSpec struct {
 
 type ReplsetStatus struct {
 	Name        string   `json:"name,omitempty"`
-	Members     []string `json:"members,omitempty"`
+	Pods        []string `json:"pods,omitempty"`
 	Configsvr   bool     `json:"configsvr,omitempty"`
 	Initialised bool     `json:"initialised,omitempty"`
 }

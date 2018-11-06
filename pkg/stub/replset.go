@@ -1,6 +1,7 @@
 package stub
 
 import (
+	goErrors "errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -16,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running state")
+
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
 // This must be ran from within the running container to utilise the MongoDB Localhost Exeception.
 //
@@ -23,7 +26,7 @@ import (
 //
 func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replsetName string, pods []corev1.Pod) error {
 	for _, pod := range pods {
-		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, mongodContainerName) {
+		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, mongodContainerName) || !isPodReady(pod) {
 			continue
 		}
 
@@ -34,7 +37,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replsetNam
 			"init",
 		})
 	}
-	return fmt.Errorf("no %s containers in running state", mongodContainerName)
+	return ErrNoRunningMongodContainers
 }
 
 func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replsetName string) (*corev1.PodList, error) {
@@ -49,8 +52,8 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replsetName str
 	podNames := getPodNames(podList.Items)
 
 	status := getReplsetStatus(m, replsetName)
-	if !reflect.DeepEqual(podNames, status.Members) {
-		status.Members = podNames
+	if !reflect.DeepEqual(podNames, status.Pods) {
+		status.Pods = podNames
 		err := h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replsetName, err)
@@ -67,8 +70,8 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replsetName str
 }
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
-func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replsetName string) error {
-	set, err := newPSMDBStatefulSet(m, replsetName, nil)
+func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) error {
+	set, err := newPSMDBStatefulSet(m, replset, nil)
 	if err != nil {
 		return err
 	}
@@ -79,25 +82,24 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 		}
 	} else {
 		logrus.WithFields(logrus.Fields{
-			"size":          m.Spec.Mongod.Size,
+			"size":          replset.Size,
 			"limit_cpu":     m.Spec.Mongod.Limits.Cpu,
 			"limit_memory":  m.Spec.Mongod.Limits.Memory,
 			"limit_storage": m.Spec.Mongod.Limits.Storage,
-		}).Infof("created stateful set for replset: %s", replsetName)
+		}).Infof("created stateful set for replset: %s", replset.Name)
 	}
 
 	// Ensure the stateful set size is the same as the spec
 	err = h.client.Get(set)
 	if err != nil {
-		return fmt.Errorf("failed to get stateful set for replset %s: %v", replsetName, err)
+		return fmt.Errorf("failed to get stateful set for replset %s: %v", replset.Name, err)
 	}
-	size := m.Spec.Mongod.Size
-	if *set.Spec.Replicas != size {
-		logrus.Infof("setting replicas to %d for replset: %s", size, replsetName)
-		set.Spec.Replicas = &size
+	if *set.Spec.Replicas != replset.Size {
+		logrus.Infof("setting replicas to %d for replset: %s", replset.Size, replset.Name)
+		set.Spec.Replicas = &replset.Size
 		err = h.client.Update(set)
 		if err != nil {
-			return fmt.Errorf("failed to update stateful set for replset %s: %v", replsetName, err)
+			return fmt.Errorf("failed to update stateful set for replset %s: %v", replset.Name, err)
 		}
 	}
 
@@ -116,7 +118,7 @@ func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replsetName string) *v1a
 }
 
 func statusHasMember(status *v1alpha1.ReplsetStatus, memberName string) bool {
-	for _, member := range status.Members {
+	for _, member := range status.Pods {
 		if member == memberName {
 			return true
 		}
@@ -125,26 +127,19 @@ func statusHasMember(status *v1alpha1.ReplsetStatus, memberName string) bool {
 }
 
 // ensureReplset ensures resources for a PSMDB replset exist
-func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName string) (*v1alpha1.ReplsetStatus, error) {
+func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec) (*v1alpha1.ReplsetStatus, error) {
 	// Create the StatefulSet if it doesn't exist
-	err := h.ensureReplsetStatefulSet(m, replsetName)
+	err := h.ensureReplsetStatefulSet(m, replset)
 	if err != nil {
-		logrus.Errorf("failed to create stateful set for replset %s: %v", replsetName, err)
-		return nil, err
-	}
-
-	// Update the PSMDB status
-	podList, err := h.updateStatus(m, replsetName)
-	if err != nil {
-		logrus.Errorf("failed to update psmdb status for replset %s: %v", replsetName, err)
+		logrus.Errorf("failed to create stateful set for replset %s: %v", replset.Name, err)
 		return nil, err
 	}
 
 	// Initiate the replset if it hasn't already been initiated + there are pods +
 	// we have waited the ReplsetInitWait period since starting
-	status := getReplsetStatus(m, replsetName)
+	status := getReplsetStatus(m, replset.Name)
 	if !status.Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
-		err = h.handleReplsetInit(m, replsetName, podList.Items)
+		err = h.handleReplsetInit(m, replset.Name, podList.Items)
 		if err != nil {
 			return nil, err
 		}
@@ -153,9 +148,9 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName st
 		status.Initialised = true
 		err = h.client.Update(m)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update status for replset %s: %v", replsetName, err)
+			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 		}
-		logrus.Infof("changed state to initialised for replset %s", replsetName)
+		logrus.Infof("changed state to initialised for replset %s", replset.Name)
 
 		// ensure the watchdog is started
 		err = h.ensureWatchdog(m)
@@ -165,7 +160,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName st
 	}
 
 	// Create service for replset
-	service := newPSMDBService(m, replsetName)
+	service := newPSMDBService(m, replset.Name)
 	err = h.client.Create(service)
 	if err != nil {
 		if !errors.IsAlreadyExists(err) {

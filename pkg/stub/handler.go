@@ -2,7 +2,6 @@ package stub
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -92,42 +90,32 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
-		replsetNames := []string{psmdb.Spec.Mongod.ReplsetName}
-		for _, replsetName := range replsetNames {
-			// Ensure replset exists
-			status, err := h.ensureReplset(psmdb, replsetName)
+		for _, replset := range psmdb.Spec.Replsets {
+			// Update the PSMDB status
+			podList, err := h.updateStatus(psmdb, replset.Name)
 			if err != nil {
-				logrus.Errorf("failed to ensure replset %s: %v", replsetName, err)
+				logrus.Errorf("failed to update psmdb status for replset %s: %v", replset.Name, err)
+				return err
+			}
+
+			// Ensure replset exists
+			status, err := h.ensureReplset(psmdb, podList, replset)
+			if err != nil {
+				if err == ErrNoRunningMongodContainers {
+					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)
+					continue
+				}
+				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
 				return err
 			}
 			if !status.Initialised {
 				continue
 			}
 
-			// remove bound, unused PVCs by checking if the pod name of the PVC still exists
-			// and there is at least 1 other bound PVC for the replset
-			pvcs, err := getPersistentVolumeClaims(psmdb, h.client, replsetName)
+			err = persistentVolumeClaimReaper(psmdb, h.client, podList, status, replset.Name)
 			if err != nil {
-				logrus.Errorf("failed to get persistent volume claims: %v", err)
+				logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
 				return err
-			}
-			if len(pvcs) <= minPersistentVolumeClaims {
-				continue
-			}
-			for _, pvc := range pvcs {
-				if pvc.Status.Phase != corev1.ClaimBound {
-					continue
-				}
-				pvcPodName := strings.Replace(pvc.Name, mongodDataVolClaimName+"-", "", 1)
-				if statusHasMember(status, pvcPodName) {
-					continue
-				}
-				err = deletePersistentVolumeClaim(psmdb, h.client, pvc.Name)
-				if err != nil {
-					logrus.Errorf("failed to delete persistent volume claim %s: %v", pvc.Name, err)
-					return err
-				}
-				logrus.Infof("deleted stale Persistent Volume Claim for replset %s: %s", replsetName, pvc.Name)
 			}
 		}
 	}

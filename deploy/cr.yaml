@@ -7,9 +7,10 @@ spec:
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
-  mongod:
+  replsets:
+  - name: rs0
     size: 3
-    replsetName: rs0
+  mongod:
     port: 27017
     hostPort: 0
     resources:
