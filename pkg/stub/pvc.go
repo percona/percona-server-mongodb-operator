@@ -48,9 +48,9 @@ func persistentVolumeClaimList() *corev1.PersistentVolumeClaimList {
 }
 
 // getPersistentVolumeClaims returns a list of Persistent Volume Claims for a given replset
-func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, replsetName string) ([]corev1.PersistentVolumeClaim, error) {
+func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := persistentVolumeClaimList()
-	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replsetName)).String()
+	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset.Name)).String()
 	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
 	err := client.List(m.Namespace, pvcList, sdk.WithListOptions(listOps))
 	if err != nil {
@@ -75,7 +75,7 @@ func deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 
 // persistentVolumeClaimReaper removes Kubernetes Persistent Volume Claims
 // from pods that have scaled down
-func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, podList *corev1.PodList, replsetStatus *v1alpha1.ReplsetStatus, replsetName string) error {
+func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, replsetStatus *v1alpha1.ReplsetStatus) error {
 	var runningPods int
 	for _, pod := range podList.Items {
 		if isPodReady(pod) && isContainerAndPodRunning(pod, mongodContainerName) {
@@ -86,7 +86,7 @@ func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 		return nil
 	}
 
-	pvcs, err := getPersistentVolumeClaims(m, client, replsetName)
+	pvcs, err := getPersistentVolumeClaims(m, client, replset)
 	if err != nil {
 		logrus.Errorf("failed to get persistent volume claims: %v", err)
 		return err
@@ -107,7 +107,7 @@ func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 			logrus.Errorf("failed to delete persistent volume claim %s: %v", pvc.Name, err)
 			return err
 		}
-		logrus.Infof("deleted stale Persistent Volume Claim for replset %s: %s", replsetName, pvc.Name)
+		logrus.Infof("deleted stale Persistent Volume Claim for replset %s: %s", replset.Name, pvc.Name)
 	}
 
 	return nil

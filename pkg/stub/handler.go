@@ -112,7 +112,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				continue
 			}
 
-			err = persistentVolumeClaimReaper(psmdb, h.client, podList, status, replset.Name)
+			err = persistentVolumeClaimReaper(psmdb, h.client, podList, replset, status)
 			if err != nil {
 				logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
 				return err

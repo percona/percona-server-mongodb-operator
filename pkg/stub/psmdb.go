@@ -128,7 +128,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, replset.Name, clusterRole, resources),
+						newPSMDBMongodContainer(m, replset, clusterRole, resources),
 					},
 					Volumes: []corev1.Volume{
 						{
@@ -153,15 +153,15 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 }
 
 // newPSMDBService returns a core/v1 API Service
-func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replsetName string) *corev1.Service {
-	ls := labelsForPerconaServerMongoDB(m, replsetName)
+func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
+	ls := labelsForPerconaServerMongoDB(m, replset.Name)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + replsetName,
+			Name:      m.Name + "-" + replset.Name,
 			Namespace: m.Namespace,
 		},
 		Spec: corev1.ServiceSpec{

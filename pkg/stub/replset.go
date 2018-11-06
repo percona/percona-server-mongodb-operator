@@ -160,7 +160,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	}
 
 	// Create service for replset
-	service := newPSMDBService(m, replset.Name)
+	service := newPSMDBService(m, replset)
 	err = h.client.Create(service)
 	if err != nil {
 		if !errors.IsAlreadyExists(err) {
