@@ -56,7 +56,6 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replsetName str
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replsetName, err)
 		}
 	}
-	//}
 
 	// Update the pods list that is read by the watchdog
 	if h.pods == nil {
@@ -147,7 +146,6 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, replsetName st
 	if !status.Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
 		err = h.handleReplsetInit(m, replsetName, podList.Items)
 		if err != nil {
-			logrus.Errorf("failed to init replset %s: %v", replsetName, err)
 			return nil, err
 		}
 

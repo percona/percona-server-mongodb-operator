@@ -15,6 +15,7 @@ import (
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -99,8 +100,11 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				logrus.Errorf("failed to ensure replset %s: %v", replsetName, err)
 				return err
 			}
+			if !status.Initialised {
+				continue
+			}
 
-			// remove stale PVCs by checking of the pod name of the PVC still exists
+			// remove bound, unused PVCs by checking if the pod name of the PVC still exists
 			// and there is at least 1 other bound PVC for the replset
 			pvcs, err := getPersistentVolumeClaims(psmdb, h.client, replsetName)
 			if err != nil {
@@ -110,7 +114,10 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			if len(pvcs) <= minPersistentVolumeClaims {
 				continue
 			}
-			for _, pvc := range boundPersistentVolumeClaims(pvcs) {
+			for _, pvc := range pvcs {
+				if pvc.Status.Phase != corev1.ClaimBound {
+					continue
+				}
 				pvcPodName := strings.Replace(pvc.Name, mongodDataVolClaimName+"-", "", 1)
 				if statusHasMember(status, pvcPodName) {
 					continue
@@ -120,7 +127,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 					logrus.Errorf("failed to delete persistent volume claim %s: %v", pvc.Name, err)
 					return err
 				}
-				logrus.Infof("deleted stale PVC for replset %s: %s", replsetName, pvc.Name)
+				logrus.Infof("deleted stale Persistent Volume Claim for replset %s: %s", replsetName, pvc.Name)
 			}
 		}
 	}

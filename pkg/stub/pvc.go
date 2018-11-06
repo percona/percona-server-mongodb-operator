@@ -69,15 +69,3 @@ func deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 		},
 	})
 }
-
-// boundPersistentVolumeClaims returns a list of bound Persistent Volume Claims from a given list
-func boundPersistentVolumeClaims(pvcs []corev1.PersistentVolumeClaim) []corev1.PersistentVolumeClaim {
-	bound := []corev1.PersistentVolumeClaim{}
-	for _, pvc := range pvcs {
-		if pvc.Status.Phase != corev1.ClaimBound {
-			continue
-		}
-		bound = append(bound, pvc)
-	}
-	return bound
-}
