@@ -2,6 +2,7 @@ package stub
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -18,6 +19,8 @@ import (
 )
 
 var ReplsetInitWait = 10 * time.Second
+
+const minPersistentVolumeClaims = 1
 
 func NewHandler(client pkgSdk.Client) sdk.Handler {
 	return &Handler{
@@ -70,7 +73,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
 			logrus.Infof("Received deleted event for %s", psmdb.Name)
-			h.watchdogQuit <- true
+			close(h.watchdogQuit)
 			h.watchdog = nil
 			return nil
 		}
@@ -90,10 +93,34 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// loop will create the cluster shards and config server replset
 		replsetNames := []string{psmdb.Spec.Mongod.ReplsetName}
 		for _, replsetName := range replsetNames {
-			err = h.ensureReplset(psmdb, replsetName)
+			// Ensure replset exists
+			status, err := h.ensureReplset(psmdb, replsetName)
 			if err != nil {
 				logrus.Errorf("failed to ensure replset %s: %v", replsetName, err)
 				return err
+			}
+
+			// remove stale PVCs by checking of the pod name of the PVC still exists
+			// and there is at least 1 other bound PVC for the replset
+			pvcs, err := getPersistentVolumeClaims(psmdb, h.client, replsetName)
+			if err != nil {
+				logrus.Errorf("failed to get persistent volume claims: %v", err)
+				return err
+			}
+			if len(pvcs) <= minPersistentVolumeClaims {
+				continue
+			}
+			for _, pvc := range boundPersistentVolumeClaims(pvcs) {
+				pvcPodName := strings.Replace(pvc.Name, mongodDataVolClaimName+"-", "", 1)
+				if statusHasMember(status, pvcPodName) {
+					continue
+				}
+				err = deletePersistentVolumeClaim(psmdb, h.client, pvc.Name)
+				if err != nil {
+					logrus.Errorf("failed to delete persistent volume claim %s: %v", pvc.Name, err)
+					return err
+				}
+				logrus.Infof("deleted stale PVC for replset %s: %s", replsetName, pvc.Name)
 			}
 		}
 	}
