@@ -21,9 +21,9 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 	assert.Equal(t, defaultMongodSize, spec.Replsets[0].Size)
 
 	assert.NotNil(t, spec.Mongod)
-	assert.Equal(t, defaultStorageEngine, spec.Mongod.StorageEngine)
-	assert.NotNil(t, spec.Mongod.WiredTiger)
-	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.WiredTiger.CacheSizeRatio)
+	assert.Equal(t, defaultStorageEngine, spec.Mongod.Storage.Engine)
+	assert.NotNil(t, spec.Mongod.Storage.WiredTiger)
+	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.Storage.WiredTiger.CacheSizeRatio)
 }
 
 func TestNewPSMDBStatefulSet(t *testing.T) {
@@ -40,7 +40,9 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 				},
 			},
 			Mongod: &v1alpha1.MongodSpec{
-				Port: 99999,
+				Net: &v1alpha1.MongodSpecNet{
+					Port: 99999,
+				},
 				ResourcesSpec: &v1alpha1.ResourcesSpec{
 					Limits: &v1alpha1.ResourceSpecRequirements{
 						Cpu:     "1",
