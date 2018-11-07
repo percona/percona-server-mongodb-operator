@@ -129,12 +129,34 @@ type MongodSpecMMAPv1 struct {
 	Smallfiles bool `json:"smallfiles,omitempty"`
 }
 
-type MongodSpecWiredTiger struct {
+type WiredTigerCompressor string
+
+var (
+	WiredTigerCompressorNone   WiredTigerCompressor = "none"
+	WiredTigerCompressorSnappy WiredTigerCompressor = "snappy"
+	WiredTigerCompressorZlib   WiredTigerCompressor = "zlib"
+)
+
+type MongodSpecWiredTigerEngineConfig struct {
 	CacheSizeRatio float64 `json:"cacheSizeRatio,omitempty"`
+}
+type MongodSpecWiredTigerCollectionConfig struct {
+	BlockCompressor *WiredTigerCompressor `json:"blockCompressor,omitempty"`
+}
+
+type MongodSpecWiredTiger struct {
+	EngineConfig        *MongodSpecWiredTigerEngineConfig     `json:"engineConfig,omitempty"`
+	CollectionConfig    *MongodSpecWiredTigerCollectionConfig `json:"collectionConfig,omitempty"`
+	JournalCompressor   *WiredTigerCompressor                 `json:"journalCompressor,omitempty"`
+	DirectoryForIndexes bool                                  `json:"directoryForIndexes,omitempty"`
+}
+
+type MongodSpecInMemoryEngineConfig struct {
+	InMemorySizeRatio float64 `json:"inMemorySizeRatio,omitempty"`
 }
 
 type MongodSpecInMemory struct {
-	SizeRatio float64 `json:"sizeRatio,omitempty"`
+	EngineConfig *MongodSpecInMemoryEngineConfig `json:"engineConfig,omitempty"`
 }
 
 type AuditLogDestination string

@@ -165,12 +165,12 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		case v1alpha1.StorageEngineWiredTiger:
 			args = append(args, fmt.Sprintf(
 				"--wiredTigerCacheSizeGB=%.2f",
-				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.CacheSizeRatio),
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio),
 			))
 		case v1alpha1.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(
 				"--inMemorySizeGB=%.2f",
-				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.SizeRatio),
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio),
 			))
 		}
 		if mongod.Storage.DirectoryPerDB {

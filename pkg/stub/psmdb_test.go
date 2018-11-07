@@ -23,7 +23,20 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 	assert.NotNil(t, spec.Mongod)
 	assert.Equal(t, defaultStorageEngine, spec.Mongod.Storage.Engine)
 	assert.NotNil(t, spec.Mongod.Storage.WiredTiger)
-	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.Storage.WiredTiger.CacheSizeRatio)
+	assert.NotNil(t, spec.Mongod.Storage.WiredTiger.EngineConfig)
+	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
+
+	spec2 := v1alpha1.PerconaServerMongoDBSpec{
+		Mongod: &v1alpha1.MongodSpec{
+			Storage: &v1alpha1.MongodSpecStorage{
+				Engine: v1alpha1.StorageEngineInMemory,
+			},
+		},
+	}
+	addPSMDBSpecDefaults(&spec2)
+	assert.NotNil(t, spec2.Mongod.Storage.InMemory)
+	assert.NotNil(t, spec2.Mongod.Storage.InMemory.EngineConfig)
+	assert.Equal(t, spec2.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
 }
 
 func TestNewPSMDBStatefulSet(t *testing.T) {

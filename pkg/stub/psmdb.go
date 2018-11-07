@@ -19,6 +19,7 @@ var (
 	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
+	defaultInMemorySizeRatio        float64 = 0.9
 	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
 	mongodContainerDataDir          string  = "/data/db"
 	mongodContainerName             string  = "mongod"
@@ -58,14 +59,33 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Mongod.Storage.Engine == "" {
 		spec.Mongod.Storage.Engine = defaultStorageEngine
 	}
-	if spec.Mongod.Storage.Engine == v1alpha1.StorageEngineWiredTiger {
+
+	switch spec.Mongod.Storage.Engine {
+	case v1alpha1.StorageEngineInMemory:
+		if spec.Mongod.Storage.InMemory == nil {
+			spec.Mongod.Storage.InMemory = &v1alpha1.MongodSpecInMemory{}
+		}
+		if spec.Mongod.Storage.InMemory.EngineConfig == nil {
+			spec.Mongod.Storage.InMemory.EngineConfig = &v1alpha1.MongodSpecInMemoryEngineConfig{}
+		}
+		if spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio == 0 {
+			spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio = defaultInMemorySizeRatio
+		}
+	case v1alpha1.StorageEngineWiredTiger:
 		if spec.Mongod.Storage.WiredTiger == nil {
 			spec.Mongod.Storage.WiredTiger = &v1alpha1.MongodSpecWiredTiger{}
 		}
-		if spec.Mongod.Storage.WiredTiger.CacheSizeRatio == 0 {
-			spec.Mongod.Storage.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+		if spec.Mongod.Storage.WiredTiger.CollectionConfig == nil {
+			spec.Mongod.Storage.WiredTiger.CollectionConfig = &v1alpha1.MongodSpecWiredTigerCollectionConfig{}
+		}
+		if spec.Mongod.Storage.WiredTiger.EngineConfig == nil {
+			spec.Mongod.Storage.WiredTiger.EngineConfig = &v1alpha1.MongodSpecWiredTigerEngineConfig{}
+		}
+		if spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio == 0 {
+			spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
 		}
 	}
+
 	if spec.Mongod.OperationProfiling == nil {
 		spec.Mongod.OperationProfiling = &v1alpha1.MongodSpecOperationProfiling{
 			Mode: defaultOperationProfilingMode,

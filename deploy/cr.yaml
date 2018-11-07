@@ -25,12 +25,25 @@ spec:
     security:
       redactClientLogData: false
     setParameter:
+      ttlMonitorSleepSecs: 60
       wiredTigerConcurrentReadTransactions: 128
       wiredTigerConcurrentWriteTransactions: 128
     storage:
       engine: wiredTiger
+      inMemory:
+        inMemorySizeRatio: 0.9
+      mmapv1:
+        nsSize: 16
+        smallfiles: false
       wiredTiger:
-        cacheSizeRatio: 0.5
+        engineConfig:
+          cacheSizeRatio: 0.5
+          journalCompressor: snappy
+          directoryForIndexes: false
+        collectionConfig:
+          blockCompressor: snappy
+        indexConfig:
+          prefixCompression: true
     operationProfiling:
       mode: slowOp
       slowOpThresholdMs: 100
