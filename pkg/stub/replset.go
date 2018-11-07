@@ -13,8 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
 var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running state")
@@ -40,17 +38,16 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 	return ErrNoRunningMongodContainers
 }
 
+// updateStatus updates the PerconaServerMongoDB status
 func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*corev1.PodList, error) {
-	// Update the PerconaServerMongoDB status with the pod names
 	podList := podList()
-	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset)).String()
-	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
-	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(listOps))
+	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods for replset %s: %v", replset.Name, err)
 	}
-	podNames := getPodNames(podList.Items)
 
+	// Update status pods list
+	podNames := getPodNames(podList.Items)
 	status := getReplsetStatus(m, replset)
 	if !reflect.DeepEqual(podNames, status.Pods) {
 		status.Pods = podNames

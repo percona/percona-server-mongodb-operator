@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
 // newPSMDBMongodVolumeClaims returns a Persistent Volume Claims for Mongod pod
@@ -50,9 +49,7 @@ func persistentVolumeClaimList() *corev1.PersistentVolumeClaimList {
 // getPersistentVolumeClaims returns a list of Persistent Volume Claims for a given replset
 func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := persistentVolumeClaimList()
-	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset)).String()
-	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
-	err := client.List(m.Namespace, pvcList, sdk.WithListOptions(listOps))
+	err := client.List(m.Namespace, pvcList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
 	return pvcList.Items, err
 }
 
