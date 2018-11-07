@@ -20,16 +20,6 @@ const (
 	dockerImageBase          string  = "percona/percona-server-mongodb"
 )
 
-// getContainer returns a container, if it exists
-func getContainer(pod corev1.Pod, containerName string) *corev1.Container {
-	for _, cont := range pod.Spec.Containers {
-		if cont.Name == containerName {
-			return &cont
-		}
-	}
-	return nil
-}
-
 // getMongodPort returns the mongod port number as a string
 func getMongodPort(container *corev1.Container) string {
 	for _, port := range container.Ports {
@@ -74,7 +64,8 @@ func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float
 	return sizeGB
 }
 
-func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
+// newPSMDBContainerEnv returns environment variables for a container
+func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) []corev1.EnvVar {
 	mSpec := m.Spec.Mongod
 	return []corev1.EnvVar{
 		{
@@ -91,7 +82,7 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 		},
 		{
 			Name:  motPkg.EnvMongoDBReplset,
-			Value: mSpec.ReplsetName,
+			Value: replset.Name,
 		},
 	}
 }
@@ -129,7 +120,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	}
 }
 
-func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1.ResourceRequirements) corev1.Container {
+func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole, resources *corev1.ResourceRequirements) corev1.Container {
 	mongod := m.Spec.Mongod
 
 	args := []string{
@@ -139,6 +130,15 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mongod.Storage.Engine),
+	}
+
+	if clusterRole != nil {
+		switch *clusterRole {
+		case v1alpha1.ClusterRoleConfigSvr:
+			args = append(args, "--configsvr")
+		case v1alpha1.ClusterRoleShardSvr:
+			args = append(args, "--shardsvr")
+		}
 	}
 
 	switch mongod.OperationProfiling.Mode {
@@ -175,7 +175,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 				ContainerPort: mongod.Net.Port,
 			},
 		},
-		Env: newPSMDBContainerEnv(m),
+		Env: newPSMDBContainerEnv(m, replset),
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{

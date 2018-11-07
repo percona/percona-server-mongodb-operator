@@ -266,6 +266,17 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 		*out = new(MongodSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Replsets != nil {
+		in, out := &in.Replsets, &out.Replsets
+		*out = make([]*ReplsetSpec, len(*in))
+		for i := range *in {
+			if (*in)[i] != nil {
+				in, out := &(*in)[i], &(*out)[i]
+				*out = new(ReplsetSpec)
+				**out = **in
+			}
+		}
+	}
 	if in.Secrets != nil {
 		in, out := &in.Secrets, &out.Secrets
 		*out = new(SecretsSpec)

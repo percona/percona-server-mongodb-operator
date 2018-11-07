@@ -22,10 +22,11 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Version string       `json:"version,omitempty"`
-	RunUID  int64        `json:"runUid,omitempty"`
-	Mongod  *MongodSpec  `json:"mongod,omitempty"`
-	Secrets *SecretsSpec `json:"secrets,omitempty"`
+	Version  string         `json:"version,omitempty"`
+	RunUID   int64          `json:"runUid,omitempty"`
+	Mongod   *MongodSpec    `json:"mongod,omitempty"`
+	Replsets []*ReplsetSpec `json:"replsets,omitempty"`
+	Secrets  *SecretsSpec   `json:"secrets,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
@@ -42,6 +43,13 @@ type ResourcesSpec struct {
 	Limits   *ResourceSpecRequirements `json:"limits,omitempty"`
 	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
 }
+
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
 
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
@@ -75,13 +83,6 @@ type MongodSpec struct {
 	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
 	AuditLog           *MongodSpecAuditLog           `json:"auditLog,omitempty"`
 }
-
-type ClusterRole string
-
-const (
-	ClusterRoleShardSvr  ClusterRole = "shardsvr"
-	ClusterRoleConfigSvr ClusterRole = "configsvr"
-)
 
 type MongodSpecNet struct {
 	Port     int32 `json:"port,omitempty"`

@@ -27,11 +27,10 @@ const (
 	EnvKubernetesPort = "KUBERNETES_SERVICE_PORT"
 )
 
-func NewPods(serviceName, namespace, portName string) *Pods {
+func NewPods(serviceName, namespace string) *Pods {
 	return &Pods{
 		namespace:   namespace,
 		serviceName: serviceName,
-		portName:    portName,
 		pods:        make([]corev1.Pod, 0),
 	}
 }
@@ -40,7 +39,6 @@ type Pods struct {
 	sync.Mutex
 	namespace   string
 	serviceName string
-	portName    string
 	pods        []corev1.Pod
 }
 
@@ -86,7 +84,7 @@ func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 		if pod.Name != podName {
 			continue
 		}
-		tasks = append(tasks, NewTask(pod, p.serviceName, p.namespace, p.portName))
+		tasks = append(tasks, NewTask(pod, p.serviceName, p.namespace))
 	}
 	return tasks, nil
 }

@@ -7,17 +7,13 @@ spec:
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
-  mongod:
-<<<<<<< Updated upstream
+  replsets:
+  - name: rs0
     size: 3
-    replsetName: rs0
-    port: 27017
-    hostPort: 0
-=======
+  mongod:
     net:
       port: 27017
       hostPort: 0
->>>>>>> Stashed changes
     resources:
       limits:
         cpu: "300m"
@@ -32,9 +28,6 @@ spec:
         cacheSizeRatio: 0.5
     operationProfiling:
       mode: slowOp
-<<<<<<< Updated upstream
-      slowMs: 100
-=======
       slowOpThresholdMs: 100
     #auditLog:
     #  destination: file
@@ -43,4 +36,3 @@ spec:
     #  resources:
     #    limits:
     #      storage: "1Gi"
->>>>>>> Stashed changes
