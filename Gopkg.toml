@@ -36,6 +36,14 @@ required = [
   name = "github.com/percona/mongodb-orchestration-tools"
   revision = "e64e668d6d516e4f224e936adca9fae3c97932f7"
 
+[[override]]
+  branch = "master"
+  name = "golang.org/x/crypto"
+
+[[override]]
+  branch = "master"
+  name = "golang.org/x/net"
+
 [prune]
   go-tests = true
   non-go = true

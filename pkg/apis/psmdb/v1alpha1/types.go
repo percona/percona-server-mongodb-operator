@@ -67,7 +67,7 @@ const (
 
 type MongodSpecOperationProfiling struct {
 	Mode              OperationProfilingMode `json:"mode,omitempty"`
-	SlowOpThresholdMs int                    `json:"slowMs,omitempty"`
+	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
 }
 
 type ResourceSpecRequirements struct {

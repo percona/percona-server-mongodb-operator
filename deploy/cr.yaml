@@ -24,4 +24,4 @@ spec:
     storageEngine: wiredTiger
     operationProfiling:
       mode: slowOp
-      slowMs: 100
+      slowOpThresholdMs: 100
