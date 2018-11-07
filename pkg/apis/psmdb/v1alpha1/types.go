@@ -97,17 +97,8 @@ type MongodSpecReplication struct {
 	OplogSizeMB int `json:"oplogSizeMB,omitempty"`
 }
 
-//type EncryptionCipherMode string
-
-//var (
-//	EncryptionCipherModeAES256CBC = "AES256-CBC"
-//	EncryptionCipherModeAES256GCM = "AES256-GCM"
-//)
-
 type MongodSpecSecurity struct {
 	RedactClientLogData bool `json:"redactClientLogData,omitempty"`
-	//	EnableEncryption     bool                 `json:"enableEncryption,omitempty"`
-	//	EncryptionCipherMode EncryptionCipherMode `json:"encryptionCipherMode,omitempty"`
 }
 
 type MongodSpecSetParameter struct {
@@ -148,9 +139,7 @@ type MongodSpecInMemory struct {
 
 type AuditLogDestination string
 
-var (
-	AuditLogDestinationFile AuditLogDestination = "file"
-)
+var AuditLogDestinationFile AuditLogDestination = "file"
 
 type AuditLogFormat string
 
