@@ -77,7 +77,7 @@ type MongodSpec struct {
 	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
 	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
 	Security           *MongodSpecSecurity           `json:"security,omitempty"`
-	SetParameter       map[string]string             `json:"setParameter,omitempty"`
+	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
 	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
 }
 
@@ -110,6 +110,12 @@ type MongodSpecSecurity struct {
 	//	EncryptionCipherMode EncryptionCipherMode `json:"encryptionCipherMode,omitempty"`
 }
 
+type MongodSpecSetParameter struct {
+	TTLMonitorSleepSecs                   int `json:"ttlMonitorSleepSecs,omitempty"`
+	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
+	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
+}
+
 type StorageEngine string
 
 var (
@@ -120,7 +126,7 @@ var (
 
 type MongodSpecStorage struct {
 	Engine         StorageEngine         `json:"engine,omitempty"`
-	DirectoryPerDB bool                  `json:directoryPerDB,omitempty"`
+	DirectoryPerDB bool                  `json:"directoryPerDB,omitempty"`
 	SyncPeriodSecs int                   `json:"syncPeriodSecs,omitempty"`
 	InMemory       *MongodSpecInMemory   `json:"inMemory,omitempty"`
 	MMAPv1         *MongodSpecMMAPv1     `json:"mmapv1,omitempty"`
@@ -156,7 +162,6 @@ var (
 type MongodSpecAuditLog struct {
 	Destination AuditLogDestination `json:"destination,omitempty"`
 	Format      AuditLogFormat      `json:"format,omitempty"`
-	Path        string              `json:"path,omitempty"`
 	Filter      string              `json:"filter,omitempty"`
 }
 

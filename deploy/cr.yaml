@@ -39,6 +39,3 @@ spec:
     #  destination: file
     #  format: BSON
     #  filter: '{}'
-    #  resources:
-    #    limits:
-    #      storage: "1Gi"

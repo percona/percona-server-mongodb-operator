@@ -126,6 +126,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
+		"--dbpath=" + mongodContainerDataDir,
 		"--keyFile=/mongodb/mongodb.key",
 		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
@@ -191,9 +192,42 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	}
 
 	// setParameter
-	if len(mongod.SetParameter) > 0 {
-		for key, value := range mongod.SetParameter {
-			args = append(args, "--setParameter", key+"="+value)
+	if mongod.SetParameter != nil {
+		if mongod.SetParameter.TTLMonitorSleepSecs > 0 {
+			args = append(args,
+				"--setParameter",
+				"ttlMonitorSleepSecs="+strconv.Itoa(mongod.SetParameter.TTLMonitorSleepSecs),
+			)
+		}
+		if mongod.SetParameter.WiredTigerConcurrentReadTransactions > 0 {
+			args = append(args,
+				"--setParameter",
+				"wiredTigerConcurrentReadTransactions="+strconv.Itoa(mongod.SetParameter.WiredTigerConcurrentReadTransactions),
+			)
+		}
+		if mongod.SetParameter.WiredTigerConcurrentWriteTransactions > 0 {
+			args = append(args,
+				"--setParameter",
+				"wiredTigerConcurrentWriteTransactions="+strconv.Itoa(mongod.SetParameter.WiredTigerConcurrentWriteTransactions),
+			)
+		}
+	}
+
+	// auditLog
+	if mongod.AuditLog != nil && mongod.AuditLog.Destination == v1alpha1.AuditLogDestinationFile {
+		if mongod.AuditLog.Filter == "" {
+			mongod.AuditLog.Filter = "{}"
+		}
+		args = append(args,
+			"--auditDestination=file",
+			"--auditFilter="+mongod.AuditLog.Filter,
+			"--auditFormat="+string(mongod.AuditLog.Format),
+		)
+		switch mongod.AuditLog.Format {
+		case v1alpha1.AuditLogFormatBSON:
+			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.bson")
+		case v1alpha1.AuditLogFormatJSON:
+			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.json")
 		}
 	}
 
