@@ -226,7 +226,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		switch mongod.AuditLog.Format {
 		case v1alpha1.AuditLogFormatBSON:
 			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.bson")
-		case v1alpha1.AuditLogFormatJSON:
+		default:
 			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.json")
 		}
 	}
