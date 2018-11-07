@@ -38,8 +38,8 @@ spec:
       wiredTiger:
         engineConfig:
           cacheSizeRatio: 0.5
-          journalCompressor: snappy
           directoryForIndexes: false
+          journalCompressor: snappy
         collectionConfig:
           blockCompressor: snappy
         indexConfig:

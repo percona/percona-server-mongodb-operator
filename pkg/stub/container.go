@@ -167,6 +167,19 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 				"--wiredTigerCacheSizeGB=%.2f",
 				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio),
 			))
+			if mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
+				args = append(args,
+					"--wiredTigerCollectionBlockCompressor="+string(*mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor),
+				)
+			}
+			if mongod.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
+				args = append(args,
+					"--wiredTigerJournalCompressor="+string(*mongod.Storage.WiredTiger.EngineConfig.JournalCompressor),
+				)
+			}
+			if mongod.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
+				args = append(args, "--wiredTigerDirectoryForIndexes")
+			}
 		case v1alpha1.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(
 				"--inMemorySizeGB=%.2f",

@@ -138,17 +138,23 @@ var (
 )
 
 type MongodSpecWiredTigerEngineConfig struct {
-	CacheSizeRatio float64 `json:"cacheSizeRatio,omitempty"`
+	CacheSizeRatio      float64               `json:"cacheSizeRatio,omitempty"`
+	DirectoryForIndexes bool                  `json:"directoryForIndexes,omitempty"`
+	JournalCompressor   *WiredTigerCompressor `json:"journalCompressor,omitempty"`
 }
+
 type MongodSpecWiredTigerCollectionConfig struct {
 	BlockCompressor *WiredTigerCompressor `json:"blockCompressor,omitempty"`
 }
 
+type MongodSpecWiredTigerIndexConfig struct {
+	PrefixCompression bool `json:"prefixCompression,omitempty"`
+}
+
 type MongodSpecWiredTiger struct {
-	EngineConfig        *MongodSpecWiredTigerEngineConfig     `json:"engineConfig,omitempty"`
-	CollectionConfig    *MongodSpecWiredTigerCollectionConfig `json:"collectionConfig,omitempty"`
-	JournalCompressor   *WiredTigerCompressor                 `json:"journalCompressor,omitempty"`
-	DirectoryForIndexes bool                                  `json:"directoryForIndexes,omitempty"`
+	CollectionConfig *MongodSpecWiredTigerCollectionConfig `json:"collectionConfig,omitempty"`
+	EngineConfig     *MongodSpecWiredTigerEngineConfig     `json:"engineConfig,omitempty"`
+	IndexConfig      *MongodSpecWiredTigerIndexConfig      `json:"indexConfig,omitempty"`
 }
 
 type MongodSpecInMemoryEngineConfig struct {
