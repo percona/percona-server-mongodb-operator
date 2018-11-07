@@ -87,7 +87,7 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB) []corev1.EnvVar {
 		},
 		{
 			Name:  motPkg.EnvMongoDBPort,
-			Value: strconv.Itoa(int(mSpec.Port)),
+			Value: strconv.Itoa(int(mSpec.Net.Port)),
 		},
 		{
 			Name:  motPkg.EnvMongoDBReplset,
@@ -136,9 +136,9 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 		"--bind_ip_all",
 		"--auth",
 		"--keyFile=/mongodb/mongodb.key",
-		"--port=" + strconv.Itoa(int(mongod.Port)),
-		"--replSet=" + mongod.ReplsetName,
-		"--storageEngine=" + string(mongod.StorageEngine),
+		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
+		"--replSet=" + replset.Name,
+		"--storageEngine=" + string(mongod.Storage.Engine),
 	}
 
 	switch mongod.OperationProfiling.Mode {
@@ -151,16 +151,16 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 		)
 	}
 
-	switch mongod.StorageEngine {
+	switch mongod.Storage.Engine {
 	case v1alpha1.StorageEngineWiredTiger:
 		args = append(args, fmt.Sprintf(
 			"--wiredTigerCacheSizeGB=%.2f",
-			getWiredTigerCacheSizeGB(resources.Limits, mongod.WiredTiger.CacheSizeRatio),
+			getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.CacheSizeRatio),
 		))
 	case v1alpha1.StorageEngineInMemory:
 		args = append(args, fmt.Sprintf(
 			"--inMemorySizeGB=%.2f",
-			getWiredTigerCacheSizeGB(resources.Limits, mongod.InMemory.SizeRatio),
+			getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.SizeRatio),
 		))
 	}
 
@@ -171,8 +171,8 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      mongod.HostPort,
-				ContainerPort: mongod.Port,
+				HostPort:      mongod.Net.HostPort,
+				ContainerPort: mongod.Net.Port,
 			},
 		},
 		Env: newPSMDBContainerEnv(m),
@@ -205,7 +205,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, resources *corev1
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(mongod.Port)),
+					Port: intstr.FromInt(int(mongod.Net.Port)),
 				},
 			},
 			InitialDelaySeconds: int32(10),
