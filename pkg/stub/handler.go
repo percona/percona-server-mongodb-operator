@@ -92,7 +92,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// loop will create the cluster shards and config server replset
 		for _, replset := range psmdb.Spec.Replsets {
 			// Update the PSMDB status
-			podList, err := h.updateStatus(psmdb, replset.Name)
+			podList, err := h.updateStatus(psmdb, replset)
 			if err != nil {
 				logrus.Errorf("failed to update psmdb status for replset %s: %v", replset.Name, err)
 				return err

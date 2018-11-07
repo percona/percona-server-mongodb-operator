@@ -15,8 +15,12 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 	addPSMDBSpecDefaults(&spec)
 
 	assert.Equal(t, defaultVersion, spec.Version)
+
+	assert.Len(t, spec.Replsets, 1)
+	assert.Equal(t, defaultReplsetName, spec.Replsets[0].Name)
+	assert.Equal(t, defaultMongodSize, spec.Replsets[0].Size)
+
 	assert.NotNil(t, spec.Mongod)
-	assert.Equal(t, defaultMongodSize, spec.Mongod.Size)
 	assert.Equal(t, defaultStorageEngine, spec.Mongod.StorageEngine)
 	assert.NotNil(t, spec.Mongod.WiredTiger)
 	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.WiredTiger.CacheSizeRatio)
@@ -29,10 +33,14 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Replsets: []*v1alpha1.ReplsetSpec{
+				{
+					Name: defaultReplsetName,
+					Size: defaultMongodSize,
+				},
+			},
 			Mongod: &v1alpha1.MongodSpec{
-				ReplsetName: defaultReplsetName,
-				Size:        defaultMongodSize,
-				Port:        99999,
+				Port: 99999,
 				ResourcesSpec: &v1alpha1.ResourcesSpec{
 					Limits: &v1alpha1.ResourceSpecRequirements{
 						Cpu:     "1",
@@ -47,7 +55,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			},
 		},
 	}
-	set, err := newPSMDBStatefulSet(psmdb, defaultReplsetName, nil)
+	set, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, set)
 	assert.Equal(t, t.Name()+"-"+defaultReplsetName, set.Name)

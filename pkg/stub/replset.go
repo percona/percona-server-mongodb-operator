@@ -24,13 +24,13 @@ var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running
 //
 // See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
 //
-func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replsetName string, pods []corev1.Pod) error {
+func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, mongodContainerName) || !isPodReady(pod) {
 			continue
 		}
 
-		logrus.Infof("Initiating replset %s on running pod: %s", replsetName, pod.Name)
+		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
 
 		return execCommandInContainer(pod, mongodContainerName, []string{
 			"/mongodb/k8s-mongodb-initiator",
@@ -40,23 +40,23 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replsetNam
 	return ErrNoRunningMongodContainers
 }
 
-func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replsetName string) (*corev1.PodList, error) {
+func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*corev1.PodList, error) {
 	// Update the PerconaServerMongoDB status with the pod names
 	podList := podList()
-	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replsetName)).String()
+	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset)).String()
 	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
 	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(listOps))
 	if err != nil {
-		return nil, fmt.Errorf("failed to list pods for replset %s: %v", replsetName, err)
+		return nil, fmt.Errorf("failed to list pods for replset %s: %v", replset.Name, err)
 	}
 	podNames := getPodNames(podList.Items)
 
-	status := getReplsetStatus(m, replsetName)
+	status := getReplsetStatus(m, replset)
 	if !reflect.DeepEqual(podNames, status.Pods) {
 		status.Pods = podNames
 		err := h.client.Update(m)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update status for replset %s: %v", replsetName, err)
+			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 		}
 	}
 
@@ -106,15 +106,15 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	return nil
 }
 
-func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replsetName string) *v1alpha1.ReplsetStatus {
+func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *v1alpha1.ReplsetStatus {
 	for _, replset := range m.Status.Replsets {
-		if replset.Name == replsetName {
+		if replset.Name == replset.Name {
 			return replset
 		}
 	}
-	replset := &v1alpha1.ReplsetStatus{Name: replsetName}
-	m.Status.Replsets = append(m.Status.Replsets, replset)
-	return replset
+	status := &v1alpha1.ReplsetStatus{Name: replset.Name}
+	m.Status.Replsets = append(m.Status.Replsets, status)
+	return status
 }
 
 func statusHasMember(status *v1alpha1.ReplsetStatus, memberName string) bool {
@@ -137,9 +137,9 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 
 	// Initiate the replset if it hasn't already been initiated + there are pods +
 	// we have waited the ReplsetInitWait period since starting
-	status := getReplsetStatus(m, replset.Name)
+	status := getReplsetStatus(m, replset)
 	if !status.Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
-		err = h.handleReplsetInit(m, replset.Name, podList.Items)
+		err = h.handleReplsetInit(m, replset, podList.Items)
 		if err != nil {
 			return nil, err
 		}

@@ -19,11 +19,11 @@ var (
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
-func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replsetName string) map[string]string {
+func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
 	return map[string]string{
 		"app":                       "percona-server-mongodb",
 		"percona-server-mongodb_cr": m.Name,
-		"replset":                   replsetName,
+		"replset":                   replset.Name,
 	}
 }
 

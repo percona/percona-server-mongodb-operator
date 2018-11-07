@@ -101,7 +101,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 		Requests: requests,
 	}
 
-	ls := labelsForPerconaServerMongoDB(m, replset.Name)
+	ls := labelsForPerconaServerMongoDB(m, replset)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -154,7 +154,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 
 // newPSMDBService returns a core/v1 API Service
 func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
-	ls := labelsForPerconaServerMongoDB(m, replset.Name)
+	ls := labelsForPerconaServerMongoDB(m, replset)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",

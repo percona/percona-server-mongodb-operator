@@ -50,13 +50,10 @@ func persistentVolumeClaimList() *corev1.PersistentVolumeClaimList {
 // getPersistentVolumeClaims returns a list of Persistent Volume Claims for a given replset
 func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := persistentVolumeClaimList()
-	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset.Name)).String()
+	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset)).String()
 	listOps := &metav1.ListOptions{LabelSelector: labelSelector}
 	err := client.List(m.Namespace, pvcList, sdk.WithListOptions(listOps))
-	if err != nil {
-		return nil, err
-	}
-	return pvcList.Items, nil
+	return pvcList.Items, err
 }
 
 // deletePersistentVolumeClaim deletes a Persistent Volume Claim
