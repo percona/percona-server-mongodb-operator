@@ -44,21 +44,15 @@ type ResourcesSpec struct {
 	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
 }
 
-type ClusterRole string
-
-const (
-	ClusterRoleShardSvr  ClusterRole = "shardsvr"
-	ClusterRoleConfigSvr ClusterRole = "configsvr"
-)
-
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
 }
 
 type ReplsetSpec struct {
-	Name string `json:"name"`
-	Size int32  `json:"size"`
+	Name      string `json:"name"`
+	Size      int32  `json:"size"`
+	Configsvr bool   `json:"configsvr,omitempty"`
 	//Mongod *MongodSpec `json:"mongod"`
 }
 
@@ -79,14 +73,41 @@ type MongodSpec struct {
 	*ResourcesSpec     `json:"resources,omitempty"`
 	StorageClassName   string                        `json:"storageClassName,omitempty"`
 	Net                *MongodSpecNet                `json:"net,omitempty"`
-	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
-	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
 	AuditLog           *MongodSpecAuditLog           `json:"auditLog,omitempty"`
+	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
+	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
+	Security           *MongodSpecSecurity           `json:"security,omitempty"`
+	SetParameter       map[string]string             `json:"setParameter,omitempty"`
+	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
 }
+
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
 
 type MongodSpecNet struct {
 	Port     int32 `json:"port,omitempty"`
 	HostPort int32 `json:"hostPort,omitempty"`
+}
+
+type MongodSpecReplication struct {
+	OplogSizeMB int `json:"oplogSizeMB,omitempty"`
+}
+
+//type EncryptionCipherMode string
+
+//var (
+//	EncryptionCipherModeAES256CBC = "AES256-CBC"
+//	EncryptionCipherModeAES256GCM = "AES256-GCM"
+//)
+
+type MongodSpecSecurity struct {
+	RedactClientLogData bool `json:"redactClientLogData,omitempty"`
+	//	EnableEncryption     bool                 `json:"enableEncryption,omitempty"`
+	//	EncryptionCipherMode EncryptionCipherMode `json:"encryptionCipherMode,omitempty"`
 }
 
 type StorageEngine string
@@ -98,10 +119,12 @@ var (
 )
 
 type MongodSpecStorage struct {
-	Engine     StorageEngine         `json:"engine,omitempty"`
-	InMemory   *MongodSpecInMemory   `json:"inMemory,omitempty"`
-	MMAPv1     *MongodSpecMMAPv1     `json:"mmapv1,omitempty"`
-	WiredTiger *MongodSpecWiredTiger `json:"wiredTiger,omitempty"`
+	Engine         StorageEngine         `json:"engine,omitempty"`
+	DirectoryPerDB bool                  `json:directoryPerDB,omitempty"`
+	SyncPeriodSecs int                   `json:"syncPeriodSecs,omitempty"`
+	InMemory       *MongodSpecInMemory   `json:"inMemory,omitempty"`
+	MMAPv1         *MongodSpecMMAPv1     `json:"mmapv1,omitempty"`
+	WiredTiger     *MongodSpecWiredTiger `json:"wiredTiger,omitempty"`
 }
 
 type MongodSpecMMAPv1 struct {
@@ -147,4 +170,5 @@ const (
 type MongodSpecOperationProfiling struct {
 	Mode              OperationProfilingMode `json:"mode,omitempty"`
 	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
+	RateLimit         int                    `json:"rateLimit,omitempty"`
 }

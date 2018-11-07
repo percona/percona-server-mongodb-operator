@@ -10,24 +10,25 @@ import (
 )
 
 var (
-	defaultVersion                  string  = "latest"
-	defaultRunUID                   int64   = 1001
-	defaultKeySecretName            string  = "percona-server-mongodb-key"
-	defaultUsersSecretName          string  = "percona-server-mongodb-users"
-	defaultMongodSize               int32   = 3
-	defaultReplsetName              string  = "rs"
-	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
-	defaultMongodPort               int32   = 27017
-	defaultWiredTigerCacheSizeRatio float64 = 0.5
-	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
-	defaultOperationProfilingSlowMs int     = 100
-	mongodContainerDataDir          string  = "/data/db"
-	mongodContainerName             string  = "mongod"
-	mongodDataVolClaimName          string  = "mongod-data"
-	mongodToolsVolName              string  = "mongodb-tools"
-	mongodPortName                  string  = "mongodb"
-	mongodbInitiatorUrl             string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/k8s-mongodb-initiator"
-	mongodbHealthcheckUrl           string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
+	defaultVersion                          string  = "latest"
+	defaultRunUID                           int64   = 1001
+	defaultKeySecretName                    string  = "percona-server-mongodb-key"
+	defaultUsersSecretName                  string  = "percona-server-mongodb-users"
+	defaultMongodSize                       int32   = 3
+	defaultReplsetName                      string  = "rs"
+	defaultStorageEngine                            = v1alpha1.StorageEngineWiredTiger
+	defaultMongodPort                       int32   = 27017
+	defaultWiredTigerCacheSizeRatio         float64 = 0.5
+	defaultWiredTigerConcurrentTransactions string  = "128"
+	defaultOperationProfilingMode                   = v1alpha1.OperationProfilingModeSlowOp
+	defaultOperationProfilingSlowMs         int     = 100
+	mongodContainerDataDir                  string  = "/data/db"
+	mongodContainerName                     string  = "mongod"
+	mongodDataVolClaimName                  string  = "mongod-data"
+	mongodToolsVolName                      string  = "mongodb-tools"
+	mongodPortName                          string  = "mongodb"
+	mongodbInitiatorUrl                     string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/k8s-mongodb-initiator"
+	mongodbHealthcheckUrl                   string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
@@ -71,6 +72,12 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 		spec.Mongod.OperationProfiling = &v1alpha1.MongodSpecOperationProfiling{
 			Mode:              defaultOperationProfilingMode,
 			SlowOpThresholdMs: defaultOperationProfilingSlowMs,
+		}
+	}
+	if len(spec.Mongod.SetParameter) < 1 {
+		spec.Mongod.SetParameter = map[string]string{
+			"wiredTigerConcurrentReadTransactions":  defaultWiredTigerConcurrentTransactions,
+			"wiredTigerConcurrentWriteTransactions": defaultWiredTigerConcurrentTransactions,
 		}
 	}
 	if len(spec.Replsets) == 0 {

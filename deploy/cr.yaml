@@ -22,6 +22,11 @@ spec:
       requests:
         cpu: "300m"
         memory: "0.5G"
+    security:
+      redactClientLogData: false
+    setParameter:
+      wiredTigerConcurrentReadTransactions: 128
+      wiredTigerConcurrentWriteTransactions: 128
     storage:
       engine: wiredTiger
       wiredTiger:
@@ -29,6 +34,7 @@ spec:
     operationProfiling:
       mode: slowOp
       slowOpThresholdMs: 100
+      rateLimit: 1
     #auditLog:
     #  destination: file
     #  format: BSON

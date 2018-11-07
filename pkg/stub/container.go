@@ -132,6 +132,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		"--storageEngine=" + string(mongod.Storage.Engine),
 	}
 
+	// sharding
 	if clusterRole != nil {
 		switch *clusterRole {
 		case v1alpha1.ClusterRoleConfigSvr:
@@ -141,27 +142,59 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		}
 	}
 
-	switch mongod.OperationProfiling.Mode {
-	case v1alpha1.OperationProfilingModeAll:
-		args = append(args, "--profile=2")
-	case v1alpha1.OperationProfilingModeSlowOp:
-		args = append(args,
-			"--slowms="+strconv.Itoa(int(mongod.OperationProfiling.SlowOpThresholdMs)),
-			"--profile=1",
-		)
+	// operationProfiling
+	if mongod.OperationProfiling != nil {
+		switch mongod.OperationProfiling.Mode {
+		case v1alpha1.OperationProfilingModeAll:
+			args = append(args, "--profile=2")
+		case v1alpha1.OperationProfilingModeSlowOp:
+			args = append(args,
+				"--slowms="+strconv.Itoa(int(mongod.OperationProfiling.SlowOpThresholdMs)),
+				"--profile=1",
+			)
+		}
+		if mongod.OperationProfiling.RateLimit > 0 {
+			args = append(args, "--rateLimit="+strconv.Itoa(mongod.OperationProfiling.RateLimit))
+		}
 	}
 
-	switch mongod.Storage.Engine {
-	case v1alpha1.StorageEngineWiredTiger:
-		args = append(args, fmt.Sprintf(
-			"--wiredTigerCacheSizeGB=%.2f",
-			getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.CacheSizeRatio),
-		))
-	case v1alpha1.StorageEngineInMemory:
-		args = append(args, fmt.Sprintf(
-			"--inMemorySizeGB=%.2f",
-			getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.SizeRatio),
-		))
+	// storage
+	if mongod.Storage != nil {
+		switch mongod.Storage.Engine {
+		case v1alpha1.StorageEngineWiredTiger:
+			args = append(args, fmt.Sprintf(
+				"--wiredTigerCacheSizeGB=%.2f",
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.CacheSizeRatio),
+			))
+		case v1alpha1.StorageEngineInMemory:
+			args = append(args, fmt.Sprintf(
+				"--inMemorySizeGB=%.2f",
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.SizeRatio),
+			))
+		}
+		if mongod.Storage.DirectoryPerDB {
+			args = append(args, "--directoryperdb")
+		}
+		if mongod.Storage.SyncPeriodSecs > 0 {
+			args = append(args, "--syncdelay="+strconv.Itoa(mongod.Storage.SyncPeriodSecs))
+		}
+	}
+
+	// security
+	if mongod.Security != nil && mongod.Security.RedactClientLogData {
+		args = append(args, "--redactClientLogData")
+	}
+
+	// replication
+	if mongod.Replication != nil && mongod.Replication.OplogSizeMB > 0 {
+		args = append(args, "--oplogSize="+strconv.Itoa(mongod.Replication.OplogSizeMB))
+	}
+
+	// setParameter
+	if len(mongod.SetParameter) > 0 {
+		for key, value := range mongod.SetParameter {
+			args = append(args, "--setParameter", key+"="+value)
+		}
 	}
 
 	return corev1.Container{
