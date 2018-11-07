@@ -96,7 +96,7 @@ func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 			continue
 		}
 		pvcPodName := strings.Replace(pvc.Name, mongodDataVolClaimName+"-", "", 1)
-		if statusHasMember(replsetStatus, pvcPodName) {
+		if statusHasPod(replsetStatus, pvcPodName) {
 			continue
 		}
 		err = deletePersistentVolumeClaim(m, client, pvc.Name)

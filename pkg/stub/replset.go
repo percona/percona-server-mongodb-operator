@@ -106,10 +106,11 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	return nil
 }
 
+// getReplsetStatus returns a ReplsetStatus object for a given replica set
 func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *v1alpha1.ReplsetStatus {
-	for _, replset := range m.Status.Replsets {
-		if replset.Name == replset.Name {
-			return replset
+	for _, rs := range m.Status.Replsets {
+		if rs.Name == replset.Name {
+			return rs
 		}
 	}
 	status := &v1alpha1.ReplsetStatus{Name: replset.Name}
@@ -117,9 +118,11 @@ func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 	return status
 }
 
-func statusHasMember(status *v1alpha1.ReplsetStatus, memberName string) bool {
-	for _, member := range status.Pods {
-		if member == memberName {
+// statusHasPod returns a boolean reflecting if a ReplsetSTatus contains a
+// pod name
+func statusHasPod(status *v1alpha1.ReplsetStatus, podName string) bool {
+	for _, pod := range status.Pods {
+		if pod == podName {
 			return true
 		}
 	}
