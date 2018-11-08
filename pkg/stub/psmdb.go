@@ -84,6 +84,11 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 		if spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio == 0 {
 			spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
 		}
+		if spec.Mongod.Storage.WiredTiger.IndexConfig == nil {
+			spec.Mongod.Storage.WiredTiger.IndexConfig = &v1alpha1.MongodSpecWiredTigerIndexConfig{
+				PrefixCompression: true,
+			}
+		}
 	}
 
 	if spec.Mongod.OperationProfiling == nil {

@@ -7,7 +7,11 @@ GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
-IMAGE?=perconalab/percona-server-mongodb-operator:$(VERSION)
+
+IMAGE="perconalab/percona-server-mongodb-operator:$(VERSION)"
+ifneq ($(GIT_BRANCH), "master")
+	IMAGE="perconalab/percona-server-mongodb-operator:$(GIT_BRANCH)"
+endif
 
 all: build
 
