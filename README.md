@@ -93,8 +93,8 @@ The name of the required secrets can be set in *deploy/cr.yaml* under the sectio
 
 ## MongoDB System Users
 
-**Default Secret name**: *my-cluster-name-mongodb-users*.
-**Secret name field**: *spec.secrets.users*.
+**Default Secret name**: *my-cluster-name-mongodb-users*
+**Secret name field**: *spec.secrets.users*
 
 The operator requires system-level MongoDB Users to automate the MongoDB deployment. These users should not be used to run an application!
 
@@ -126,8 +126,8 @@ The default credentials from *deploy/mongodb-users.yaml* are:
 
 ## MongoDB Internal Authentication Key (optional)
 
-**Default Secret name**: *my-cluster-name-mongodb-key*.
-**Secret name field**: *spec.secrets.key*.
+**Default Secret name**: *my-cluster-name-mongodb-key*
+**Secret name field**: *spec.secrets.key*
 
 By default, the operator will create a random, 1024-byte key for [MongoDB Internal Authentication](https://docs.mongodb.com/manual/core/security-internal-authentication/) if it does not already exist.
 
