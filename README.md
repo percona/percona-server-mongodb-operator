@@ -29,8 +29,7 @@ The operator was developed/tested for only:
     ```
     kubectl create -f deploy/mongodb-users.yaml
     ```
- 
-1. Extra step (for Google Kubernetes Engine ONLY!!!)
+1. Extra step **(for Google Kubernetes Engine ONLY!!!)**
     ```
     kubectl create clusterrolebinding cluster-admin-binding1 --clusterrole=cluster-admin --user=<myname@example.org>
     ```
@@ -58,14 +57,14 @@ The operator was developed/tested for only:
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
     mongodb@percona-client:/$ mongo mongodb+srv://userAdmin:admin123456@my-cluster-name.psmdb.svc.cluster.local/admin?replicaSet=rs0
     rs0:PRIMARY> db.createUser({
-        user: "app",
+        user: "myApp",
         pwd: "myAppPassword",
         roles: [
           { db: "myApp", role: "readWrite" }
         ]
     })
     Successfully added user: {
-    	"user" : "app",
+    	"user" : "myApp",
     	"roles" : [
     		{
     			"db" : "myApp",
