@@ -185,6 +185,13 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 				"--inMemorySizeGB=%.2f",
 				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio),
 			))
+		case v1alpha1.StorageEngineMMAPv1:
+			if mongod.Storage.MMAPv1.NsSize > 0 {
+				args = append(args, "--nssize="+strconv.Itoa(mongod.Storage.MMAPv1.NsSize))
+			}
+			if mongod.Storage.MMAPv1.Smallfiles {
+				args = append(args, "--smallfiles")
+			}
 		}
 		if mongod.Storage.DirectoryPerDB {
 			args = append(args, "--directoryperdb")

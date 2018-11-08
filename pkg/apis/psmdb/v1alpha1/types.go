@@ -112,7 +112,7 @@ type StorageEngine string
 var (
 	StorageEngineWiredTiger StorageEngine = "wiredTiger"
 	StorageEngineInMemory   StorageEngine = "inMemory"
-	StorageEngineMMAPV1     StorageEngine = "mmapv1"
+	StorageEngineMMAPv1     StorageEngine = "mmapv1"
 )
 
 type MongodSpecStorage struct {
