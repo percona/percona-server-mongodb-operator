@@ -20,16 +20,6 @@ import (
 
 var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running state")
 
-func updateStatusMember(status *v1alpha1.ReplsetStatus, member *v1alpha1.ReplsetMemberStatus) {
-	for _, statusMember := range status.Members {
-		if statusMember.Name == member.Name {
-			statusMember = member
-			return
-		}
-	}
-	status.Members = append(status.Members, member)
-}
-
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
 // This must be ran from within the running container to utilise the MongoDB Localhost Exeception.
 //
@@ -70,46 +60,53 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	}
 
 	// Update pod mongodb status
+	members := []*v1alpha1.ReplsetMemberStatus{}
 	for _, pod := range podList.Items {
 		dialInfo := &mgo.DialInfo{
-			Addrs:    []string{pod.Name + "." + m.Name + "-" + replset.Name + ".svc.cluster.local:" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))},
+			Addrs:    []string{pod.Name + "." + m.Name + "-" + replset.Name + "." + m.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))},
 			Username: string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 			Password: string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 			Direct:   true,
 			FailFast: true,
 		}
+		logrus.Infof("Updating status for host: %s", dialInfo.Addrs[0])
+
 		session, err := mgo.DialWithInfo(dialInfo)
 		if err != nil {
 			logrus.Errorf("Cannot connect to mongodb host %s: %v", dialInfo.Addrs[0], err)
 			continue
 		}
 		defer session.Close()
+		session.SetMode(mgo.Eventual, true)
+
 		buildInfo, err := session.BuildInfo()
 		if err != nil {
 			logrus.Errorf("Cannot get buildInfo from mongodb host %s: %v", dialInfo.Addrs[0], err)
 			continue
 		}
-		updateStatusMember(status, &v1alpha1.ReplsetMemberStatus{
+
+		members = append(members, &v1alpha1.ReplsetMemberStatus{
 			Name:    dialInfo.Addrs[0],
 			Version: buildInfo.Version,
 		})
+	}
+	if !reflect.DeepEqual(members, status.Members) {
+		status.Members = members
 		doUpdate = true
 	}
 
-	if !doUpdate {
-		return podList, nil
-	}
+	if doUpdate {
+		err = h.client.Update(m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
+		}
 
-	err = h.client.Update(m)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
+		// Update the pods list that is read by the watchdog
+		if h.pods == nil {
+			h.pods = podk8s.NewPods(m.Name, m.Namespace)
+		}
+		h.pods.SetPods(podList.Items)
 	}
-
-	// Update the pods list that is read by the watchdog
-	if h.pods == nil {
-		h.pods = podk8s.NewPods(m.Name, m.Namespace)
-	}
-	h.pods.SetPods(podList.Items)
 
 	return podList, nil
 }

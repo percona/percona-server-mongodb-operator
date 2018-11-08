@@ -113,6 +113,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				continue
 			}
 
+			// Remove PVCs left-behind from scaling down
 			err = persistentVolumeClaimReaper(psmdb, h.client, podList, replset, status)
 			if err != nil {
 				logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
