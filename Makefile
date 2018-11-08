@@ -32,5 +32,8 @@ build: tmp/_output/bin/percona-server-mongodb-operator
 docker: tmp/_output/bin/percona-server-mongodb-operator
 	IMAGE=$(IMAGE) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
 
+docker-push:
+	docker push $(IMAGE)
+
 clean:
 	rm -rf cover.out tmp/_output 2>/dev/null || true
