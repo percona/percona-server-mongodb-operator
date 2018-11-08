@@ -20,6 +20,44 @@ import (
 
 var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running state")
 
+// getRepsetMemberStatuses returns a list of ReplsetMemberStatus structs for a given replset
+func getRepsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []*v1alpha1.ReplsetMemberStatus {
+	members := []*v1alpha1.ReplsetMemberStatus{}
+	for _, pod := range pods {
+		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
+		dialInfo := &mgo.DialInfo{
+			Addrs:          []string{hostname + ":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))},
+			ReplicaSetName: replset.Name,
+			Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+			Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+			Direct:         true,
+			FailFast:       true,
+			Timeout:        time.Second,
+		}
+		logrus.Debugf("Updating status for host: %s", dialInfo.Addrs[0])
+
+		session, err := mgo.DialWithInfo(dialInfo)
+		if err != nil {
+			logrus.Debugf("Cannot connect to mongodb host %s: %v", dialInfo.Addrs[0], err)
+			continue
+		}
+		defer session.Close()
+		session.SetMode(mgo.Eventual, true)
+
+		buildInfo, err := session.BuildInfo()
+		if err != nil {
+			logrus.Debugf("Cannot get buildInfo from mongodb host %s: %v", dialInfo.Addrs[0], err)
+			continue
+		}
+
+		members = append(members, &v1alpha1.ReplsetMemberStatus{
+			Name:    dialInfo.Addrs[0],
+			Version: buildInfo.Version,
+		})
+	}
+	return members
+}
+
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
 // This must be ran from within the running container to utilise the MongoDB Localhost Exeception.
 //
@@ -59,42 +97,14 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 		doUpdate = true
 	}
 
-	// Update pod mongodb status
-	members := []*v1alpha1.ReplsetMemberStatus{}
-	for _, pod := range podList.Items {
-		dialInfo := &mgo.DialInfo{
-			Addrs:    []string{pod.Name + "." + m.Name + "-" + replset.Name + "." + m.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))},
-			Username: string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
-			Password: string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
-			Direct:   true,
-			FailFast: true,
-		}
-		logrus.Infof("Updating status for host: %s", dialInfo.Addrs[0])
-
-		session, err := mgo.DialWithInfo(dialInfo)
-		if err != nil {
-			logrus.Errorf("Cannot connect to mongodb host %s: %v", dialInfo.Addrs[0], err)
-			continue
-		}
-		defer session.Close()
-		session.SetMode(mgo.Eventual, true)
-
-		buildInfo, err := session.BuildInfo()
-		if err != nil {
-			logrus.Errorf("Cannot get buildInfo from mongodb host %s: %v", dialInfo.Addrs[0], err)
-			continue
-		}
-
-		members = append(members, &v1alpha1.ReplsetMemberStatus{
-			Name:    dialInfo.Addrs[0],
-			Version: buildInfo.Version,
-		})
-	}
+	// Update mongodb replset member status list
+	members := getRepsetMemberStatuses(m, replset, podList.Items, usersSecret)
 	if !reflect.DeepEqual(members, status.Members) {
 		status.Members = members
 		doUpdate = true
 	}
 
+	// Send update to SDK+Pods-object if something changed
 	if doUpdate {
 		err = h.client.Update(m)
 		if err != nil {
