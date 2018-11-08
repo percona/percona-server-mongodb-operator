@@ -56,11 +56,17 @@ type ReplsetSpec struct {
 	//Mongod *MongodSpec `json:"mongod"`
 }
 
+type ReplsetMemberStatus struct {
+	Name    string `json:"name,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
 type ReplsetStatus struct {
-	Name        string   `json:"name,omitempty"`
-	Pods        []string `json:"pods,omitempty"`
-	Configsvr   bool     `json:"configsvr,omitempty"`
-	Initialised bool     `json:"initialised,omitempty"`
+	Name        string                 `json:"name,omitempty"`
+	Pods        []string               `json:"pods,omitempty"`
+	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
+	Configsvr   bool                   `json:"configsvr,omitempty"`
+	Initialised bool                   `json:"initialised,omitempty"`
 }
 
 type MongosSpec struct {

@@ -4,11 +4,14 @@ import (
 	goErrors "errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
+	mgo "github.com/globalsign/mgo"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
+	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +19,16 @@ import (
 )
 
 var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running state")
+
+func updateStatusMember(status *v1alpha1.ReplsetStatus, member *v1alpha1.ReplsetMemberStatus) {
+	for _, statusMember := range status.Members {
+		if statusMember.Name == member.Name {
+			statusMember = member
+			return
+		}
+	}
+	status.Members = append(status.Members, member)
+}
 
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
 // This must be ran from within the running container to utilise the MongoDB Localhost Exeception.
@@ -39,7 +52,9 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 }
 
 // updateStatus updates the PerconaServerMongoDB status
-func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*corev1.PodList, error) {
+func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*corev1.PodList, error) {
+	var doUpdate bool
+
 	podList := podList()
 	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
 	if err != nil {
@@ -51,10 +66,43 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	status := getReplsetStatus(m, replset)
 	if !reflect.DeepEqual(podNames, status.Pods) {
 		status.Pods = podNames
-		err := h.client.Update(m)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
+		doUpdate = true
+	}
+
+	// Update pod mongodb status
+	for _, pod := range podList.Items {
+		dialInfo := &mgo.DialInfo{
+			Addrs:    []string{pod.Name + "." + m.Name + "-" + replset.Name + ".svc.cluster.local:" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))},
+			Username: string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+			Password: string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+			Direct:   true,
+			FailFast: true,
 		}
+		session, err := mgo.DialWithInfo(dialInfo)
+		if err != nil {
+			logrus.Errorf("Cannot connect to mongodb host %s: %v", dialInfo.Addrs[0], err)
+			continue
+		}
+		defer session.Close()
+		buildInfo, err := session.BuildInfo()
+		if err != nil {
+			logrus.Errorf("Cannot get buildInfo from mongodb host %s: %v", dialInfo.Addrs[0], err)
+			continue
+		}
+		updateStatusMember(status, &v1alpha1.ReplsetMemberStatus{
+			Name:    dialInfo.Addrs[0],
+			Version: buildInfo.Version,
+		})
+		doUpdate = true
+	}
+
+	if !doUpdate {
+		return podList, nil
+	}
+
+	err = h.client.Update(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 	}
 
 	// Update the pods list that is read by the watchdog
@@ -110,7 +158,10 @@ func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 			return rs
 		}
 	}
-	status := &v1alpha1.ReplsetStatus{Name: replset.Name}
+	status := &v1alpha1.ReplsetStatus{
+		Name:    replset.Name,
+		Members: []*v1alpha1.ReplsetMemberStatus{},
+	}
 	m.Status.Replsets = append(m.Status.Replsets, status)
 	return status
 }
@@ -127,7 +178,7 @@ func statusHasPod(status *v1alpha1.ReplsetStatus, podName string) bool {
 }
 
 // ensureReplset ensures resources for a PSMDB replset exist
-func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec) (*v1alpha1.ReplsetStatus, error) {
+func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*v1alpha1.ReplsetStatus, error) {
 	// Create the StatefulSet if it doesn't exist
 	err := h.ensureReplsetStatefulSet(m, replset)
 	if err != nil {
@@ -153,7 +204,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		logrus.Infof("changed state to initialised for replset %s", replset.Name)
 
 		// ensure the watchdog is started
-		err = h.ensureWatchdog(m)
+		err = h.ensureWatchdog(m, usersSecret)
 		if err != nil {
 			return nil, fmt.Errorf("failed to start watchdog: %v", err)
 		}

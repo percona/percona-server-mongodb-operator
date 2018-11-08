@@ -14,6 +14,7 @@ import (
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -37,23 +38,16 @@ type Handler struct {
 	startedAt    time.Time
 }
 
-func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB) error {
+func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB, usersSecret *corev1.Secret) error {
 	if h.watchdog != nil {
 		return nil
-	}
-
-	// load username/password from secret
-	secret, err := getPSMDBSecret(m, h.client, m.Spec.Secrets.Users)
-	if err != nil {
-		logrus.Errorf("failed to load psmdb user secrets: %v", err)
-		return err
 	}
 
 	// Start the watchdog if it has not been started
 	h.watchdog = watchdog.New(&wdConfig.Config{
 		ServiceName:    m.Name,
-		Username:       string(secret.Data[motPkg.EnvMongoDBClusterAdminUser]),
-		Password:       string(secret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 3 * time.Second,
@@ -88,18 +82,25 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			logrus.Info("created mongodb auth key secret")
 		}
 
+		// Load MongoDB system users/passwords from secret
+		usersSecret, err := getPSMDBSecret(psmdb, h.client, psmdb.Spec.Secrets.Users)
+		if err != nil {
+			logrus.Errorf("failed to load psmdb user secrets: %v", err)
+			return err
+		}
+
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
 		for _, replset := range psmdb.Spec.Replsets {
 			// Update the PSMDB status
-			podList, err := h.updateStatus(psmdb, replset)
+			podList, err := h.updateStatus(psmdb, replset, usersSecret)
 			if err != nil {
 				logrus.Errorf("failed to update psmdb status for replset %s: %v", replset.Name, err)
 				return err
 			}
 
 			// Ensure replset exists
-			status, err := h.ensureReplset(psmdb, podList, replset)
+			status, err := h.ensureReplset(psmdb, podList, replset, usersSecret)
 			if err != nil {
 				if err == ErrNoRunningMongodContainers {
 					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)
