@@ -9,11 +9,11 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
-	mgo "github.com/globalsign/mgo"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/sirupsen/logrus"
+	mgo "gopkg.in/mgo.v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
