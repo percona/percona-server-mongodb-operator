@@ -98,12 +98,12 @@ The name of the required secrets can be set in *deploy/cr.yaml* under the sectio
 
 The operator requires system-level MongoDB Users to automate the MongoDB deployment. These users should not be used to run an application!
 
-| User                 | Username Secret Key          | Password Secret Key              | MongoDB Role                                                                               |
-|----------------------|------------------------------|----------------------------------|--------------------------------------------------------------------------------------------|
-| Backup/Restore user  | MONGODB_BACKUP_USER          | MONGODB_BACKUP_PASSWORD          | [backup](https://docs.mongodb.com/manual/reference/built-in-roles/#backup), clusterMonitor, [restore](https://docs.mongodb.com/manual/reference/built-in-roles/#restore) | 
-| Cluster Admin user   | MONGODB_CLUSTER_ADMIN_USER   | MONGODB_CLUSTER_ADMIN_PASSWORD   | [clusterAdmin](https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin)     |
-| Cluster Monitor user | MONGODB_CLUSTER_MONITOR_USER | MONGODB_CLUSTER_MONITOR_PASSWORD | [clusterMonitor](https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor) | 
-| User Admin user      | MONGODB_USER_ADMIN_USER      | MONGODB_USER_ADMIN_PASSWORD      | [userAdmin](https://docs.mongodb.com/manual/reference/built-in-roles/#userAdmin)           |
+| User Purpose    | Username Secret Key          | Password Secret Key              | MongoDB Role                                                                               |
+|-----------------|------------------------------|----------------------------------|--------------------------------------------------------------------------------------------|
+| Backup/Restore  | MONGODB_BACKUP_USER          | MONGODB_BACKUP_PASSWORD          | [backup](https://docs.mongodb.com/manual/reference/built-in-roles/#backup), clusterMonitor, [restore](https://docs.mongodb.com/manual/reference/built-in-roles/#restore) | 
+| Cluster Admin   | MONGODB_CLUSTER_ADMIN_USER   | MONGODB_CLUSTER_ADMIN_PASSWORD   | [clusterAdmin](https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin)     |
+| Cluster Monitor | MONGODB_CLUSTER_MONITOR_USER | MONGODB_CLUSTER_MONITOR_PASSWORD | [clusterMonitor](https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor) | 
+| User Admin      | MONGODB_USER_ADMIN_USER      | MONGODB_USER_ADMIN_PASSWORD      | [userAdmin](https://docs.mongodb.com/manual/reference/built-in-roles/#userAdmin)           |
 
 ### Development Mode
 
