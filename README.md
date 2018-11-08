@@ -84,3 +84,37 @@ The operator was developed/tested for only:
     rs0:PRIMARY> db.test.findOne()
     { "_id" : ObjectId("5bc74ef05c0ec73be760fcf9"), "x" : 1 }
     ```
+
+# Required Secrets
+
+The operator requires secrets to be deployed before it is started.
+
+The name of thei required secret can be set in *deploy/cr.yaml* under the section *spec.secrets*.
+
+## MongoDB System Users
+
+| User                 | Username Secret Key          | Password Secret Key              | MongoDB Role                    |
+|----------------------|------------------------------|----------------------------------|---------------------------------|
+| Backup/Restore user  | MONGODB_BACKUP_USER          | MONGODB_BACKUP_PASSWORD          | backup, clusterMonitor, restore | 
+| Cluster Admin user   | MONGODB_CLUSTER_ADMIN_USER   | MONGODB_CLUSTER_ADMIN_PASSWORD   | clusterAdmin                    |
+| Cluster Monitor user | MONGODB_CLUSTER_MONITOR_USER | MONGODB_CLUSTER_MONITOR_PASSWORD | clusterMonitor                  | 
+| User Admin user      | MONGODB_USER_ADMIN_USER      | MONGODB_USER_ADMIN_PASSWORD      | userAdmin                       |
+
+### Development Mode
+
+**Note: do not use in Production!**
+
+To make development/testing easier a secrets file with default MongoDB System User/Passwords is located at *'deploy/mongodb-users.yaml'*.
+
+The default credentials from *deploy/mongodb-users.yaml* are:
+
+| Secret Key                       | Secret Value   |
+|----------------------------------|----------------|
+| MONGODB_BACKUP_USER              | backup         |
+| MONGODB_BACKUP_PASSWORD          | admin123456    |
+| MONGODB_CLUSTER_ADMIN_USER       | clusterAdmin   |
+| MONGODB_CLUSTER_ADMIN_PASSWORD   | admin123456    |
+| MONGODB_CLUSTER_MONITOR_USER     | clusterMonitor |
+| MONGODB_CLUSTER_MONITOR_PASSWORD | admin123456    |
+| MONGODB_USER_ADMIN_USER          | userAdmin      |
+| MONGODB_USER_ADMIN_PASSWORD      | admin123456    |
