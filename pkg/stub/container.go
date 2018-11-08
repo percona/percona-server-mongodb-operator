@@ -54,9 +54,14 @@ func isContainerAndPodRunning(pod corev1.Pod, containerName string) bool {
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
 //
-func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64) float64 {
+func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64, subtract1GB bool) float64 {
 	maxMemory := resourceList[corev1.ResourceMemory]
-	size := math.Floor(cacheRatio * float64(maxMemory.Value()-gigaByte))
+	var size float64
+	if subtract1GB {
+		size = math.Floor(cacheRatio * float64(maxMemory.Value()-gigaByte))
+	} else {
+		size = math.Floor(cacheRatio * float64(maxMemory.Value()))
+	}
 	sizeGB := size / float64(gigaByte)
 	if sizeGB < minWiredTigerCacheSizeGB {
 		sizeGB = minWiredTigerCacheSizeGB
@@ -165,7 +170,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		case v1alpha1.StorageEngineWiredTiger:
 			args = append(args, fmt.Sprintf(
 				"--wiredTigerCacheSizeGB=%.2f",
-				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio),
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
 			))
 			if mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
 				args = append(args,
@@ -183,7 +188,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		case v1alpha1.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(
 				"--inMemorySizeGB=%.2f",
-				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio),
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, false),
 			))
 		case v1alpha1.StorageEngineMMAPv1:
 			if mongod.Storage.MMAPv1.NsSize > 0 {
