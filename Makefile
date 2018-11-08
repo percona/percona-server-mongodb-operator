@@ -41,7 +41,7 @@ docker-push:
 release:
 	mkdir -p $(CURDIR)/tmp/_output
 	docker build -t $(NAME)_build --build-arg UID=$(UID) -f $(CURDIR)/tmp/build/Dockerfile.build .
-	docker run --rm -v $(CURDIR)/tmp/_output:/go/src/$(GIT_REPO)/tmp/_output -it $(NAME)_build
+	docker run --rm -v $(CURDIR)/tmp/_output:/go/src/$(GIT_REPO)/tmp/_output -i $(NAME)_build
 	docker rmi -f $(NAME)_build
 
 clean:
