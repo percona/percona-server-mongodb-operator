@@ -104,19 +104,19 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 		doUpdate = true
 	}
 
-	// Send update to SDK+Pods-object if something changed
+	// Send update to SDK if something changed
 	if doUpdate {
 		err = h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 		}
-
-		// Update the pods list that is read by the watchdog
-		if h.pods == nil {
-			h.pods = podk8s.NewPods(m.Name, m.Namespace)
-		}
-		h.pods.SetPods(podList.Items)
 	}
+
+	// Update the pods list that is read by the watchdog
+	if h.pods == nil {
+		h.pods = podk8s.NewPods(m.Name, m.Namespace)
+	}
+	h.pods.SetPods(podList.Items)
 
 	return podList, nil
 }
