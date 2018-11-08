@@ -22,11 +22,19 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Version string       `json:"version,omitempty"`
-	RunUID  int64        `json:"runUid,omitempty"`
-	Mongod  *MongodSpec  `json:"mongod,omitempty"`
-	Secrets *SecretsSpec `json:"secrets,omitempty"`
+	Version  string         `json:"version,omitempty"`
+	RunUID   int64          `json:"runUid,omitempty"`
+	Mongod   *MongodSpec    `json:"mongod,omitempty"`
+	Replsets []*ReplsetSpec `json:"replsets,omitempty"`
+	Secrets  *SecretsSpec   `json:"secrets,omitempty"`
 }
+
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
 
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
@@ -52,14 +60,14 @@ type MongodSpecInMemory struct {
 
 type OperationProfilingMode string
 
-var (
+const (
 	OperationProfilingModeAll    OperationProfilingMode = "all"
 	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
 )
 
 type MongodSpecOperationProfiling struct {
 	Mode              OperationProfilingMode `json:"mode,omitempty"`
-	SlowOpThresholdMs int                    `json:"slowMs,omitempty"`
+	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
@@ -75,16 +83,20 @@ type ResourcesSpec struct {
 
 type StorageEngine string
 
-var (
+const (
 	StorageEngineWiredTiger StorageEngine = "wiredTiger"
 	StorageEngineInMemory   StorageEngine = "inMemory"
 	StorageEngineMMAPV1     StorageEngine = "mmapv1"
 )
 
+type ReplsetSpec struct {
+	Name string `json:"name"`
+	Size int32  `json:"size"`
+	//Mongod *MongodSpec `json:"mongod"`
+}
+
 type MongodSpec struct {
 	*ResourcesSpec     `json:"resources,omitempty"`
-	Size               int32                         `json:"size"`
-	ReplsetName        string                        `json:"replsetName,omitempty"`
 	Port               int32                         `json:"port,omitempty"`
 	HostPort           int32                         `json:"hostPort,omitempty"`
 	StorageClassName   string                        `json:"storageClassName,omitempty"`
@@ -103,7 +115,7 @@ type MongosSpec struct {
 
 type ReplsetStatus struct {
 	Name        string   `json:"name,omitempty"`
-	Members     []string `json:"members,omitempty"`
+	Pods        []string `json:"pods,omitempty"`
 	Configsvr   bool     `json:"configsvr,omitempty"`
 	Initialised bool     `json:"initialised,omitempty"`
 }

@@ -19,11 +19,11 @@ var (
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
-func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB) map[string]string {
+func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
 	return map[string]string{
 		"app":                       "percona-server-mongodb",
 		"percona-server-mongodb_cr": m.Name,
-		"replset":                   m.Spec.Mongod.ReplsetName,
+		"replset":                   replset.Name,
 	}
 }
 
@@ -43,25 +43,7 @@ func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 	}
 }
 
-// podList returns a v1.PodList object
-func podList() *corev1.PodList {
-	return &corev1.PodList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pod",
-			APIVersion: "v1",
-		},
-	}
-}
-
-// getPodNames returns the pod names of the array of pods passed in
-func getPodNames(pods []corev1.Pod) []string {
-	var podNames []string
-	for _, pod := range pods {
-		podNames = append(podNames, pod.Name)
-	}
-	return podNames
-}
-
+// parseSpecResourceRequirements parses resource requirements to a corev1.ResourceList
 func parseSpecResourceRequirements(rsr *v1alpha1.ResourceSpecRequirements) (corev1.ResourceList, error) {
 	rl := corev1.ResourceList{}
 

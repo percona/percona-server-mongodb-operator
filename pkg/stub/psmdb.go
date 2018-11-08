@@ -47,12 +47,6 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Mongod == nil {
 		spec.Mongod = &v1alpha1.MongodSpec{}
 	}
-	if spec.Mongod.ReplsetName == "" {
-		spec.Mongod.ReplsetName = defaultReplsetName
-	}
-	if spec.Mongod.Size == 0 {
-		spec.Mongod.Size = defaultMongodSize
-	}
 	if spec.Mongod.Port == 0 {
 		spec.Mongod.Port = defaultMongodPort
 	}
@@ -73,36 +67,25 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 			SlowOpThresholdMs: defaultOperationProfilingSlowMs,
 		}
 	}
+	if len(spec.Replsets) == 0 {
+		spec.Replsets = []*v1alpha1.ReplsetSpec{{
+			Name: defaultReplsetName,
+			Size: defaultMongodSize,
+		}}
+	} else {
+		for _, replset := range spec.Replsets {
+			if replset.Size == 0 {
+				replset.Size = defaultMongodSize
+			}
+		}
+	}
 	if spec.RunUID == 0 {
 		spec.RunUID = defaultRunUID
 	}
 }
 
-// newPSMDBMongodVolumeClaims returns a Persistent Volume Claims for Mongod pod
-func newPSMDBMongodVolumeClaims(m *v1alpha1.PerconaServerMongoDB, claimName string, resources *corev1.ResourceRequirements) []corev1.PersistentVolumeClaim {
-	vc := corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: claimName,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
-			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resources.Limits[corev1.ResourceStorage],
-				},
-			},
-		},
-	}
-	if m.Spec.Mongod.StorageClassName != "" {
-		vc.Spec.StorageClassName = &m.Spec.Mongod.StorageClassName
-	}
-	return []corev1.PersistentVolumeClaim{vc}
-}
-
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet, error) {
+func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
 
 	limits, err := parseSpecResourceRequirements(m.Spec.Mongod.Limits)
@@ -118,19 +101,19 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 		Requests: requests,
 	}
 
-	ls := labelsForPerconaServerMongoDB(m)
+	ls := labelsForPerconaServerMongoDB(m, replset)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + m.Spec.Mongod.ReplsetName,
+			Name:      m.Name + "-" + replset.Name,
 			Namespace: m.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: m.Name,
-			Replicas:    &m.Spec.Mongod.Size,
+			ServiceName: m.Name + "-" + replset.Name,
+			Replicas:    &replset.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -140,21 +123,12 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      newPSMDBPodAffinity(ls),
-					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					InitContainers: []corev1.Container{
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, resources),
-					},
-					SecurityContext: &corev1.PodSecurityContext{
-						//Sysctls: []corev1.Sysctl{
-						//	{
-						//		Name:  "vm.swappiness",
-						//		Value: "1",
-						//	},
-						//},
+						newPSMDBMongodContainer(m, replset, clusterRole, resources),
 					},
 					Volumes: []corev1.Volume{
 						{
@@ -178,35 +152,16 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB) (*appsv1.StatefulSet,
 	return set, nil
 }
 
-func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
-	return &corev1.Affinity{
-		// prefer to run mongo instances on separate hostnames
-		PodAntiAffinity: &corev1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-				{
-					Weight: 100,
-					PodAffinityTerm: corev1.PodAffinityTerm{
-						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: ls,
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
-				},
-			},
-		},
-	}
-}
-
 // newPSMDBService returns a core/v1 API Service
-func newPSMDBService(m *v1alpha1.PerconaServerMongoDB) *corev1.Service {
-	ls := labelsForPerconaServerMongoDB(m)
+func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
+	ls := labelsForPerconaServerMongoDB(m, replset)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name,
+			Name:      m.Name + "-" + replset.Name,
 			Namespace: m.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
