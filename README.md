@@ -87,18 +87,23 @@ The operator was developed/tested for only:
 
 # Required Secrets
 
-The operator requires secrets to be deployed before it is started.
+The operator requires Kubernetes Secrets to be deployed before it is started.
 
-The name of thei required secret can be set in *deploy/cr.yaml* under the section *spec.secrets*.
+The name of the required secrets can be set in *deploy/cr.yaml* under the section *spec.secrets*.
 
 ## MongoDB System Users
 
-| User                 | Username Secret Key          | Password Secret Key              | MongoDB Role                    |
-|----------------------|------------------------------|----------------------------------|---------------------------------|
-| Backup/Restore user  | MONGODB_BACKUP_USER          | MONGODB_BACKUP_PASSWORD          | backup, clusterMonitor, restore | 
-| Cluster Admin user   | MONGODB_CLUSTER_ADMIN_USER   | MONGODB_CLUSTER_ADMIN_PASSWORD   | clusterAdmin                    |
-| Cluster Monitor user | MONGODB_CLUSTER_MONITOR_USER | MONGODB_CLUSTER_MONITOR_PASSWORD | clusterMonitor                  | 
-| User Admin user      | MONGODB_USER_ADMIN_USER      | MONGODB_USER_ADMIN_PASSWORD      | userAdmin                       |
+**Default Secret name**: *my-cluster-name-mongodb-users*.
+**Secret name field**: *spec.secrets.users*.
+
+The operator requires system-level MongoDB Users to automate the MongoDB deployment. These users should not be used to run an application!
+
+| User                 | Username Secret Key          | Password Secret Key              | MongoDB Role                                                                               |
+|----------------------|------------------------------|----------------------------------|--------------------------------------------------------------------------------------------|
+| Backup/Restore user  | MONGODB_BACKUP_USER          | MONGODB_BACKUP_PASSWORD          | [backup](https://docs.mongodb.com/manual/reference/built-in-roles/#backup), clusterMonitor, [restore](https://docs.mongodb.com/manual/reference/built-in-roles/#restore) | 
+| Cluster Admin user   | MONGODB_CLUSTER_ADMIN_USER   | MONGODB_CLUSTER_ADMIN_PASSWORD   | [clusterAdmin](https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin)     |
+| Cluster Monitor user | MONGODB_CLUSTER_MONITOR_USER | MONGODB_CLUSTER_MONITOR_PASSWORD | [clusterMonitor](https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor) | 
+| User Admin user      | MONGODB_USER_ADMIN_USER      | MONGODB_USER_ADMIN_PASSWORD      | [userAdmin](https://docs.mongodb.com/manual/reference/built-in-roles/#userAdmin)           |
 
 ### Development Mode
 
@@ -118,3 +123,12 @@ The default credentials from *deploy/mongodb-users.yaml* are:
 | MONGODB_CLUSTER_MONITOR_PASSWORD | admin123456    |
 | MONGODB_USER_ADMIN_USER          | userAdmin      |
 | MONGODB_USER_ADMIN_PASSWORD      | admin123456    |
+
+## MongoDB Internal Authentication Key (optional)
+
+**Default Secret name**: *my-cluster-name-mongodb-key*.
+**Secret name field**: *spec.secrets.key*.
+
+By default, the operator will create a random, 1024-byte key for [MongoDB Internal Authentication](https://docs.mongodb.com/manual/core/security-internal-authentication/) if it does not already exist.
+
+If you would like to deploy a different key, create the secret manually before starting the operator.
