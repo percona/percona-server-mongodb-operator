@@ -3,13 +3,12 @@ GO_TEST_PATH?=./pkg/stub/...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
 GIT_COMMIT?=$(shell git rev-parse HEAD)
-GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
+GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD|grep -oP "\w+$$")
 UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
-
 IMAGE="perconalab/percona-server-mongodb-operator:$(VERSION)"
-ifneq ($(GIT_BRANCH), "master")
+ifneq ($(GIT_BRANCH), master)
 	IMAGE="perconalab/percona-server-mongodb-operator:$(GIT_BRANCH)"
 endif
 
@@ -32,6 +31,9 @@ build: tmp/_output/bin/percona-server-mongodb-operator
 
 docker: tmp/_output/bin/percona-server-mongodb-operator
 	IMAGE=$(IMAGE) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
+
+docker-push:
+	docker push $(IMAGE)
 
 clean:
 	rm -rf cover.out tmp/_output 2>/dev/null || true
