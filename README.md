@@ -243,7 +243,7 @@ YAML Path: *spec.secrets*
 
 | Key      | Value Type  | Default                       | Description                                                                                                          |
 |----------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| key      | string      | my-cluster-name-mongodb-key   | The secret name for the MongoDB Internal Auth Key. This secret is auto-created if it doesn't exist                   |
+| key      | string      | my-cluster-name-mongodb-key   | The secret name for the [MongoDB Internal Auth Key](https://docs.mongodb.com/manual/core/security-internal-authentication/). This secret is auto-created by the operator if it doesn't exist   |
 | users    | string      | my-cluster-name-mongodb-users | The secret name for the MongoDB users required to run the operator. **This secret is required to run the operator!** |
 
 ## Replsets
@@ -251,9 +251,9 @@ YAML Path: *spec.replsets*
 
 | Key                       | Value Type  | Default                       | Description                                                                                                          |
 |---------------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| name                      | string      | rs0                           | The name of the MongoDB Replica Set                                                                                  |
-| size                      | integer     | 3                             | The size of the MongoDB Replica Set, must be >= 3 for high-availability                                              |
-| storageClass              | string      |                               | Defines Kubernetes Storage Class to use with Persistent Volume Claims for MongoDB data                               |
+| name                      | string      | rs0                           | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/)                                  |
+| size                      | integer     | 3                             | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
+| storageClass              | string      |                               | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with Persistent Volume Claims for MongoDB data |
 | resources.limits.cpu      | string      |                               |                                                                                                                      |
 | resources.limits.memory   | string      |                               |                                                                                                                      |
 | resources.limits.storage  | string      |                               |                                                                                                                      |
@@ -269,8 +269,8 @@ YAML Path: *spec.mongod*
 | net.hostPort                                        | integer    | 0                             | Sets the Kubernets/Docker 'hostPort' option for the MongoDB containers                                                  |
 | security.redactClientLogData                        | boolean    | false                         | Enables/disables the Percona Server for MongoDB [Log Redaction feature](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html) |
 | setParameter.ttlMonitorSleepSecs                    | integer    | 60                            | Sets the Percona Server for MongoDB 'ttlMonitorSecs' server parameter                                                   |
-| setParameter.wiredTigerConcurrentReadTransactions   | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentReadTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions) |
-| setParameter.wiredTigerConcurrentWriteTransactions  | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentWriteTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions) |
+| setParameter.wiredTigerConcurrentReadTransactions   | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentReadTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions) server parameter |
+| setParameter.wiredTigerConcurrentWriteTransactions  | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentWriteTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions) server parameter |
 | storage.engine                                      | string     | wiredTiger                    | Sets the Mongodb ['storage.engine' config option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine) |
 | storage.inMemory.inMemorySizeRatio                  | float      | 0.9                           |                                                                                                                      |
 | storage.mmapv1.nsSize                               | integer    | 16                            |                                                                                                                      |
