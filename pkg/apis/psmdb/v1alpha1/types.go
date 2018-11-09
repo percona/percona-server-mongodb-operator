@@ -67,7 +67,7 @@ type ReplsetStatus struct {
 	Pods        []string               `json:"pods,omitempty"`
 	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
 	Configsvr   bool                   `json:"configsvr,omitempty"`
-	Initialised bool                   `json:"initialised,omitempty"`
+	Initialized bool                   `json:"initialized,omitempty"`
 }
 
 type MongosSpec struct {

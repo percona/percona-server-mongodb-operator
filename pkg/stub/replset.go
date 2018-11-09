@@ -196,14 +196,14 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	// Initiate the replset if it hasn't already been initiated + there are pods +
 	// we have waited the ReplsetInitWait period since starting
 	status := getReplsetStatus(m, replset)
-	if !status.Initialised && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
+	if !status.Initialized && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
 		err = h.handleReplsetInit(m, replset, podList.Items)
 		if err != nil {
 			return nil, err
 		}
 
 		// update status after replset init
-		status.Initialised = true
+		status.Initialized = true
 		err = h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)

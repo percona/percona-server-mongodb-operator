@@ -109,7 +109,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
 				return err
 			}
-			if !status.Initialised {
+			if !status.Initialized {
 				continue
 			}
 
