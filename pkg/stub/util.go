@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 var (
@@ -25,6 +26,12 @@ func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1
 		"percona-server-mongodb_cr": m.Name,
 		"replset":                   replset.Name,
 	}
+}
+
+// getLabelSelectorListOpts returns metav1.ListOptions with a label-selector for a given replset
+func getLabelSelectorListOpts(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *metav1.ListOptions {
+	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset)).String()
+	return &metav1.ListOptions{LabelSelector: labelSelector}
 }
 
 // addOwnerRefToObject appends the desired OwnerReference to the object

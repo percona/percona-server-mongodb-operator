@@ -54,9 +54,14 @@ func isContainerAndPodRunning(pod corev1.Pod, containerName string) bool {
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
 //
-func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64) float64 {
+func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64, subtract1GB bool) float64 {
 	maxMemory := resourceList[corev1.ResourceMemory]
-	size := math.Floor(cacheRatio * float64(maxMemory.Value()-gigaByte))
+	var size float64
+	if subtract1GB {
+		size = math.Floor(cacheRatio * float64(maxMemory.Value()-gigaByte))
+	} else {
+		size = math.Floor(cacheRatio * float64(maxMemory.Value()))
+	}
 	sizeGB := size / float64(gigaByte)
 	if sizeGB < minWiredTigerCacheSizeGB {
 		sizeGB = minWiredTigerCacheSizeGB
@@ -78,7 +83,7 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 		},
 		{
 			Name:  motPkg.EnvMongoDBPort,
-			Value: strconv.Itoa(int(mSpec.Port)),
+			Value: strconv.Itoa(int(mSpec.Net.Port)),
 		},
 		{
 			Name:  motPkg.EnvMongoDBReplset,
@@ -126,12 +131,14 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
+		"--dbpath=" + mongodContainerDataDir,
 		"--keyFile=/mongodb/mongodb.key",
-		"--port=" + strconv.Itoa(int(mongod.Port)),
+		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
-		"--storageEngine=" + string(mongod.StorageEngine),
+		"--storageEngine=" + string(mongod.Storage.Engine),
 	}
 
+	// sharding
 	if clusterRole != nil {
 		switch *clusterRole {
 		case v1alpha1.ClusterRoleConfigSvr:
@@ -141,27 +148,112 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		}
 	}
 
-	switch mongod.OperationProfiling.Mode {
-	case v1alpha1.OperationProfilingModeAll:
-		args = append(args, "--profile=2")
-	case v1alpha1.OperationProfilingModeSlowOp:
-		args = append(args,
-			"--slowms="+strconv.Itoa(int(mongod.OperationProfiling.SlowOpThresholdMs)),
-			"--profile=1",
-		)
+	// operationProfiling
+	if mongod.OperationProfiling != nil {
+		switch mongod.OperationProfiling.Mode {
+		case v1alpha1.OperationProfilingModeAll:
+			args = append(args, "--profile=2")
+		case v1alpha1.OperationProfilingModeSlowOp:
+			args = append(args,
+				"--slowms="+strconv.Itoa(int(mongod.OperationProfiling.SlowOpThresholdMs)),
+				"--profile=1",
+			)
+		}
+		if mongod.OperationProfiling.RateLimit > 0 {
+			args = append(args, "--rateLimit="+strconv.Itoa(mongod.OperationProfiling.RateLimit))
+		}
 	}
 
-	switch mongod.StorageEngine {
-	case v1alpha1.StorageEngineWiredTiger:
-		args = append(args, fmt.Sprintf(
-			"--wiredTigerCacheSizeGB=%.2f",
-			getWiredTigerCacheSizeGB(resources.Limits, mongod.WiredTiger.CacheSizeRatio),
-		))
-	case v1alpha1.StorageEngineInMemory:
-		args = append(args, fmt.Sprintf(
-			"--inMemorySizeGB=%.2f",
-			getWiredTigerCacheSizeGB(resources.Limits, mongod.InMemory.SizeRatio),
-		))
+	// storage
+	if mongod.Storage != nil {
+		switch mongod.Storage.Engine {
+		case v1alpha1.StorageEngineWiredTiger:
+			args = append(args, fmt.Sprintf(
+				"--wiredTigerCacheSizeGB=%.2f",
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
+			))
+			if mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
+				args = append(args,
+					"--wiredTigerCollectionBlockCompressor="+string(*mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor),
+				)
+			}
+			if mongod.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
+				args = append(args,
+					"--wiredTigerJournalCompressor="+string(*mongod.Storage.WiredTiger.EngineConfig.JournalCompressor),
+				)
+			}
+			if mongod.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
+				args = append(args, "--wiredTigerDirectoryForIndexes")
+			}
+		case v1alpha1.StorageEngineInMemory:
+			args = append(args, fmt.Sprintf(
+				"--inMemorySizeGB=%.2f",
+				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, false),
+			))
+		case v1alpha1.StorageEngineMMAPv1:
+			if mongod.Storage.MMAPv1.NsSize > 0 {
+				args = append(args, "--nssize="+strconv.Itoa(mongod.Storage.MMAPv1.NsSize))
+			}
+			if mongod.Storage.MMAPv1.Smallfiles {
+				args = append(args, "--smallfiles")
+			}
+		}
+		if mongod.Storage.DirectoryPerDB {
+			args = append(args, "--directoryperdb")
+		}
+		if mongod.Storage.SyncPeriodSecs > 0 {
+			args = append(args, "--syncdelay="+strconv.Itoa(mongod.Storage.SyncPeriodSecs))
+		}
+	}
+
+	// security
+	if mongod.Security != nil && mongod.Security.RedactClientLogData {
+		args = append(args, "--redactClientLogData")
+	}
+
+	// replication
+	if mongod.Replication != nil && mongod.Replication.OplogSizeMB > 0 {
+		args = append(args, "--oplogSize="+strconv.Itoa(mongod.Replication.OplogSizeMB))
+	}
+
+	// setParameter
+	if mongod.SetParameter != nil {
+		if mongod.SetParameter.TTLMonitorSleepSecs > 0 {
+			args = append(args,
+				"--setParameter",
+				"ttlMonitorSleepSecs="+strconv.Itoa(mongod.SetParameter.TTLMonitorSleepSecs),
+			)
+		}
+		if mongod.SetParameter.WiredTigerConcurrentReadTransactions > 0 {
+			args = append(args,
+				"--setParameter",
+				"wiredTigerConcurrentReadTransactions="+strconv.Itoa(mongod.SetParameter.WiredTigerConcurrentReadTransactions),
+			)
+		}
+		if mongod.SetParameter.WiredTigerConcurrentWriteTransactions > 0 {
+			args = append(args,
+				"--setParameter",
+				"wiredTigerConcurrentWriteTransactions="+strconv.Itoa(mongod.SetParameter.WiredTigerConcurrentWriteTransactions),
+			)
+		}
+	}
+
+	// auditLog
+	if mongod.AuditLog != nil && mongod.AuditLog.Destination == v1alpha1.AuditLogDestinationFile {
+		if mongod.AuditLog.Filter == "" {
+			mongod.AuditLog.Filter = "{}"
+		}
+		args = append(args,
+			"--auditDestination=file",
+			"--auditFilter="+mongod.AuditLog.Filter,
+			"--auditFormat="+string(mongod.AuditLog.Format),
+		)
+		switch mongod.AuditLog.Format {
+		case v1alpha1.AuditLogFormatBSON:
+			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.bson")
+		default:
+			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.json")
+		}
 	}
 
 	return corev1.Container{
@@ -171,8 +263,8 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      mongod.HostPort,
-				ContainerPort: mongod.Port,
+				HostPort:      mongod.Net.HostPort,
+				ContainerPort: mongod.Net.Port,
 			},
 		},
 		Env: newPSMDBContainerEnv(m, replset),
@@ -205,7 +297,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(mongod.Port)),
+					Port: intstr.FromInt(int(mongod.Net.Port)),
 				},
 			},
 			InitialDelaySeconds: int32(10),

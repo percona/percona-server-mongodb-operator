@@ -19,8 +19,8 @@ var (
 	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
+	defaultInMemorySizeRatio        float64 = 0.9
 	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
-	defaultOperationProfilingSlowMs int     = 100
 	mongodContainerDataDir          string  = "/data/db"
 	mongodContainerName             string  = "mongod"
 	mongodDataVolClaimName          string  = "mongod-data"
@@ -47,24 +47,53 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Mongod == nil {
 		spec.Mongod = &v1alpha1.MongodSpec{}
 	}
-	if spec.Mongod.Port == 0 {
-		spec.Mongod.Port = defaultMongodPort
+	if spec.Mongod.Net == nil {
+		spec.Mongod.Net = &v1alpha1.MongodSpecNet{}
 	}
-	if spec.Mongod.StorageEngine == "" {
-		spec.Mongod.StorageEngine = defaultStorageEngine
+	if spec.Mongod.Net.Port == 0 {
+		spec.Mongod.Net.Port = defaultMongodPort
 	}
-	if spec.Mongod.StorageEngine == v1alpha1.StorageEngineWiredTiger {
-		if spec.Mongod.WiredTiger == nil {
-			spec.Mongod.WiredTiger = &v1alpha1.MongodSpecWiredTiger{}
+	if spec.Mongod.Storage == nil {
+		spec.Mongod.Storage = &v1alpha1.MongodSpecStorage{}
+	}
+	if spec.Mongod.Storage.Engine == "" {
+		spec.Mongod.Storage.Engine = defaultStorageEngine
+	}
+
+	switch spec.Mongod.Storage.Engine {
+	case v1alpha1.StorageEngineInMemory:
+		if spec.Mongod.Storage.InMemory == nil {
+			spec.Mongod.Storage.InMemory = &v1alpha1.MongodSpecInMemory{}
 		}
-		if spec.Mongod.WiredTiger.CacheSizeRatio == 0 {
-			spec.Mongod.WiredTiger.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+		if spec.Mongod.Storage.InMemory.EngineConfig == nil {
+			spec.Mongod.Storage.InMemory.EngineConfig = &v1alpha1.MongodSpecInMemoryEngineConfig{}
+		}
+		if spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio == 0 {
+			spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio = defaultInMemorySizeRatio
+		}
+	case v1alpha1.StorageEngineWiredTiger:
+		if spec.Mongod.Storage.WiredTiger == nil {
+			spec.Mongod.Storage.WiredTiger = &v1alpha1.MongodSpecWiredTiger{}
+		}
+		if spec.Mongod.Storage.WiredTiger.CollectionConfig == nil {
+			spec.Mongod.Storage.WiredTiger.CollectionConfig = &v1alpha1.MongodSpecWiredTigerCollectionConfig{}
+		}
+		if spec.Mongod.Storage.WiredTiger.EngineConfig == nil {
+			spec.Mongod.Storage.WiredTiger.EngineConfig = &v1alpha1.MongodSpecWiredTigerEngineConfig{}
+		}
+		if spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio == 0 {
+			spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+		}
+		if spec.Mongod.Storage.WiredTiger.IndexConfig == nil {
+			spec.Mongod.Storage.WiredTiger.IndexConfig = &v1alpha1.MongodSpecWiredTigerIndexConfig{
+				PrefixCompression: true,
+			}
 		}
 	}
+
 	if spec.Mongod.OperationProfiling == nil {
 		spec.Mongod.OperationProfiling = &v1alpha1.MongodSpecOperationProfiling{
-			Mode:              defaultOperationProfilingMode,
-			SlowOpThresholdMs: defaultOperationProfilingSlowMs,
+			Mode: defaultOperationProfilingMode,
 		}
 	}
 	if len(spec.Replsets) == 0 {
@@ -88,11 +117,11 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
 
-	limits, err := parseSpecResourceRequirements(m.Spec.Mongod.Limits)
+	limits, err := parseSpecResourceRequirements(replset.Limits)
 	if err != nil {
 		return nil, err
 	}
-	requests, err := parseSpecResourceRequirements(m.Spec.Mongod.Requests)
+	requests, err := parseSpecResourceRequirements(replset.Requests)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +174,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 					},
 				},
 			},
-			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, mongodDataVolClaimName, resources),
+			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClass),
 		},
 	}
 	addOwnerRefToObject(set, asOwner(m))
@@ -168,8 +197,8 @@ func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 			Ports: []corev1.ServicePort{
 				{
 					Name:       mongodPortName,
-					Port:       m.Spec.Mongod.Port,
-					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Port)),
+					Port:       m.Spec.Mongod.Net.Port,
+					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 				},
 			},
 			ClusterIP: "None",

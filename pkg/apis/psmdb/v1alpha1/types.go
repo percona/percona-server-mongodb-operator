@@ -29,45 +29,8 @@ type PerconaServerMongoDBSpec struct {
 	Secrets  *SecretsSpec   `json:"secrets,omitempty"`
 }
 
-type ClusterRole string
-
-const (
-	ClusterRoleShardSvr  ClusterRole = "shardsvr"
-	ClusterRoleConfigSvr ClusterRole = "configsvr"
-)
-
-type SecretsSpec struct {
-	Key   string `json:"key,omitempty"`
-	Users string `json:"users,omitempty"`
-}
-
 type PerconaServerMongoDBStatus struct {
 	Replsets []*ReplsetStatus `json:"replsets,omitempty"`
-}
-
-type MongodSpecMMAPv1 struct {
-	NsSize     int  `json:"nsSize,omitempty"`
-	Smallfiles bool `json:"smallfiles,omitempty"`
-}
-
-type MongodSpecWiredTiger struct {
-	CacheSizeRatio float64 `json:"cacheSizeRatio,omitempty"`
-}
-
-type MongodSpecInMemory struct {
-	SizeRatio float64 `json:"sizeRatio,omitempty"`
-}
-
-type OperationProfilingMode string
-
-const (
-	OperationProfilingModeAll    OperationProfilingMode = "all"
-	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
-)
-
-type MongodSpecOperationProfiling struct {
-	Mode              OperationProfilingMode `json:"mode,omitempty"`
-	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
@@ -81,30 +44,30 @@ type ResourcesSpec struct {
 	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
 }
 
-type StorageEngine string
-
-const (
-	StorageEngineWiredTiger StorageEngine = "wiredTiger"
-	StorageEngineInMemory   StorageEngine = "inMemory"
-	StorageEngineMMAPV1     StorageEngine = "mmapv1"
-)
-
-type ReplsetSpec struct {
-	Name string `json:"name"`
-	Size int32  `json:"size"`
-	//Mongod *MongodSpec `json:"mongod"`
+type SecretsSpec struct {
+	Key   string `json:"key,omitempty"`
+	Users string `json:"users,omitempty"`
 }
 
-type MongodSpec struct {
-	*ResourcesSpec     `json:"resources,omitempty"`
-	Port               int32                         `json:"port,omitempty"`
-	HostPort           int32                         `json:"hostPort,omitempty"`
-	StorageClassName   string                        `json:"storageClassName,omitempty"`
-	StorageEngine      StorageEngine                 `json:"storageEngine,omitempty"`
-	InMemory           *MongodSpecInMemory           `json:"inMemory,omitempty"`
-	MMAPv1             *MongodSpecMMAPv1             `json:"mmapv1,omitempty"`
-	WiredTiger         *MongodSpecWiredTiger         `json:"wiredTiger,omitempty"`
-	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
+type ReplsetSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+	Name           string `json:"name"`
+	Size           int32  `json:"size"`
+	StorageClass   string `json:"storageClass,omitempty"`
+	Configsvr      bool   `json:"configsvr,omitempty"`
+}
+
+type ReplsetMemberStatus struct {
+	Name    string `json:"name,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
+type ReplsetStatus struct {
+	Name        string                 `json:"name,omitempty"`
+	Pods        []string               `json:"pods,omitempty"`
+	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
+	Configsvr   bool                   `json:"configsvr,omitempty"`
+	Initialized bool                   `json:"initialized,omitempty"`
 }
 
 type MongosSpec struct {
@@ -113,9 +76,126 @@ type MongosSpec struct {
 	HostPort       int32 `json:"hostPort,omitempty"`
 }
 
-type ReplsetStatus struct {
-	Name        string   `json:"name,omitempty"`
-	Pods        []string `json:"pods,omitempty"`
-	Configsvr   bool     `json:"configsvr,omitempty"`
-	Initialised bool     `json:"initialised,omitempty"`
+type MongodSpec struct {
+	Net                *MongodSpecNet                `json:"net,omitempty"`
+	AuditLog           *MongodSpecAuditLog           `json:"auditLog,omitempty"`
+	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
+	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
+	Security           *MongodSpecSecurity           `json:"security,omitempty"`
+	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
+	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
+}
+
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
+
+type MongodSpecNet struct {
+	Port     int32 `json:"port,omitempty"`
+	HostPort int32 `json:"hostPort,omitempty"`
+}
+
+type MongodSpecReplication struct {
+	OplogSizeMB int `json:"oplogSizeMB,omitempty"`
+}
+
+type MongodSpecSecurity struct {
+	RedactClientLogData bool `json:"redactClientLogData,omitempty"`
+}
+
+type MongodSpecSetParameter struct {
+	TTLMonitorSleepSecs                   int `json:"ttlMonitorSleepSecs,omitempty"`
+	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
+	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
+}
+
+type StorageEngine string
+
+var (
+	StorageEngineWiredTiger StorageEngine = "wiredTiger"
+	StorageEngineInMemory   StorageEngine = "inMemory"
+	StorageEngineMMAPv1     StorageEngine = "mmapv1"
+)
+
+type MongodSpecStorage struct {
+	Engine         StorageEngine         `json:"engine,omitempty"`
+	DirectoryPerDB bool                  `json:"directoryPerDB,omitempty"`
+	SyncPeriodSecs int                   `json:"syncPeriodSecs,omitempty"`
+	InMemory       *MongodSpecInMemory   `json:"inMemory,omitempty"`
+	MMAPv1         *MongodSpecMMAPv1     `json:"mmapv1,omitempty"`
+	WiredTiger     *MongodSpecWiredTiger `json:"wiredTiger,omitempty"`
+}
+
+type MongodSpecMMAPv1 struct {
+	NsSize     int  `json:"nsSize,omitempty"`
+	Smallfiles bool `json:"smallfiles,omitempty"`
+}
+
+type WiredTigerCompressor string
+
+var (
+	WiredTigerCompressorNone   WiredTigerCompressor = "none"
+	WiredTigerCompressorSnappy WiredTigerCompressor = "snappy"
+	WiredTigerCompressorZlib   WiredTigerCompressor = "zlib"
+)
+
+type MongodSpecWiredTigerEngineConfig struct {
+	CacheSizeRatio      float64               `json:"cacheSizeRatio,omitempty"`
+	DirectoryForIndexes bool                  `json:"directoryForIndexes,omitempty"`
+	JournalCompressor   *WiredTigerCompressor `json:"journalCompressor,omitempty"`
+}
+
+type MongodSpecWiredTigerCollectionConfig struct {
+	BlockCompressor *WiredTigerCompressor `json:"blockCompressor,omitempty"`
+}
+
+type MongodSpecWiredTigerIndexConfig struct {
+	PrefixCompression bool `json:"prefixCompression,omitempty"`
+}
+
+type MongodSpecWiredTiger struct {
+	CollectionConfig *MongodSpecWiredTigerCollectionConfig `json:"collectionConfig,omitempty"`
+	EngineConfig     *MongodSpecWiredTigerEngineConfig     `json:"engineConfig,omitempty"`
+	IndexConfig      *MongodSpecWiredTigerIndexConfig      `json:"indexConfig,omitempty"`
+}
+
+type MongodSpecInMemoryEngineConfig struct {
+	InMemorySizeRatio float64 `json:"inMemorySizeRatio,omitempty"`
+}
+
+type MongodSpecInMemory struct {
+	EngineConfig *MongodSpecInMemoryEngineConfig `json:"engineConfig,omitempty"`
+}
+
+type AuditLogDestination string
+
+var AuditLogDestinationFile AuditLogDestination = "file"
+
+type AuditLogFormat string
+
+var (
+	AuditLogFormatBSON AuditLogFormat = "BSON"
+	AuditLogFormatJSON AuditLogFormat = "JSON"
+)
+
+type MongodSpecAuditLog struct {
+	Destination AuditLogDestination `json:"destination,omitempty"`
+	Format      AuditLogFormat      `json:"format,omitempty"`
+	Filter      string              `json:"filter,omitempty"`
+}
+
+type OperationProfilingMode string
+
+const (
+	OperationProfilingModeAll    OperationProfilingMode = "all"
+	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
+)
+
+type MongodSpecOperationProfiling struct {
+	Mode              OperationProfilingMode `json:"mode,omitempty"`
+	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
+	RateLimit         int                    `json:"rateLimit,omitempty"`
 }

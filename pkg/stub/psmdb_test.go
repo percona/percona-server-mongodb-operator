@@ -21,9 +21,22 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 	assert.Equal(t, defaultMongodSize, spec.Replsets[0].Size)
 
 	assert.NotNil(t, spec.Mongod)
-	assert.Equal(t, defaultStorageEngine, spec.Mongod.StorageEngine)
-	assert.NotNil(t, spec.Mongod.WiredTiger)
-	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.WiredTiger.CacheSizeRatio)
+	assert.Equal(t, defaultStorageEngine, spec.Mongod.Storage.Engine)
+	assert.NotNil(t, spec.Mongod.Storage.WiredTiger)
+	assert.NotNil(t, spec.Mongod.Storage.WiredTiger.EngineConfig)
+	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
+
+	spec2 := v1alpha1.PerconaServerMongoDBSpec{
+		Mongod: &v1alpha1.MongodSpec{
+			Storage: &v1alpha1.MongodSpecStorage{
+				Engine: v1alpha1.StorageEngineInMemory,
+			},
+		},
+	}
+	addPSMDBSpecDefaults(&spec2)
+	assert.NotNil(t, spec2.Mongod.Storage.InMemory)
+	assert.NotNil(t, spec2.Mongod.Storage.InMemory.EngineConfig)
+	assert.Equal(t, spec2.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
 }
 
 func TestNewPSMDBStatefulSet(t *testing.T) {
@@ -37,24 +50,27 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 				{
 					Name: defaultReplsetName,
 					Size: defaultMongodSize,
+					ResourcesSpec: &v1alpha1.ResourcesSpec{
+						Limits: &v1alpha1.ResourceSpecRequirements{
+							Cpu:     "1",
+							Memory:  "1G",
+							Storage: "1G",
+						},
+						Requests: &v1alpha1.ResourceSpecRequirements{
+							Cpu:    "1",
+							Memory: "1G",
+						},
+					},
 				},
 			},
 			Mongod: &v1alpha1.MongodSpec{
-				Port: 99999,
-				ResourcesSpec: &v1alpha1.ResourcesSpec{
-					Limits: &v1alpha1.ResourceSpecRequirements{
-						Cpu:     "1",
-						Memory:  "1G",
-						Storage: "1G",
-					},
-					Requests: &v1alpha1.ResourceSpecRequirements{
-						Cpu:    "1",
-						Memory: "1G",
-					},
+				Net: &v1alpha1.MongodSpecNet{
+					Port: 99999,
 				},
 			},
 		},
 	}
+	// default/wiredTiger set
 	set, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, set)
@@ -64,4 +80,27 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	assert.Contains(t, set.Spec.Template.Spec.Containers[0].Args, "--wiredTigerCacheSizeGB=0.25")
 	assert.Len(t, set.Spec.Template.Spec.Containers[0].Ports, 1)
 	assert.Equal(t, int32(99999), set.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort)
+
+	// mmapv1 set
+	psmdb.Spec.Mongod.Storage.Engine = v1alpha1.StorageEngineMMAPv1
+	psmdb.Spec.Mongod.Storage.MMAPv1 = &v1alpha1.MongodSpecMMAPv1{
+		Smallfiles: true,
+	}
+	mmapSet, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, mmapSet)
+	assert.Contains(t, mmapSet.Spec.Template.Spec.Containers[0].Args, "--storageEngine=mmapv1")
+	assert.Contains(t, mmapSet.Spec.Template.Spec.Containers[0].Args, "--smallfiles")
+
+	// inMemory set
+	psmdb.Spec.Mongod.Storage.Engine = v1alpha1.StorageEngineInMemory
+	psmdb.Spec.Mongod.Storage.InMemory = &v1alpha1.MongodSpecInMemory{
+		EngineConfig: &v1alpha1.MongodSpecInMemoryEngineConfig{
+			InMemorySizeRatio: 1.0,
+		},
+	}
+	imSet, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, imSet)
+	assert.Contains(t, imSet.Spec.Template.Spec.Containers[0].Args, "--inMemorySizeGB=0.93")
 }
