@@ -230,6 +230,7 @@ The operator is configured via the *spec* section of the [deploy/cr.yaml](https:
 
 ## Spec (top-level)
 YAML Path: *spec*
+
 | Key                   | Value Type  | Default                       | Description                                                                                                          |
 |-----------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | version               | string      | 3.6                           | The Dockerhub tag of percona/percona-server-mongodb to deploy                                                        |
@@ -239,6 +240,7 @@ YAML Path: *spec*
 
 ## Secrets
 YAML Path: *spec.secrets*
+
 | Key      | Value Type  | Default                       | Description                                                                                                          |
 |----------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | key      | string      | my-cluster-name-mongodb-key   | The secret name for the MongoDB Internal Auth Key. This secret is auto-created if it doesn't exist                   |
@@ -246,6 +248,7 @@ YAML Path: *spec.secrets*
 
 ## Replsets
 YAML Path: *spec.replsets*
+
 | Key                       | Value Type  | Default                       | Description                                                                                                          |
 |---------------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | name                      | string      | rs0                           | The name of the MongoDB Replica Set                                                                                  |
@@ -259,6 +262,7 @@ YAML Path: *spec.replsets*
 
 ## Mongod
 YAML Path: *spec.mongod*
+
 | Key                                                 | Value Type | Default                       | Description                                                                                                             |
 |-----------------------------------------------------|------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------|
 | net.port                                            | integer    | 27017                         | Sets the MongoDB ['net.port' config option](https://docs.mongodb.com/manual/reference/configuration-options/#net.port)  |
