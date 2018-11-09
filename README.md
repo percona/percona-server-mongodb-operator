@@ -137,25 +137,24 @@ If you would like to deploy a different key, create the secret manually before s
 
 The operator is configured via the *spec* section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file.
 
-## Top-level
+## Spec (top-level)
+YAML Path: *spec*
 | Key                   | Value Type  | Default                       | Description                                                                                                          |
 |-----------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | version               | string      | 3.6                           | The Dockerhub tag of percona/percona-server-mongodb to deploy                                                        |
-| [secrets](#mongod)    | subdocument |                               |                                                                                                                      |
+| [secrets](#secrets)   | subdocument |                               |                                                                                                                      |
 | [replsets](#replsets) | array/list  |                               |                                                                                                                      |
 | [mongod](#mongod)     | subdocument |                               |                                                                                                                      |
 
 ## Secrets
-YAML Path: *secrets*
-
+YAML Path: *spec.secrets*
 | Key      | Value Type  | Default                       | Description                                                                                                          |
 |----------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | key      | string      | my-cluster-name-mongodb-key   | The secret name for the MongoDB Internal Auth Key. This secret is auto-created if it doesn't exist                   |
 | users    | string      | my-cluster-name-mongodb-users | The secret name for the MongoDB users required to run the operator. **This secret is required to run the operator!** |
 
 ## Replsets
-YAML Path: *replsets*
-
+YAML Path: *spec.replsets*
 | Key                       | Value Type  | Default                       | Description                                                                                                          |
 |---------------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | name                      | string      | rs0                           | The name of the MongoDB Replica Set                                                                                  |
@@ -167,8 +166,7 @@ YAML Path: *replsets*
 | resources.requests.memory | string      |                               |                                                                                                                      |
 
 ## Mongod
-YAML Path: *mongod*
-
+YAML Path: *spec.mongod*
 | Key                                                 | Value Type | Default                       | Description                                                                                                          |
 |-----------------------------------------------------|------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | net.port                                            | integer    | 27017                         |                                                                                                                      |
