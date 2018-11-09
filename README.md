@@ -159,6 +159,7 @@ YAML Path: *spec.replsets*
 |---------------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | name                      | string      | rs0                           | The name of the MongoDB Replica Set                                                                                  |
 | size                      | integer     | 3                             | The size of the MongoDB Replica Set, must be >= 3 for high-availability                                              |
+| storageClass              | string      |                               | Defines Kubernetes Storage Class to use with Persistent Volume Claims for MongoDB data                               |
 | resources.limits.cpu      | string      |                               |                                                                                                                      |
 | resources.limits.memory   | string      |                               |                                                                                                                      |
 | resources.limits.storage  | string      |                               |                                                                                                                      |
@@ -167,15 +168,15 @@ YAML Path: *spec.replsets*
 
 ## Mongod
 YAML Path: *spec.mongod*
-| Key                                                 | Value Type | Default                       | Description                                                                                                          |
-|-----------------------------------------------------|------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| net.port                                            | integer    | 27017                         |                                                                                                                      |
-| net.hostPort                                        | integer    | 0                             |                                                                                                                      |
-| security.redactClientLogData                        | boolean    | false                         |                                                                                                                      |
-| setParameter.ttlMonitorSleepSecs                    | integer    | 60                            |                                                                                                                      |
-| setParameter.wiredTigerConcurrentReadTransactions   | integer    | 128                           |                                                                                                                      |
-| setParameter.wiredTigerConcurrentWriteTransactions  | integer    | 128                           |                                                                                                                      |
-| storage.engine                                      | string     | wiredTiger                    |                                                                                                                      |
+| Key                                                 | Value Type | Default                       | Description                                                                                                             |
+|-----------------------------------------------------|------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| net.port                                            | integer    | 27017                         | Sets the MongoDB ['net.port' config option](https://docs.mongodb.com/manual/reference/configuration-options/#net.port)  |
+| net.hostPort                                        | integer    | 0                             | Sets the Kubernets/Docker 'hostPort' option for the MongoDB containers                                                  |
+| security.redactClientLogData                        | boolean    | false                         | Enables/disables the Percona Server for MongoDB [Log Redaction feature](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html) |
+| setParameter.ttlMonitorSleepSecs                    | integer    | 60                            | Sets the Percona Server for MongoDB 'ttlMonitorSecs' server parameter                                                   |
+| setParameter.wiredTigerConcurrentReadTransactions   | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentReadTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions) |
+| setParameter.wiredTigerConcurrentWriteTransactions  | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentWriteTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions) |
+| storage.engine                                      | string     | wiredTiger                    | Sets the Mongodb ['storage.engine' config option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine) |
 | storage.inMemory.inMemorySizeRatio                  | float      | 0.9                           |                                                                                                                      |
 | storage.mmapv1.nsSize                               | integer    | 16                            |                                                                                                                      |
 | storage.mmapv1.smallfiles                           | boolean    | false                         |                                                                                                                      |
