@@ -223,3 +223,41 @@ The development-mode credentials from *deploy/mongodb-users.yaml* are:
 By default, the operator will create a random, 1024-byte key for [MongoDB Internal Authentication](https://docs.mongodb.com/manual/core/security-internal-authentication/) if it does not already exist.
 
 If you would like to deploy a different key, create the secret manually before starting the operator.
+
+# Configuration
+
+The operator is configured via the *spec* section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file.
+
+| Key                                                        | Value Type | Default                       | Description                                                                                                          |
+|------------------------------------------------------------|------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| version                                                    | string     | 3.6                           | The Dockerhub tag of percona/percona-server-mongodb to deploy                                                        |
+| secrets.key                                                | string     | my-cluster-name-mongodb-key   | The secret name for the MongoDB Internal Auth Key. This secret is auto-created if it doesn't exist                   |
+| secrets.users                                              | string     | my-cluster-name-mongodb-users | The secret name for the MongoDB users required to run the operator. **This secret is required to run the operator!** |
+| replsets.name                                              | string     | rs0                           | The name of the MongoDB Replica Set                                                                                  |
+| replsets.size                                              | integer    | 3                             | The size of the MongoDB Replica Set, must be >= 3 for high-availability                                              |
+| replset.resources.limits.cpu                               | string     |                               |                                                                                                                      |
+| replset.resources.limits.memory                            | string     |                               |                                                                                                                      |
+| replset.resources.limits.storage                           | string     |                               |                                                                                                                      |
+| replset.resources.requests.cpu                             | string     |                               |                                                                                                                      |
+| replset.resources.requests.memory                          | string     |                               |                                                                                                                      |
+| mongod.net.port                                            | integer    | 27017                         |                                                                                                                      |
+| mongod.net.hostPort                                        | integer    | 0                             |                                                                                                                      |
+| mongod.security.redactClientLogData                        | boolean    | false                         |                                                                                                                      |
+| mongod.setParameter.ttlMonitorSleepSecs                    | integer    | 60                            |                                                                                                                      |
+| mongod.setParameter.wiredTigerConcurrentReadTransactions   | integer    | 128                           |                                                                                                                      |
+| mongod.setParameter.wiredTigerConcurrentWriteTransactions  | integer    | 128                           |                                                                                                                      |
+| mongod.storage.engine                                      | string     | wiredTiger                    |                                                                                                                      |
+| mongod.storage.inMemory.inMemorySizeRatio                  | float      | 0.9                           |                                                                                                                      |
+| mongod.storage.mmapv1.nsSize                               | integer    | 16                            |                                                                                                                      |
+| mongod.storage.mmapv1.smallfiles                           | boolean    | false                         |                                                                                                                      |
+| mongod.storage.wiredTiger.engineConfig.cacheSizeRatio      | float      | 0.5                           |                                                                                                                      |
+| mongod.storage.wiredTiger.engineConfig.directoryForIndexes | boolean    | false                         |                                                                                                                      |
+| mongod.storage.wiredTiger.engineConfig.journalCompressor   | string     | snappy                        |                                                                                                                      |
+| mongod.storage.wiredTiger.collectionConfig.blockCompressor | string     | snappy                        |                                                                                                                      |
+| mongod.storage.wiredTiger.indexConfig.prefixCompression    | boolean    | true                          |                                                                                                                      |
+| mongod.operationProfiling.mode                             | string     | slowOp                        |                                                                                                                      |
+| mongod.operationProfiling.slowOpThresholdMs                | integer    | 100                           |                                                                                                                      |
+| mongod.operationProfiling.rateLimit                        | integer    | 1                             |                                                                                                                      |
+| mongod.auditLog.destination                                | string     |                               |                                                                                                                      |
+| mongod.auditLog.format                                     | string     | BSON                          |                                                                                                                      |
+| mongod.auditLog.filter                                     | string     | {}                            |                                                                                                                      |
