@@ -174,7 +174,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 					},
 				},
 			},
-			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClassName),
+			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClass),
 		},
 	}
 	addOwnerRefToObject(set, asOwner(m))
