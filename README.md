@@ -231,12 +231,12 @@ The operator is configured via the *spec* section of the [deploy/cr.yaml](https:
 ## Spec (top-level)
 YAML Path: *spec*
 
-| Key                   | Value Type  | Default                       | Description                                                                                                          |
-|-----------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| version               | string      | 3.6                           | The Dockerhub tag of percona/percona-server-mongodb to deploy                                                        |
-| [secrets](#secrets)   | subdocument |                               |                                                                                                                      |
-| [replsets](#replsets) | array/list  |                               |                                                                                                                      |
-| [mongod](#mongod)     | subdocument |                               |                                                                                                                      |
+| Key                   | Value Type  | Default | Description                                                                                                          |
+|-----------------------|-------------|---------|----------------------------------------------------------------------------------------------------------------------|
+| version               | string      | 3.6     | The Dockerhub tag of [percona/percona-server-mongodb](https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/) to deploy |
+| [secrets](#secrets)   | subdoc      |         |                                                                                                                      |
+| [replsets](#replsets) | array       |         |                                                                                                                      |
+| [mongod](#mongod)     | subdoc      |         |                                                                                                                      |
 
 ## Secrets
 YAML Path: *spec.secrets*
@@ -249,40 +249,40 @@ YAML Path: *spec.secrets*
 ## Replsets
 YAML Path: *spec.replsets*
 
-| Key                       | Value Type  | Default                       | Description                                                                                                          |
-|---------------------------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| name                      | string      | rs0                           | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/)                                  |
-| size                      | integer     | 3                             | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
-| storageClass              | string      |                               | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with Persistent Volume Claims for MongoDB data |
-| resources.limits.cpu      | string      |                               |                                                                                                                      |
-| resources.limits.memory   | string      |                               |                                                                                                                      |
-| resources.limits.storage  | string      |                               |                                                                                                                      |
-| resources.requests.cpu    | string      |                               |                                                                                                                      |
-| resources.requests.memory | string      |                               |                                                                                                                      |
+| Key                       | Value Type  | Default | Description                                                                                                          |
+|---------------------------|-------------|---------|----------------------------------------------------------------------------------------------------------------------|
+| name                      | string      | rs0     | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/)                                  |
+| size                      | int         | 3       | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
+| storageClass              | string      |         | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
+| resources.limits.cpu      | string      |         |                                                                                                                      |
+| resources.limits.memory   | string      |         |                                                                                                                      |
+| resources.limits.storage  | string      |         |                                                                                                                      |
+| resources.requests.cpu    | string      |         |                                                                                                                      |
+| resources.requests.memory | string      |         |                                                                                                                      |
 
 ## Mongod
 YAML Path: *spec.mongod*
 
-| Key                                                 | Value Type | Default                       | Description                                                                                                             |
-|-----------------------------------------------------|------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| net.port                                            | integer    | 27017                         | Sets the MongoDB ['net.port' config option](https://docs.mongodb.com/manual/reference/configuration-options/#net.port)  |
-| net.hostPort                                        | integer    | 0                             | Sets the Kubernets/Docker 'hostPort' option for the MongoDB containers                                                  |
-| security.redactClientLogData                        | boolean    | false                         | Enables/disables the Percona Server for MongoDB [Log Redaction feature](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html) |
-| setParameter.ttlMonitorSleepSecs                    | integer    | 60                            | Sets the Percona Server for MongoDB 'ttlMonitorSecs' server parameter                                                   |
-| setParameter.wiredTigerConcurrentReadTransactions   | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentReadTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions) server parameter |
-| setParameter.wiredTigerConcurrentWriteTransactions  | integer    | 128                           | Sets the MongoDB ['wiredTigerConcurrentWriteTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions) server parameter |
-| storage.engine                                      | string     | wiredTiger                    | Sets the Mongodb ['storage.engine' config option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine) |
-| storage.inMemory.inMemorySizeRatio                  | float      | 0.9                           |                                                                                                                      |
-| storage.mmapv1.nsSize                               | integer    | 16                            |                                                                                                                      |
-| storage.mmapv1.smallfiles                           | boolean    | false                         |                                                                                                                      |
-| storage.wiredTiger.engineConfig.cacheSizeRatio      | float      | 0.5                           |                                                                                                                      |
-| storage.wiredTiger.engineConfig.directoryForIndexes | boolean    | false                         |                                                                                                                      |
-| storage.wiredTiger.engineConfig.journalCompressor   | string     | snappy                        |                                                                                                                      |
-| storage.wiredTiger.collectionConfig.blockCompressor | string     | snappy                        |                                                                                                                      |
-| storage.wiredTiger.indexConfig.prefixCompression    | boolean    | true                          |                                                                                                                      |
-| operationProfiling.mode                             | string     | slowOp                        |                                                                                                                      |
-| operationProfiling.slowOpThresholdMs                | integer    | 100                           |                                                                                                                      |
-| operationProfiling.rateLimit                        | integer    | 1                             |                                                                                                                      |
-| auditLog.destination                                | string     |                               |                                                                                                                      |
-| auditLog.format                                     | string     | BSON                          |                                                                                                                      |
-| auditLog.filter                                     | string     | {}                            |                                                                                                                      |
+| Key                                                 | Value Type | Default    | Description                                                                                                             |
+|-----------------------------------------------------|------------|------------|-------------------------------------------------------------------------------------------------------------------------|
+| net.port                                            | int        | 27017      | Sets the MongoDB ['net.port' config option](https://docs.mongodb.com/manual/reference/configuration-options/#net.port)  |
+| net.hostPort                                        | int        | 0          | Sets the Kubernetes ['hostPort' option](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#support-hostport) for MongoDB containers                                                  |
+| security.redactClientLogData                        | bool       | false      | Enables/disables the Percona Server for MongoDB [Log Redaction feature](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html) |
+| setParameter.ttlMonitorSleepSecs                    | int        | 60         | Sets the Percona Server for MongoDB 'ttlMonitorSecs' server parameter                                                   |
+| setParameter.wiredTigerConcurrentReadTransactions   | int        | 128        | Sets the MongoDB ['wiredTigerConcurrentReadTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions) server parameter |
+| setParameter.wiredTigerConcurrentWriteTransactions  | int        | 128        | Sets the MongoDB ['wiredTigerConcurrentWriteTransactions'](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions) server parameter |
+| storage.engine                                      | string     | wiredTiger | Sets the Mongodb ['storage.engine' config option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine) |
+| storage.inMemory.inMemorySizeRatio                  | float      | 0.9        |                                                                                                                      |
+| storage.mmapv1.nsSize                               | int        | 16         |                                                                                                                      |
+| storage.mmapv1.smallfiles                           | bool       | false      |                                                                                                                      |
+| storage.wiredTiger.engineConfig.cacheSizeRatio      | float      | 0.5        |                                                                                                                      |
+| storage.wiredTiger.engineConfig.directoryForIndexes | bool       | false      |                                                                                                                      |
+| storage.wiredTiger.engineConfig.journalCompressor   | string     | snappy     |                                                                                                                      |
+| storage.wiredTiger.collectionConfig.blockCompressor | string     | snappy     |                                                                                                                      |
+| storage.wiredTiger.indexConfig.prefixCompression    | bool       | true       |                                                                                                                      |
+| operationProfiling.mode                             | string     | slowOp     |                                                                                                                      |
+| operationProfiling.slowOpThresholdMs                | int        | 100        |                                                                                                                      |
+| operationProfiling.rateLimit                        | int        | 1          |                                                                                                                      |
+| auditLog.destination                                | string     |            |                                                                                                                      |
+| auditLog.format                                     | string     | BSON       |                                                                                                                      |
+| auditLog.filter                                     | string     | {}         |                                                                                                                      |
