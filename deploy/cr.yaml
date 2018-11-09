@@ -10,10 +10,6 @@ spec:
   replsets:
   - name: rs0
     size: 3
-  mongod:
-    net:
-      port: 27017
-      hostPort: 0
     resources:
       limits:
         cpu: "300m"
@@ -22,6 +18,10 @@ spec:
       requests:
         cpu: "300m"
         memory: "0.5G"
+  mongod:
+    net:
+      port: 27017
+      hostPort: 0
     security:
       redactClientLogData: false
     setParameter:

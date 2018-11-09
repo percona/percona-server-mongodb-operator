@@ -50,22 +50,22 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 				{
 					Name: defaultReplsetName,
 					Size: defaultMongodSize,
+					ResourcesSpec: &v1alpha1.ResourcesSpec{
+						Limits: &v1alpha1.ResourceSpecRequirements{
+							Cpu:     "1",
+							Memory:  "1G",
+							Storage: "1G",
+						},
+						Requests: &v1alpha1.ResourceSpecRequirements{
+							Cpu:    "1",
+							Memory: "1G",
+						},
+					},
 				},
 			},
 			Mongod: &v1alpha1.MongodSpec{
 				Net: &v1alpha1.MongodSpecNet{
 					Port: 99999,
-				},
-				ResourcesSpec: &v1alpha1.ResourcesSpec{
-					Limits: &v1alpha1.ResourceSpecRequirements{
-						Cpu:     "1",
-						Memory:  "1G",
-						Storage: "1G",
-					},
-					Requests: &v1alpha1.ResourceSpecRequirements{
-						Cpu:    "1",
-						Memory: "1G",
-					},
 				},
 			},
 		},

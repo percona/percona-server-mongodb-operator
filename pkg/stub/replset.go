@@ -135,9 +135,9 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	} else {
 		logrus.WithFields(logrus.Fields{
 			"size":          replset.Size,
-			"limit_cpu":     m.Spec.Mongod.Limits.Cpu,
-			"limit_memory":  m.Spec.Mongod.Limits.Memory,
-			"limit_storage": m.Spec.Mongod.Limits.Storage,
+			"limit_cpu":     replset.Limits.Cpu,
+			"limit_memory":  replset.Limits.Memory,
+			"limit_storage": replset.Limits.Storage,
 		}).Infof("created stateful set for replset: %s", replset.Name)
 	}
 

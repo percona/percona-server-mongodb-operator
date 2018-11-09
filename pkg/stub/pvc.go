@@ -13,7 +13,7 @@ import (
 )
 
 // newPSMDBMongodVolumeClaims returns a Persistent Volume Claims for Mongod pod
-func newPSMDBMongodVolumeClaims(m *v1alpha1.PerconaServerMongoDB, claimName string, resources *corev1.ResourceRequirements) []corev1.PersistentVolumeClaim {
+func newPSMDBMongodVolumeClaims(m *v1alpha1.PerconaServerMongoDB, resources *corev1.ResourceRequirements, claimName, storageClass string) []corev1.PersistentVolumeClaim {
 	vc := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      claimName,
@@ -30,8 +30,8 @@ func newPSMDBMongodVolumeClaims(m *v1alpha1.PerconaServerMongoDB, claimName stri
 			},
 		},
 	}
-	if m.Spec.Mongod.StorageClassName != "" {
-		vc.Spec.StorageClassName = &m.Spec.Mongod.StorageClassName
+	if storageClass != "" {
+		vc.Spec.StorageClassName = &storageClass
 	}
 	return []corev1.PersistentVolumeClaim{vc}
 }

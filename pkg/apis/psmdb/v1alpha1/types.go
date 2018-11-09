@@ -50,10 +50,11 @@ type SecretsSpec struct {
 }
 
 type ReplsetSpec struct {
-	Name      string `json:"name"`
-	Size      int32  `json:"size"`
-	Configsvr bool   `json:"configsvr,omitempty"`
-	//Mongod *MongodSpec `json:"mongod"`
+	*ResourcesSpec   `json:"resources,omitempty"`
+	Name             string `json:"name"`
+	Size             int32  `json:"size"`
+	StorageClassName string `json:"storageClassName,omitempty"`
+	Configsvr        bool   `json:"configsvr,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -76,8 +77,6 @@ type MongosSpec struct {
 }
 
 type MongodSpec struct {
-	*ResourcesSpec     `json:"resources,omitempty"`
-	StorageClassName   string                        `json:"storageClassName,omitempty"`
 	Net                *MongodSpecNet                `json:"net,omitempty"`
 	AuditLog           *MongodSpecAuditLog           `json:"auditLog,omitempty"`
 	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`

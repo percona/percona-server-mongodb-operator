@@ -117,11 +117,11 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
 
-	limits, err := parseSpecResourceRequirements(m.Spec.Mongod.Limits)
+	limits, err := parseSpecResourceRequirements(replset.Limits)
 	if err != nil {
 		return nil, err
 	}
-	requests, err := parseSpecResourceRequirements(m.Spec.Mongod.Requests)
+	requests, err := parseSpecResourceRequirements(replset.Requests)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 					},
 				},
 			},
-			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, mongodDataVolClaimName, resources),
+			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClassName),
 		},
 	}
 	addOwnerRefToObject(set, asOwner(m))
