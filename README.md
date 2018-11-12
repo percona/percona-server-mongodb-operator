@@ -18,10 +18,10 @@ The operator was developed/tested for only:
 1. Go 1.11
 
 **If running from OpenShift - need to run: `oc edit scc restricted` and change to:**
-```runAsUser:
+`runAsUser:
   type: RunAsAny
 seLinuxContext:
-  type: RunAsAny```
+  type: RunAsAny`
 
 # Run
 
