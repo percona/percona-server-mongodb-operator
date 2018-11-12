@@ -17,6 +17,12 @@ The operator was developed/tested for only:
 1. Kubernetes version 1.10 to 1.11
 1. Go 1.11
 
+**If running from OpenShift - need to run: `oc edit scc restricted` and change to:**
+```runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny```
+
 # Run
 
 ## Run the Operator
