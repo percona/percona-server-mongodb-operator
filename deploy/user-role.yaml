@@ -1,7 +1,7 @@
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: percona-server-mongodb-operator
+  name: customresourcedefinition-creator
 rules:
   - apiGroups:
       - ""
@@ -35,17 +35,41 @@ rules:
       - "list"
       - "watch"
       - "patch"
+  - apiGroups:
+      - apiextensions
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+      - "patch"
+  - apiGroups:
+      - psmdb.percona.com
+    resources:
+      - perconaservermongodbs
+    verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+      - "patch"
 
 ---
 
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: default-account-percona-server-mongodb-operator
+  name: customresourcedefinition-creator-bindings
 subjects:
-  - kind: ServiceAccount
-    name: default
+  - kind: User
+    name: PASTE_YOUR_USER_NAME_HERE
 roleRef:
   kind: Role
-  name: percona-server-mongodb-operator
+  name: customresourcedefinition-creator
   apiGroup: rbac.authorization.k8s.io

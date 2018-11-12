@@ -19,6 +19,88 @@ The operator was developed/tested for only:
 
 # Run
 
+## User Permissions
+To install the percona-server-mongodb-operator please ensure that you have enough permission. 
+You'll need to have cluster-admin role to install operator, also you can grant to specified user additional permissions by applying next policy:
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: customresourcedefinition-creator
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/exec
+      - services
+      - endpoints
+      - persistentvolumeclaims
+      - configmaps
+      - secrets
+    verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+      - "patch"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+      - "patch"
+  - apiGroups:
+      - apiextensions
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+      - "patch"
+  - apiGroups:
+      - psmdb.percona.com
+    resources:
+      - perconaservermongodbs
+    verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+      - "patch"
+
+---
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: customresourcedefinition-creator-bindings
+subjects:
+  - kind: User
+    name: PASTE_YOUR_USER_NAME_HERE
+roleRef:
+  kind: Role
+  name: customresourcedefinition-creator
+  apiGroup: rbac.authorization.k8s.io
+```
+
+
 ## Run the Operator
 1. Add the 'psmdb' Namespace to Kubernetes:
     ```
