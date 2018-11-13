@@ -1,6 +1,7 @@
 package stub
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -70,7 +71,7 @@ func TestHandlerHandle(t *testing.T) {
 		},
 	}
 
-	assert.NoError(t, h.Handle(nil, event))
+	assert.NoError(t, h.Handle(context.TODO(), event))
 
 	client.AssertExpectations(t)
 
