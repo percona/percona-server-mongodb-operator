@@ -48,9 +48,8 @@ type ResourcesSpec struct {
 type Platform string
 
 const (
-	PlatformUndef      Platform = ""
-	PlatformKubernetes          = "kubernetes"
-	PlatformOpenshift           = "openshift"
+	PlatformKubernetes Platform = "kubernetes"
+	PlatformOpenshift  Platform = "openshift"
 )
 
 // ServerVersion represents info about k8s / openshift server version
