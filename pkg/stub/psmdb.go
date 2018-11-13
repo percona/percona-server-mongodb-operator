@@ -114,7 +114,7 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
+func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
 	addPSMDBSpecDefaults(&m.Spec)
 
 	limits, err := parseSpecResourceRequirements(replset.Limits)
@@ -157,7 +157,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, replset, clusterRole, resources),
+						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),
 					},
 					Volumes: []corev1.Volume{
 						{

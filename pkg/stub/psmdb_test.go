@@ -70,8 +70,15 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			},
 		},
 	}
+
+	h := &Handler{
+		serverVersion: &v1alpha1.ServerVersion{
+			Platform: v1alpha1.PlatformKubernetes,
+		},
+	}
+
 	// default/wiredTiger set
-	set, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	set, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, set)
 	assert.Equal(t, t.Name()+"-"+defaultReplsetName, set.Name)
@@ -86,7 +93,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	psmdb.Spec.Mongod.Storage.MMAPv1 = &v1alpha1.MongodSpecMMAPv1{
 		Smallfiles: true,
 	}
-	mmapSet, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	mmapSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, mmapSet)
 	assert.Contains(t, mmapSet.Spec.Template.Spec.Containers[0].Args, "--storageEngine=mmapv1")
@@ -99,7 +106,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			InMemorySizeRatio: 1.0,
 		},
 	}
-	imSet, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	imSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, imSet)
 	assert.Contains(t, imSet.Spec.Template.Spec.Containers[0].Args, "--inMemorySizeGB=0.93")
