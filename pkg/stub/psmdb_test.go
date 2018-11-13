@@ -10,11 +10,17 @@ import (
 )
 
 func TestAddPSMDBSpecDefaults(t *testing.T) {
+	h := &Handler{
+		serverVersion: &v1alpha1.ServerVersion{
+			Platform: v1alpha1.PlatformKubernetes,
+		},
+	}
 	spec := v1alpha1.PerconaServerMongoDBSpec{}
 
-	addPSMDBSpecDefaults(&spec)
+	h.addPSMDBSpecDefaults(&spec)
 
 	assert.Equal(t, defaultVersion, spec.Version)
+	assert.Equal(t, int64(defaultRunUID), spec.RunUID)
 
 	assert.Len(t, spec.Replsets, 1)
 	assert.Equal(t, defaultReplsetName, spec.Replsets[0].Name)
@@ -33,10 +39,16 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 			},
 		},
 	}
-	addPSMDBSpecDefaults(&spec2)
+	h.addPSMDBSpecDefaults(&spec2)
 	assert.NotNil(t, spec2.Mongod.Storage.InMemory)
 	assert.NotNil(t, spec2.Mongod.Storage.InMemory.EngineConfig)
 	assert.Equal(t, spec2.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
+
+	// test runUID default is skipped on Openshift
+	spec3 := v1alpha1.PerconaServerMongoDBSpec{}
+	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
+	h.addPSMDBSpecDefaults(&spec)
+	assert.Equal(t, int64(0), spec3.RunUID)
 }
 
 func TestNewPSMDBStatefulSet(t *testing.T) {
