@@ -87,6 +87,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	assert.Contains(t, set.Spec.Template.Spec.Containers[0].Args, "--wiredTigerCacheSizeGB=0.25")
 	assert.Len(t, set.Spec.Template.Spec.Containers[0].Ports, 1)
 	assert.Equal(t, int32(99999), set.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort)
+	assert.Equal(t, int64(1001), *set.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 
 	// mmapv1 set
 	psmdb.Spec.Mongod.Storage.Engine = v1alpha1.StorageEngineMMAPv1
@@ -110,4 +111,10 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, imSet)
 	assert.Contains(t, imSet.Spec.Template.Spec.Containers[0].Args, "--inMemorySizeGB=0.93")
+
+	// test runUID is disabled on Openshift
+	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
+	osSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	assert.NoError(t, err)
+	assert.Nil(t, osSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 }
