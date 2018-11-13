@@ -27,6 +27,7 @@ func NewHandler(client pkgSdk.Client) (sdk.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	logrus.Infof("detected Kubernetes platform: %s, version: %s", serverVersion.Platform, serverVersion.Info)
 	return &Handler{
 		client:        client,
 		serverVersion: serverVersion,
@@ -78,7 +79,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
-			logrus.Infof("Received deleted event for %s", psmdb.Name)
+			logrus.Infof("received deleted event for %s", psmdb.Name)
 			close(h.watchdogQuit)
 			h.watchdog = nil
 			return nil

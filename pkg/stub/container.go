@@ -139,7 +139,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 	}
 
 	// dont set runUID when using Openshift
-	var runUID *int64
+	var runUID *int64 = nil
 	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
 		runUID = &m.Spec.RunUID
 	}
