@@ -138,9 +138,9 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 		"--storageEngine=" + string(mongod.Storage.Engine),
 	}
 
-	// set runUID only when using Kubernetes
+	// dont set runUID when using Openshift
 	var runUID *int64
-	if h.serverVersion.Platform == v1alpha1.PlatformKubernetes {
+	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
 		runUID = &m.Spec.RunUID
 	}
 
