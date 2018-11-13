@@ -1,6 +1,8 @@
 package stub
 
 import (
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -32,6 +34,17 @@ func getPodNames(pods []corev1.Pod) []string {
 		podNames = append(podNames, pod.Name)
 	}
 	return podNames
+}
+
+// statusHasPod returns a boolean reflecting if a ReplsetSTatus contains a
+// pod name
+func statusHasPod(status *v1alpha1.ReplsetStatus, podName string) bool {
+	for _, pod := range status.Pods {
+		if pod == podName {
+			return true
+		}
+	}
+	return false
 }
 
 // isMongodPod returns a boolean reflecting if a pod
