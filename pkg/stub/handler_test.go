@@ -58,7 +58,7 @@ func TestHandlerHandle(t *testing.T) {
 	client.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil)
 	client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
 	client.On("List",
-		mock.AnythingOfType("string"),
+		"test",
 		mock.AnythingOfType("*v1.PodList"),
 		mock.AnythingOfType("sdk.ListOption"),
 	).Return(nil)
