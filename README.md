@@ -20,23 +20,45 @@ The operator was developed/tested for only:
 # Run
 
 ## Run the Operator
-1. Add the 'psmdb' Namespace to Kubernetes:
+1. Add the 'psmdb' Namespace
+
+    on Kubernetes:
     ```
     kubectl create namespace psmdb
     kubectl config set-context $(kubectl config current-context) --namespace=psmdb
     ```
-1. Add the MongoDB Users secrets to Kubernetes. **Update mongodb-users.yaml with new passwords!!!**
+    on OpenShift:
+    ```
+    oc new-project psmdb
+    ```
+1. Add the MongoDB Users secrets to Kubernetes. **Update mongodb-users.yaml with new passwords!**
     ```
     kubectl create -f deploy/mongodb-users.yaml
     ```
-1. Extra step **(for Google Kubernetes Engine ONLY!!!)**
+1. Extra step **for Google Kubernetes Engine**
     ```
     kubectl create clusterrolebinding cluster-admin-binding1 --clusterrole=cluster-admin --user=<myname@example.org>
     ```
+1. Create RBAC and CustomResourceDefinition
+
+    on Kubernetes:
+    ```
+    kubectl create -f deploy/crd.yaml
+    kubectl create -f deploy/rbac.yaml
+    ```
+    on OpenShift **commands should be run from cluster admin privilegies**:
+    ```
+    oc project mykola-psmdb
+    oc create -f deploy/crd.yaml
+    oc create -f deploy/rbac.yaml
+    ```
+1. Extra step **for OpenShift**, if you want to manage PSMDB cluster from non-privilegied user, you can grant permissions by applying next clusterrole
+    ```
+    oc create clusterrole psmdb-admin --verb="*" --resource=perconaservermongodbs.psmdb.percona.com
+    oc adm policy add-cluster-role-to-user psmdb-admin <some-user>
+    ```
 1. Start the percona-server-mongodb-operator within Kubernetes:
     ```
-    kubectl create -f deploy/rbac.yaml
-    kubectl create -f deploy/crd.yaml
     kubectl create -f deploy/operator.yaml
     ```
 1. Create the Percona Server for MongoDB cluster:
