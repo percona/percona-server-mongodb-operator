@@ -20,7 +20,7 @@ func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 	logrus.SetOutput(out)
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		fmt.Fprintf(out, "%s (%s): %s", cmd, pod, scanner.Text())
+		fmt.Fprintf(out, "%s (%s): %s\n", cmd, pod, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
 		logrus.Errorf("Error printing output from %s (%s): %v", cmd, pod, err)
