@@ -15,12 +15,12 @@ func TestPrintCommandOutput(t *testing.T) {
 	_, err := stdout.WriteString("test stdout")
 	assert.NoError(t, err)
 	printCommandOutput("test", t.Name(), &stdout, &stderr, &output)
-	assert.Regexp(t, "test stdout$", output.String())
-	assert.NotRegexp(t, "stderr$", output.String())
+	assert.Regexp(t, "test stdout\n$", output.String())
+	assert.NotRegexp(t, "stderr\n$", output.String())
 	output.Reset()
 
 	_, err = stderr.WriteString("test stderr")
 	assert.NoError(t, err)
 	printCommandOutput("test", t.Name(), &stdout, &stderr, &output)
-	assert.Regexp(t, "test stderr$", output.String())
+	assert.Regexp(t, "test stderr\n$", output.String())
 }
