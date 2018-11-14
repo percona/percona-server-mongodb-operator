@@ -36,7 +36,6 @@ rules:
   - "update"
   - "delete"
   - "get"
-  - "list"
 
 ---
 
