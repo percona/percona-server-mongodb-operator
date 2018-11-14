@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sversion "k8s.io/apimachinery/pkg/version"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -42,6 +43,19 @@ type ResourceSpecRequirements struct {
 type ResourcesSpec struct {
 	Limits   *ResourceSpecRequirements `json:"limits,omitempty"`
 	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
+}
+
+type Platform string
+
+const (
+	PlatformKubernetes Platform = "kubernetes"
+	PlatformOpenshift  Platform = "openshift"
+)
+
+// ServerVersion represents info about k8s / openshift server version
+type ServerVersion struct {
+	Platform Platform
+	Info     k8sversion.Info
 }
 
 type SecretsSpec struct {

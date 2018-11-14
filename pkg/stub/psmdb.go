@@ -31,7 +31,7 @@ var (
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
-func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
+func (h *Handler) addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Version == "" {
 		spec.Version = defaultVersion
 	}
@@ -108,14 +108,14 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 			}
 		}
 	}
-	if spec.RunUID == 0 {
+	if spec.RunUID == 0 && h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
 		spec.RunUID = defaultRunUID
 	}
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
-	addPSMDBSpecDefaults(&m.Spec)
+func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
+	h.addPSMDBSpecDefaults(&m.Spec)
 
 	limits, err := parseSpecResourceRequirements(replset.Limits)
 	if err != nil {
@@ -157,7 +157,7 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 						newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, replset, clusterRole, resources),
+						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),
 					},
 					Volumes: []corev1.Volume{
 						{

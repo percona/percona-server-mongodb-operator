@@ -125,7 +125,7 @@ func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	}
 }
 
-func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole, resources *corev1.ResourceRequirements) corev1.Container {
+func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole, resources *corev1.ResourceRequirements) corev1.Container {
 	mongod := m.Spec.Mongod
 
 	args := []string{
@@ -136,6 +136,12 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mongod.Storage.Engine),
+	}
+
+	// dont set runUID when using Openshift
+	var runUID *int64 = nil
+	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
+		runUID = &m.Spec.RunUID
 	}
 
 	// sharding
@@ -317,7 +323,7 @@ func newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &trueVar,
-			RunAsUser:    &m.Spec.RunUID,
+			RunAsUser:    runUID,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{

@@ -22,23 +22,36 @@ var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
 
-func NewHandler(client pkgSdk.Client) sdk.Handler {
-	return &Handler{
-		client:       client,
-		startedAt:    time.Now(),
-		watchdogQuit: make(chan bool, 1),
+func NewHandler(client pkgSdk.Client) (sdk.Handler, error) {
+	serverVersion, err := getServerVersion()
+	if err != nil {
+		return nil, err
 	}
+	logrus.Infof("detected Kubernetes platform: %s, version: %s", serverVersion.Platform, serverVersion.Info)
+	return &Handler{
+		client:        client,
+		serverVersion: serverVersion,
+		startedAt:     time.Now(),
+		watchdogQuit:  make(chan bool, 1),
+	}, nil
 }
 
 type Handler struct {
-	client       pkgSdk.Client
-	pods         *podk8s.Pods
-	watchdog     *watchdog.Watchdog
-	watchdogQuit chan bool
-	startedAt    time.Time
+	client        pkgSdk.Client
+	serverVersion *v1alpha1.ServerVersion
+	pods          *podk8s.Pods
+	watchdog      *watchdog.Watchdog
+	watchdogQuit  chan bool
+	startedAt     time.Time
 }
 
+// ensureWatchdog ensures the PSMDB watchdog has started. This process controls the replica set and sharding
+// state of a PSMDB cluster.
+//
+// See: https://github.com/percona/mongodb-orchestration-tools/tree/master/watchdog
+//
 func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB, usersSecret *corev1.Secret) error {
+	// Skip if watchdog is started
 	if h.watchdog != nil {
 		return nil
 	}
@@ -57,6 +70,7 @@ func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB, usersSecret *
 	return nil
 }
 
+// Handle is the main operator function that is ran for every SDK event
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	switch o := event.Object.(type) {
 	case *v1alpha1.PerconaServerMongoDB:
@@ -65,7 +79,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
-			logrus.Infof("Received deleted event for %s", psmdb.Name)
+			logrus.Infof("received deleted event for %s", psmdb.Name)
 			close(h.watchdogQuit)
 			h.watchdog = nil
 			return nil
