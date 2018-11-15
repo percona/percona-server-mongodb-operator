@@ -101,6 +101,7 @@ func (h *Handler) newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1
 		"cp " + mongoDBSecretsDir + "/" + mongoDbSecretMongoKeyVal + " /mongodb/mongodb.key",
 		"chmod 0400 /mongodb/mongodb.key",
 	}
+
 	return corev1.Container{
 		Name:  "init",
 		Image: "busybox",
