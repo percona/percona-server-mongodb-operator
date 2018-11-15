@@ -92,12 +92,13 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 	}
 }
 
+// getContainerRunUID returns an int64-pointer reflecting the user ID a container
+// should run as
 func (h *Handler) getContainerRunUID(m *v1alpha1.PerconaServerMongoDB) *int64 {
-	var runUID *int64
 	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
-		runUID = &m.Spec.RunUID
+		return &m.Spec.RunUID
 	}
-	return runUID
+	return nil
 }
 
 func (h *Handler) newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
