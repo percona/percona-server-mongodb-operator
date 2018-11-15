@@ -17,9 +17,7 @@ The operator was developed/tested for only:
 1. Kubernetes version 1.10 to 1.11
 1. Go 1.11
 
-# Run
-
-## Run the Operator
+# Run the Operator
 1. Add the 'psmdb' Namespace
 
     on Kubernetes:
@@ -129,22 +127,22 @@ The operator requires system-level MongoDB Users to automate the MongoDB deploym
 
 ### Development Mode
 
-**Note: do not use in Production!**
+**Note: Do not use the default MongoDB Users in Production!**
 
 To make development/testing easier a secrets file with default MongoDB System User/Passwords is located at *'deploy/mongodb-users.yaml'*.
 
-The default credentials from *deploy/mongodb-users.yaml* are:
+The development-mode credentials from *deploy/mongodb-users.yaml* are:
 
-| Secret Key                       | Secret Value   |
-|----------------------------------|----------------|
-| MONGODB_BACKUP_USER              | backup         |
-| MONGODB_BACKUP_PASSWORD          | admin123456    |
-| MONGODB_CLUSTER_ADMIN_USER       | clusterAdmin   |
-| MONGODB_CLUSTER_ADMIN_PASSWORD   | admin123456    |
-| MONGODB_CLUSTER_MONITOR_USER     | clusterMonitor |
-| MONGODB_CLUSTER_MONITOR_PASSWORD | admin123456    |
-| MONGODB_USER_ADMIN_USER          | userAdmin      |
-| MONGODB_USER_ADMIN_PASSWORD      | admin123456    |
+| Secret Key                       | Secret Value         |
+|----------------------------------|----------------------|
+| MONGODB_BACKUP_USER              | backup               |
+| MONGODB_BACKUP_PASSWORD          | backup123456         |
+| MONGODB_CLUSTER_ADMIN_USER       | clusterAdmin         |
+| MONGODB_CLUSTER_ADMIN_PASSWORD   | clusterAdmin123456   |
+| MONGODB_CLUSTER_MONITOR_USER     | clusterMonitor       |
+| MONGODB_CLUSTER_MONITOR_PASSWORD | clusterMonitor123456 |
+| MONGODB_USER_ADMIN_USER          | userAdmin            |
+| MONGODB_USER_ADMIN_PASSWORD      | userAdmin123456      |
 
 ## MongoDB Internal Authentication Key (optional)
 
