@@ -130,11 +130,6 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 		Requests: requests,
 	}
 
-	var fsGroup *int64
-	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
-		fsGroup = &m.Spec.RunUID
-	}
-
 	ls := labelsForPerconaServerMongoDB(m, replset)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -165,7 +160,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),
 					},
 					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup: fsGroup,
+						FSGroup: h.getContainerRunUID(m),
 					},
 					Volumes: []corev1.Volume{
 						{
