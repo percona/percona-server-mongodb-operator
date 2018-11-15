@@ -92,6 +92,14 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 	}
 }
 
+func (h *Handler) getContainerRunUID(m *v1alpha1.PerconaServerMongoDB) *int64 {
+	var runUID *int64
+	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
+		runUID = &m.Spec.RunUID
+	}
+	return runUID
+}
+
 func (h *Handler) newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	// download mongodb-healthcheck, copy internal auth key and setup ownership+permissions
 	cmds := []string{
@@ -127,14 +135,6 @@ func (h *Handler) newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1
 			},
 		},
 	}
-}
-
-func (h *Handler) getContainerRunUID(m *v1alpha1.PerconaServerMongoDB) *int64 {
-	var runUID *int64
-	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
-		runUID = &m.Spec.RunUID
-	}
-	return runUID
 }
 
 func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole, resources *corev1.ResourceRequirements) corev1.Container {
