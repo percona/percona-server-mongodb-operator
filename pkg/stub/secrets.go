@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	mongoDBSecretsDirName    = "mongodb-secrets"
 	mongoDBSecretsDir        = "/etc/mongodb-secrets"
 	mongoDbSecretMongoKeyVal = "mongodb-key"
 )
