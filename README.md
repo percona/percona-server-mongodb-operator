@@ -6,6 +6,18 @@
 
 A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) based on the [Operator SDK](https://github.com/operator-framework/operator-sdk).
 
+<!-- ToC start -->
+# Table of Contents
+
+1. [DISCLAIMER](#disclaimer)
+1. [Requirements](#requirements)
+1. [Run the Operator](#run-the-operator)
+1. [Required Secrets](#required-secrets)
+   1. [MongoDB System Users](#mongodb-system-users)
+      1. [Development Mode](#development-mode)
+   1. [MongoDB Internal Authentication Key (optional)](#mongodb-internal-authentication-key-optional)
+<!-- ToC end -->
+
 # DISCLAIMER
 
 **This code is incomplete, expect major issues and changes until this repo has stabilised!**

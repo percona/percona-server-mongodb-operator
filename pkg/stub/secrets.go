@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	mongoDBSecretsDirName    = "mongodb-secrets"
 	mongoDBSecretsDir        = "/etc/mongodb-secrets"
-	mongoDbSecretMongoKeyVal = "mongodb-key"
+	mongoDBSecretMongoKeyVal = "mongodb-key"
 )
 
 // generateMongoDBKey generates a 1024 byte-length random key for MongoDB Internal Authentication
@@ -40,7 +39,7 @@ func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) *corev1.Secret {
 			Namespace: m.Namespace,
 		},
 		StringData: map[string]string{
-			mongoDbSecretMongoKeyVal: generateMongoDBKey(),
+			mongoDBSecretMongoKeyVal: generateMongoDBKey(),
 		},
 	}
 	addOwnerRefToObject(secret, asOwner(m))
