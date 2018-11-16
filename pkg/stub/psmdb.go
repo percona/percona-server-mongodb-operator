@@ -10,24 +10,24 @@ import (
 )
 
 var (
-	defaultVersion                  string  = "latest"
-	defaultRunUID                   int64   = 1001
-	defaultKeySecretName            string  = "percona-server-mongodb-key"
-	defaultUsersSecretName          string  = "percona-server-mongodb-users"
-	defaultMongodSize               int32   = 3
-	defaultReplsetName              string  = "rs"
-	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
-	defaultMongodPort               int32   = 27017
-	defaultWiredTigerCacheSizeRatio float64 = 0.5
-	defaultInMemorySizeRatio        float64 = 0.9
-	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
-	mongodContainerDataDir          string  = "/data/db"
-	mongodContainerName             string  = "mongod"
-	mongodDataVolClaimName          string  = "mongod-data"
-	mongodToolsVolName              string  = "mongodb-tools"
-	mongodPortName                  string  = "mongodb"
-	mongodbInitiatorUrl             string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/k8s-mongodb-initiator"
-	mongodbHealthcheckUrl           string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
+	defaultVersion                        = "latest"
+	defaultRunUID                   int64 = 1001
+	defaultKeySecretName                  = "percona-server-mongodb-key"
+	defaultUsersSecretName                = "percona-server-mongodb-users"
+	defaultMongodSize               int32 = 3
+	defaultReplsetName                    = "rs"
+	defaultStorageEngine                  = v1alpha1.StorageEngineWiredTiger
+	defaultMongodPort               int32 = 27017
+	defaultWiredTigerCacheSizeRatio       = 0.5
+	defaultInMemorySizeRatio              = 0.9
+	defaultOperationProfilingMode         = v1alpha1.OperationProfilingModeSlowOp
+	mongodContainerDataDir                = "/data/db"
+	mongodContainerName                   = "mongod"
+	mongodDataVolClaimName                = "mongod-data"
+	mongodToolsVolName                    = "mongodb-tools"
+	mongodPortName                        = "mongodb"
+	mongodbInitiatorUrl                   = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/k8s-mongodb-initiator"
+	mongodbHealthcheckUrl                 = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
