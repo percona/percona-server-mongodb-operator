@@ -45,7 +45,7 @@ The operator was developed/tested for only:
     ```
 1. Create RBAC and CustomResourceDefinition
 
-    This step require that your user need to has **cluster-admin role privileges**. 
+    This step require that your user needs to have **cluster-admin role privileges**. 
     
     Detailed about users and roles:
     
