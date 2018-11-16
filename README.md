@@ -101,7 +101,7 @@ The operator was developed/tested for only:
 1. From a *'mongo'* shell add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(hostname/replicaSet in mongo uri may vary for your situation)*:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
-    mongodb@percona-client:/$ mongo mongodb+srv://userAdmin:admin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0
+    mongodb@percona-client:/$ mongo mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0
     rs0:PRIMARY> db.createUser({
         user: "myApp",
         pwd: "myAppPassword",

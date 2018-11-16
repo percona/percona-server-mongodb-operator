@@ -32,7 +32,8 @@ spec:
     storage:
       engine: wiredTiger
       inMemory:
-        inMemorySizeRatio: 0.9
+        engineConfig:
+          inMemorySizeRatio: 0.9
       mmapv1:
         nsSize: 16
         smallfiles: false
