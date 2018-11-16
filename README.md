@@ -30,8 +30,14 @@ The operator was developed/tested for only:
     oc new-project psmdb
     ```
 1. Add the MongoDB Users secrets to Kubernetes. **Update mongodb-users.yaml with new passwords!**
+    
+    on Kubernetes:
     ```
     kubectl create -f deploy/mongodb-users.yaml
+    ```
+    on OpenShift:
+    ```
+    oc create -f deploy/mongodb-users.yaml
     ```
 1. Extra step **for Google Kubernetes Engine**
     ```
@@ -39,12 +45,20 @@ The operator was developed/tested for only:
     ```
 1. Create RBAC and CustomResourceDefinition
 
+    This step require that your user need to has **cluster-admin role privileges**. 
+    
+    Detailed about users and roles:
+    
+    Kubernetes: [documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings)
+    
+    OpenShift: [documentation](https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html)
+    
     on Kubernetes:
     ```
     kubectl create -f deploy/crd.yaml
     kubectl create -f deploy/rbac.yaml
     ```
-    on OpenShift **commands should be run from cluster admin privilegies**:
+    on OpenShift:
     ```
     oc project mykola-psmdb
     oc create -f deploy/crd.yaml
