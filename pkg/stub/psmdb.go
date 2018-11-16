@@ -21,19 +21,21 @@ var (
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
 	defaultInMemorySizeRatio        float64 = 0.9
 	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
+	defaultImagePullPolicy                  = corev1.PullIfNotPresent
 	mongodContainerDataDir          string  = "/data/db"
 	mongodContainerName             string  = "mongod"
 	mongodDataVolClaimName          string  = "mongod-data"
-	mongodToolsVolName              string  = "mongodb-tools"
 	mongodPortName                  string  = "mongodb"
-	mongodbInitiatorUrl             string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/k8s-mongodb-initiator"
-	mongodbHealthcheckUrl           string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
+	secretFileMode                  int32   = 0060
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
 func (h *Handler) addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 	if spec.Version == "" {
 		spec.Version = defaultVersion
+	}
+	if spec.ImagePullPolicy == "" {
+		spec.ImagePullPolicy = defaultImagePullPolicy
 	}
 	if spec.Secrets == nil {
 		spec.Secrets = &v1alpha1.SecretsSpec{}
@@ -153,9 +155,6 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 				Spec: corev1.PodSpec{
 					Affinity:      newPSMDBPodAffinity(ls),
 					RestartPolicy: corev1.RestartPolicyAlways,
-					InitContainers: []corev1.Container{
-						h.newPSMDBInitContainer(m),
-					},
 					Containers: []corev1.Container{
 						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),
 					},
@@ -164,13 +163,12 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: mongodToolsVolName,
-						},
-						{
 							Name: m.Spec.Secrets.Key,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: m.Spec.Secrets.Key,
+									DefaultMode: &secretFileMode,
+									SecretName:  m.Spec.Secrets.Key,
+									Optional:    &falseVar,
 								},
 							},
 						},

@@ -87,7 +87,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
 
 		return execCommandInContainer(pod, mongodContainerName, []string{
-			"/mongodb/k8s-mongodb-initiator",
+			"k8s-mongodb-initiator",
 			"init",
 		})
 	}

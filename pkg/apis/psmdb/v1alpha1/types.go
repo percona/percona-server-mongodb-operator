@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 )
@@ -23,11 +24,12 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Version  string         `json:"version,omitempty"`
-	RunUID   int64          `json:"runUid,omitempty"`
-	Mongod   *MongodSpec    `json:"mongod,omitempty"`
-	Replsets []*ReplsetSpec `json:"replsets,omitempty"`
-	Secrets  *SecretsSpec   `json:"secrets,omitempty"`
+	Version         string            `json:"version,omitempty"`
+	RunUID          int64             `json:"runUid,omitempty"`
+	Mongod          *MongodSpec       `json:"mongod,omitempty"`
+	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
+	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {

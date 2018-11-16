@@ -4,6 +4,7 @@ metadata:
   name: my-cluster-name
 spec:
   version: "3.6"
+  imagePullPolicy: Always
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users

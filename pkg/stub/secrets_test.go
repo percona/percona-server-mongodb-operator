@@ -26,7 +26,7 @@ func TestNewPSMDBMongoKeySecret(t *testing.T) {
 	})
 	assert.NotNil(t, secret)
 	assert.Equal(t, t.Name(), secret.Name)
-	assert.Len(t, secret.StringData[mongoDbSecretMongoKeyVal], 1024)
+	assert.Len(t, secret.StringData[mongoDBSecretMongoKeyVal], 1024)
 }
 
 func TestGetPSMDBSecret(t *testing.T) {
@@ -37,20 +37,20 @@ func TestGetPSMDBSecret(t *testing.T) {
 		},
 	}
 
-	// make mock SDK return secret with test mongoDbSecretMongoKeyVal key
+	// make mock SDK return secret with test mongoDBSecretMongoKeyVal key
 	sdk := &mocks.Client{}
 	sdk.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil).Run(func(args mock.Arguments) {
 		obj := args.Get(0).(*corev1.Secret)
 		obj.Data = map[string][]byte{
-			mongoDbSecretMongoKeyVal: []byte(t.Name()),
+			mongoDBSecretMongoKeyVal: []byte(t.Name()),
 		}
 	})
 
 	// call getPSMDBSecret() to get secret from mock SDK
-	secret, err := getPSMDBSecret(psmdb, sdk, mongoDbSecretMongoKeyVal)
+	secret, err := getPSMDBSecret(psmdb, sdk, mongoDBSecretMongoKeyVal)
 	assert.NoError(t, err)
 
 	// test secret returned from mock SDK
 	assert.Len(t, secret.Data, 1)
-	assert.Equal(t, []byte(t.Name()), secret.Data[mongoDbSecretMongoKeyVal])
+	assert.Equal(t, []byte(t.Name()), secret.Data[mongoDBSecretMongoKeyVal])
 }

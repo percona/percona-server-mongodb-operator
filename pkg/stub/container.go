@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	k8sPod "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
@@ -17,8 +17,14 @@ import (
 const (
 	gigaByte                 int64   = 1024 * 1024 * 1024
 	minWiredTigerCacheSizeGB float64 = 0.25
-	dockerImageBase          string  = "percona/percona-server-mongodb"
 )
+
+// getPSMDBDockerImageName returns the prefix for the Dockerhub image name.
+// This image name should be in the following format:
+// perconalab/percona-server-mongodb-operator:<VERSION>-mongod<PSMDB-VERSION>
+func getPSMDBDockerImageName(m *v1alpha1.PerconaServerMongoDB) string {
+	return "perconalab/percona-server-mongodb-operator:" + version.Version + "-mongod" + m.Spec.Version
+}
 
 // getMongodPort returns the mongod port number as a string
 func getMongodPort(container *corev1.Container) string {
@@ -101,43 +107,6 @@ func (h *Handler) getContainerRunUID(m *v1alpha1.PerconaServerMongoDB) *int64 {
 	return nil
 }
 
-func (h *Handler) newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
-	// download mongodb-healthcheck, copy internal auth key and setup ownership+permissions
-	cmds := []string{
-		"wget -P /mongodb " + mongodbHealthcheckUrl,
-		"wget -P /mongodb " + mongodbInitiatorUrl,
-		"chmod +x /mongodb/mongodb-healthcheck /mongodb/k8s-mongodb-initiator",
-		"cp " + mongoDBSecretsDir + "/" + mongoDbSecretMongoKeyVal + " /mongodb/mongodb.key",
-		"chmod 0400 /mongodb/mongodb.key",
-	}
-
-	return corev1.Container{
-		Name:  "init",
-		Image: "busybox",
-		Command: []string{
-			"/bin/sh", "-c", strings.Join(cmds, " && "),
-		},
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: &trueVar,
-			RunAsUser:    h.getContainerRunUID(m),
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      mongodToolsVolName,
-				MountPath: "/mongodb",
-			},
-			{
-				Name:      mongodDataVolClaimName,
-				MountPath: mongodContainerDataDir,
-			},
-			{
-				Name:      m.Spec.Secrets.Key,
-				MountPath: mongoDBSecretsDir,
-			},
-		},
-	}
-}
-
 func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole, resources *corev1.ResourceRequirements) corev1.Container {
 	mongod := m.Spec.Mongod
 
@@ -145,7 +114,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 		"--bind_ip_all",
 		"--auth",
 		"--dbpath=" + mongodContainerDataDir,
-		"--keyFile=/mongodb/mongodb.key",
+		"--keyFile=" + mongodContainerDataDir + "/.mongod.key",
 		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mongod.Storage.Engine),
@@ -270,9 +239,10 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 	}
 
 	return corev1.Container{
-		Name:  mongodContainerName,
-		Image: dockerImageBase + ":" + m.Spec.Version,
-		Args:  args,
+		Name:            mongodContainerName,
+		Image:           getPSMDBDockerImageName(m),
+		ImagePullPolicy: m.Spec.ImagePullPolicy,
+		Args:            args,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
@@ -296,7 +266,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/mongodb/mongodb-healthcheck",
+						"mongodb-healthcheck",
 						"k8s",
 						"liveness",
 					},
@@ -334,13 +304,13 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      mongodToolsVolName,
-				MountPath: "/mongodb",
-				ReadOnly:  true,
-			},
-			{
 				Name:      mongodDataVolClaimName,
 				MountPath: mongodContainerDataDir,
+			},
+			{
+				Name:      m.Spec.Secrets.Key,
+				MountPath: mongoDBSecretsDir,
+				ReadOnly:  true,
 			},
 		},
 	}
