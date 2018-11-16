@@ -154,10 +154,13 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 					Affinity:      newPSMDBPodAffinity(ls),
 					RestartPolicy: corev1.RestartPolicyAlways,
 					InitContainers: []corev1.Container{
-						newPSMDBInitContainer(m),
+						h.newPSMDBInitContainer(m),
 					},
 					Containers: []corev1.Container{
 						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),
+					},
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: h.getContainerRunUID(m),
 					},
 					Volumes: []corev1.Volume{
 						{

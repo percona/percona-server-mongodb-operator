@@ -92,21 +92,34 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 	}
 }
 
-func newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
+// getContainerRunUID returns an int64-pointer reflecting the user ID a container
+// should run as
+func (h *Handler) getContainerRunUID(m *v1alpha1.PerconaServerMongoDB) *int64 {
+	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
+		return &m.Spec.RunUID
+	}
+	return nil
+}
+
+func (h *Handler) newPSMDBInitContainer(m *v1alpha1.PerconaServerMongoDB) corev1.Container {
 	// download mongodb-healthcheck, copy internal auth key and setup ownership+permissions
 	cmds := []string{
 		"wget -P /mongodb " + mongodbHealthcheckUrl,
 		"wget -P /mongodb " + mongodbInitiatorUrl,
 		"chmod +x /mongodb/mongodb-healthcheck /mongodb/k8s-mongodb-initiator",
 		"cp " + mongoDBSecretsDir + "/" + mongoDbSecretMongoKeyVal + " /mongodb/mongodb.key",
-		"chown " + strconv.Itoa(int(m.Spec.RunUID)) + " " + mongodContainerDataDir + " /mongodb/mongodb.key",
 		"chmod 0400 /mongodb/mongodb.key",
 	}
+
 	return corev1.Container{
 		Name:  "init",
 		Image: "busybox",
 		Command: []string{
 			"/bin/sh", "-c", strings.Join(cmds, " && "),
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsNonRoot: &trueVar,
+			RunAsUser:    h.getContainerRunUID(m),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -136,12 +149,6 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mongod.Storage.Engine),
-	}
-
-	// dont set runUID when using Openshift
-	var runUID *int64 = nil
-	if h.serverVersion.Platform != v1alpha1.PlatformOpenshift {
-		runUID = &m.Spec.RunUID
 	}
 
 	// sharding
@@ -323,7 +330,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &trueVar,
-			RunAsUser:    runUID,
+			RunAsUser:    h.getContainerRunUID(m),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
