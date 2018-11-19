@@ -97,11 +97,11 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 				RequiredDuringSchedulingIgnoredDuringExecution: terms,
 			},
 		}
-	default:
+	case v1alpha1.AffinityModePreferred:
 		var terms []corev1.WeightedPodAffinityTerm
 		if replset.Affinity.UniqueHostname {
 			terms = append(terms, corev1.WeightedPodAffinityTerm{
-				Weight:          100,
+				Weight:          150,
 				PodAffinityTerm: hostnameAffinity,
 			})
 		}
@@ -117,4 +117,5 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 			},
 		}
 	}
+	return nil
 }
