@@ -49,6 +49,7 @@ func TestGetReplsetDialInfo(t *testing.T) {
 	assert.Equal(t, "testPod."+t.Name()+"-"+defaultReplsetName+".default.svc.cluster.local:99999", di.Addrs[0])
 	assert.Equal(t, "clusterAdmin", di.Username)
 	assert.Equal(t, "123456", di.Password)
+	assert.Equal(t, MongoDBTimeout, di.Timeout)
 	assert.True(t, di.FailFast)
 }
 
