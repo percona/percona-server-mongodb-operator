@@ -101,13 +101,13 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 		var terms []corev1.WeightedPodAffinityTerm
 		if replset.Affinity.UniqueHostname {
 			terms = append(terms, corev1.WeightedPodAffinityTerm{
-				Weight:          200,
+				Weight:          100,
 				PodAffinityTerm: hostnameAffinity,
 			})
 		}
 		if replset.Affinity.UniqueZone {
 			terms = append(terms, corev1.WeightedPodAffinityTerm{
-				Weight:          100,
+				Weight:          50,
 				PodAffinityTerm: failureDomainZoneAffinity,
 			})
 		}
