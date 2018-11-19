@@ -17,6 +17,7 @@ var (
 	defaultMongodSize               int32   = 3
 	defaultReplsetName              string  = "rs"
 	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
+	defaultAffinityMode                     = v1alpha1.AffinityModePreferred
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
 	defaultInMemorySizeRatio        float64 = 0.9
@@ -100,13 +101,17 @@ func (h *Handler) addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) 
 	}
 	if len(spec.Replsets) == 0 {
 		spec.Replsets = []*v1alpha1.ReplsetSpec{{
-			Name: defaultReplsetName,
-			Size: defaultMongodSize,
+			Name:         defaultReplsetName,
+			Size:         defaultMongodSize,
+			AffinityMode: defaultAffinityMode,
 		}}
 	} else {
 		for _, replset := range spec.Replsets {
 			if replset.Size == 0 {
 				replset.Size = defaultMongodSize
+			}
+			if replset.AffinityMode == "" {
+				replset.AffinityMode = defaultAffinityMode
 			}
 		}
 	}
