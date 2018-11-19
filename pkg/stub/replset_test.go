@@ -28,13 +28,11 @@ func TestGetReplsetDialInfo(t *testing.T) {
 		},
 		&v1alpha1.ReplsetSpec{
 			Name: defaultReplsetName,
-			Size: defaultMongodSize,
 		},
 		[]corev1.Pod{
 			{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "testPod",
-					Namespace: t.Name(),
+					Name: "testPod",
 				},
 			},
 		},
@@ -51,18 +49,13 @@ func TestGetReplsetDialInfo(t *testing.T) {
 	assert.Equal(t, "testPod."+t.Name()+"-"+defaultReplsetName+".default.svc.cluster.local:99999", di.Addrs[0])
 	assert.Equal(t, "clusterAdmin", di.Username)
 	assert.Equal(t, "123456", di.Password)
+	assert.True(t, di.FailFast)
 }
 
 //func TestGetReplsetStatus(t *testing.T) {}
-
 //func TestIsReplsetInitialized(t *testing.T) {}
-
 //func TestGetReplsetMemberStatuses(t *testing.T) {}
-
 //func TestHandlerHandleReplsetInit(t *testing.T) {}
-
 //func TestHandlerUpdateStatus(t *testing.T) {}
-
 //func TestEnsureReplsetStatefulSet(t *testing.T) {}
-
 //func TestHandlerEnsureReplset(t *testing.T) {}
