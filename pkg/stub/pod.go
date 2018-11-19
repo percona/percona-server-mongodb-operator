@@ -70,39 +70,41 @@ func isPodReady(pod corev1.Pod) bool {
 // newPSMDBPodAffinity returns an Affinity configuration that aims to avoid deploying more than
 // one pod on the same Kubernetes failure-domain zone (failure-domain.beta.kubernetes.io/zone)
 // and hostname (kubernetes.io/hostname)
-func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
-	affinityTerm := []corev1.WeightedPodAffinityTerm{
-		{
-			Weight: 100,
-			PodAffinityTerm: corev1.PodAffinityTerm{
-				LabelSelector: &metav1.LabelSelector{
-					MatchLabels: ls,
-				},
-				TopologyKey: "kubernetes.io/hostname",
-			},
+func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *corev1.Affinity {
+	hostnameAffinity := corev1.PodAffinityTerm{
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: ls,
 		},
-		{
-			Weight: 100,
-			PodAffinityTerm: corev1.PodAffinityTerm{
-				LabelSelector: &metav1.LabelSelector{
-					MatchLabels: ls,
-				},
-				TopologyKey: "failure-domain.beta.kubernetes.io/zone",
-			},
-		},
+		TopologyKey: "kubernetes.io/hostname",
 	}
-	switch m.Spec.Mongod.AffinityMode {
-	case v1alpha1.AffinityModePreffered:
-		return corev1.Affinity{
+	failureDomainZoneAffinity := corev1.PodAffinityTerm{
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: ls,
+		},
+		TopologyKey: "failure-domain.beta.kubernetes.io/zone",
+	}
+	if replset.AffinityMode == v1alpha1.AffinityModeRequired {
+		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: affinityTerm,
+				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+					hostnameAffinity,
+					failureDomainZoneAffinity,
+				},
 			},
 		}
-	case v1alpha1.AffinityModePreffered:
-		return corev1.Affinity{
-			PodAntiAffinity: &corev1.PodAntiAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: affinityTerm,
+	}
+	return &corev1.Affinity{
+		PodAntiAffinity: &corev1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+				{
+					Weight:          100,
+					PodAffinityTerm: hostnameAffinity,
+				},
+				{
+					Weight:          100,
+					PodAffinityTerm: failureDomainZoneAffinity,
+				},
 			},
-		}
+		},
 	}
 }

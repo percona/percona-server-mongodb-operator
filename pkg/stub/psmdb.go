@@ -158,7 +158,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:      newPSMDBPodAffinity(ls),
+					Affinity:      newPSMDBPodAffinity(replset, ls),
 					RestartPolicy: corev1.RestartPolicyAlways,
 					Containers: []corev1.Container{
 						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),

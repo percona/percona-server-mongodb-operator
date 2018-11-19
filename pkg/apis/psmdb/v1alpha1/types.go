@@ -60,6 +60,13 @@ type ServerVersion struct {
 	Info     k8sversion.Info
 }
 
+type AffinityMode string
+
+const (
+	AffinityModePreferred AffinityMode = "preferred"
+	AffinityModeRequired  AffinityMode = "required"
+)
+
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
@@ -67,10 +74,11 @@ type SecretsSpec struct {
 
 type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string `json:"name"`
-	Size           int32  `json:"size"`
-	StorageClass   string `json:"storageClass,omitempty"`
-	Configsvr      bool   `json:"configsvr,omitempty"`
+	Name           string       `json:"name"`
+	Size           int32        `json:"size"`
+	AffinityMode   AffinityMode `json:"affinityMode,omitempty"`
+	StorageClass   string       `json:"storageClass,omitempty"`
+	Configsvr      bool         `json:"configsvr,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
