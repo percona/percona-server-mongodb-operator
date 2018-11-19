@@ -72,6 +72,7 @@ type AffinitySpec struct {
 	Mode           AffinityMode `json:"mode,omitempty"`
 	UniqueHostname bool         `json:"uniqueHostname,omitempty"`
 	UniqueZone     bool         `json:"uniqueZone,omitempty"`
+	OnlyZones      []string     `json:"onlyZones,omitempty"`
 }
 
 type SecretsSpec struct {

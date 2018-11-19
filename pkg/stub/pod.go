@@ -7,6 +7,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	topologyKeyHostname          = "kubernetes.io/hostname"
+	topologyKeyFailureDomainZone = "failure-domain.beta.kubernetes.io/zone"
+)
+
 // podList returns a v1.PodList object
 func podList() *corev1.PodList {
 	return &corev1.PodList{
@@ -71,18 +76,42 @@ func isPodReady(pod corev1.Pod) bool {
 // one pod on the same Kubernetes failure-domain zone (failure-domain.beta.kubernetes.io/zone)
 // and hostname (kubernetes.io/hostname)
 func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *corev1.Affinity {
+	var affinity corev1.Affinity
+
 	hostnameAffinity := corev1.PodAffinityTerm{
 		LabelSelector: &metav1.LabelSelector{
 			MatchLabels: ls,
 		},
-		TopologyKey: "kubernetes.io/hostname",
+		TopologyKey: topologyKeyHostname,
 	}
+
 	failureDomainZoneAffinity := corev1.PodAffinityTerm{
 		LabelSelector: &metav1.LabelSelector{
 			MatchLabels: ls,
 		},
-		TopologyKey: "failure-domain.beta.kubernetes.io/zone",
+		TopologyKey: topologyKeyFailureDomainZone,
 	}
+
+	// force pod to launch in specific zones, if specified
+	if len(replset.Affinity.OnlyZones) > 0 {
+		affinity.PodAffinity = &corev1.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      topologyKeyFailureDomainZone,
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   replset.Affinity.OnlyZones,
+							},
+						},
+					},
+					TopologyKey: topologyKeyFailureDomainZone,
+				},
+			},
+		}
+	}
+
 	switch replset.Affinity.Mode {
 	case v1alpha1.AffinityModeRequired:
 		var terms []corev1.PodAffinityTerm
@@ -92,10 +121,8 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 			terms = append(terms, failureDomainZoneAffinity)
 
 		}
-		return &corev1.Affinity{
-			PodAntiAffinity: &corev1.PodAntiAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: terms,
-			},
+		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: terms,
 		}
 	case v1alpha1.AffinityModePreferred:
 		var terms []corev1.WeightedPodAffinityTerm
@@ -111,11 +138,10 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 				PodAffinityTerm: failureDomainZoneAffinity,
 			})
 		}
-		return &corev1.Affinity{
-			PodAntiAffinity: &corev1.PodAntiAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: terms,
-			},
+		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: terms,
 		}
 	}
-	return nil
+
+	return &affinity
 }
