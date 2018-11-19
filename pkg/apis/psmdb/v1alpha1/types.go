@@ -67,6 +67,14 @@ const (
 	AffinityModeRequired  AffinityMode = "required"
 )
 
+type AffinitySpec struct {
+	Mode     AffinityMode `json:"mode,omitempty"`
+	Hostname bool         `json:"hostname,omitempty"`
+	Region   bool         `json:"region,omitempty"`
+	Zone     bool         `json:"zone,omitempty"`
+	Zones    []string     `json:"zones,omitempty"`
+}
+
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
@@ -74,11 +82,11 @@ type SecretsSpec struct {
 
 type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string       `json:"name"`
-	Size           int32        `json:"size"`
-	AffinityMode   AffinityMode `json:"affinityMode,omitempty"`
-	StorageClass   string       `json:"storageClass,omitempty"`
-	Configsvr      bool         `json:"configsvr,omitempty"`
+	Name           string        `json:"name"`
+	Size           int32         `json:"size"`
+	Affinity       *AffinitySpec `json:"affinity,omitempty"`
+	StorageClass   string        `json:"storageClass,omitempty"`
+	Configsvr      bool          `json:"configsvr,omitempty"`
 }
 
 type ReplsetMemberStatus struct {

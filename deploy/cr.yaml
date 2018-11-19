@@ -11,7 +11,14 @@ spec:
   replsets:
   - name: rs0
     size: 3
-    affinityMode: preferred
+    affinity:
+      mode: preferred
+      hostname: true
+      zone: true
+      #zones:
+      #- us-east-1a
+      #- us-east-1b
+      #- us-east-1c
     resources:
       limits:
         cpu: "300m"
@@ -20,6 +27,7 @@ spec:
       requests:
         cpu: "300m"
         memory: "0.5G"
+    #storageClass: standard
   mongod:
     net:
       port: 27017

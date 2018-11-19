@@ -23,7 +23,8 @@ var (
 	MongoDBTimeout               = 3 * time.Second
 )
 
-// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
+// getReplsetDialInfo returns a *mgo.Session configured to connect
+// (with auth) to all Pods of a MongoDB replica set
 func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
 	addrs := []string{}
 	for _, pod := range pods {
