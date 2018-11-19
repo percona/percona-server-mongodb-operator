@@ -11,6 +11,7 @@ spec:
   replsets:
   - name: rs0
     size: 3
+    affinityMode: preferred
     resources:
       limits:
         cpu: "300m"

@@ -67,22 +67,42 @@ func isPodReady(pod corev1.Pod) bool {
 	return false
 }
 
-// newPSMDBPodAeeinity returns an Affinity configuration that aims to
-// avoid deploying more than one pod on the same kubelet hostname
+// newPSMDBPodAffinity returns an Affinity configuration that aims to avoid deploying more than
+// one pod on the same Kubernetes failure-domain zone (failure-domain.beta.kubernetes.io/zone)
+// and hostname (kubernetes.io/hostname)
 func newPSMDBPodAffinity(ls map[string]string) *corev1.Affinity {
-	return &corev1.Affinity{
-		PodAntiAffinity: &corev1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-				{
-					Weight: 100,
-					PodAffinityTerm: corev1.PodAffinityTerm{
-						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: ls,
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
+	affinityTerm := []corev1.WeightedPodAffinityTerm{
+		{
+			Weight: 100,
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: ls,
 				},
+				TopologyKey: "kubernetes.io/hostname",
 			},
 		},
+		{
+			Weight: 100,
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: ls,
+				},
+				TopologyKey: "failure-domain.beta.kubernetes.io/zone",
+			},
+		},
+	}
+	switch m.Spec.Mongod.AffinityMode {
+	case v1alpha1.AffinityModePreffered:
+		return corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: affinityTerm,
+			},
+		}
+	case v1alpha1.AffinityModePreffered:
+		return corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: affinityTerm,
+			},
+		}
 	}
 }
