@@ -83,28 +83,38 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 		},
 		TopologyKey: "failure-domain.beta.kubernetes.io/zone",
 	}
-	if replset.AffinityMode == v1alpha1.AffinityModeRequired {
+	switch replset.Affinity.Mode {
+	case v1alpha1.AffinityModeRequired:
+		var terms []corev1.PodAffinityTerm
+		if replset.Affinity.UniqueHostname {
+			terms = append(terms, hostnameAffinity)
+		} else if replset.Affinity.UniqueZone {
+			terms = append(terms, failureDomainZoneAffinity)
+
+		}
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-					hostnameAffinity,
-					failureDomainZoneAffinity,
-				},
+				RequiredDuringSchedulingIgnoredDuringExecution: terms,
 			},
 		}
-	}
-	return &corev1.Affinity{
-		PodAntiAffinity: &corev1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-				{
-					Weight:          100,
-					PodAffinityTerm: hostnameAffinity,
-				},
-				{
-					Weight:          100,
-					PodAffinityTerm: failureDomainZoneAffinity,
-				},
+	default:
+		var terms []corev1.WeightedPodAffinityTerm
+		if replset.Affinity.UniqueHostname {
+			terms = append(terms, corev1.WeightedPodAffinityTerm{
+				Weight:          100,
+				PodAffinityTerm: hostnameAffinity,
+			})
+		}
+		if replset.Affinity.UniqueZone {
+			terms = append(terms, corev1.WeightedPodAffinityTerm{
+				Weight:          100,
+				PodAffinityTerm: failureDomainZoneAffinity,
+			})
+		}
+		return &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: terms,
 			},
-		},
+		}
 	}
 }

@@ -13,12 +13,8 @@ spec:
     size: 3
     affinity:
       mode: preferred
-      hostname: true
-      zone: true
-      #zones:
-      #- us-east-1a
-      #- us-east-1b
-      #- us-east-1c
+      uniqueHostname: true
+      uniqueZone: true
     resources:
       limits:
         cpu: "300m"

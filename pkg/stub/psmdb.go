@@ -10,14 +10,19 @@ import (
 )
 
 var (
-	defaultVersion                  string  = "latest"
-	defaultRunUID                   int64   = 1001
-	defaultKeySecretName            string  = "percona-server-mongodb-key"
-	defaultUsersSecretName          string  = "percona-server-mongodb-users"
-	defaultMongodSize               int32   = 3
-	defaultReplsetName              string  = "rs"
-	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
-	defaultAffinityMode                     = v1alpha1.AffinityModePreferred
+	defaultVersion         string = "latest"
+	defaultRunUID          int64  = 1001
+	defaultKeySecretName   string = "percona-server-mongodb-key"
+	defaultUsersSecretName string = "percona-server-mongodb-users"
+	defaultMongodSize      int32  = 3
+	defaultReplsetName     string = "rs"
+	defaultStorageEngine          = v1alpha1.StorageEngineWiredTiger
+	defaultAffinityMode           = v1alpha1.AffinityModePreferred
+	defaultAffinitySpec           = &v1alpha1.AffinitySpec{
+		Mode:           defaultAffinityMode,
+		UniqueHostname: true,
+		UniqueZone:     true,
+	}
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
 	defaultInMemorySizeRatio        float64 = 0.9
@@ -101,17 +106,17 @@ func (h *Handler) addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) 
 	}
 	if len(spec.Replsets) == 0 {
 		spec.Replsets = []*v1alpha1.ReplsetSpec{{
-			Name:         defaultReplsetName,
-			Size:         defaultMongodSize,
-			AffinityMode: defaultAffinityMode,
+			Name:     defaultReplsetName,
+			Size:     defaultMongodSize,
+			Affinity: defaultAffinitySpec,
 		}}
 	} else {
 		for _, replset := range spec.Replsets {
 			if replset.Size == 0 {
 				replset.Size = defaultMongodSize
 			}
-			if replset.AffinityMode == "" {
-				replset.AffinityMode = defaultAffinityMode
+			if replset.Affinity == nil {
+				replset.Affinity = defaultAffinitySpec
 			}
 		}
 	}
