@@ -63,6 +63,7 @@ type ServerVersion struct {
 type AffinityMode string
 
 const (
+	AffinityModePreferred AffinityMode = "none"
 	AffinityModePreferred AffinityMode = "preferred"
 	AffinityModeRequired  AffinityMode = "required"
 )
