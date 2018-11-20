@@ -9,28 +9,31 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+const (
+	defaultVersion                  string  = "latest"
+	defaultRunUID                   int64   = 1001
+	defaultKeySecretName            string  = "my-cluster-name-mongodb-key"
+	defaultUsersSecretName          string  = "my-cluster-name-mongodb-users"
+	defaultMongodSize               int32   = 3
+	defaultReplsetName              string  = "rs"
+	defaultMongodPort               int32   = 27017
+	defaultWiredTigerCacheSizeRatio float64 = 0.5
+	defaultInMemorySizeRatio        float64 = 0.9
+	mongodContainerDataDir          string  = "/data/db"
+	mongodContainerName             string  = "mongod"
+	mongodDataVolClaimName          string  = "mongod-data"
+	mongodPortName                  string  = "mongodb"
+)
+
 var (
-	defaultVersion         string = "latest"
-	defaultRunUID          int64  = 1001
-	defaultKeySecretName   string = "percona-server-mongodb-key"
-	defaultUsersSecretName string = "percona-server-mongodb-users"
-	defaultMongodSize      int32  = 3
-	defaultReplsetName     string = "rs"
+	defaultImagePullPolicy        = corev1.PullIfNotPresent
+	defaultOperationProfilingMode = v1alpha1.OperationProfilingModeSlowOp
 	defaultStorageEngine          = v1alpha1.StorageEngineWiredTiger
 	defaultAffinitySpec           = &v1alpha1.AffinitySpec{
 		UniqueHostname: v1alpha1.AffinityModePreferred,
 		UniqueZone:     v1alpha1.AffinityModePreferred,
 	}
-	defaultMongodPort               int32   = 27017
-	defaultWiredTigerCacheSizeRatio float64 = 0.5
-	defaultInMemorySizeRatio        float64 = 0.9
-	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
-	defaultImagePullPolicy                  = corev1.PullIfNotPresent
-	mongodContainerDataDir          string  = "/data/db"
-	mongodContainerName             string  = "mongod"
-	mongodDataVolClaimName          string  = "mongod-data"
-	mongodPortName                  string  = "mongodb"
-	secretFileMode                  int32   = 0060
+	secretFileMode int32 = 0060
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
