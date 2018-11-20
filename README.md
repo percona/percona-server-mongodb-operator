@@ -92,7 +92,7 @@ The operator was developed/tested for only:
     ```
 
     on OpenShift:
-    1. Change the deploy/cr.yaml spec field *'platform: kubernetes'* to *'platform: openshift'*. Example:
+    1. Uncomment the deploy/cr.yaml field *'#platform:'* and set it to *'platform: openshift'*. Example:
     ```
     apiVersion: psmdb.percona.com/v1alpha1
     kind: PerconaServerMongoDB
@@ -100,6 +100,7 @@ The operator was developed/tested for only:
       name: my-cluster-name
     spec:
       platform: openshift
+    ...
     ...
     ```
     2. Create/apply the CR: 
