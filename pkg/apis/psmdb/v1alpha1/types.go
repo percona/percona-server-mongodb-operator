@@ -64,16 +64,15 @@ type ServerVersion struct {
 type AffinityMode string
 
 const (
-	AffinityModeNone      AffinityMode = "none"
+	AffinityModeDisabled  AffinityMode = "disabled"
 	AffinityModePreferred AffinityMode = "preferred"
 	AffinityModeRequired  AffinityMode = "required"
 )
 
 type AffinitySpec struct {
-	Mode           AffinityMode `json:"mode,omitempty"`
-	UniqueHostname bool         `json:"uniqueHostname,omitempty"`
-	UniqueRegion   bool         `json:"uniqueRegion,omitempty"`
-	UniqueZone     bool         `json:"uniqueZone,omitempty"`
+	UniqueHostname AffinityMode `json:"uniqueHostname,omitempty"`
+	UniqueRegion   AffinityMode `json:"uniqueRegion,omitempty"`
+	UniqueZone     AffinityMode `json:"uniqueZone,omitempty"`
 	Regions        []string     `json:"regions,omitempty"`
 	Zones          []string     `json:"zones,omitempty"`
 }

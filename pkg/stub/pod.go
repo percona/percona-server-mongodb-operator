@@ -146,40 +146,44 @@ func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string)
 	}
 
 	// setup pod anti-affinity based on affinity mode (none, required or preferred)
-	switch m.Spec.Mongod.Affinity.Mode {
-	case v1alpha1.AffinityModeRequired:
-		var terms []corev1.PodAffinityTerm
-		if m.Spec.Mongod.Affinity.UniqueHostname {
-			terms = append(terms, hostnameAffinity)
-		} else if m.Spec.Mongod.Affinity.UniqueRegion {
-			terms = append(terms, failureDomainRegionAffinity)
-		} else if m.Spec.Mongod.Affinity.UniqueZone {
-			terms = append(terms, failureDomainZoneAffinity)
+	var requiredTerms []corev1.PodAffinityTerm
+	var preferredTerms []corev1.WeightedPodAffinityTerm
 
-		}
-		affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = terms
+	// schedule pods on unique hostnames
+	switch m.Spec.Mongod.Affinity.UniqueHostname {
+	case v1alpha1.AffinityModeRequired:
+		requiredTerms = append(requiredTerms, hostnameAffinity)
 	case v1alpha1.AffinityModePreferred:
-		var terms []corev1.WeightedPodAffinityTerm
-		if m.Spec.Mongod.Affinity.UniqueHostname {
-			terms = append(terms, corev1.WeightedPodAffinityTerm{
-				Weight:          100,
-				PodAffinityTerm: hostnameAffinity,
-			})
-		}
-		if m.Spec.Mongod.Affinity.UniqueRegion {
-			terms = append(terms, corev1.WeightedPodAffinityTerm{
-				Weight:          50,
-				PodAffinityTerm: failureDomainRegionAffinity,
-			})
-		}
-		if m.Spec.Mongod.Affinity.UniqueZone {
-			terms = append(terms, corev1.WeightedPodAffinityTerm{
-				Weight:          50,
-				PodAffinityTerm: failureDomainZoneAffinity,
-			})
-		}
-		affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = terms
+		preferredTerms = append(preferredTerms, corev1.WeightedPodAffinityTerm{
+			Weight:          100,
+			PodAffinityTerm: hostnameAffinity,
+		})
 	}
+
+	// schedule pods on unique zones
+	switch m.Spec.Mongod.Affinity.UniqueRegion {
+	case v1alpha1.AffinityModeRequired:
+		requiredTerms = append(requiredTerms, failureDomainRegionAffinity)
+	case v1alpha1.AffinityModePreferred:
+		preferredTerms = append(preferredTerms, corev1.WeightedPodAffinityTerm{
+			Weight:          50,
+			PodAffinityTerm: failureDomainRegionAffinity,
+		})
+	}
+
+	// schedule pods on unique zones
+	switch m.Spec.Mongod.Affinity.UniqueZone {
+	case v1alpha1.AffinityModeRequired:
+		requiredTerms = append(requiredTerms, failureDomainZoneAffinity)
+	case v1alpha1.AffinityModePreferred:
+		preferredTerms = append(preferredTerms, corev1.WeightedPodAffinityTerm{
+			Weight:          50,
+			PodAffinityTerm: failureDomainZoneAffinity,
+		})
+	}
+
+	affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = preferredTerms
+	affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = requiredTerms
 
 	return &affinity
 }

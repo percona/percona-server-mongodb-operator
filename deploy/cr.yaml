@@ -23,10 +23,9 @@ spec:
     #storageClass: standard
   mongod:
     affinity:
-      mode: preferred
-      uniqueHostname: true
-      uniqueRegion: false
-      uniqueZone: true
+      uniqueHostname: preferred
+      uniqueRegion: disabled
+      uniqueZone: preferred
       #regions:
       #- us-east-1
       #zones:

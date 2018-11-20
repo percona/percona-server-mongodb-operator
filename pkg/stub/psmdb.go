@@ -17,11 +17,9 @@ var (
 	defaultMongodSize      int32  = 3
 	defaultReplsetName     string = "rs"
 	defaultStorageEngine          = v1alpha1.StorageEngineWiredTiger
-	defaultAffinityMode           = v1alpha1.AffinityModePreferred
 	defaultAffinitySpec           = &v1alpha1.AffinitySpec{
-		Mode:           defaultAffinityMode,
-		UniqueHostname: true,
-		UniqueZone:     true,
+		UniqueHostname: v1alpha1.AffinityModePreferred,
+		UniqueZone:     v1alpha1.AffinityModePreferred,
 	}
 	defaultMongodPort               int32   = 27017
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
