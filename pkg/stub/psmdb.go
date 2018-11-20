@@ -98,6 +98,9 @@ func (h *Handler) addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) 
 			}
 		}
 	}
+	if spec.Mongod.Affinity == nil {
+		spec.Mongod.Affinity = defaultAffinitySpec
+	}
 
 	if spec.Mongod.OperationProfiling == nil {
 		spec.Mongod.OperationProfiling = &v1alpha1.MongodSpecOperationProfiling{
@@ -105,18 +108,16 @@ func (h *Handler) addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) 
 		}
 	}
 	if len(spec.Replsets) == 0 {
-		spec.Replsets = []*v1alpha1.ReplsetSpec{{
-			Name:     defaultReplsetName,
-			Size:     defaultMongodSize,
-			Affinity: defaultAffinitySpec,
-		}}
+		spec.Replsets = []*v1alpha1.ReplsetSpec{
+			{
+				Name: defaultReplsetName,
+				Size: defaultMongodSize,
+			},
+		}
 	} else {
 		for _, replset := range spec.Replsets {
 			if replset.Size == 0 {
 				replset.Size = defaultMongodSize
-			}
-			if replset.Affinity == nil {
-				replset.Affinity = defaultAffinitySpec
 			}
 		}
 	}
@@ -163,7 +164,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:      newPSMDBPodAffinity(replset, ls),
+					Affinity:      newPSMDBPodAffinity(m, ls),
 					RestartPolicy: corev1.RestartPolicyAlways,
 					Containers: []corev1.Container{
 						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),

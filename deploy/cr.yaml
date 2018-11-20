@@ -11,6 +11,16 @@ spec:
   replsets:
   - name: rs0
     size: 3
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+        storage: "1Gi"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    #storageClass: standard
+  mongod:
     affinity:
       mode: preferred
       uniqueHostname: true
@@ -22,19 +32,9 @@ spec:
       #- us-east-1a
       #- us-east-1b
       #- us-east-1c
-    resources:
-      limits:
-        cpu: "300m"
-        memory: "0.5G"
-        storage: "1Gi"
-      requests:
-        cpu: "300m"
-        memory: "0.5G"
-    #storageClass: standard
-  mongod:
     net:
       port: 27017
-      hostPort: 0
+      #hostPort: 27017
     security:
       redactClientLogData: false
     setParameter:

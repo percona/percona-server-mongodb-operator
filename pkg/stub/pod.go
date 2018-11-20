@@ -76,7 +76,7 @@ func isPodReady(pod corev1.Pod) bool {
 // newPSMDBPodAffinity returns an Affinity configuration that aims to avoid deploying more than
 // one pod on the same Kubernetes failure-domain zone (failure-domain.beta.kubernetes.io/zone)
 // and hostname (kubernetes.io/hostname)
-func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *corev1.Affinity {
+func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string) *corev1.Affinity {
 	affinity := corev1.Affinity{
 		PodAffinity: &corev1.PodAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{},
@@ -106,7 +106,7 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 	}
 
 	// force pod to launch in specific regions, if specified
-	if len(replset.Affinity.Regions) > 0 {
+	if len(m.Spec.Mongod.Affinity.Regions) > 0 {
 		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = append(
 			affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
 			corev1.PodAffinityTerm{
@@ -116,7 +116,7 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 						{
 							Key:      topologyKeyFailureDomainRegion,
 							Operator: metav1.LabelSelectorOpIn,
-							Values:   replset.Affinity.Regions,
+							Values:   m.Spec.Mongod.Affinity.Regions,
 						},
 					},
 				},
@@ -126,7 +126,7 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 	}
 
 	// force pod to launch in specific zones, if specified
-	if len(replset.Affinity.Zones) > 0 {
+	if len(m.Spec.Mongod.Affinity.Zones) > 0 {
 		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = append(
 			affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
 			corev1.PodAffinityTerm{
@@ -136,7 +136,7 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 						{
 							Key:      topologyKeyFailureDomainZone,
 							Operator: metav1.LabelSelectorOpIn,
-							Values:   replset.Affinity.Zones,
+							Values:   m.Spec.Mongod.Affinity.Zones,
 						},
 					},
 				},
@@ -146,33 +146,33 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 	}
 
 	// setup pod anti-affinity based on affinity mode (none, required or preferred)
-	switch replset.Affinity.Mode {
+	switch m.Spec.Mongod.Affinity.Mode {
 	case v1alpha1.AffinityModeRequired:
 		var terms []corev1.PodAffinityTerm
-		if replset.Affinity.UniqueHostname {
+		if m.Spec.Mongod.Affinity.UniqueHostname {
 			terms = append(terms, hostnameAffinity)
-		} else if replset.Affinity.UniqueRegion {
+		} else if m.Spec.Mongod.Affinity.UniqueRegion {
 			terms = append(terms, failureDomainRegionAffinity)
-		} else if replset.Affinity.UniqueZone {
+		} else if m.Spec.Mongod.Affinity.UniqueZone {
 			terms = append(terms, failureDomainZoneAffinity)
 
 		}
 		affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = terms
 	case v1alpha1.AffinityModePreferred:
 		var terms []corev1.WeightedPodAffinityTerm
-		if replset.Affinity.UniqueHostname {
+		if m.Spec.Mongod.Affinity.UniqueHostname {
 			terms = append(terms, corev1.WeightedPodAffinityTerm{
 				Weight:          100,
 				PodAffinityTerm: hostnameAffinity,
 			})
 		}
-		if replset.Affinity.UniqueRegion {
+		if m.Spec.Mongod.Affinity.UniqueRegion {
 			terms = append(terms, corev1.WeightedPodAffinityTerm{
 				Weight:          50,
 				PodAffinityTerm: failureDomainRegionAffinity,
 			})
 		}
-		if replset.Affinity.UniqueZone {
+		if m.Spec.Mongod.Affinity.UniqueZone {
 			terms = append(terms, corev1.WeightedPodAffinityTerm{
 				Weight:          50,
 				PodAffinityTerm: failureDomainZoneAffinity,
