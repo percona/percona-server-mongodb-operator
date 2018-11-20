@@ -159,6 +159,7 @@ The operator was developed/tested for only:
 If you prefer to use a static server list *(instead of using mongodb+srv:// to detect servers)* use *'kubectl describe service <service name>'* to gather the list of endpoints.
 
 Example *(see 'Endpoints:' below)*:
+
     ```
     $ kubectl describe service my-cluster-name-rs0
     Name:              my-cluster-name-rs0
