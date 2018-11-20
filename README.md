@@ -87,7 +87,7 @@ The operator was developed/tested for only:
     ```
 1. Create the Percona Server for MongoDB cluster:
 
-    on Kubernetes
+    on Kubernetes:
     ```
     kubectl apply -f deploy/cr.yaml
     ```
