@@ -92,7 +92,7 @@ The operator was developed/tested for only:
     ```
 
     on OpenShift:
-    1. Uncomment *'#platform: openshift'* in deploy/cr.yaml.
+    1. Change the deploy/cr.yaml spec field *'platform: kubernetes'* to *'platform: openshift'*.
     2. Create/apply the CR: 
     ```
     oc apply -f deploy/cr.yaml
