@@ -86,6 +86,7 @@ The operator was developed/tested for only:
     kubectl create -f deploy/operator.yaml
     ```
 1. Create the Percona Server for MongoDB cluster:
+
     on Kubernetes
     ```
     kubectl apply -f deploy/cr.yaml
