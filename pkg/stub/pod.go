@@ -78,7 +78,9 @@ func isPodReady(pod corev1.Pod) bool {
 // and hostname (kubernetes.io/hostname)
 func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *corev1.Affinity {
 	affinity := corev1.Affinity{
-		PodAffinity:     &corev1.PodAffinity{},
+		PodAffinity: &corev1.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{},
+		},
 		PodAntiAffinity: &corev1.PodAntiAffinity{},
 	}
 
@@ -105,8 +107,9 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 
 	// force pod to launch in specific regions, if specified
 	if len(replset.Affinity.Regions) > 0 {
-		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = []corev1.PodAffinityTerm{
-			{
+		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = append(
+			affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+			corev1.PodAffinityTerm{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: ls,
 					MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -119,13 +122,14 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 				},
 				TopologyKey: topologyKeyFailureDomainRegion,
 			},
-		}
+		)
 	}
 
 	// force pod to launch in specific zones, if specified
 	if len(replset.Affinity.Zones) > 0 {
-		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = []corev1.PodAffinityTerm{
-			{
+		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = append(
+			affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+			corev1.PodAffinityTerm{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: ls,
 					MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -138,9 +142,10 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 				},
 				TopologyKey: topologyKeyFailureDomainZone,
 			},
-		}
+		)
 	}
 
+	// setup pod anti-affinity based on affinity mode (none, required or preferred)
 	switch replset.Affinity.Mode {
 	case v1alpha1.AffinityModeRequired:
 		var terms []corev1.PodAffinityTerm
