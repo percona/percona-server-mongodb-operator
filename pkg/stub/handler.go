@@ -45,20 +45,9 @@ type Handler struct {
 // See: https://github.com/percona/mongodb-orchestration-tools/tree/master/watchdog
 //
 func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB, usersSecret *corev1.Secret) error {
-	var err error
-
 	// Skip if watchdog is started
 	if h.watchdog != nil {
 		return nil
-	}
-
-	// Get server/platform info if not exists
-	if h.serverVersion == nil {
-		h.serverVersion, err = getServerVersion()
-		if err != nil {
-			return err
-		}
-		logrus.Infof("detected Kubernetes platform: %s, version: %s", h.getPlatform(m), h.serverVersion.Info)
 	}
 
 	// Start the watchdog if it has not been started
@@ -88,6 +77,17 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			close(h.watchdogQuit)
 			h.watchdog = nil
 			return nil
+		}
+
+		// Get server/platform info if not exists
+		if h.serverVersion == nil {
+			serverVersion, err := getServerVersion()
+			if err != nil {
+				logrus.Errorf("error fetching server/platform version info: %v", err)
+				return err
+			}
+			h.serverVersion = serverVersion
+			logrus.Infof("detected Kubernetes platform: %s, version: %s", h.getPlatform(psmdb), h.serverVersion.Info)
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
