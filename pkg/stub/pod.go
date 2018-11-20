@@ -176,8 +176,9 @@ func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string)
 	}
 
 	if len(requiredAffinityTerms) > 0 {
-		affinity.PodAffinity = &corev1.PodAffinity{}
-		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = requiredAffinityTerms
+		affinity.PodAffinity = &corev1.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: requiredAffinityTerms,
+		}
 	}
 	if len(preferredAntiAffinityTerms) > 0 || len(requiredAntiAffinityTerms) > 0 {
 		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{}
