@@ -77,12 +77,7 @@ func isPodReady(pod corev1.Pod) bool {
 // one pod on the same Kubernetes failure-domain zone (failure-domain.beta.kubernetes.io/zone)
 // and hostname (kubernetes.io/hostname)
 func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string) *corev1.Affinity {
-	affinity := corev1.Affinity{
-		PodAffinity: &corev1.PodAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{},
-		},
-		PodAntiAffinity: &corev1.PodAntiAffinity{},
-	}
+	affinity := &corev1.Affinity{}
 
 	hostnameAffinity := corev1.PodAffinityTerm{
 		LabelSelector: &metav1.LabelSelector{
@@ -105,10 +100,13 @@ func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string)
 		TopologyKey: topologyKeyFailureDomainZone,
 	}
 
+	var requiredAffinityTerms []corev1.PodAffinityTerm
+	var requiredAntiAffinityTerms []corev1.PodAffinityTerm
+	var preferredAntiAffinityTerms []corev1.WeightedPodAffinityTerm
+
 	// force pod to launch in specific regions, if specified
 	if len(m.Spec.Mongod.Affinity.Regions) > 0 {
-		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = append(
-			affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+		requiredAffinityTerms = append(requiredAffinityTerms,
 			corev1.PodAffinityTerm{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: ls,
@@ -127,8 +125,7 @@ func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string)
 
 	// force pod to launch in specific zones, if specified
 	if len(m.Spec.Mongod.Affinity.Zones) > 0 {
-		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = append(
-			affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+		requiredAffinityTerms = append(requiredAffinityTerms,
 			corev1.PodAffinityTerm{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: ls,
@@ -145,16 +142,12 @@ func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string)
 		)
 	}
 
-	// setup pod anti-affinity based on affinity mode (none, required or preferred)
-	var requiredTerms []corev1.PodAffinityTerm
-	var preferredTerms []corev1.WeightedPodAffinityTerm
-
 	// schedule pods on unique hostnames
 	switch m.Spec.Mongod.Affinity.UniqueHostname {
 	case v1alpha1.AffinityModeRequired:
-		requiredTerms = append(requiredTerms, hostnameAffinity)
+		requiredAntiAffinityTerms = append(requiredAntiAffinityTerms, hostnameAffinity)
 	case v1alpha1.AffinityModePreferred:
-		preferredTerms = append(preferredTerms, corev1.WeightedPodAffinityTerm{
+		preferredAntiAffinityTerms = append(preferredAntiAffinityTerms, corev1.WeightedPodAffinityTerm{
 			Weight:          100,
 			PodAffinityTerm: hostnameAffinity,
 		})
@@ -163,9 +156,9 @@ func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string)
 	// schedule pods on unique zones
 	switch m.Spec.Mongod.Affinity.UniqueRegion {
 	case v1alpha1.AffinityModeRequired:
-		requiredTerms = append(requiredTerms, failureDomainRegionAffinity)
+		requiredAntiAffinityTerms = append(requiredAntiAffinityTerms, failureDomainRegionAffinity)
 	case v1alpha1.AffinityModePreferred:
-		preferredTerms = append(preferredTerms, corev1.WeightedPodAffinityTerm{
+		preferredAntiAffinityTerms = append(preferredAntiAffinityTerms, corev1.WeightedPodAffinityTerm{
 			Weight:          50,
 			PodAffinityTerm: failureDomainRegionAffinity,
 		})
@@ -174,16 +167,27 @@ func newPSMDBPodAffinity(m *v1alpha1.PerconaServerMongoDB, ls map[string]string)
 	// schedule pods on unique zones
 	switch m.Spec.Mongod.Affinity.UniqueZone {
 	case v1alpha1.AffinityModeRequired:
-		requiredTerms = append(requiredTerms, failureDomainZoneAffinity)
+		requiredAntiAffinityTerms = append(requiredAntiAffinityTerms, failureDomainZoneAffinity)
 	case v1alpha1.AffinityModePreferred:
-		preferredTerms = append(preferredTerms, corev1.WeightedPodAffinityTerm{
+		preferredAntiAffinityTerms = append(preferredAntiAffinityTerms, corev1.WeightedPodAffinityTerm{
 			Weight:          50,
 			PodAffinityTerm: failureDomainZoneAffinity,
 		})
 	}
 
-	affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = preferredTerms
-	affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = requiredTerms
+	if len(requiredAffinityTerms) > 0 {
+		affinity.PodAffinity = &corev1.PodAffinity{}
+		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = requiredAffinityTerms
+	}
+	if len(preferredAntiAffinityTerms) > 0 || len(requiredAntiAffinityTerms) > 0 {
+		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{}
+		if len(preferredAntiAffinityTerms) > 0 {
+			affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = preferredAntiAffinityTerms
+		}
+		if len(requiredAntiAffinityTerms) > 0 {
+			affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = requiredAntiAffinityTerms
+		}
+	}
 
-	return &affinity
+	return affinity
 }
