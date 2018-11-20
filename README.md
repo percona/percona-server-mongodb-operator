@@ -92,7 +92,16 @@ The operator was developed/tested for only:
     ```
 
     on OpenShift:
-    1. Change the deploy/cr.yaml spec field *'platform: kubernetes'* to *'platform: openshift'*.
+    1. Change the deploy/cr.yaml spec field *'platform: kubernetes'* to *'platform: openshift'*. Example:
+    ```
+    apiVersion: psmdb.percona.com/v1alpha1
+    kind: PerconaServerMongoDB
+    metadata:
+      name: my-cluster-name
+    spec:
+      platform: openshift
+    ...
+    ```
     2. Create/apply the CR: 
     ```
     oc apply -f deploy/cr.yaml
