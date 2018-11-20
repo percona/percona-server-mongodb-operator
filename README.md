@@ -86,8 +86,16 @@ The operator was developed/tested for only:
     kubectl create -f deploy/operator.yaml
     ```
 1. Create the Percona Server for MongoDB cluster:
+    on Kubernetes
     ```
     kubectl apply -f deploy/cr.yaml
+    ```
+
+    on OpenShift:
+    1. Uncomment *'#platform: openshift'* in deploy/cr.yaml.
+    2. Create/apply the CR: 
+    ```
+    oc apply -f deploy/cr.yaml
     ```
 1. Wait for the operator and replica set pod reach Running state:
     ```

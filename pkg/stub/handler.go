@@ -22,18 +22,12 @@ var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
 
-func NewHandler(client pkgSdk.Client) (sdk.Handler, error) {
-	serverVersion, err := getServerVersion()
-	if err != nil {
-		return nil, err
-	}
-	logrus.Infof("detected Kubernetes platform: %s, version: %s", serverVersion.Platform, serverVersion.Info)
+func NewHandler(client pkgSdk.Client) sdk.Handler {
 	return &Handler{
-		client:        client,
-		serverVersion: serverVersion,
-		startedAt:     time.Now(),
-		watchdogQuit:  make(chan bool, 1),
-	}, nil
+		client:       client,
+		startedAt:    time.Now(),
+		watchdogQuit: make(chan bool, 1),
+	}
 }
 
 type Handler struct {
@@ -51,9 +45,20 @@ type Handler struct {
 // See: https://github.com/percona/mongodb-orchestration-tools/tree/master/watchdog
 //
 func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB, usersSecret *corev1.Secret) error {
+	var err error
+
 	// Skip if watchdog is started
 	if h.watchdog != nil {
 		return nil
+	}
+
+	// Get server/platform info if not exists
+	if h.serverVersion == nil {
+		h.serverVersion, err = getServerVersion()
+		if err != nil {
+			return err
+		}
+		logrus.Infof("detected Kubernetes platform: %s, version: %s", h.getPlatform(m), h.serverVersion.Info)
 	}
 
 	// Start the watchdog if it has not been started

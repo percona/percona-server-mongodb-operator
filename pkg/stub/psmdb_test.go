@@ -15,40 +15,42 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 			Platform: v1alpha1.PlatformKubernetes,
 		},
 	}
-	spec := v1alpha1.PerconaServerMongoDBSpec{}
+	m := &v1alpha1.PerconaServerMongoDB{
+		Spec: v1alpha1.PerconaServerMongoDBSpec{},
+	}
 
-	h.addPSMDBSpecDefaults(&spec)
+	h.addPSMDBSpecDefaults(m)
 
-	assert.Equal(t, defaultVersion, spec.Version)
-	assert.Equal(t, int64(defaultRunUID), spec.RunUID)
+	assert.Equal(t, defaultVersion, m.Spec.Version)
+	assert.Equal(t, int64(defaultRunUID), m.Spec.RunUID)
 
-	assert.Len(t, spec.Replsets, 1)
-	assert.Equal(t, defaultReplsetName, spec.Replsets[0].Name)
-	assert.Equal(t, defaultMongodSize, spec.Replsets[0].Size)
+	assert.Len(t, m.Spec.Replsets, 1)
+	assert.Equal(t, defaultReplsetName, m.Spec.Replsets[0].Name)
+	assert.Equal(t, defaultMongodSize, m.Spec.Replsets[0].Size)
 
-	assert.NotNil(t, spec.Mongod)
-	assert.Equal(t, defaultStorageEngine, spec.Mongod.Storage.Engine)
-	assert.NotNil(t, spec.Mongod.Storage.WiredTiger)
-	assert.NotNil(t, spec.Mongod.Storage.WiredTiger.EngineConfig)
-	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
+	assert.NotNil(t, m.Spec.Mongod)
+	assert.Equal(t, defaultStorageEngine, m.Spec.Mongod.Storage.Engine)
+	assert.NotNil(t, m.Spec.Mongod.Storage.WiredTiger)
+	assert.NotNil(t, m.Spec.Mongod.Storage.WiredTiger.EngineConfig)
+	assert.Equal(t, defaultWiredTigerCacheSizeRatio, m.Spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
 
-	spec2 := v1alpha1.PerconaServerMongoDBSpec{
+	m.Spec = v1alpha1.PerconaServerMongoDBSpec{
 		Mongod: &v1alpha1.MongodSpec{
 			Storage: &v1alpha1.MongodSpecStorage{
 				Engine: v1alpha1.StorageEngineInMemory,
 			},
 		},
 	}
-	h.addPSMDBSpecDefaults(&spec2)
-	assert.NotNil(t, spec2.Mongod.Storage.InMemory)
-	assert.NotNil(t, spec2.Mongod.Storage.InMemory.EngineConfig)
-	assert.Equal(t, spec2.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
+	h.addPSMDBSpecDefaults(m)
+	assert.NotNil(t, m.Spec.Mongod.Storage.InMemory)
+	assert.NotNil(t, m.Spec.Mongod.Storage.InMemory.EngineConfig)
+	assert.Equal(t, m.Spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
 
 	// test runUID default is skipped on Openshift
-	spec3 := v1alpha1.PerconaServerMongoDBSpec{}
+	m.Spec = v1alpha1.PerconaServerMongoDBSpec{}
 	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
-	h.addPSMDBSpecDefaults(&spec)
-	assert.Equal(t, int64(0), spec3.RunUID)
+	h.addPSMDBSpecDefaults(m)
+	assert.Equal(t, int64(0), m.Spec.RunUID)
 }
 
 func TestNewPSMDBStatefulSet(t *testing.T) {
