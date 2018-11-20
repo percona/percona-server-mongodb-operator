@@ -154,6 +154,27 @@ The operator was developed/tested for only:
     { "_id" : ObjectId("5bc74ef05c0ec73be760fcf9"), "x" : 1 }
     ```
 
+## Static Endpoints List
+
+If you prefer to use a static server list *(instead of using mongodb+srv:// to detect servers)* use *'kubectl describe service <service name>'* to gather the list of endpoints.
+
+Example:
+    ```
+    $ kubectl describe service my-cluster-name-rs0
+    Name:              my-cluster-name-rs0
+    Namespace:         myproject
+    Labels:            <none>
+    Annotations:       <none>
+    Selector:          app=percona-server-mongodb,percona-server-mongodb_cr=my-cluster-name,replset=rs0
+    Type:              ClusterIP
+    IP:                None
+    Port:              mongodb  27017/TCP
+    TargetPort:        27017/TCP
+    Endpoints:         172.17.0.10:27017,172.17.0.12:27017,172.17.0.9:27017
+    Session Affinity:  None
+    Events:            <none>
+    ```
+
 # Required Secrets
 
 The operator requires Kubernetes Secrets to be deployed before it is started.
