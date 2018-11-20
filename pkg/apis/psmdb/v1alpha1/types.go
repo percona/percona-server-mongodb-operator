@@ -24,6 +24,7 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
+	Platform        *Platform         `json:"platform,omitempty"`
 	Version         string            `json:"version,omitempty"`
 	RunUID          int64             `json:"runUid,omitempty"`
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`

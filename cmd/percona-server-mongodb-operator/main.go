@@ -45,12 +45,6 @@ func main() {
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %s", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-
-	handler, err := stub.NewHandler(pkgSdk.NewClient())
-	if err != nil {
-		logrus.Fatalf("failed to start handler: %v", err)
-	}
-	sdk.Handle(handler)
-
+	sdk.Handle(stub.NewHandler(pkgSdk.NewClient()))
 	sdk.Run(context.TODO())
 }

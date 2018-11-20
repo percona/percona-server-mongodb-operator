@@ -12,6 +12,8 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
 1. [DISCLAIMER](#disclaimer)
 1. [Requirements](#requirements)
 1. [Run the Operator](#run-the-operator)
+1. [Connect to the MongoDB Replica Set](#connect-to-the-mongodb-replica-set)
+   1. [Static Endpoints List](#static-endpoints-list)
 1. [Required Secrets](#required-secrets)
    1. [MongoDB System Users](#mongodb-system-users)
       1. [Development Mode](#development-mode)
@@ -86,8 +88,27 @@ The operator was developed/tested for only:
     kubectl create -f deploy/operator.yaml
     ```
 1. Create the Percona Server for MongoDB cluster:
+
+    on Kubernetes:
     ```
     kubectl apply -f deploy/cr.yaml
+    ```
+
+    on OpenShift:
+    1. Uncomment the deploy/cr.yaml field *'#platform:'* and set it to *'platform: openshift'*. Example:
+    ```
+    apiVersion: psmdb.percona.com/v1alpha1
+    kind: PerconaServerMongoDB
+    metadata:
+      name: my-cluster-name
+    spec:
+      platform: openshift
+    ...
+    ...
+    ```
+    2. Create/apply the CR: 
+    ```
+    oc apply -f deploy/cr.yaml
     ```
 1. Wait for the operator and replica set pod reach Running state:
     ```
@@ -98,6 +119,9 @@ The operator was developed/tested for only:
     my-cluster-name-rs0-2                              1/1     Running   0          7m
     percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
     ``` 
+
+# Connect to the MongoDB Replica Set
+
 1. From a *'mongo'* shell add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(hostname/replicaSet in mongo uri may vary for your situation)*:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
@@ -129,6 +153,27 @@ The operator was developed/tested for only:
     WriteResult({ "nInserted" : 1 })
     rs0:PRIMARY> db.test.findOne()
     { "_id" : ObjectId("5bc74ef05c0ec73be760fcf9"), "x" : 1 }
+    ```
+
+## Static Endpoints List
+
+If you prefer to use a static server list *(instead of using mongodb+srv:// to detect servers)* use *'kubectl describe service'* to gather the list of endpoints.
+
+Example *(see 'Endpoints:' below)*:
+    ```
+    $ kubectl describe service my-cluster-name-rs0
+    Name:              my-cluster-name-rs0
+    Namespace:         myproject
+    Labels:            <none>
+    Annotations:       <none>
+    Selector:          app=percona-server-mongodb,percona-server-mongodb_cr=my-cluster-name,replset=rs0
+    Type:              ClusterIP
+    IP:                None
+    Port:              mongodb  27017/TCP
+    TargetPort:        27017/TCP
+    Endpoints:         172.17.0.10:27017,172.17.0.12:27017,172.17.0.9:27017
+    Session Affinity:  None
+    Events:            <none>
     ```
 
 # Required Secrets
