@@ -13,6 +13,7 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
 1. [Requirements](#requirements)
 1. [Run the Operator](#run-the-operator)
 1. [Connect to the MongoDB Replica Set](#connect-to-the-mongodb-replica-set)
+   1. [Static Endpoints List](#static-endpoints-list)
 1. [Required Secrets](#required-secrets)
    1. [MongoDB System Users](#mongodb-system-users)
       1. [Development Mode](#development-mode)
