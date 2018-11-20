@@ -12,6 +12,7 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
 1. [DISCLAIMER](#disclaimer)
 1. [Requirements](#requirements)
 1. [Run the Operator](#run-the-operator)
+1. [Connect to the MongoDB Replica Set](#connect-to-the-mongodb-replica-set)
 1. [Required Secrets](#required-secrets)
    1. [MongoDB System Users](#mongodb-system-users)
       1. [Development Mode](#development-mode)
@@ -117,6 +118,9 @@ The operator was developed/tested for only:
     my-cluster-name-rs0-2                              1/1     Running   0          7m
     percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
     ``` 
+
+# Connect to the MongoDB Replica Set
+
 1. From a *'mongo'* shell add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(hostname/replicaSet in mongo uri may vary for your situation)*:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
