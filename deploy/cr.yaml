@@ -14,7 +14,14 @@ spec:
     affinity:
       mode: preferred
       uniqueHostname: true
+      uniqueRegion: false
       uniqueZone: true
+      #regions:
+      #- us-east-1
+      #zones:
+      #- us-east-1a
+      #- us-east-1b
+      #- us-east-1c
     resources:
       limits:
         cpu: "300m"

@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	topologyKeyHostname          = "kubernetes.io/hostname"
-	topologyKeyFailureDomainZone = "failure-domain.beta.kubernetes.io/zone"
+	topologyKeyHostname            = "kubernetes.io/hostname"
+	topologyKeyFailureDomainRegion = "failure-domain.beta.kubernetes.io/region"
+	topologyKeyFailureDomainZone   = "failure-domain.beta.kubernetes.io/zone"
 )
 
 // podList returns a v1.PodList object
@@ -76,13 +77,23 @@ func isPodReady(pod corev1.Pod) bool {
 // one pod on the same Kubernetes failure-domain zone (failure-domain.beta.kubernetes.io/zone)
 // and hostname (kubernetes.io/hostname)
 func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *corev1.Affinity {
-	var affinity corev1.Affinity
+	affinity := corev1.Affinity{
+		PodAffinity:     &corev1.PodAffinity{},
+		PodAntiAffinity: &corev1.PodAntiAffinity{},
+	}
 
 	hostnameAffinity := corev1.PodAffinityTerm{
 		LabelSelector: &metav1.LabelSelector{
 			MatchLabels: ls,
 		},
 		TopologyKey: topologyKeyHostname,
+	}
+
+	failureDomainRegionAffinity := corev1.PodAffinityTerm{
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: ls,
+		},
+		TopologyKey: topologyKeyFailureDomainRegion,
 	}
 
 	failureDomainZoneAffinity := corev1.PodAffinityTerm{
@@ -92,22 +103,40 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 		TopologyKey: topologyKeyFailureDomainZone,
 	}
 
-	// force pod to launch in specific zones, if specified
-	if len(replset.Affinity.OnlyZones) > 0 {
-		affinity.PodAffinity = &corev1.PodAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{
-								Key:      topologyKeyFailureDomainZone,
-								Operator: metav1.LabelSelectorOpIn,
-								Values:   replset.Affinity.OnlyZones,
-							},
+	// force pod to launch in specific regions, if specified
+	if len(replset.Affinity.Regions) > 0 {
+		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = []corev1.PodAffinityTerm{
+			{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: ls,
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      topologyKeyFailureDomainRegion,
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   replset.Affinity.Regions,
 						},
 					},
-					TopologyKey: topologyKeyFailureDomainZone,
 				},
+				TopologyKey: topologyKeyFailureDomainRegion,
+			},
+		}
+	}
+
+	// force pod to launch in specific zones, if specified
+	if len(replset.Affinity.Zones) > 0 {
+		affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution = []corev1.PodAffinityTerm{
+			{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: ls,
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      topologyKeyFailureDomainZone,
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   replset.Affinity.Zones,
+						},
+					},
+				},
+				TopologyKey: topologyKeyFailureDomainZone,
 			},
 		}
 	}
@@ -117,13 +146,13 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 		var terms []corev1.PodAffinityTerm
 		if replset.Affinity.UniqueHostname {
 			terms = append(terms, hostnameAffinity)
+		} else if replset.Affinity.UniqueRegion {
+			terms = append(terms, failureDomainRegionAffinity)
 		} else if replset.Affinity.UniqueZone {
 			terms = append(terms, failureDomainZoneAffinity)
 
 		}
-		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: terms,
-		}
+		affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution = terms
 	case v1alpha1.AffinityModePreferred:
 		var terms []corev1.WeightedPodAffinityTerm
 		if replset.Affinity.UniqueHostname {
@@ -132,15 +161,19 @@ func newPSMDBPodAffinity(replset *v1alpha1.ReplsetSpec, ls map[string]string) *c
 				PodAffinityTerm: hostnameAffinity,
 			})
 		}
+		if replset.Affinity.UniqueRegion {
+			terms = append(terms, corev1.WeightedPodAffinityTerm{
+				Weight:          50,
+				PodAffinityTerm: failureDomainRegionAffinity,
+			})
+		}
 		if replset.Affinity.UniqueZone {
 			terms = append(terms, corev1.WeightedPodAffinityTerm{
 				Weight:          50,
 				PodAffinityTerm: failureDomainZoneAffinity,
 			})
 		}
-		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: terms,
-		}
+		affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = terms
 	}
 
 	return &affinity
