@@ -22,18 +22,12 @@ var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
 
-func NewHandler(client pkgSdk.Client) (sdk.Handler, error) {
-	serverVersion, err := getServerVersion()
-	if err != nil {
-		return nil, err
-	}
-	logrus.Infof("detected Kubernetes platform: %s, version: %s", serverVersion.Platform, serverVersion.Info)
+func NewHandler(client pkgSdk.Client) sdk.Handler {
 	return &Handler{
-		client:        client,
-		serverVersion: serverVersion,
-		startedAt:     time.Now(),
-		watchdogQuit:  make(chan bool, 1),
-	}, nil
+		client:       client,
+		startedAt:    time.Now(),
+		watchdogQuit: make(chan bool, 1),
+	}
 }
 
 type Handler struct {
@@ -83,6 +77,17 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			close(h.watchdogQuit)
 			h.watchdog = nil
 			return nil
+		}
+
+		// Get server/platform info if not exists
+		if h.serverVersion == nil {
+			serverVersion, err := getServerVersion()
+			if err != nil {
+				logrus.Errorf("error fetching server/platform version info: %v", err)
+				return err
+			}
+			h.serverVersion = serverVersion
+			logrus.Infof("detected Kubernetes platform: %s, version: %s", h.getPlatform(psmdb), h.serverVersion.Info)
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
