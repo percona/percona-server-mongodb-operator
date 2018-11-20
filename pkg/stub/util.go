@@ -21,6 +21,18 @@ var (
 	trueVar  = true
 )
 
+// getPlatform returns the Kubernetes platform type, first using the Spec 'platform'
+// field or the serverVersion.Platform field if the Spec 'platform' field is not set
+func (h *Handler) getPlatform(m *v1alpha1.PerconaServerMongoDB) v1alpha1.Platform {
+	if m.Spec.Platform != nil {
+		return *m.Spec.Platform
+	}
+	if h.serverVersion != nil {
+		return h.serverVersion.Platform
+	}
+	return v1alpha1.PlatformKubernetes
+}
+
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
 func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
