@@ -157,7 +157,9 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	}
 
 	// Ensure the stateful set resources are the same as the spec
-	mongodLimits := corev1.ResourceList{}
+	mongodLimits := corev1.ResourceList{
+		corev1.ResourceStorage: mongod.Resources.Limits[corev1.ResourceStorage],
+	}
 	mongodRequests := corev1.ResourceList{}
 	for _, resourceName := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
 		mongodRequest := mongod.Resources.Requests[resourceName]
