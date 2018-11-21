@@ -1,7 +1,7 @@
 package stub
 
 import (
-	goErrors "errors"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -15,10 +15,30 @@ import (
 	"github.com/sirupsen/logrus"
 	mgo "gopkg.in/mgo.v2"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running state")
+var (
+	ErrNoRunningMongodContainers = errors.New("no mongod containers in running state")
+	MongoDBTimeout               = 3 * time.Second
+)
+
+// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
+func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
+	addrs := []string{}
+	for _, pod := range pods {
+		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
+		addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
+	}
+	return &mgo.DialInfo{
+		Addrs:          addrs,
+		ReplicaSetName: replset.Name,
+		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+		Timeout:        MongoDBTimeout,
+		FailFast:       true,
+	}
+}
 
 // getReplsetStatus returns a ReplsetStatus object for a given replica set
 func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *v1alpha1.ReplsetStatus {
@@ -35,22 +55,38 @@ func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 	return status
 }
 
+// isReplsetInitialized returns a boolean reflecting if the replica set has been initiated
+func isReplsetInitialized(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, status *v1alpha1.ReplsetStatus, podList *corev1.PodList, usersSecret *corev1.Secret) bool {
+	if status.Initialized {
+		return true
+	}
+
+	// try making a replica set connection to the pods to
+	// check if the replset was already initialized
+	session, err := mgo.DialWithInfo(getReplsetDialInfo(m, replset, podList.Items, usersSecret))
+	if err != nil {
+		logrus.Debugf("Cannot connect to mongodb replset %s to check initialization: %v", replset.Name, err)
+		return false
+	}
+	defer session.Close()
+	err = session.Ping()
+	if err != nil {
+		logrus.Debugf("Cannot ping mongodb replset %s to check initialization: %v", replset.Name, err)
+		return false
+	}
+
+	// if we made it here the replset was already initialized
+	status.Initialized = true
+
+	return true
+}
+
 // getReplsetMemberStatuses returns a list of ReplsetMemberStatus structs for a given replset
 func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []*v1alpha1.ReplsetMemberStatus {
 	members := []*v1alpha1.ReplsetMemberStatus{}
 	for _, pod := range pods {
-		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
-		dialInfo := &mgo.DialInfo{
-			Addrs:          []string{hostname + ":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))},
-			ReplicaSetName: replset.Name,
-			Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
-			Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
-			Direct:         true,
-			FailFast:       true,
-			Timeout:        time.Second,
-		}
-		logrus.Debugf("Updating status for host: %s", dialInfo.Addrs[0])
-
+		dialInfo := getReplsetDialInfo(m, replset, []corev1.Pod{pod}, usersSecret)
+		dialInfo.Direct = true
 		session, err := mgo.DialWithInfo(dialInfo)
 		if err != nil {
 			logrus.Debugf("Cannot connect to mongodb host %s: %v", dialInfo.Addrs[0], err)
@@ -58,6 +94,8 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 		}
 		defer session.Close()
 		session.SetMode(mgo.Eventual, true)
+
+		logrus.Debugf("Updating status for host: %s", dialInfo.Addrs[0])
 
 		buildInfo, err := session.BuildInfo()
 		if err != nil {
@@ -144,7 +182,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	}
 	err = h.client.Create(set)
 	if err != nil {
-		if !errors.IsAlreadyExists(err) {
+		if !k8serrors.IsAlreadyExists(err) {
 			return err
 		}
 	} else {
@@ -185,7 +223,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	// Initiate the replset if it hasn't already been initiated + there are pods +
 	// we have waited the ReplsetInitWait period since starting
 	status := getReplsetStatus(m, replset)
-	if !status.Initialized && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
+	if !isReplsetInitialized(m, replset, status, podList, usersSecret) && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
 		err = h.handleReplsetInit(m, replset, podList.Items)
 		if err != nil {
 			return nil, err
@@ -210,7 +248,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	service := newPSMDBService(m, replset)
 	err = h.client.Create(service)
 	if err != nil {
-		if !errors.IsAlreadyExists(err) {
+		if !k8serrors.IsAlreadyExists(err) {
 			logrus.Errorf("failed to create psmdb service: %v", err)
 			return nil, err
 		}
