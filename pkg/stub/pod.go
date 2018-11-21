@@ -17,8 +17,8 @@ func podList() *corev1.PodList {
 	}
 }
 
-// getContainer returns a container, if it exists
-func getContainer(pod corev1.Pod, containerName string) *corev1.Container {
+// getPodContainer returns a container, if it exists
+func getPodContainer(pod *corev1.Pod, containerName string) *corev1.Container {
 	for _, cont := range pod.Spec.Containers {
 		if cont.Name == containerName {
 			return &cont
@@ -50,7 +50,7 @@ func statusHasPod(status *v1alpha1.ReplsetStatus, podName string) bool {
 // isMongodPod returns a boolean reflecting if a pod
 // is running a mongod container
 func isMongodPod(pod corev1.Pod) bool {
-	container := getContainer(pod, mongodContainerName)
+	container := getPodContainer(&pod, mongodContainerName)
 	return container != nil
 }
 

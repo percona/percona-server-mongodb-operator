@@ -68,10 +68,10 @@ type SecretsSpec struct {
 
 type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string `json:"name"`
-	Size           int32  `json:"size"`
-	StorageClass   string `json:"storageClass,omitempty"`
-	Configsvr      bool   `json:"configsvr,omitempty"`
+	Name           string      `json:"name"`
+	Size           int32       `json:"size"`
+	StorageClass   string      `json:"storageClass,omitempty"`
+	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -83,7 +83,7 @@ type ReplsetStatus struct {
 	Name        string                 `json:"name,omitempty"`
 	Pods        []string               `json:"pods,omitempty"`
 	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
-	Configsvr   bool                   `json:"configsvr,omitempty"`
+	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
 	Initialized bool                   `json:"initialized,omitempty"`
 }
 

@@ -61,7 +61,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 	}
 
 	// find the mongod container
-	container := getContainer(pod, containerName)
+	container := getPodContainer(&pod, containerName)
 	if container == nil {
 		return nil
 	}
