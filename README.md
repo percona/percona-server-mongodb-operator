@@ -231,12 +231,13 @@ The operator is configured via the *spec* section of the [deploy/cr.yaml](https:
 ## Spec (top-level)
 YAML Path: *spec*
 
-| Key                   | Value Type  | Default | Description                                                                                                          |
-|-----------------------|-------------|---------|----------------------------------------------------------------------------------------------------------------------|
-| version               | string      | 3.6     | The Dockerhub tag of [percona/percona-server-mongodb](https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/) to deploy |
-| [secrets](#secrets)   | subdoc      |         |                                                                                                                      |
-| [replsets](#replsets) | array       |         |                                                                                                                      |
-| [mongod](#mongod)     | subdoc      |         |                                                                                                                      |
+| Key                   | Value Type  | Default    | Description                                                                                                          |
+|-----------------------|-------------|------------|----------------------------------------------------------------------------------------------------------------------|
+| platform              | string      | kubernetes | Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set *openshift* on OpenShift 3.11+                |
+| version               | string      | 3.6        | The Dockerhub tag of [percona/percona-server-mongodb](https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/) to deploy |
+| [secrets](#secrets)   | subdoc      |            |                                                                                                                      |
+| [replsets](#replsets) | array       |            |                                                                                                                      |
+| [mongod](#mongod)     | subdoc      |            |                                                                                                                      |
 
 ## Secrets
 YAML Path: *spec.secrets*
