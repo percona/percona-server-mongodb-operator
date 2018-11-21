@@ -7,11 +7,11 @@ import (
 	"io"
 	"os"
 
+	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
@@ -20,7 +20,7 @@ func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 	logrus.SetOutput(out)
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		fmt.Fprintf(out, "%s (%s): %s", cmd, pod, scanner.Text())
+		fmt.Fprintf(out, "%s (%s): %s\n", cmd, pod, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
 		logrus.Errorf("Error printing output from %s (%s): %v", cmd, pod, err)
@@ -54,10 +54,7 @@ func printCommandOutput(cmd, pod string, stdOut, stdErr *bytes.Buffer, out io.Wr
 // See: https://github.com/kubernetes/client-go/issues/45
 //
 func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) error {
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig: %v", err)
-	}
+	cfg := k8sclient.GetKubeConfig()
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig: %v", err)

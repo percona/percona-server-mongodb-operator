@@ -20,8 +20,23 @@ import (
 
 var ErrNoRunningMongodContainers = goErrors.New("no mongod containers in running state")
 
-// getRepsetMemberStatuses returns a list of ReplsetMemberStatus structs for a given replset
-func getRepsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []*v1alpha1.ReplsetMemberStatus {
+// getReplsetStatus returns a ReplsetStatus object for a given replica set
+func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *v1alpha1.ReplsetStatus {
+	for _, rs := range m.Status.Replsets {
+		if rs.Name == replset.Name {
+			return rs
+		}
+	}
+	status := &v1alpha1.ReplsetStatus{
+		Name:    replset.Name,
+		Members: []*v1alpha1.ReplsetMemberStatus{},
+	}
+	m.Status.Replsets = append(m.Status.Replsets, status)
+	return status
+}
+
+// getReplsetMemberStatuses returns a list of ReplsetMemberStatus structs for a given replset
+func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []*v1alpha1.ReplsetMemberStatus {
 	members := []*v1alpha1.ReplsetMemberStatus{}
 	for _, pod := range pods {
 		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
@@ -72,7 +87,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
 
 		return execCommandInContainer(pod, mongodContainerName, []string{
-			"/mongodb/k8s-mongodb-initiator",
+			"k8s-mongodb-initiator",
 			"init",
 		})
 	}
@@ -98,7 +113,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	}
 
 	// Update mongodb replset member status list
-	members := getRepsetMemberStatuses(m, replset, podList.Items, usersSecret)
+	members := getReplsetMemberStatuses(m, replset, podList.Items, usersSecret)
 	if !reflect.DeepEqual(members, status.Members) {
 		status.Members = members
 		doUpdate = true
@@ -123,7 +138,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
 func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) error {
-	set, err := newPSMDBStatefulSet(m, replset, nil)
+	set, err := h.newPSMDBStatefulSet(m, replset, nil)
 	if err != nil {
 		return err
 	}
@@ -156,32 +171,6 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	}
 
 	return nil
-}
-
-// getReplsetStatus returns a ReplsetStatus object for a given replica set
-func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *v1alpha1.ReplsetStatus {
-	for _, rs := range m.Status.Replsets {
-		if rs.Name == replset.Name {
-			return rs
-		}
-	}
-	status := &v1alpha1.ReplsetStatus{
-		Name:    replset.Name,
-		Members: []*v1alpha1.ReplsetMemberStatus{},
-	}
-	m.Status.Replsets = append(m.Status.Replsets, status)
-	return status
-}
-
-// statusHasPod returns a boolean reflecting if a ReplsetSTatus contains a
-// pod name
-func statusHasPod(status *v1alpha1.ReplsetStatus, podName string) bool {
-	for _, pod := range status.Pods {
-		if pod == podName {
-			return true
-		}
-	}
-	return false
 }
 
 // ensureReplset ensures resources for a PSMDB replset exist

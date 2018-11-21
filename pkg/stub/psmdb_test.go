@@ -10,33 +10,47 @@ import (
 )
 
 func TestAddPSMDBSpecDefaults(t *testing.T) {
-	spec := v1alpha1.PerconaServerMongoDBSpec{}
+	h := &Handler{
+		serverVersion: &v1alpha1.ServerVersion{
+			Platform: v1alpha1.PlatformKubernetes,
+		},
+	}
+	m := &v1alpha1.PerconaServerMongoDB{
+		Spec: v1alpha1.PerconaServerMongoDBSpec{},
+	}
 
-	addPSMDBSpecDefaults(&spec)
+	h.addPSMDBSpecDefaults(m)
 
-	assert.Equal(t, defaultVersion, spec.Version)
+	assert.Equal(t, defaultVersion, m.Spec.Version)
+	assert.Equal(t, int64(defaultRunUID), m.Spec.RunUID)
 
-	assert.Len(t, spec.Replsets, 1)
-	assert.Equal(t, defaultReplsetName, spec.Replsets[0].Name)
-	assert.Equal(t, defaultMongodSize, spec.Replsets[0].Size)
+	assert.Len(t, m.Spec.Replsets, 1)
+	assert.Equal(t, defaultReplsetName, m.Spec.Replsets[0].Name)
+	assert.Equal(t, defaultMongodSize, m.Spec.Replsets[0].Size)
 
-	assert.NotNil(t, spec.Mongod)
-	assert.Equal(t, defaultStorageEngine, spec.Mongod.Storage.Engine)
-	assert.NotNil(t, spec.Mongod.Storage.WiredTiger)
-	assert.NotNil(t, spec.Mongod.Storage.WiredTiger.EngineConfig)
-	assert.Equal(t, defaultWiredTigerCacheSizeRatio, spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
+	assert.NotNil(t, m.Spec.Mongod)
+	assert.Equal(t, defaultStorageEngine, m.Spec.Mongod.Storage.Engine)
+	assert.NotNil(t, m.Spec.Mongod.Storage.WiredTiger)
+	assert.NotNil(t, m.Spec.Mongod.Storage.WiredTiger.EngineConfig)
+	assert.Equal(t, defaultWiredTigerCacheSizeRatio, m.Spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
 
-	spec2 := v1alpha1.PerconaServerMongoDBSpec{
+	m.Spec = v1alpha1.PerconaServerMongoDBSpec{
 		Mongod: &v1alpha1.MongodSpec{
 			Storage: &v1alpha1.MongodSpecStorage{
 				Engine: v1alpha1.StorageEngineInMemory,
 			},
 		},
 	}
-	addPSMDBSpecDefaults(&spec2)
-	assert.NotNil(t, spec2.Mongod.Storage.InMemory)
-	assert.NotNil(t, spec2.Mongod.Storage.InMemory.EngineConfig)
-	assert.Equal(t, spec2.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
+	h.addPSMDBSpecDefaults(m)
+	assert.NotNil(t, m.Spec.Mongod.Storage.InMemory)
+	assert.NotNil(t, m.Spec.Mongod.Storage.InMemory.EngineConfig)
+	assert.Equal(t, m.Spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
+
+	// test runUID default is skipped on Openshift
+	m.Spec = v1alpha1.PerconaServerMongoDBSpec{}
+	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
+	h.addPSMDBSpecDefaults(m)
+	assert.Equal(t, int64(0), m.Spec.RunUID)
 }
 
 func TestNewPSMDBStatefulSet(t *testing.T) {
@@ -70,8 +84,15 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			},
 		},
 	}
+
+	h := &Handler{
+		serverVersion: &v1alpha1.ServerVersion{
+			Platform: v1alpha1.PlatformKubernetes,
+		},
+	}
+
 	// default/wiredTiger set
-	set, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	set, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, set)
 	assert.Equal(t, t.Name()+"-"+defaultReplsetName, set.Name)
@@ -80,13 +101,14 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	assert.Contains(t, set.Spec.Template.Spec.Containers[0].Args, "--wiredTigerCacheSizeGB=0.25")
 	assert.Len(t, set.Spec.Template.Spec.Containers[0].Ports, 1)
 	assert.Equal(t, int32(99999), set.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort)
+	assert.Equal(t, int64(1001), *set.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 
 	// mmapv1 set
 	psmdb.Spec.Mongod.Storage.Engine = v1alpha1.StorageEngineMMAPv1
 	psmdb.Spec.Mongod.Storage.MMAPv1 = &v1alpha1.MongodSpecMMAPv1{
 		Smallfiles: true,
 	}
-	mmapSet, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	mmapSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, mmapSet)
 	assert.Contains(t, mmapSet.Spec.Template.Spec.Containers[0].Args, "--storageEngine=mmapv1")
@@ -99,8 +121,14 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			InMemorySizeRatio: 1.0,
 		},
 	}
-	imSet, err := newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	imSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, imSet)
 	assert.Contains(t, imSet.Spec.Template.Spec.Containers[0].Args, "--inMemorySizeGB=0.93")
+
+	// test runUID is disabled on Openshift
+	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
+	osSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	assert.NoError(t, err)
+	assert.Nil(t, osSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 }

@@ -21,19 +21,22 @@ var (
 	defaultWiredTigerCacheSizeRatio float64 = 0.5
 	defaultInMemorySizeRatio        float64 = 0.9
 	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
+	defaultImagePullPolicy                  = corev1.PullIfNotPresent
 	mongodContainerDataDir          string  = "/data/db"
 	mongodContainerName             string  = "mongod"
 	mongodDataVolClaimName          string  = "mongod-data"
-	mongodToolsVolName              string  = "mongodb-tools"
 	mongodPortName                  string  = "mongodb"
-	mongodbInitiatorUrl             string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/k8s-mongodb-initiator"
-	mongodbHealthcheckUrl           string  = "https://github.com/percona/mongodb-orchestration-tools/releases/download/0.4.1/mongodb-healthcheck"
+	secretFileMode                  int32   = 0060
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
-func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
+func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
+	spec := &m.Spec
 	if spec.Version == "" {
 		spec.Version = defaultVersion
+	}
+	if spec.ImagePullPolicy == "" {
+		spec.ImagePullPolicy = defaultImagePullPolicy
 	}
 	if spec.Secrets == nil {
 		spec.Secrets = &v1alpha1.SecretsSpec{}
@@ -108,14 +111,14 @@ func addPSMDBSpecDefaults(spec *v1alpha1.PerconaServerMongoDBSpec) {
 			}
 		}
 	}
-	if spec.RunUID == 0 {
+	if spec.RunUID == 0 && h.getPlatform(m) != v1alpha1.PlatformOpenshift {
 		spec.RunUID = defaultRunUID
 	}
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
-	addPSMDBSpecDefaults(&m.Spec)
+func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
+	h.addPSMDBSpecDefaults(m)
 
 	limits, err := parseSpecResourceRequirements(replset.Limits)
 	if err != nil {
@@ -153,21 +156,20 @@ func newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 				Spec: corev1.PodSpec{
 					Affinity:      newPSMDBPodAffinity(ls),
 					RestartPolicy: corev1.RestartPolicyAlways,
-					InitContainers: []corev1.Container{
-						newPSMDBInitContainer(m),
-					},
 					Containers: []corev1.Container{
-						newPSMDBMongodContainer(m, replset, clusterRole, resources),
+						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),
+					},
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: h.getContainerRunUID(m),
 					},
 					Volumes: []corev1.Volume{
-						{
-							Name: mongodToolsVolName,
-						},
 						{
 							Name: m.Spec.Secrets.Key,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: m.Spec.Secrets.Key,
+									DefaultMode: &secretFileMode,
+									SecretName:  m.Spec.Secrets.Key,
+									Optional:    &falseVar,
 								},
 							},
 						},

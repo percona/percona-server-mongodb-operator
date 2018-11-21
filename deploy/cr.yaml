@@ -3,7 +3,9 @@ kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
 spec:
+  #platform: openshift
   version: "3.6"
+  imagePullPolicy: Always
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
@@ -31,7 +33,8 @@ spec:
     storage:
       engine: wiredTiger
       inMemory:
-        inMemorySizeRatio: 0.9
+        engineConfig:
+          inMemorySizeRatio: 0.9
       mmapv1:
         nsSize: 16
         smallfiles: false

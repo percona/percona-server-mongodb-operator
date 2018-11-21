@@ -6,6 +6,20 @@
 
 A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) based on the [Operator SDK](https://github.com/operator-framework/operator-sdk).
 
+<!-- ToC start -->
+# Table of Contents
+
+1. [DISCLAIMER](#disclaimer)
+1. [Requirements](#requirements)
+1. [Run the Operator](#run-the-operator)
+1. [Connect to the MongoDB Replica Set](#connect-to-the-mongodb-replica-set)
+   1. [Static Endpoints List](#static-endpoints-list)
+1. [Required Secrets](#required-secrets)
+   1. [MongoDB System Users](#mongodb-system-users)
+      1. [Development Mode](#development-mode)
+   1. [MongoDB Internal Authentication Key (optional)](#mongodb-internal-authentication-key-optional)
+<!-- ToC end -->
+
 # DISCLAIMER
 
 **This code is incomplete, expect major issues and changes until this repo has stabilised!**
@@ -17,31 +31,84 @@ The operator was developed/tested for only:
 1. Kubernetes version 1.10 to 1.11
 1. Go 1.11
 
-# Run
+# Run the Operator
+1. Add the 'psmdb' Namespace
 
-## Run the Operator
-1. Add the 'psmdb' Namespace to Kubernetes:
+    on Kubernetes:
     ```
     kubectl create namespace psmdb
     kubectl config set-context $(kubectl config current-context) --namespace=psmdb
     ```
-1. Add the MongoDB Users secrets to Kubernetes. **Update mongodb-users.yaml with new passwords!!!**
+    on OpenShift:
+    ```
+    oc new-project psmdb
+    ```
+1. Add the MongoDB Users secrets to Kubernetes. **Update mongodb-users.yaml with new passwords!**
+    
+    on Kubernetes:
     ```
     kubectl create -f deploy/mongodb-users.yaml
     ```
-1. Extra step **(for Google Kubernetes Engine ONLY!!!)**
+    on OpenShift:
+    ```
+    oc create -f deploy/mongodb-users.yaml
+    ```
+1. Extra step **for Google Kubernetes Engine**
     ```
     kubectl create clusterrolebinding cluster-admin-binding1 --clusterrole=cluster-admin --user=<myname@example.org>
     ```
+1. Create RBAC and CustomResourceDefinition
+
+    This step require that your user needs to have **cluster-admin role privileges**. 
+    
+    Detailed about users and roles:
+    
+    Kubernetes: [documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings)
+    
+    OpenShift: [documentation](https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html)
+    
+    on Kubernetes:
+    ```
+    kubectl create -f deploy/crd.yaml
+    kubectl create -f deploy/rbac.yaml
+    ```
+    on OpenShift:
+    ```
+    oc project mykola-psmdb
+    oc create -f deploy/crd.yaml
+    oc create -f deploy/rbac.yaml
+    ```
+1. Extra step **for OpenShift**, if you want to manage PSMDB cluster from non-privilegied user, you can grant permissions by applying next clusterrole
+    ```
+    oc create clusterrole psmdb-admin --verb="*" --resource=perconaservermongodbs.psmdb.percona.com
+    oc adm policy add-cluster-role-to-user psmdb-admin <some-user>
+    ```
 1. Start the percona-server-mongodb-operator within Kubernetes:
     ```
-    kubectl create -f deploy/rbac.yaml
-    kubectl create -f deploy/crd.yaml
     kubectl create -f deploy/operator.yaml
     ```
 1. Create the Percona Server for MongoDB cluster:
+
+    on Kubernetes:
     ```
     kubectl apply -f deploy/cr.yaml
+    ```
+
+    on OpenShift:
+    1. Uncomment the deploy/cr.yaml field *'#platform:'* and set it to *'platform: openshift'*. Example:
+    ```
+    apiVersion: psmdb.percona.com/v1alpha1
+    kind: PerconaServerMongoDB
+    metadata:
+      name: my-cluster-name
+    spec:
+      platform: openshift
+    ...
+    ...
+    ```
+    2. Create/apply the CR: 
+    ```
+    oc apply -f deploy/cr.yaml
     ```
 1. Wait for the operator and replica set pod reach Running state:
     ```
@@ -52,10 +119,13 @@ The operator was developed/tested for only:
     my-cluster-name-rs0-2                              1/1     Running   0          7m
     percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
     ``` 
+
+# Connect to the MongoDB Replica Set
+
 1. From a *'mongo'* shell add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(hostname/replicaSet in mongo uri may vary for your situation)*:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
-    mongodb@percona-client:/$ mongo mongodb+srv://userAdmin:admin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0
+    mongodb@percona-client:/$ mongo mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0
     rs0:PRIMARY> db.createUser({
         user: "myApp",
         pwd: "myAppPassword",
@@ -85,6 +155,27 @@ The operator was developed/tested for only:
     { "_id" : ObjectId("5bc74ef05c0ec73be760fcf9"), "x" : 1 }
     ```
 
+## Static Endpoints List
+
+If you prefer to use a static server list *(instead of using mongodb+srv:// to detect servers)* use *'kubectl describe service'* to gather the list of endpoints.
+
+Example *(see 'Endpoints:' below)*:
+    ```
+    $ kubectl describe service my-cluster-name-rs0
+    Name:              my-cluster-name-rs0
+    Namespace:         myproject
+    Labels:            <none>
+    Annotations:       <none>
+    Selector:          app=percona-server-mongodb,percona-server-mongodb_cr=my-cluster-name,replset=rs0
+    Type:              ClusterIP
+    IP:                None
+    Port:              mongodb  27017/TCP
+    TargetPort:        27017/TCP
+    Endpoints:         172.17.0.10:27017,172.17.0.12:27017,172.17.0.9:27017
+    Session Affinity:  None
+    Events:            <none>
+    ```
+
 # Required Secrets
 
 The operator requires Kubernetes Secrets to be deployed before it is started.
@@ -107,22 +198,22 @@ The operator requires system-level MongoDB Users to automate the MongoDB deploym
 
 ### Development Mode
 
-**Note: do not use in Production!**
+**Note: Do not use the default MongoDB Users in Production!**
 
 To make development/testing easier a secrets file with default MongoDB System User/Passwords is located at *'deploy/mongodb-users.yaml'*.
 
-The default credentials from *deploy/mongodb-users.yaml* are:
+The development-mode credentials from *deploy/mongodb-users.yaml* are:
 
-| Secret Key                       | Secret Value   |
-|----------------------------------|----------------|
-| MONGODB_BACKUP_USER              | backup         |
-| MONGODB_BACKUP_PASSWORD          | admin123456    |
-| MONGODB_CLUSTER_ADMIN_USER       | clusterAdmin   |
-| MONGODB_CLUSTER_ADMIN_PASSWORD   | admin123456    |
-| MONGODB_CLUSTER_MONITOR_USER     | clusterMonitor |
-| MONGODB_CLUSTER_MONITOR_PASSWORD | admin123456    |
-| MONGODB_USER_ADMIN_USER          | userAdmin      |
-| MONGODB_USER_ADMIN_PASSWORD      | admin123456    |
+| Secret Key                       | Secret Value         |
+|----------------------------------|----------------------|
+| MONGODB_BACKUP_USER              | backup               |
+| MONGODB_BACKUP_PASSWORD          | backup123456         |
+| MONGODB_CLUSTER_ADMIN_USER       | clusterAdmin         |
+| MONGODB_CLUSTER_ADMIN_PASSWORD   | clusterAdmin123456   |
+| MONGODB_CLUSTER_MONITOR_USER     | clusterMonitor       |
+| MONGODB_CLUSTER_MONITOR_PASSWORD | clusterMonitor123456 |
+| MONGODB_USER_ADMIN_USER          | userAdmin            |
+| MONGODB_USER_ADMIN_PASSWORD      | userAdmin123456      |
 
 ## MongoDB Internal Authentication Key (optional)
 
