@@ -16,14 +16,24 @@ func TestIsStatefulSetUpdating(t *testing.T) {
 			UpdateRevision:  t.Name(),
 		},
 	}
+
+	// test success
 	assert.False(t, isStatefulSetUpdating(ss))
 
+	// updateRevision != currentRevision
 	ss.Status.UpdateRevision = ss.Status.UpdateRevision + "-true"
 	assert.True(t, isStatefulSetUpdating(ss))
 	ss.Status.UpdateRevision = t.Name()
 
-	ss.Status.ReadyReplicas -= 1
-	assert.True(t, isStatefulSetUpdating(ss))
+	// readyReplicas < currentReplicas
+	assert.True(t, isStatefulSetUpdating(&appsv1.StatefulSet{
+		Status: appsv1.StatefulSetStatus{
+			CurrentReplicas: defaultMongodSize,
+			ReadyReplicas:   defaultMongodSize - 1,
+			CurrentRevision: t.Name(),
+			UpdateRevision:  t.Name(),
+		},
+	}))
 }
 
 //func TestGetReplsetStatus(t *testing.T) {}
