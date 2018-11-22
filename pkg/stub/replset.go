@@ -147,10 +147,22 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 		doUpdate = true
 	}
 
+	// Find the mongod container
+	var mongod *corev1.Container
+	for i, container := range set.Spec.Template.Spec.Containers {
+		if container.Name != mongodContainerName {
+			continue
+		}
+		mongod = &set.Spec.Template.Spec.Containers[i]
+		break
+	}
+	if mongod == nil {
+		return fmt.Errorf("could not find mongod container in pod")
+	}
+
 	// Ensure the PSMDB version is the same as the spec
 	expectedImage := getPSMDBDockerImageName(m)
-	mongod := &set.Spec.Template.Spec.Containers[0]
-	if mongod != nil && mongod.Image != expectedImage {
+	if mongod.Image != expectedImage {
 		logrus.Infof("updating spec image for replset %s: %s -> %s", replset.Name, mongod.Image, expectedImage)
 		mongod.Image = expectedImage
 		doUpdate = true
