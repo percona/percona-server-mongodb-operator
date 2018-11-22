@@ -322,16 +322,16 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		if err != nil {
 			return nil, err
 		}
-
-		// update status after replset init
 		status.Initialized = true
 		err = h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 		}
 		logrus.Infof("changed state to initialised for replset %s", replset.Name)
+	}
 
-		// ensure the watchdog is started
+	// ensure the watchdog is started if a replset is initialized
+	if isReplsetInitialized(m, replset, status, podList, usersSecret) {
 		err = h.ensureWatchdog(m, usersSecret)
 		if err != nil {
 			return nil, fmt.Errorf("failed to start watchdog: %v", err)
