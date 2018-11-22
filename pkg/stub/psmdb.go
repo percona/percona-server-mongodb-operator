@@ -117,21 +117,8 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole) (*appsv1.StatefulSet, error) {
+func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addPSMDBSpecDefaults(m)
-
-	limits, err := parseSpecResourceRequirements(replset.Limits)
-	if err != nil {
-		return nil, err
-	}
-	requests, err := parseSpecResourceRequirements(replset.Requests)
-	if err != nil {
-		return nil, err
-	}
-	resources := &corev1.ResourceRequirements{
-		Limits:   limits,
-		Requests: requests,
-	}
 
 	ls := labelsForPerconaServerMongoDB(m, replset)
 	set := &appsv1.StatefulSet{
@@ -157,7 +144,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 					Affinity:      newPSMDBPodAffinity(ls),
 					RestartPolicy: corev1.RestartPolicyAlways,
 					Containers: []corev1.Container{
-						h.newPSMDBMongodContainer(m, replset, clusterRole, resources),
+						h.newPSMDBMongodContainer(m, replset, resources),
 					},
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup: h.getContainerRunUID(m),
