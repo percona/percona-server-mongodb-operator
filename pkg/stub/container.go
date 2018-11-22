@@ -98,18 +98,9 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 	}
 }
 
-// getContainerRunUID returns an int64-pointer reflecting the user ID a container
-// should run as
-func (h *Handler) getContainerRunUID(m *v1alpha1.PerconaServerMongoDB) *int64 {
-	if h.getPlatform(m) != v1alpha1.PlatformOpenshift {
-		return &m.Spec.RunUID
-	}
-	return nil
-}
-
-func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, clusterRole *v1alpha1.ClusterRole, resources *corev1.ResourceRequirements) corev1.Container {
+// newPSMDBMongodContainerArgs returns the args to pass to the mongod container
+func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) []string {
 	mongod := m.Spec.Mongod
-
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
@@ -121,13 +112,11 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 	}
 
 	// sharding
-	if clusterRole != nil {
-		switch *clusterRole {
-		case v1alpha1.ClusterRoleConfigSvr:
-			args = append(args, "--configsvr")
-		case v1alpha1.ClusterRoleShardSvr:
-			args = append(args, "--shardsvr")
-		}
+	switch replset.ClusterRole {
+	case v1alpha1.ClusterRoleConfigSvr:
+		args = append(args, "--configsvr")
+	case v1alpha1.ClusterRoleShardSvr:
+		args = append(args, "--shardsvr")
 	}
 
 	// operationProfiling
@@ -154,18 +143,22 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 				"--wiredTigerCacheSizeGB=%.2f",
 				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
 			))
-			if mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
-				args = append(args,
-					"--wiredTigerCollectionBlockCompressor="+string(*mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor),
-				)
+			if mongod.Storage.WiredTiger.CollectionConfig != nil {
+				if mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
+					args = append(args,
+						"--wiredTigerCollectionBlockCompressor="+string(*mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor),
+					)
+				}
 			}
-			if mongod.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
-				args = append(args,
-					"--wiredTigerJournalCompressor="+string(*mongod.Storage.WiredTiger.EngineConfig.JournalCompressor),
-				)
-			}
-			if mongod.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
-				args = append(args, "--wiredTigerDirectoryForIndexes")
+			if mongod.Storage.WiredTiger.EngineConfig != nil {
+				if mongod.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
+					args = append(args,
+						"--wiredTigerJournalCompressor="+string(*mongod.Storage.WiredTiger.EngineConfig.JournalCompressor),
+					)
+				}
+				if mongod.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
+					args = append(args, "--wiredTigerDirectoryForIndexes")
+				}
 			}
 		case v1alpha1.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(
@@ -238,16 +231,29 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 		}
 	}
 
+	return args
+}
+
+// getContainerRunUID returns an int64-pointer reflecting the user ID a container
+// should run as
+func (h *Handler) getContainerRunUID(m *v1alpha1.PerconaServerMongoDB) *int64 {
+	if h.getPlatform(m) != v1alpha1.PlatformOpenshift {
+		return &m.Spec.RunUID
+	}
+	return nil
+}
+
+func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) corev1.Container {
 	return corev1.Container{
 		Name:            mongodContainerName,
 		Image:           getPSMDBDockerImageName(m),
 		ImagePullPolicy: m.Spec.ImagePullPolicy,
-		Args:            args,
+		Args:            newPSMDBMongodContainerArgs(m, replset, resources),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      mongod.Net.HostPort,
-				ContainerPort: mongod.Net.Port,
+				HostPort:      m.Spec.Mongod.Net.HostPort,
+				ContainerPort: m.Spec.Mongod.Net.Port,
 			},
 		},
 		Env: newPSMDBContainerEnv(m, replset),
@@ -280,7 +286,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(mongod.Net.Port)),
+					Port: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 				},
 			},
 			InitialDelaySeconds: int32(10),

@@ -70,6 +70,9 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	case *v1alpha1.PerconaServerMongoDB:
 		psmdb := o
 
+		// apply Spec defaults
+		h.addPSMDBSpecDefaults(psmdb)
+
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
