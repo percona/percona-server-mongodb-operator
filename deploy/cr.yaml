@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
 spec:
-  platform: openshift
+  #platform: openshift
   version: "3.6"
   imagePullPolicy: Always
   secrets:
@@ -14,7 +14,7 @@ spec:
     size: 3
     resources:
       limits:
-        cpu: "301m"
+        cpu: "300m"
         memory: "0.5G"
         storage: "1Gi"
       requests:
