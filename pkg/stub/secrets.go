@@ -26,24 +26,27 @@ func generateMongoDBKey() string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-// newPSMDBMongoKeySecret returns a Core API Secret structure containing a new MongoDB Internal
-// Authentication key
-func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) *corev1.Secret {
+// newSecret returns a Core API Secret structure
+func newSecret(m *v1alpha1.PerconaServerMongoDB, name string, data map[string]string) *corev1.Secret {
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Secret",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Spec.Secrets.Key,
+			Name:      name,
 			Namespace: m.Namespace,
 		},
-		StringData: map[string]string{
-			mongoDBSecretMongoKeyVal: generateMongoDBKey(),
-		},
+		StringData: data,
 	}
 	addOwnerRefToObject(secret, asOwner(m))
 	return secret
+}
+
+func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) *corev1.Secret {
+	return newSecret(m, m.Spec.Secrets.Key, map[string]string{
+		mongoDBSecretMongoKeyVal: generateMongoDBKey(),
+	})
 }
 
 // getPSMDBSecret retrieves a Kubernetes Secret

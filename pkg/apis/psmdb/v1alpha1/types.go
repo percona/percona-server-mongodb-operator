@@ -228,8 +228,5 @@ type BackupSpec struct {
 	Enabled     bool              `json:"enabled,omitempty"`
 	Schedule    string            `json:"schedule,omitempty"`
 	Destination BackupDestination `json:"destination,omitempty"`
-}
-
-type BackupStatus struct {
-	Running bool `json:"running,omitempty"`
+	Verbose     bool              `json:"verbose,omitempty"`
 }
