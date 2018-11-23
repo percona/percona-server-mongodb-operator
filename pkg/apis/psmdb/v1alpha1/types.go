@@ -218,9 +218,16 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
+type BackupDestination string
+
+var (
+	BackupDestinationPVC BackupDestination = "pvc"
+)
+
 type BackupSpec struct {
-	Enabled  bool   `json:"enabled,omitempty"`
-	Schedule string `json:"schedule,omitempty"`
+	Enabled     bool              `json:"enabled,omitempty"`
+	Schedule    string            `json:"schedule,omitempty"`
+	Destination BackupDestination `json:"destination,omitempty"`
 }
 
 type BackupStatus struct {

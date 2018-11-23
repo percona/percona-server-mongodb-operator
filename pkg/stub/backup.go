@@ -16,21 +16,25 @@ const (
 	backupDataVolume = "backup-data"
 )
 
-func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *batchv1b.CronJob {
+func getPSMDBBackupContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []string {
 	addrs := getReplsetAddrs(m, replset, pods)
+	return []string{
+		"--host=" + replset.Name + "/" + strings.Join(addrs, ","),
+		"--username=" + string(usersSecret.Data[motPkg.EnvMongoDBBackupUser]),
+		"--password=" + string(usersSecret.Data[motPkg.EnvMongoDBBackupPassword]),
+		"--backup.name=" + m.Name,
+		"--backup.location=/data",
+	}
+}
+
+func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *batchv1b.CronJob {
 	backupPod := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
 			{
 				Name:  "backup",
 				Image: "perconalab/mongodb_consistent_backup:1.3.0-3.6",
-				Args: []string{
-					"--host=" + replset.Name + "/" + strings.Join(addrs, ","),
-					"--username=" + string(usersSecret.Data[motPkg.EnvMongoDBBackupUser]),
-					"--password=" + string(usersSecret.Data[motPkg.EnvMongoDBBackupPassword]),
-					"--backup.name=" + m.Name,
-					"--backup.location=/data",
-				},
+				Args:  getPSMDBBackupContainerArgs(m, replset, pods, usersSecret),
 				Env: []corev1.EnvVar{
 					{
 						Name:  "PEX_ROOT",
@@ -56,6 +60,7 @@ func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replse
 		Volumes: []corev1.Volume{
 			{
 				Name: backupDataVolume,
+				//TODO: make backups persistent
 				//PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				//	ClaimName: m.Name + "-backup-data",
 				//},
@@ -89,3 +94,9 @@ func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replse
 	addOwnerRefToObject(cronJob, asOwner(m))
 	return cronJob
 }
+
+//func (h *Handler) updateBackupCronJob() error {
+//	return nil
+//}
+
+//func (h *Handler) ensureReplsetBackupCronJob()

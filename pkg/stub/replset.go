@@ -255,27 +255,27 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			return fmt.Errorf("failed to start watchdog: %v", err)
 		}
 
-		// Ensure backup cronJob is created if backups are enabled
-		if m.Spec.Backup.Enabled && m.Spec.Backup.Schedule != "" {
-			cronJob := h.newPSMDBBackupCronJob(m, replset, podList.Items, usersSecret)
-			err = h.client.Create(cronJob)
-			if err != nil {
-				if !k8serrors.IsAlreadyExists(err) {
-					logrus.Errorf("failed to create backup cronJob for replset %s: %v", replset.Name, err)
-					return err
+		if !isStatefulSetUpdating(set) {
+			// Ensure backup cronJob is created if backups are enabled
+			if m.Spec.Backup.Enabled && m.Spec.Backup.Schedule != "" {
+				cronJob := h.newPSMDBBackupCronJob(m, replset, podList.Items, usersSecret)
+				err = h.client.Create(cronJob)
+				if err != nil {
+					if !k8serrors.IsAlreadyExists(err) {
+						logrus.Errorf("failed to create backup cronJob for replset %s: %v", replset.Name, err)
+						return err
+					}
+				} else {
+					logrus.Infof("created backup cronJob for replset: %s", replset.Name)
 				}
-			} else {
-				logrus.Infof("created backup cronJob for replset: %s", replset.Name)
 			}
-		}
-	}
 
-	// Remove PVCs left-behind from scaling down if no update is running
-	if !isStatefulSetUpdating(set) {
-		err = h.persistentVolumeClaimReaper(m, podList.Items, replset, status)
-		if err != nil {
-			logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
-			return err
+			// Remove PVCs left-behind from scaling down if no update is running
+			err = h.persistentVolumeClaimReaper(m, podList.Items, replset, status)
+			if err != nil {
+				logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
+				return err
+			}
 		}
 	}
 
