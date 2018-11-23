@@ -15,41 +15,42 @@ import (
 )
 
 func TestHandlerHandle(t *testing.T) {
-	event := sdk.Event{
-		Object: &v1alpha1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      t.Name(),
-				Namespace: "test",
+	psmdb := &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.Name(),
+			Namespace: "test",
+		},
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Secrets: &v1alpha1.SecretsSpec{
+				Key:   defaultKeySecretName,
+				Users: defaultUsersSecretName,
 			},
-			Spec: v1alpha1.PerconaServerMongoDBSpec{
-				Secrets: &v1alpha1.SecretsSpec{
-					Key:   defaultKeySecretName,
-					Users: defaultUsersSecretName,
-				},
-				Replsets: []*v1alpha1.ReplsetSpec{
-					{
-						Name: defaultReplsetName,
-						Size: defaultMongodSize,
-						ResourcesSpec: &v1alpha1.ResourcesSpec{
-							Limits: &v1alpha1.ResourceSpecRequirements{
-								Cpu:     "1",
-								Memory:  "1G",
-								Storage: "1G",
-							},
-							Requests: &v1alpha1.ResourceSpecRequirements{
-								Cpu:    "1",
-								Memory: "1G",
-							},
+			Replsets: []*v1alpha1.ReplsetSpec{
+				{
+					Name: defaultReplsetName,
+					Size: defaultMongodSize,
+					ResourcesSpec: &v1alpha1.ResourcesSpec{
+						Limits: &v1alpha1.ResourceSpecRequirements{
+							Cpu:     "1",
+							Memory:  "1G",
+							Storage: "1G",
+						},
+						Requests: &v1alpha1.ResourceSpecRequirements{
+							Cpu:    "1",
+							Memory: "1G",
 						},
 					},
 				},
-				Mongod: &v1alpha1.MongodSpec{
-					Net: &v1alpha1.MongodSpecNet{
-						Port: 99999,
-					},
+			},
+			Mongod: &v1alpha1.MongodSpec{
+				Net: &v1alpha1.MongodSpecNet{
+					Port: 99999,
 				},
 			},
 		},
+	}
+	event := sdk.Event{
+		Object: psmdb,
 	}
 
 	client := &mocks.Client{}
@@ -69,6 +70,7 @@ func TestHandlerHandle(t *testing.T) {
 		serverVersion: &v1alpha1.ServerVersion{
 			Platform: v1alpha1.PlatformKubernetes,
 		},
+		watchdogQuit: make(chan bool),
 	}
 
 	assert.NoError(t, h.Handle(context.TODO(), event))
@@ -80,4 +82,23 @@ func TestHandlerHandle(t *testing.T) {
 	lastCall := client.Calls[calls-1]
 	assert.Equal(t, "Create", lastCall.Method)
 	assert.IsType(t, &corev1.Service{}, lastCall.Arguments.Get(0))
+
+	// test watchdog is started when 1+ replsets are initializaed
+	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
+	assert.Nil(t, h.watchdog)
+	psmdb.Status = v1alpha1.PerconaServerMongoDBStatus{
+		Replsets: []*v1alpha1.ReplsetStatus{
+			{
+				Name:        defaultReplsetName,
+				Initialized: true,
+			},
+		},
+	}
+	assert.NoError(t, h.Handle(context.TODO(), event))
+	assert.NotNil(t, h.watchdog)
+
+	// test watchdog is stopped by a 'Deleted' SDK event
+	event.Deleted = true
+	assert.NoError(t, h.Handle(context.TODO(), event))
+	assert.Nil(t, h.watchdog)
 }
