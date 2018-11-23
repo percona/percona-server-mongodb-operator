@@ -77,8 +77,10 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
 			logrus.Infof("received deleted event for %s", psmdb.Name)
-			close(h.watchdogQuit)
-			h.watchdog = nil
+			if h.watchdog != nil {
+				close(h.watchdogQuit)
+				h.watchdog = nil
+			}
 			return nil
 		}
 
