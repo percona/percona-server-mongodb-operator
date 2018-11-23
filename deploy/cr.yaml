@@ -3,8 +3,8 @@ kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
 spec:
-  platform: openshift
-  version: "3.6.8"
+  #platform: openshift
+  version: "3.6"
   imagePullPolicy: Always
   secrets:
     key: my-cluster-name-mongodb-key
