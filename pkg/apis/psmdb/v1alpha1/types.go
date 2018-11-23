@@ -225,8 +225,9 @@ var (
 )
 
 type BackupSpec struct {
-	Enabled     bool              `json:"enabled,omitempty"`
-	Schedule    string            `json:"schedule,omitempty"`
-	Destination BackupDestination `json:"destination,omitempty"`
-	Verbose     bool              `json:"verbose,omitempty"`
+	*ResourcesSpec `json:"resources,omitempty"`
+	Enabled        bool              `json:"enabled,omitempty"`
+	Schedule       string            `json:"schedule,omitempty"`
+	Destination    BackupDestination `json:"destination,omitempty"`
+	Verbose        bool              `json:"verbose,omitempty"`
 }
