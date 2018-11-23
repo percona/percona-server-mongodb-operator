@@ -56,4 +56,5 @@ spec:
     #  format: BSON
     #  filter: '{}'
   backup:
+    enabled: true
     schedule: "*/2 * * * *"

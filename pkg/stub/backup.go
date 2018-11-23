@@ -16,8 +16,7 @@ const (
 	backupDataVolume = "backup-data"
 )
 
-func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *batchv1b.CronJob {
-	//ls := labelsForPerconaServerMongoDB(m, replset)
+func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *batchv1b.CronJob {
 	addrs := getReplsetAddrs(m, replset, pods)
 	backupPod := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
@@ -32,6 +31,11 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 					"--backup.name=" + m.Name,
 					"--backup.location=/data",
 				},
+				WorkingDir: "/data",
+				SecurityContext: &corev1.SecurityContext{
+					RunAsNonRoot: &trueVar,
+					RunAsUser:    h.getContainerRunUID(m),
+				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      backupDataVolume,
@@ -39,6 +43,9 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 					},
 				},
 			},
+		},
+		SecurityContext: &corev1.PodSecurityContext{
+			FSGroup: h.getContainerRunUID(m),
 		},
 		Volumes: []corev1.Volume{
 			{
@@ -62,6 +69,9 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 			Schedule:          m.Spec.Backup.Schedule,
 			ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 			JobTemplate: batchv1b.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labelsForPerconaServerMongoDB(m, replset),
+				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
 						Spec: backupPod,

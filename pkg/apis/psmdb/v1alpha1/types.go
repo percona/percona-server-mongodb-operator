@@ -219,6 +219,7 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupSpec struct {
+	Enabled  bool   `json:"enabled,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
 }
 
