@@ -31,6 +31,12 @@ func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replse
 					"--backup.name=" + m.Name,
 					"--backup.location=/data",
 				},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "PEX_ROOT",
+						Value: "/data/.pex",
+					},
+				},
 				WorkingDir: "/data",
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &trueVar,
