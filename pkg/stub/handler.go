@@ -70,12 +70,17 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	case *v1alpha1.PerconaServerMongoDB:
 		psmdb := o
 
+		// apply Spec defaults
+		h.addPSMDBSpecDefaults(psmdb)
+
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
 			logrus.Infof("received deleted event for %s", psmdb.Name)
-			close(h.watchdogQuit)
-			h.watchdog = nil
+			if h.watchdog != nil {
+				close(h.watchdogQuit)
+				h.watchdog = nil
+			}
 			return nil
 		}
 
@@ -118,24 +123,14 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return err
 			}
 
-			// Ensure replset exists
-			status, err := h.ensureReplset(psmdb, podList, replset, usersSecret)
+			// Ensure replset exists and has correct state, PVCs, etc
+			err = h.ensureReplset(psmdb, podList, replset, usersSecret)
 			if err != nil {
 				if err == ErrNoRunningMongodContainers {
 					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)
 					continue
 				}
 				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
-				return err
-			}
-			if !status.Initialized {
-				continue
-			}
-
-			// Remove PVCs left-behind from scaling down
-			err = persistentVolumeClaimReaper(psmdb, h.client, podList, replset, status)
-			if err != nil {
-				logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
 				return err
 			}
 		}

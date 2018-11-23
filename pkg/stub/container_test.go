@@ -8,20 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-func TestGetContainer(t *testing.T) {
-	pod := corev1.Pod{
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name: t.Name(),
-				},
-			},
-		},
-	}
-	assert.NotNil(t, getContainer(pod, t.Name()))
-	assert.Nil(t, getContainer(pod, "doesnt exist"))
-}
-
 func TestGetMongodPort(t *testing.T) {
 	assert.Equal(t, "27017", getMongodPort(&corev1.Container{
 		Ports: []corev1.ContainerPort{
