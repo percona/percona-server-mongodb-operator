@@ -1,19 +1,24 @@
 package stub
 
 import (
+	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
+	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	backupDataVolume = "backup-data"
+	backupContainerName = "backup"
+	backupDataVolume    = "backup-data"
 )
 
 func getPSMDBBackupContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []string {
@@ -32,7 +37,7 @@ func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replse
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
 			{
-				Name:  "backup",
+				Name:  backupContainerName,
 				Image: "perconalab/mongodb_consistent_backup:1.3.0-3.6",
 				Args:  getPSMDBBackupContainerArgs(m, replset, pods, usersSecret),
 				Env: []corev1.EnvVar{
@@ -95,8 +100,44 @@ func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replse
 	return cronJob
 }
 
-//func (h *Handler) updateBackupCronJob() error {
-//	return nil
-//}
+func (h *Handler) updateBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret, cronJob *batchv1b.CronJob) error {
+	err := h.client.Get(cronJob)
+	if err != nil {
+		logrus.Errorf("failed to get cronJob %s: %v", cronJob.Name, err)
+		return err
+	}
 
-//func (h *Handler) ensureReplsetBackupCronJob()
+	expectedArgs := getPSMDBBackupContainerArgs(m, replset, pods, usersSecret)
+	container := getPodSpecContainer(&cronJob.Spec.JobTemplate.Spec.Template.Spec, backupContainerName)
+	if container == nil {
+		return fmt.Errorf("cannot find %s container", backupContainerName)
+	}
+
+	if !reflect.DeepEqual(container.Args, expectedArgs) {
+		logrus.Infof("updating backup cronjob for replset %s: %v -> %v", replset.Name, container.Args, expectedArgs)
+		container.Args = expectedArgs
+		return h.client.Update(cronJob)
+	}
+	return nil
+}
+
+func (h *Handler) ensureReplsetBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) error {
+	if !m.Spec.Backup.Enabled || m.Spec.Backup.Schedule == "" {
+		return nil
+	}
+
+	cronJob := h.newPSMDBBackupCronJob(m, replset, pods, usersSecret)
+	err := h.client.Create(cronJob)
+	if err != nil {
+		if k8serrors.IsAlreadyExists(err) {
+			return h.updateBackupCronJob(m, replset, pods, usersSecret, cronJob)
+		} else {
+			logrus.Errorf("failed to create backup cronJob for replset %s: %v", replset.Name, err)
+			return err
+		}
+	} else {
+		logrus.Infof("created backup cronJob for replset: %s", replset.Name)
+	}
+
+	return nil
+}

@@ -257,17 +257,9 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 
 		if !isStatefulSetUpdating(set) {
 			// Ensure backup cronJob is created if backups are enabled
-			if m.Spec.Backup.Enabled && m.Spec.Backup.Schedule != "" {
-				cronJob := h.newPSMDBBackupCronJob(m, replset, podList.Items, usersSecret)
-				err = h.client.Create(cronJob)
-				if err != nil {
-					if !k8serrors.IsAlreadyExists(err) {
-						logrus.Errorf("failed to create backup cronJob for replset %s: %v", replset.Name, err)
-						return err
-					}
-				} else {
-					logrus.Infof("created backup cronJob for replset: %s", replset.Name)
-				}
+			err = h.ensureReplsetBackupCronJob(m, replset, podList.Items, usersSecret)
+			if err != nil {
+				return err
 			}
 
 			// Remove PVCs left-behind from scaling down if no update is running

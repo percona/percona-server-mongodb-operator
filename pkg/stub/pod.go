@@ -27,6 +27,17 @@ func getPodContainer(pod *corev1.Pod, containerName string) *corev1.Container {
 	return nil
 }
 
+// getPodSpecContainer returns a container from a pod spec, if it exists
+func getPodSpecContainer(spec *corev1.PodSpec, containerName string) *corev1.Container {
+	for i, c := range spec.Containers {
+		if c.Name != containerName {
+			continue
+		}
+		return &spec.Containers[i]
+	}
+	return nil
+}
+
 // getPodNames returns the pod names of the array of pods passed in
 func getPodNames(pods []corev1.Pod) []string {
 	var podNames []string
