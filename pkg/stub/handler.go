@@ -121,24 +121,14 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return err
 			}
 
-			// Ensure replset exists
-			status, err := h.ensureReplset(psmdb, podList, replset, usersSecret)
+			// Ensure replset exists and has correct state, PVCs, etc
+			err = h.ensureReplset(psmdb, podList, replset, usersSecret)
 			if err != nil {
 				if err == ErrNoRunningMongodContainers {
 					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)
 					continue
 				}
 				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
-				return err
-			}
-			if !status.Initialized {
-				continue
-			}
-
-			// Remove PVCs left-behind from scaling down
-			err = persistentVolumeClaimReaper(psmdb, h.client, podList, replset, status)
-			if err != nil {
-				logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
 				return err
 			}
 		}

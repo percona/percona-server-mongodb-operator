@@ -5,7 +5,7 @@ GO_TEST_PATH?=./pkg/stub/...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
 GIT_COMMIT?=$(shell git rev-parse HEAD)
-GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD|grep -oP "\w+$$")
+GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 GIT_REPO=github.com/Percona-Lab/$(NAME)
 UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
