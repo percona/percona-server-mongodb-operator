@@ -131,6 +131,19 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
 				return err
 			}
+
+			// Ensure backup cronJob is created
+			if psmdb.Spec.Backup.Schedule != "" {
+				err = h.client.Create(newPSMDBBackupCronJob(psmdb, replset, podList.Items, usersSecret))
+				if err != nil {
+					if !errors.IsAlreadyExists(err) {
+						logrus.Errorf("failed to create backup cronJob for replset %s: %v", replset.Name, err)
+						return err
+					}
+				} else {
+					logrus.Info("create backup cron job for replset %s", replset.Name)
+				}
+			}
 		}
 	}
 	return nil

@@ -23,15 +23,20 @@ var (
 	MongoDBTimeout               = 3 * time.Second
 )
 
-// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
-func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
+// getReplsetAddrs returns a slice of replset host:port addresses
+func getReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) []string {
 	addrs := []string{}
 	for _, pod := range pods {
 		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
 		addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
 	}
+	return addrs
+}
+
+// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
+func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
 	return &mgo.DialInfo{
-		Addrs:          addrs,
+		Addrs:          getReplsetAddrs(m, replset, pods),
 		ReplicaSetName: replset.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),

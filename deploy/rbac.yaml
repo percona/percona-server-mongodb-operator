@@ -36,6 +36,15 @@ rules:
   - "update"
   - "delete"
   - "get"
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  verbs:
+  - "create"
+  - "update"
+  - "delete"
+  - "get"
 
 ---
 

@@ -31,6 +31,7 @@ type PerconaServerMongoDBSpec struct {
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	Backup          *BackupSpec       `json:"backup,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
@@ -215,4 +216,12 @@ type MongodSpecOperationProfiling struct {
 	Mode              OperationProfilingMode `json:"mode,omitempty"`
 	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
 	RateLimit         int                    `json:"rateLimit,omitempty"`
+}
+
+type BackupSpec struct {
+	Schedule string `json:"schedule,omitempty"`
+}
+
+type BackupStatus struct {
+	Running bool `json:"running,omitempty"`
 }
