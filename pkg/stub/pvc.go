@@ -8,6 +8,7 @@ import (
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -53,6 +54,16 @@ func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.C
 	return pvcList.Items, err
 }
 
+// isStatefulSetUpdating returns a boolean reflecting if a StatefulSet is updating or
+// scaling. If the currentRevision is different than the updateRevision or if the
+// number of readyReplicas is different than currentReplicas, the set is updating
+func isStatefulSetUpdating(set *appsv1.StatefulSet) bool {
+	if set.Status.CurrentRevision != set.Status.UpdateRevision {
+		return true
+	}
+	return set.Status.ReadyReplicas != set.Status.CurrentReplicas
+}
+
 // deletePersistentVolumeClaim deletes a Persistent Volume Claim
 func deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, pvcName string) error {
 	return client.Delete(&corev1.PersistentVolumeClaim{
@@ -69,9 +80,9 @@ func deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 
 // persistentVolumeClaimReaper removes Kubernetes Persistent Volume Claims
 // from pods that have scaled down
-func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, replsetStatus *v1alpha1.ReplsetStatus) error {
+func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod, replset *v1alpha1.ReplsetSpec, replsetStatus *v1alpha1.ReplsetStatus) error {
 	var runningPods int
-	for _, pod := range podList.Items {
+	for _, pod := range pods {
 		if isPodReady(pod) && isContainerAndPodRunning(pod, mongodContainerName) {
 			runningPods++
 		}
@@ -80,7 +91,7 @@ func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 		return nil
 	}
 
-	pvcs, err := getPersistentVolumeClaims(m, client, replset)
+	pvcs, err := getPersistentVolumeClaims(m, h.client, replset)
 	if err != nil {
 		logrus.Errorf("failed to get persistent volume claims: %v", err)
 		return err
@@ -96,7 +107,7 @@ func persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, client pkgSdk
 		if statusHasPod(replsetStatus, pvcPodName) {
 			continue
 		}
-		err = deletePersistentVolumeClaim(m, client, pvc.Name)
+		err = deletePersistentVolumeClaim(m, h.client, pvc.Name)
 		if err != nil {
 			logrus.Errorf("failed to delete persistent volume claim %s: %v", pvc.Name, err)
 			return err

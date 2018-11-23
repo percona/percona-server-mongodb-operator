@@ -53,10 +53,7 @@ func TestGetReplsetDialInfo(t *testing.T) {
 	assert.True(t, di.FailFast)
 }
 
-//func TestGetReplsetStatus(t *testing.T) {}
 //func TestIsReplsetInitialized(t *testing.T) {}
-//func TestGetReplsetMemberStatuses(t *testing.T) {}
 //func TestHandlerHandleReplsetInit(t *testing.T) {}
-//func TestHandlerUpdateStatus(t *testing.T) {}
 //func TestEnsureReplsetStatefulSet(t *testing.T) {}
 //func TestHandlerEnsureReplset(t *testing.T) {}

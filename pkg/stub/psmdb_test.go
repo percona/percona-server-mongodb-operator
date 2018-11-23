@@ -6,6 +6,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -60,6 +61,9 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Secrets: &v1alpha1.SecretsSpec{
+				Key: defaultKeySecretName,
+			},
 			Replsets: []*v1alpha1.ReplsetSpec{
 				{
 					Name: defaultReplsetName,
@@ -81,8 +85,27 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 				Net: &v1alpha1.MongodSpecNet{
 					Port: 99999,
 				},
+				Storage: &v1alpha1.MongodSpecStorage{
+					Engine: v1alpha1.StorageEngineWiredTiger,
+					WiredTiger: &v1alpha1.MongodSpecWiredTiger{
+						EngineConfig: &v1alpha1.MongodSpecWiredTigerEngineConfig{
+							CacheSizeRatio: 0.5,
+						},
+					},
+				},
 			},
 		},
+	}
+	replset := psmdb.Spec.Replsets[0]
+
+	// parse resources
+	limits, err := parseSpecResourceRequirements(replset.Limits)
+	assert.NoError(t, err)
+	requests, err := parseSpecResourceRequirements(replset.Requests)
+	assert.NoError(t, err)
+	resources := corev1.ResourceRequirements{
+		Limits:   limits,
+		Requests: requests,
 	}
 
 	h := &Handler{
@@ -92,7 +115,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	}
 
 	// default/wiredTiger set
-	set, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	set, err := h.newPSMDBStatefulSet(psmdb, replset, &resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, set)
 	assert.Equal(t, t.Name()+"-"+defaultReplsetName, set.Name)
@@ -108,7 +131,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	psmdb.Spec.Mongod.Storage.MMAPv1 = &v1alpha1.MongodSpecMMAPv1{
 		Smallfiles: true,
 	}
-	mmapSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	mmapSet, err := h.newPSMDBStatefulSet(psmdb, replset, &resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, mmapSet)
 	assert.Contains(t, mmapSet.Spec.Template.Spec.Containers[0].Args, "--storageEngine=mmapv1")
@@ -121,14 +144,14 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			InMemorySizeRatio: 1.0,
 		},
 	}
-	imSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	imSet, err := h.newPSMDBStatefulSet(psmdb, replset, &resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, imSet)
 	assert.Contains(t, imSet.Spec.Template.Spec.Containers[0].Args, "--inMemorySizeGB=0.93")
 
 	// test runUID is disabled on Openshift
 	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
-	osSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], nil)
+	osSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], &resources)
 	assert.NoError(t, err)
 	assert.Nil(t, osSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 }
