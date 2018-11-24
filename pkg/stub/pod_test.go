@@ -33,6 +33,20 @@ func TestGetPodNames(t *testing.T) {
 	assert.Equal(t, []string{t.Name() + "-0", t.Name() + "-1"}, podNames)
 }
 
+func TestGetPodContainer(t *testing.T) {
+	pod := corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name: t.Name(),
+				},
+			},
+		},
+	}
+	assert.NotNil(t, getPodContainer(&pod, t.Name()))
+	assert.Nil(t, getPodContainer(&pod, "doesnt exist"))
+}
+
 func TestNewPSMDBPodAffinity(t *testing.T) {
 	labels := map[string]string{
 		"test": t.Name(),
