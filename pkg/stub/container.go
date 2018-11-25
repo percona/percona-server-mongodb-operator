@@ -105,7 +105,6 @@ func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 		"--bind_ip_all",
 		"--auth",
 		"--dbpath=" + mongodContainerDataDir,
-		"--keyFile=" + mongodContainerDataDir + "/.mongod.key",
 		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mongod.Storage.Engine),
