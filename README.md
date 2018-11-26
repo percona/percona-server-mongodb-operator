@@ -291,6 +291,6 @@ YAML Path: *spec.mongod*
 | operationProfiling.mode                             | string     | slowOp     | Sets the ['operationProfiling.mode' option](https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.mode) |
 | operationProfiling.slowOpThresholdMs                | int        | 100        | Sets the ['operationProfiling.slowOpThresholdMs' option](https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.slowOpThresholdMs) |
 | operationProfiling.rateLimit                        | int        | 1          | Sets the ['operationProfiling.rateLimit' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html) |
-| auditLog.destination                                | string     |            | Sets the ['auditLog.destination' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html) |
-| auditLog.format                                     | string     | BSON       | Sets the ['auditLog.format' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html) |
-| auditLog.filter                                     | string     | {}         | Sets the ['auditLog.filter' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html) |
+| auditLog.destination                                | string     |            | Sets the ['auditLog.destination' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html) |
+| auditLog.format                                     | string     | BSON       | Sets the ['auditLog.format' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html) |
+| auditLog.filter                                     | string     | {}         | Sets the ['auditLog.filter' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html) |
