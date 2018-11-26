@@ -21,9 +21,9 @@ const (
 
 // getPSMDBDockerImageName returns the prefix for the Dockerhub image name.
 // This image name should be in the following format:
-// perconalab/percona-server-mongodb-operator:<VERSION>-mongod<PSMDB-VERSION>
+// percona/percona-server-mongodb-operator:<VERSION>-mongod<PSMDB-VERSION>
 func getPSMDBDockerImageName(m *v1alpha1.PerconaServerMongoDB) string {
-	return "perconalab/percona-server-mongodb-operator:" + version.Version + "-mongod" + m.Spec.Version
+	return "percona/percona-server-mongodb-operator:" + version.Version + "-mongod" + m.Spec.Version
 }
 
 // getMongodPort returns the mongod port number as a string

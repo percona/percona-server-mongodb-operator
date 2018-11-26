@@ -10,9 +10,9 @@ GIT_REPO=github.com/Percona-Lab/$(NAME)
 UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
-IMAGE="perconalab/$(NAME):$(VERSION)"
+IMAGE="percona/$(NAME):$(VERSION)"
 ifneq ($(GIT_BRANCH), master)
-	IMAGE="perconalab/$(NAME):$(GIT_BRANCH)"
+	IMAGE="percona/$(NAME):$(GIT_BRANCH)"
 endif
 
 all: build
