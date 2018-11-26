@@ -262,11 +262,11 @@ YAML Path: *spec.replsets*
 | name                      | string      | rs0     | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/)                                  |
 | size                      | int         | 3       | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
 | storageClass              | string      |         | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
-| resources.limits.cpu      | string      |         | Kubernetes CPU limit for MongoDB container                                                                           |
-| resources.limits.memory   | string      |         | Kubernetes Memory limit for MongoDB container                                                                        |
-| resources.limits.storage  | string      |         | Kubernetes Storage limit for Persistent Volume Claim                                                                 |
-| resources.requests.cpu    | string      |         | Kubernetes CPU requests for MongoDB container                                                                        |
-| resources.requests.memory | string      |         | Kubernetes Memory requests for MongoDB container                                                                     |
+| resources.limits.cpu      | string      |         | [Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+| resources.limits.memory   | string      |         | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+| resources.limits.storage  | string      |         | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
+| resources.requests.cpu    | string      |         | [Kubernetes CPU requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+| resources.requests.memory | string      |         | [Kubernetes Memory requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
 
 ## Mongod
 YAML Path: *spec.mongod*
