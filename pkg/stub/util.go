@@ -23,12 +23,12 @@ var (
 
 // getPlatform returns the Kubernetes platform type, first using the Spec 'platform'
 // field or the serverVersion.Platform field if the Spec 'platform' field is not set
-func (h *Handler) getPlatform(m *v1alpha1.PerconaServerMongoDB) v1alpha1.Platform {
+func getPlatform(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) v1alpha1.Platform {
 	if m.Spec.Platform != nil {
 		return *m.Spec.Platform
 	}
-	if h.serverVersion != nil {
-		return h.serverVersion.Platform
+	if serverVersion != nil {
+		return serverVersion.Platform
 	}
 	return v1alpha1.PlatformKubernetes
 }

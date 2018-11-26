@@ -27,7 +27,7 @@ func generateMongoDBKey() string {
 }
 
 // newSecret returns a Core API Secret structure
-func newSecret(m *v1alpha1.PerconaServerMongoDB, name string, data map[string]string) *corev1.Secret {
+func NewPSMDBSecret(m *v1alpha1.PerconaServerMongoDB, name string, data map[string]string) *corev1.Secret {
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -44,7 +44,7 @@ func newSecret(m *v1alpha1.PerconaServerMongoDB, name string, data map[string]st
 }
 
 func newPSMDBMongoKeySecret(m *v1alpha1.PerconaServerMongoDB) *corev1.Secret {
-	return newSecret(m, m.Spec.Secrets.Key, map[string]string{
+	return NewPSMDBSecret(m, m.Spec.Secrets.Key, map[string]string{
 		mongoDBSecretMongoKeyVal: generateMongoDBKey(),
 	})
 }

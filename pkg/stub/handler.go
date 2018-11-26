@@ -92,7 +92,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 				return err
 			}
 			h.serverVersion = serverVersion
-			logrus.Infof("detected Kubernetes platform: %s, version: %s", h.getPlatform(psmdb), h.serverVersion.Info)
+			logrus.Infof("detected Kubernetes platform: %s, version: %s", getPlatform(psmdb, h.serverVersion), h.serverVersion.Info)
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist

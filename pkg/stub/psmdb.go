@@ -111,7 +111,7 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 			}
 		}
 	}
-	if spec.RunUID == 0 && h.getPlatform(m) != v1alpha1.PlatformOpenshift {
+	if spec.RunUID == 0 && getPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {
 		spec.RunUID = defaultRunUID
 	}
 }
@@ -147,7 +147,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 						h.newPSMDBMongodContainer(m, replset, resources),
 					},
 					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup: h.getContainerRunUID(m),
+						FSGroup: GetContainerRunUID(m, h.serverVersion),
 					},
 					Volumes: []corev1.Volume{
 						{

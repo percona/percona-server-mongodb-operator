@@ -1,13 +1,11 @@
-package stub
+package backup
 
 import (
-	"strings"
-
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/sirupsen/logrus"
-	yaml "gopkg.in/yaml.v2"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,56 +16,25 @@ import (
 const (
 	backupContainerName = "backup"
 	backupDataVolume    = "backup-data"
-	backupImagePrefix   = "perconalab/mongodb_consistent_backup"
-	backupImageVersion  = "1.3.0-3.6"
-	backupConfigFile    = "config.yaml"
 )
 
-var (
-	backupConfigFileMode = int32(0060)
-)
-
-// MCBConfig represents the backup section of the config file for mongodb_consistent_backup
-// See: https://github.com/Percona-Lab/mongodb_consistent_backup/blob/master/conf/mongodb-consistent-backup.example.conf#L14
-type MCBConfigBackup struct {
-	Name     string `yaml:"name"`
-	Location string `yaml:"location"`
+type Controller struct {
+	psmdb *v1alpha1.PerconaServerMongoDB
 }
 
-// MCBConfig represents the config file for mongodb_consistent_backup
-// See: https://github.com/Percona-Lab/mongodb_consistent_backup/blob/master/conf/mongodb-consistent-backup.example.conf
-type MCBConfig struct {
-	Host     string           `yaml:"host"`
-	Username string           `yaml:"username"`
-	Password string           `yaml:"password"`
-	Backup   *MCBConfigBackup `yaml:"backup"`
-	Verbose  bool             `yaml:"verbose,omitempty"`
-}
-
-func newMCBConfigYAML(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) (string, error) {
-	addrs := getReplsetAddrs(m, replset, pods)
-	config := map[string]*MCBConfig{
-		"production": &MCBConfig{
-			Host:     replset.Name + "/" + strings.Join(addrs, ","),
-			Username: string(usersSecret.Data[motPkg.EnvMongoDBBackupUser]),
-			Password: string(usersSecret.Data[motPkg.EnvMongoDBBackupPassword]),
-			Backup: &MCBConfigBackup{
-				Name:     m.Name,
-				Location: "/data",
-			},
-			Verbose: m.Spec.Backup.Verbose,
-		},
+func New(psmdb *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) *Controller {
+	return &Controller{
+		psmdb:         psmdb,
+		serverVersion: serverVersion,
 	}
-	bytes, err := yaml.Marshal(config)
-	return string(bytes), err
 }
 
-func newMCBConfigSecret(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) (*corev1.Secret, error) {
-	config, err := newMCBConfigYAML(m, replset, pods, usersSecret)
+func (c *Controller) newMCBConfigSecret(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) (*corev1.Secret, error) {
+	config, err := c.newMCBConfigYAML(replset, pods, usersSecret)
 	if err != nil {
 		return nil, err
 	}
-	return newSecret(m, m.Name+"-"+replset.Name+"-backup-config", map[string]string{
+	return stub.NewPSMDBSecret(c.psmdb, c.psmdb.Name+"-"+replset.Name+"-backup-config", map[string]string{
 		backupConfigFile: string(config),
 	}), nil
 }
@@ -85,7 +52,7 @@ func newCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec)
 	}
 }
 
-func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, configSecret *corev1.Secret) *batchv1b.CronJob {
+func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, configSecret *corev1.Secret) *batchv1b.CronJob {
 	backupPod := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
@@ -104,7 +71,7 @@ func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replse
 				WorkingDir: "/data",
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &trueVar,
-					RunAsUser:    h.getContainerRunUID(m),
+					RunAsUser:    stub.GetContainerRunUID(m, c.serverVersion),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -120,7 +87,7 @@ func (h *Handler) newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replse
 			},
 		},
 		SecurityContext: &corev1.PodSecurityContext{
-			FSGroup: h.getContainerRunUID(m),
+			FSGroup: stub.GetContainerRunUID(m, c.serverVersion),
 		},
 		Volumes: []corev1.Volume{
 			{

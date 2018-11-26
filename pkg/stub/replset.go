@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
@@ -257,7 +258,8 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 
 		if !isStatefulSetUpdating(set) {
 			// Ensure backup cronJob is created if backups are enabled
-			err = h.ensureReplsetBackupCronJob(m, replset, podList.Items, usersSecret)
+			bkp := backup.New(m, h.serverVersion)
+			err = backup.EnsureReplsetBackupCronJob(replset, podList.Items, usersSecret)
 			if err != nil {
 				return err
 			}
