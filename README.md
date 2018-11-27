@@ -31,12 +31,12 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
 
 # Requirements
 
-The operator was developed/tested for only:
-1. Percona Server for MongoDB 3.6 or greater with:
-   1. Replication enabled
-   1. Authentication enabled
-1. Kubernetes version 1.10 to 1.11 or OpenShift 3.9 to 3.11
-1. Go 1.11
+The operator was developed/tested for:
+1. [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) 3.6 or greater with:
+   1. [Authentication](https://docs.mongodb.com/manual/core/authentication/) enabled
+   1. [Replication](https://docs.mongodb.com/manual/replication/) enabled
+1. [Kubernetes](https://kubernetes.io/) version 1.10 to 1.11 or [OpenShift](https://www.openshift.com/) 3.9 to 3.11
+1. [Go](https://golang.org) 1.11
 
 # Run the Operator
 1. Add the 'psmdb' Namespace
@@ -168,19 +168,8 @@ If you prefer to use a static server list *(instead of using mongodb+srv:// to d
 
 Example *(see 'Endpoints:' below)*:
     ```
-    $ kubectl describe service my-cluster-name-rs0
-    Name:              my-cluster-name-rs0
-    Namespace:         myproject
-    Labels:            <none>
-    Annotations:       <none>
-    Selector:          app=percona-server-mongodb,percona-server-mongodb_cr=my-cluster-name,replset=rs0
-    Type:              ClusterIP
-    IP:                None
-    Port:              mongodb  27017/TCP
-    TargetPort:        27017/TCP
+    $ kubectl describe service my-cluster-name-rs0 | grep 'Endpoints:'
     Endpoints:         172.17.0.10:27017,172.17.0.12:27017,172.17.0.9:27017
-    Session Affinity:  None
-    Events:            <none>
     ```
 
 # Required Secrets
