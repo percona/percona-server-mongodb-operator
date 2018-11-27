@@ -100,12 +100,10 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		}
 	}
 	if len(spec.Replsets) == 0 {
-		spec.Replsets = []v1alpha1.ReplsetSpec{
-			{
-				Name: defaultReplsetName,
-				Size: defaultMongodSize,
-			},
-		}
+		spec.Replsets = []*v1alpha1.ReplsetSpec{{
+			Name: defaultReplsetName,
+			Size: defaultMongodSize,
+		}}
 	} else {
 		for _, replset := range spec.Replsets {
 			if replset.Size == 0 {
