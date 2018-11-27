@@ -3,8 +3,8 @@ package stub
 import (
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk/mocks"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/stretchr/testify/assert"
