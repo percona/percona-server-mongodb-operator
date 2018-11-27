@@ -12,6 +12,7 @@ spec:
   replsets:
   - name: rs0
     size: 3
+    #storageClass: aws-gp2
     resources:
       limits:
         cpu: "300m"
