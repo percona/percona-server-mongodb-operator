@@ -160,7 +160,7 @@ func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 				}
 			}
 			if mongod.Storage.WiredTiger.IndexConfig != nil && mongod.Storage.WiredTiger.IndexConfig.PrefixCompression {
-				args = append(args, "--wiredTigerIndexPrefixCompression")
+				args = append(args, "--wiredTigerIndexPrefixCompression=true")
 			}
 		case v1alpha1.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(
