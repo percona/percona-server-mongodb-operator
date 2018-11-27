@@ -218,6 +218,13 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
+type BackupArchiveMode string
+
+var (
+	BackupArchiveModeNone BackupArchiveMode = "none"
+	BackupArchiveModeTar  BackupArchiveMode = "tar"
+)
+
 type BackupDestination string
 
 var (
@@ -228,6 +235,7 @@ type BackupSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Enabled        bool              `json:"enabled,omitempty"`
 	Schedule       string            `json:"schedule,omitempty"`
+	ArchiveMode    BackupArchiveMode `json:"archiveMode,omitempty"`
 	Destination    BackupDestination `json:"destination,omitempty"`
 	Verbose        bool              `json:"verbose,omitempty"`
 }

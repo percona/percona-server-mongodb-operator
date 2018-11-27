@@ -1,10 +1,10 @@
 package backup
 
 import (
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
-	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
@@ -19,11 +19,14 @@ const (
 )
 
 type Controller struct {
-	psmdb *v1alpha1.PerconaServerMongoDB
+	client        sdk.Client
+	psmdb         *v1alpha1.PerconaServerMongoDB
+	serverVersion *v1alpha1.ServerVersion
 }
 
-func New(psmdb *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) *Controller {
+func New(psmdb *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion, client sdk.Client) *Controller {
 	return &Controller{
+		client:        client,
 		psmdb:         psmdb,
 		serverVersion: serverVersion,
 	}
@@ -34,7 +37,7 @@ func (c *Controller) newMCBConfigSecret(replset *v1alpha1.ReplsetSpec, pods []co
 	if err != nil {
 		return nil, err
 	}
-	return stub.NewPSMDBSecret(c.psmdb, c.psmdb.Name+"-"+replset.Name+"-backup-config", map[string]string{
+	return internal.NewPSMDBSecret(c.psmdb, c.psmdb.Name+"-"+replset.Name+"-backup-config", map[string]string{
 		backupConfigFile: string(config),
 	}), nil
 }
@@ -70,8 +73,8 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 				},
 				WorkingDir: "/data",
 				SecurityContext: &corev1.SecurityContext{
-					RunAsNonRoot: &trueVar,
-					RunAsUser:    stub.GetContainerRunUID(m, c.serverVersion),
+					RunAsNonRoot: &internal.TrueVar,
+					RunAsUser:    internal.GetContainerRunUID(m, c.serverVersion),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -87,7 +90,7 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 			},
 		},
 		SecurityContext: &corev1.PodSecurityContext{
-			FSGroup: stub.GetContainerRunUID(m, c.serverVersion),
+			FSGroup: internal.GetContainerRunUID(m, c.serverVersion),
 		},
 		Volumes: []corev1.Volume{
 			{
@@ -103,7 +106,7 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  configSecret.Name,
 						DefaultMode: &backupConfigFileMode,
-						Optional:    &falseVar,
+						Optional:    &internal.FalseVar,
 					},
 				},
 			},
@@ -115,7 +118,7 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 		ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 		JobTemplate: batchv1b.JobTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: labelsForPerconaServerMongoDB(m, replset),
+				Labels: internal.LabelsForPerconaServerMongoDB(m, replset),
 			},
 			Spec: batchv1.JobSpec{
 				Template: corev1.PodTemplateSpec{
@@ -124,7 +127,7 @@ func newPSMDBBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.R
 			},
 		},
 	}
-	addOwnerRefToObject(cronJob, asOwner(m))
+	internal.AddOwnerRefToObject(cronJob, internal.AsOwner(m))
 	return cronJob
 }
 
@@ -135,7 +138,7 @@ func (h *Handler) updateBackupCronJob(m *v1alpha1.PerconaServerMongoDB, replset 
 		return err
 	}
 
-	configSecret := newSecret(m, m.Name+"-"+replset.Name+"-backup-config", map[string]string{})
+	configSecret := internal.NewPSMDBSecret(m, m.Name+"-"+replset.Name+"-backup-config", map[string]string{})
 	expectedConfig, err := newMCBConfigYAML(m, replset, pods, usersSecret)
 	if err != nil {
 		logrus.Errorf("failed to marshal config to yaml: %v")
@@ -166,7 +169,7 @@ func (h *Handler) ensureReplsetBackupCronJob(m *v1alpha1.PerconaServerMongoDB, r
 			logrus.Errorf("failed to remove backup cronJob: %v", err)
 			return err
 		}
-		err = h.client.Delete(newSecret(m, m.Name+"-"+replset.Name+"-backup-config", map[string]string{}))
+		err = h.client.Delete(internal.NewPSMDBSecret(m, m.Name+"-"+replset.Name+"-backup-config", map[string]string{}))
 		if err != nil {
 			logrus.Errorf("failed to remove backup configMap: %v", err)
 			return err

@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 
@@ -263,7 +264,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: m.Spec.Secrets.Users,
 					},
-					Optional: &falseVar,
+					Optional: &internal.falseVar,
 				},
 			},
 		},
@@ -305,7 +306,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: &trueVar,
+			RunAsNonRoot: &internal.trueVar,
 			RunAsUser:    GetContainerRunUID(m, h.serverVersion),
 		},
 		VolumeMounts: []corev1.VolumeMount{

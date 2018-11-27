@@ -1,4 +1,4 @@
-package stub
+package internal
 
 import (
 	"encoding/json"
@@ -16,11 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-var (
-	falseVar = false
-	trueVar  = true
-)
-
 // getPlatform returns the Kubernetes platform type, first using the Spec 'platform'
 // field or the serverVersion.Platform field if the Spec 'platform' field is not set
 func getPlatform(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) v1alpha1.Platform {
@@ -35,7 +30,7 @@ func getPlatform(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.Serve
 
 // labelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
-func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
+func LabelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
 	return map[string]string{
 		"app":                       "percona-server-mongodb",
 		"percona-server-mongodb_cr": m.Name,
@@ -45,23 +40,23 @@ func labelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1
 
 // getLabelSelectorListOpts returns metav1.ListOptions with a label-selector for a given replset
 func getLabelSelectorListOpts(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *metav1.ListOptions {
-	labelSelector := labels.SelectorFromSet(labelsForPerconaServerMongoDB(m, replset)).String()
+	labelSelector := labels.SelectorFromSet(LabelsForPerconaServerMongoDB(m, replset)).String()
 	return &metav1.ListOptions{LabelSelector: labelSelector}
 }
 
 // addOwnerRefToObject appends the desired OwnerReference to the object
-func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
+func AddOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
 	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
 }
 
 // asOwner returns an OwnerReference set as the PerconaServerMongoDB CR
-func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
+func AsOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 	return metav1.OwnerReference{
 		APIVersion: m.APIVersion,
 		Kind:       m.Kind,
 		Name:       m.Name,
 		UID:        m.UID,
-		Controller: &trueVar,
+		Controller: &TrueVar,
 	}
 }
 
@@ -139,4 +134,13 @@ func getServerVersion() (*v1alpha1.ServerVersion, error) {
 	}
 
 	return version, nil
+}
+
+// GetContainerRunUID returns an int64-pointer reflecting the user ID a container
+// should run as
+func GetContainerRunUID(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) *int64 {
+	if getPlatform(m, serverVersion) != v1alpha1.PlatformOpenshift {
+		return &m.Spec.RunUID
+	}
+	return nil
 }

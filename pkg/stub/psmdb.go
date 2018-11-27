@@ -1,6 +1,7 @@
 package stub
 
 import (
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -156,7 +157,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 								Secret: &corev1.SecretVolumeSource{
 									DefaultMode: &secretFileMode,
 									SecretName:  m.Spec.Secrets.Key,
-									Optional:    &falseVar,
+									Optional:    &internal.falseVar,
 								},
 							},
 						},
