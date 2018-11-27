@@ -187,7 +187,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	// Check if 'resources.limits.storage' is unset
 	// https://jira.percona.com/browse/CLOUD-42
 	if _, ok := resources.Limits[corev1.ResourceStorage]; !ok {
-		return nil, fmt.Errorf("replset %s does not have required-value 'resources.limits.storage' set!")
+		return nil, fmt.Errorf("replset %s does not have required-value 'resources.limits.storage' set!", replset.Name)
 	}
 
 	lf := logrus.Fields{
