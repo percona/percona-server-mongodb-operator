@@ -2,6 +2,7 @@ package stub
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
@@ -115,7 +116,11 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
-		for _, replset := range psmdb.Spec.Replsets {
+		for i := range psmdb.Spec.Replsets {
+			replset := &psmdb.Spec.Replsets[i]
+
+			fmt.Printf("handler replset %s size: %d\n", replset.Name, replset.Size)
+
 			// Update the PSMDB status
 			podList, err := h.updateStatus(psmdb, replset, usersSecret)
 			if err != nil {

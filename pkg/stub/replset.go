@@ -91,15 +91,12 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	var doUpdate bool
 
 	// Ensure the stateful set size is the same as the spec
-	err := h.client.Get(set)
-	if err != nil {
-		return fmt.Errorf("failed to get stateful set for replset %s: %v", replset.Name, err)
-	}
 	if *set.Spec.Replicas != replset.Size {
 		logrus.Infof("setting replicas to %d for replset: %s", replset.Size, replset.Name)
 		set.Spec.Replicas = &replset.Size
 		doUpdate = true
 	}
+	fmt.Printf("==========\nSS replicas: %d, replset size: %d\n==========\n", *set.Spec.Replicas, replset.Size)
 
 	// Find the mongod container
 	var mongod *corev1.Container
@@ -160,7 +157,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	// Do update if something changed
 	if doUpdate {
 		logrus.Infof("updating state for replset: %s", replset.Name)
-		err = h.client.Update(set)
+		err := h.client.Update(set)
 		if err != nil {
 			return fmt.Errorf("failed to update stateful set for replset %s: %v", replset.Name, err)
 		}
@@ -210,6 +207,10 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 		if !k8serrors.IsAlreadyExists(err) {
 			return nil, err
 		}
+		err = h.client.Get(set)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		logrus.WithFields(lf).Infof("created stateful set for replset: %s", replset.Name)
 	}
@@ -225,8 +226,6 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 
 // ensureReplset ensures resources for a PSMDB replset exist
 func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) error {
-	status := getReplsetStatus(m, replset)
-
 	// Create the StatefulSet if it doesn't exist
 	set, err := h.ensureReplsetStatefulSet(m, replset)
 	if err != nil {
@@ -236,6 +235,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 
 	// Initiate the replset if it hasn't already been initiated + there are pods +
 	// we have waited the ReplsetInitWait period since starting
+	status := getReplsetStatus(m, replset)
 	if !isReplsetInitialized(m, replset, status, podList, usersSecret) && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
 		err = h.handleReplsetInit(m, replset, podList.Items)
 		if err != nil {
