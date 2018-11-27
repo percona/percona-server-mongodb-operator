@@ -4,15 +4,15 @@ import (
 	"context"
 	"time"
 
+	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 
-	"github.com/operator-framework/operator-sdk/pkg/sdk"
+	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,7 +22,7 @@ var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
 
-func NewHandler(client pkgSdk.Client) sdk.Handler {
+func NewHandler(client sdk.Client) opSdk.Handler {
 	return &Handler{
 		client:       client,
 		startedAt:    time.Now(),
@@ -31,7 +31,7 @@ func NewHandler(client pkgSdk.Client) sdk.Handler {
 }
 
 type Handler struct {
-	client        pkgSdk.Client
+	client        sdk.Client
 	serverVersion *v1alpha1.ServerVersion
 	pods          *podk8s.Pods
 	watchdog      *watchdog.Watchdog
@@ -65,7 +65,7 @@ func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB, usersSecret *
 }
 
 // Handle is the main operator function that is ran for every SDK event
-func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
+func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 	switch o := event.Object.(type) {
 	case *v1alpha1.PerconaServerMongoDB:
 		psmdb := o

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk/mocks"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/stretchr/testify/assert"
