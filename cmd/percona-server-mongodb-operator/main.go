@@ -5,10 +5,10 @@ import (
 	"runtime"
 	"time"
 
-	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
+	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	stub "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub"
 	version "github.com/Percona-Lab/percona-server-mongodb-operator/version"
-	sdk "github.com/operator-framework/operator-sdk/pkg/sdk"
+	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	k8sutil "github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 
@@ -33,7 +33,7 @@ func printVersion() {
 
 func main() {
 	printVersion()
-	sdk.ExposeMetricsPort()
+	opSdk.ExposeMetricsPort()
 
 	resource := "psmdb.percona.com/v1alpha1"
 	kind := "PerconaServerMongoDB"
@@ -44,7 +44,7 @@ func main() {
 
 	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %s", resource, kind, namespace, resyncPeriod)
-	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler(pkgSdk.NewClient()))
-	sdk.Run(context.TODO())
+	opSdk.Watch(resource, kind, namespace, resyncPeriod)
+	opSdk.Handle(stub.NewHandler(sdk.NewClient()))
+	opSdk.Run(context.TODO())
 }

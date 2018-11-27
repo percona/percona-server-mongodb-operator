@@ -3,10 +3,10 @@ package stub
 import (
 	"strings"
 
+	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
-	"github.com/operator-framework/operator-sdk/pkg/sdk"
+	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -48,9 +48,9 @@ func persistentVolumeClaimList() *corev1.PersistentVolumeClaimList {
 }
 
 // getPersistentVolumeClaims returns a list of Persistent Volume Claims for a given replset
-func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
+func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client sdk.Client, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := persistentVolumeClaimList()
-	err := client.List(m.Namespace, pvcList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
+	err := client.List(m.Namespace, pvcList, opSdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
 	return pvcList.Items, err
 }
 
@@ -65,7 +65,7 @@ func isStatefulSetUpdating(set *appsv1.StatefulSet) bool {
 }
 
 // deletePersistentVolumeClaim deletes a Persistent Volume Claim
-func deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, pvcName string) error {
+func deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, client sdk.Client, pvcName string) error {
 	return client.Delete(&corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
