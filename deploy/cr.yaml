@@ -14,8 +14,8 @@ spec:
     size: 3
     resources:
       limits:
-        cpu: "300m"
-        memory: "0.5G"
+        #cpu: "300m"
+        #memory: "0.5G"
         storage: "1Gi"
       requests:
         cpu: "300m"

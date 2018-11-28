@@ -98,6 +98,6 @@ func TestParseReplsetResourceRequirements(t *testing.T) {
 	assert.NotNil(t, r)
 	cpuLimits = r.Limits[corev1.ResourceCPU]
 	cpuRequests = r.Requests[corev1.ResourceCPU]
-	assert.Equal(t, "0", cpuLimits.String())
-	assert.Equal(t, "0", cpuRequests.String())
+	assert.True(t, cpuLimits.IsZero())
+	assert.True(t, cpuRequests.IsZero())
 }
