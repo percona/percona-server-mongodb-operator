@@ -22,10 +22,11 @@ import (
 )
 
 var (
-	GitCommit   string
-	GitBranch   string
-	verbose     bool
-	versionLine = fmt.Sprintf(
+	GitCommit    string
+	GitBranch    string
+	resyncPeriod time.Duration
+	verbose      bool
+	versionLine  = fmt.Sprintf(
 		"percona/percona-server-mongodb-operator Version: %v, git commit: %s (branch: %s)",
 		version.Version, GitCommit, GitBranch,
 	)
@@ -42,6 +43,7 @@ func printVersion() {
 func main() {
 	app := kingpin.New("percona-server-mongodb-operator", "A Kubernetes operator for Percona Server for MongoDB")
 	app.Version(versionLine)
+	app.Flag("resyncPeriod", "Set the rate of resync from the Kubernetes API").Default("5s").Envar("RESYNC_PERIOD").DurationVar(&resyncPeriod)
 	app.Flag("verbose", "Enable verbose logging").Envar("LOG_VERBOSE").BoolVar(&verbose)
 	_, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -62,7 +64,6 @@ func main() {
 		logrus.Fatalf("failed to get watch namespace: %v", err)
 	}
 
-	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %s", resource, kind, namespace, resyncPeriod)
 	opSdk.Watch(resource, kind, namespace, resyncPeriod)
 	opSdk.Handle(stub.NewHandler(sdk.NewClient()))
