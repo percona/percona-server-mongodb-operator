@@ -95,6 +95,12 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	if err != nil {
 		return fmt.Errorf("failed to get stateful set for replset %s: %v", replset.Name, err)
 	}
+
+	// REMOVE ME
+	fmt.Printf("=========\nStatefulSet.Spec.Replicas=%d, Spec.Replsets[0].Size=%d, replset.Size=%d\n=========\n",
+		*set.Spec.Replicas, m.Spec.Replsets[0].Size, replset.Size,
+	)
+
 	if *set.Spec.Replicas != replset.Size {
 		logrus.Infof("setting replicas to %d for replset: %s", replset.Size, replset.Name)
 		set.Spec.Replicas = &replset.Size
