@@ -171,17 +171,9 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
 func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.StatefulSet, error) {
-	limits, err := parseSpecResourceRequirements(replset.Limits)
+	resources, err := parseReplsetResourceRequirements(replset)
 	if err != nil {
 		return nil, err
-	}
-	requests, err := parseSpecResourceRequirements(replset.Requests)
-	if err != nil {
-		return nil, err
-	}
-	resources := corev1.ResourceRequirements{
-		Limits:   limits,
-		Requests: requests,
 	}
 
 	// Check if 'resources.limits.storage' is unset
