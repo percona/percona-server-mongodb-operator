@@ -28,3 +28,7 @@ spec:
                   fieldPath: metadata.namespace
             - name: OPERATOR_NAME
               value: percona-server-mongodb-operator
+            - name: RESYNC_PERIOD
+              value: 5s
+            - name: LOG_VERBOSE
+              value: "false"

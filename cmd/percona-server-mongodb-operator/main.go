@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"runtime"
 	"time"
 
@@ -14,24 +16,47 @@ import (
 
 	mongodbOT "github.com/percona/mongodb-orchestration-tools"
 
+	"github.com/alecthomas/kingpin"
 	"github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
 var (
-	GitCommit string
-	GitBranch string
+	GitCommit    string
+	GitBranch    string
+	resyncPeriod time.Duration
+	verbose      bool
+	versionLine  = fmt.Sprintf(
+		"percona/percona-server-mongodb-operator Version: %v, git commit: %s (branch: %s)",
+		version.Version, GitCommit, GitBranch,
+	)
 )
 
 func printVersion() {
 	logrus.Infof("Go Version: %s", runtime.Version())
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	logrus.Infof("operator-sdk Version: %v", sdkVersion.Version)
-	logrus.Infof("percona/percona-server-mongodb-operator Version: %v, git commit: %s (branch: %s)", version.Version, GitCommit, GitBranch)
+	logrus.Info(versionLine)
 	logrus.Infof("percona/mongodb-orchestration-tools Version: %v", mongodbOT.Version)
 }
 
 func main() {
+	app := kingpin.New("percona-server-mongodb-operator", "A Kubernetes operator for Percona Server for MongoDB")
+	app.Version(versionLine)
+	app.Flag("resyncPeriod", "Set the rate of resync from the Kubernetes API").Default("5s").Envar("RESYNC_PERIOD").DurationVar(&resyncPeriod)
+	app.Flag("verbose", "Enable verbose logging").Envar("LOG_VERBOSE").BoolVar(&verbose)
+
+	// parse flags
+	_, err := app.Parse(os.Args[1:])
+	if err != nil {
+		logrus.Fatalf("Cannot parse command line: %v", err)
+	}
+
+	// optionally enable verbose logging
+	if verbose {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
 	printVersion()
 	opSdk.ExposeMetricsPort()
 
@@ -42,7 +67,6 @@ func main() {
 		logrus.Fatalf("failed to get watch namespace: %v", err)
 	}
 
-	resyncPeriod := time.Duration(5) * time.Second
 	logrus.Infof("Watching %s, %s, %s, %s", resource, kind, namespace, resyncPeriod)
 	opSdk.Watch(resource, kind, namespace, resyncPeriod)
 	opSdk.Handle(stub.NewHandler(sdk.NewClient()))
