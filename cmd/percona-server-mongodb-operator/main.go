@@ -45,11 +45,14 @@ func main() {
 	app.Version(versionLine)
 	app.Flag("resyncPeriod", "Set the rate of resync from the Kubernetes API").Default("5s").Envar("RESYNC_PERIOD").DurationVar(&resyncPeriod)
 	app.Flag("verbose", "Enable verbose logging").Envar("LOG_VERBOSE").BoolVar(&verbose)
+
+	// parse flags
 	_, err := app.Parse(os.Args[1:])
 	if err != nil {
 		logrus.Fatalf("Cannot parse command line: %v", err)
 	}
 
+	// optionally enable verbose logging
 	if verbose {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
