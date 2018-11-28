@@ -65,8 +65,8 @@ func asOwner(m *v1alpha1.PerconaServerMongoDB) metav1.OwnerReference {
 	}
 }
 
-// parseSpecResourceRequirements parses resource requirements to a corev1.ResourceList
-func parseSpecResourceRequirements(rsr *v1alpha1.ResourceSpecRequirements) (corev1.ResourceList, error) {
+// parseResourceRequirementsList parses resource requirements to a corev1.ResourceList
+func parseResourceRequirementsList(rsr *v1alpha1.ResourceSpecRequirements) (corev1.ResourceList, error) {
 	rl := corev1.ResourceList{}
 
 	if rsr.Cpu != "" {
@@ -102,6 +102,36 @@ func parseSpecResourceRequirements(rsr *v1alpha1.ResourceSpecRequirements) (core
 	}
 
 	return rl, nil
+}
+
+// parseReplsetResourceRequirements parses the resource section of the spec to a
+// corev1.ResourceRequirements object
+func parseReplsetResourceRequirements(replset *v1alpha1.ReplsetSpec) (corev1.ResourceRequirements, error) {
+	var err error
+	rr := corev1.ResourceRequirements{
+		Limits:   corev1.ResourceList{},
+		Requests: corev1.ResourceList{},
+	}
+
+	rr.Limits, err = parseResourceRequirementsList(replset.Limits)
+	if err != nil {
+		return rr, err
+	}
+
+	// only set cpu+memory resource requests if limits are set
+	// https://jira.percona.com/browse/CLOUD-44
+	requests, err := parseResourceRequirementsList(replset.Requests)
+	if err != nil {
+		return rr, err
+	}
+	if _, ok := rr.Limits[corev1.ResourceCPU]; ok {
+		rr.Requests[corev1.ResourceCPU] = requests[corev1.ResourceCPU]
+	}
+	if _, ok := rr.Limits[corev1.ResourceMemory]; ok {
+		rr.Requests[corev1.ResourceMemory] = requests[corev1.ResourceMemory]
+	}
+
+	return rr, nil
 }
 
 // getServerVersion returns server version and platform (k8s|oc)
