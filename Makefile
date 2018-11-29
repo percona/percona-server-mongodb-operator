@@ -11,7 +11,7 @@ UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
 IMAGE="percona/$(NAME):$(VERSION)"
-ifneq ($(GIT_BRANCH), master)
+ifneq ($(GIT_BRANCH), "release-$(VERSION)")
 	IMAGE="percona/$(NAME):$(GIT_BRANCH)"
 endif
 
