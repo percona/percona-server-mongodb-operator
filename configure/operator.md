@@ -1,8 +1,4 @@
----
-permalink: /configure/
----
-
-Custom Resource options of the percona-server-mongodb-operator
+Custom Resource options
 ==============================================================
 
 The operator is configured via the spec section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. This file contains the following spec sections: 

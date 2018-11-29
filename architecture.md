@@ -1,13 +1,9 @@
----
-permalink: /architecture/
----
-
 Design overview
 ================
 
 The design of the operator is highly bound to the Percona server for MongoDB replication process, which in its turn can be briefly described with the following diagram.
 
-![PSMDB Replication](../psmdb-operator.replication.png "Percona Server for MongoDB replication")
+![PSMDB Replication](./assets/images/replication.png "Percona Server for MongoDB replication"){: .align-center}
 
 There is always one primary server and several secondary ones (two on the picture), and client application accesses them via driver implemented as a library. 
 
@@ -17,7 +13,7 @@ Client applications should use a mongo+srv URI for the connection: in this case,
 
 **Note:** *We use enforced security in contrast to default MongoDB setup. The initial configuration contains default passwords for all needed user accounts, which should be changed in the production environment, as it is stated in the [installation instructions](./psmdb-operator.install.md).*
 
-![PSMDB Operator](../psmdb-operator.operator.png "Percona Server for MongoDB operator")
+![PSMDB Operator](./assets/images/operator.png "Percona Server for MongoDB operator"){: .align-center}
 
 To provide data storage for the stateful applications, Kubernetes uses Persistent Volumes. A *PersistentVolumeClaim* (PVC) is used to implement the automatic storage provisioning to pods.  If a failure occurs, the Container Storage Interface (CSI) should be able to re-mount storage on a different node. So in our case PVC StorageClass should support this feature (Kubernetes and OpenShift support this in versions 1.9 and 3.9 respectively).
 
