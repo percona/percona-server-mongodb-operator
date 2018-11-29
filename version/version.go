@@ -1,5 +1,4 @@
 package version
 
-var (
-	Version = "0.0.1"
-)
+// Version is the version of the percona-server-mongodb-operator
+var Version = "0.1.0"
