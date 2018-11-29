@@ -62,14 +62,14 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*corev1.PodList, error) {
 	var doUpdate bool
 
-	podList := podList()
-	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
+	podsList := podList()
+	err := h.client.List(m.Namespace, podsList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods for replset %s: %v", replset.Name, err)
 	}
 
 	// Update status pods list
-	podNames := getPodNames(podList.Items)
+	podNames := getPodNames(podsList.Items)
 	status := getReplsetStatus(m, replset)
 	if !reflect.DeepEqual(podNames, status.Pods) {
 		status.Pods = podNames
@@ -77,7 +77,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	}
 
 	// Update mongodb replset member status list
-	members := getReplsetMemberStatuses(m, replset, podList.Items, usersSecret)
+	members := getReplsetMemberStatuses(m, replset, podsList.Items, usersSecret)
 	if !reflect.DeepEqual(members, status.Members) {
 		status.Members = members
 		doUpdate = true
@@ -95,7 +95,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	if h.pods == nil {
 		h.pods = podk8s.NewPods(m.Name, m.Namespace)
 	}
-	h.pods.SetPods(podList.Items)
+	h.pods.SetPods(podsList.Items)
 
-	return podList, nil
+	return podsList, nil
 }
