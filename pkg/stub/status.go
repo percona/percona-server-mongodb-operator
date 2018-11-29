@@ -30,7 +30,7 @@ func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 
 // getReplsetMemberStatuses returns a list of ReplsetMemberStatus structs for a given replset
 func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []*v1alpha1.ReplsetMemberStatus {
-	members := []*v1alpha1.ReplsetMemberStatus{}
+	members := make([]*v1alpha1.ReplsetMemberStatus, 0)
 	for _, pod := range pods {
 		dialInfo := getReplsetDialInfo(m, replset, []corev1.Pod{pod}, usersSecret)
 		dialInfo.Direct = true
