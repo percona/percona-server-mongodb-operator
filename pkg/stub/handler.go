@@ -22,6 +22,7 @@ var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
 
+// NewHandler return new instance of sdk.Handler interface.
 func NewHandler(client sdk.Client) opSdk.Handler {
 	return &Handler{
 		client:       client,
@@ -30,6 +31,7 @@ func NewHandler(client sdk.Client) opSdk.Handler {
 	}
 }
 
+// Handler implements sdk.Handler interface.
 type Handler struct {
 	client        sdk.Client
 	serverVersion *v1alpha1.ServerVersion
@@ -117,14 +119,14 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// loop will create the cluster shards and config server replset
 		for _, replset := range psmdb.Spec.Replsets {
 			// Update the PSMDB status
-			podList, err := h.updateStatus(psmdb, replset, usersSecret)
+			podsList, err := h.updateStatus(psmdb, replset, usersSecret)
 			if err != nil {
 				logrus.Errorf("failed to update psmdb status for replset %s: %v", replset.Name, err)
 				return err
 			}
 
 			// Ensure replset exists and has correct state, PVCs, etc
-			err = h.ensureReplset(psmdb, podList, replset, usersSecret)
+			err = h.ensureReplset(psmdb, podsList, replset, usersSecret)
 			if err != nil {
 				if err == ErrNoRunningMongodContainers {
 					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)

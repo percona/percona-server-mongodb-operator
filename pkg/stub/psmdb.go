@@ -10,23 +10,23 @@ import (
 )
 
 var (
-	defaultVersion                  string  = "latest"
-	defaultRunUID                   int64   = 1001
-	defaultKeySecretName            string  = "percona-server-mongodb-key"
-	defaultUsersSecretName          string  = "percona-server-mongodb-users"
-	defaultMongodSize               int32   = 3
-	defaultReplsetName              string  = "rs"
-	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
-	defaultMongodPort               int32   = 27017
-	defaultWiredTigerCacheSizeRatio float64 = 0.5
-	defaultInMemorySizeRatio        float64 = 0.9
-	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
-	defaultImagePullPolicy                  = corev1.PullIfNotPresent
-	mongodContainerDataDir          string  = "/data/db"
-	mongodContainerName             string  = "mongod"
-	mongodDataVolClaimName          string  = "mongod-data"
-	mongodPortName                  string  = "mongodb"
-	secretFileMode                  int32   = 0060
+	defaultVersion                        = "latest"
+	defaultRunUID                   int64 = 1001
+	defaultKeySecretName                  = "percona-server-mongodb-key"
+	defaultUsersSecretName                = "percona-server-mongodb-users"
+	defaultMongodSize               int32 = 3
+	defaultReplsetName                    = "rs"
+	defaultStorageEngine                  = v1alpha1.StorageEngineWiredTiger
+	defaultMongodPort               int32 = 27017
+	defaultWiredTigerCacheSizeRatio       = 0.5
+	defaultInMemorySizeRatio              = 0.9
+	defaultOperationProfilingMode         = v1alpha1.OperationProfilingModeSlowOp
+	defaultImagePullPolicy                = corev1.PullIfNotPresent
+	mongodContainerDataDir                = "/data/db"
+	mongodContainerName                   = "mongod"
+	mongodDataVolClaimName                = "mongod-data"
+	mongodPortName                        = "mongodb"
+	secretFileMode                  int32 = 0060
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
