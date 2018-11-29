@@ -39,7 +39,6 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 			logrus.Debugf("Cannot connect to mongodb host %s: %v", dialInfo.Addrs[0], err)
 			continue
 		}
-		defer session.Close()
 		session.SetMode(mgo.Eventual, true)
 
 		logrus.Debugf("Updating status for host: %s", dialInfo.Addrs[0])
@@ -54,6 +53,7 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 			Name:    dialInfo.Addrs[0],
 			Version: buildInfo.Version,
 		})
+		session.Close()
 	}
 	return members
 }
