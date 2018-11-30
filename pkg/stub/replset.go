@@ -258,9 +258,9 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 
 		if !isStatefulSetUpdating(set) {
-			// Ensure backup cronJob is created if backups are enabled
+			// Ensure backups are setup if enabled
 			bkp := backup.New(h.client, m, h.serverVersion, usersSecret)
-			err = bkp.EnsureReplsetBackupCronJobs(replset, podList.Items)
+			err = bkp.Run(replset, podList.Items)
 			if err != nil {
 				return err
 			}

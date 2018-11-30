@@ -35,6 +35,7 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type PerconaServerMongoDBStatus struct {
+	Backups  []*BackupStatus  `json:"backups,omitempty"`
 	Replsets []*ReplsetStatus `json:"replsets,omitempty"`
 }
 
@@ -239,4 +240,9 @@ type BackupSpec struct {
 	ArchiveMode    BackupArchiveMode `json:"archiveMode,omitempty"`
 	Destination    BackupDestination `json:"destination,omitempty"`
 	Verbose        bool              `json:"verbose,omitempty"`
+}
+
+type BackupStatus struct {
+	Name           string       `json:"name,omitempty"`
+	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
 }
