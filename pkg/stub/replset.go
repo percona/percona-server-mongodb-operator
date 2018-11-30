@@ -98,10 +98,6 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	var doUpdate bool
 
 	// Ensure the stateful set size is the same as the spec
-	err := h.client.Get(set)
-	if err != nil {
-		return fmt.Errorf("failed to get stateful set for replset %s: %v", replset.Name, err)
-	}
 	if *set.Spec.Replicas != replset.Size {
 		logrus.Infof("setting replicas to %d for replset: %s", replset.Size, replset.Name)
 		set.Spec.Replicas = &replset.Size
@@ -167,7 +163,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	// Do update if something changed
 	if doUpdate {
 		logrus.Infof("updating state for replset: %s", replset.Name)
-		err = h.client.Update(set)
+		err := h.client.Update(set)
 		if err != nil {
 			return fmt.Errorf("failed to update stateful set for replset %s: %v", replset.Name, err)
 		}
@@ -178,47 +174,51 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
 func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.StatefulSet, error) {
-	limits, err := internal.ParseSpecResourceRequirements(replset.Limits)
+	resources, err := internal.ParseReplsetResourceRequirements(replset)
 	if err != nil {
 		return nil, err
-	}
-	requests, err := internal.ParseSpecResourceRequirements(replset.Requests)
-	if err != nil {
-		return nil, err
-	}
-	resources := corev1.ResourceRequirements{
-		Limits:   limits,
-		Requests: requests,
 	}
 
-	lf := logrus.Fields{
-		"version": m.Spec.Version,
-		"size":    replset.Size,
-		"cpu":     replset.Limits.Cpu,
-		"memory":  replset.Limits.Memory,
-		"storage": replset.Limits.Storage,
-	}
-	if replset.StorageClass != "" {
-		lf["storageClass"] = replset.StorageClass
+	// Check if 'resources.limits.storage' is unset
+	// https://jira.percona.com/browse/CLOUD-42
+	if _, ok := resources.Limits[corev1.ResourceStorage]; !ok {
+		return nil, fmt.Errorf("replset %s does not have required-value 'resources.limits.storage' set!", replset.Name)
 	}
 
-	set, err := h.newPSMDBStatefulSet(m, replset, &resources)
+	// create the statefulset if a Get on the set name returns an error
+	set := newStatefulSet(m, m.Name+"-"+replset.Name)
+	err = h.client.Get(set)
 	if err != nil {
-		return nil, err
-	}
-	err = h.client.Create(set)
-	if err != nil {
-		if !k8serrors.IsAlreadyExists(err) {
+
+		lf := logrus.Fields{
+			"version": m.Spec.Version,
+			"size":    replset.Size,
+			"cpu":     replset.Limits.Cpu,
+			"memory":  replset.Limits.Memory,
+			"storage": replset.Limits.Storage,
+		}
+		if replset.StorageClass != "" {
+			lf["storageClass"] = replset.StorageClass
+		}
+
+		set, err = h.newPSMDBStatefulSet(m, replset, &resources)
+		if err != nil {
 			return nil, err
 		}
-	} else {
-		logrus.WithFields(lf).Infof("created stateful set for replset: %s", replset.Name)
+		err = h.client.Create(set)
+		if err != nil {
+			if !k8serrors.IsAlreadyExists(err) {
+				return nil, err
+			}
+		} else {
+			logrus.WithFields(lf).Infof("created stateful set for replset: %s", replset.Name)
+		}
 	}
 
 	// Ensure the spec is up to date
 	err = h.handleStatefulSetUpdate(m, set, replset, &resources)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get stateful set for replset %s: %v", replset.Name, err)
+		return nil, err
 	}
 
 	return set, nil

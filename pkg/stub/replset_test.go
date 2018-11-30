@@ -3,10 +3,13 @@ package stub
 import (
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -53,7 +56,56 @@ func TestGetReplsetDialInfo(t *testing.T) {
 	assert.True(t, di.FailFast)
 }
 
+func TestEnsureReplsetStatefulSet(t *testing.T) {
+	client := &mocks.Client{}
+	h := &Handler{client: client}
+	client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
+	client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Run(func(args mock.Arguments) {
+		set := args.Get(0).(*appsv1.StatefulSet)
+		set.Spec = appsv1.StatefulSetSpec{
+			Replicas: &defaultMongodSize,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: mongodContainerName,
+						},
+					},
+				},
+			},
+		}
+	})
+	client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
+
+	psmdb := &v1alpha1.PerconaServerMongoDB{}
+	h.addPSMDBSpecDefaults(psmdb)
+
+	replset := &v1alpha1.ReplsetSpec{
+		Name: t.Name(),
+		Size: 3,
+		ResourcesSpec: &v1alpha1.ResourcesSpec{
+			Limits: &v1alpha1.ResourceSpecRequirements{
+				Cpu:     "1m",
+				Memory:  "1m",
+				Storage: "1G",
+			},
+			Requests: &v1alpha1.ResourceSpecRequirements{
+				Cpu:    "1m",
+				Memory: "1m",
+			},
+		},
+	}
+	ss, err := h.ensureReplsetStatefulSet(psmdb, replset)
+	assert.NoError(t, err)
+	assert.NotNil(t, ss)
+
+	// test an error is returned when no storage limit is set
+	// https://jira.percona.com/browse/CLOUD-42
+	replset.ResourcesSpec.Limits.Storage = ""
+	_, err = h.ensureReplsetStatefulSet(psmdb, replset)
+	assert.Error(t, err)
+}
+
 //func TestIsReplsetInitialized(t *testing.T) {}
 //func TestHandlerHandleReplsetInit(t *testing.T) {}
-//func TestEnsureReplsetStatefulSet(t *testing.T) {}
 //func TestHandlerEnsureReplset(t *testing.T) {}

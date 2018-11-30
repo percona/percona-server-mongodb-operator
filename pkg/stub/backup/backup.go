@@ -2,8 +2,8 @@ package backup
 
 import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"

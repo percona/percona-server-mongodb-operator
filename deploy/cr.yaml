@@ -4,7 +4,7 @@ metadata:
   name: my-cluster-name
 spec:
   #platform: openshift
-  version: "3.6"
+  version: "3.6.8"
   imagePullPolicy: Always
   secrets:
     key: my-cluster-name-mongodb-key
@@ -12,6 +12,7 @@ spec:
   replsets:
   - name: rs0
     size: 3
+    #storageClass: aws-gp2
     resources:
       limits:
         cpu: "300m"

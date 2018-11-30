@@ -1,6 +1,6 @@
 NAME=percona-server-mongodb-operator
 UID?=$(shell id -u)
-GOCACHE?=off
+GOCACHE?=
 GO_TEST_PATH?=./pkg/stub/...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
@@ -9,12 +9,10 @@ GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 GIT_REPO=github.com/Percona-Lab/$(NAME)
 UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
 
-PSMDB_VERSION?=3.6
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
-IMAGE="perconalab/$(NAME):$(VERSION)"
-MONGOD_IMAGE="perconalab/$(NAME):$(VERSION)-mongod$(PSMDB_VERSION)"
-ifneq ($(GIT_BRANCH), master)
-	IMAGE="perconalab/$(NAME):$(GIT_BRANCH)"
+IMAGE="percona/$(NAME):$(VERSION)"
+ifneq ($(GIT_BRANCH), "release-$(VERSION)")
+	IMAGE="percona/$(NAME):$(GIT_BRANCH)"
 endif
 
 all: build
@@ -37,14 +35,8 @@ build: tmp/_output/bin/$(NAME)
 docker: tmp/_output/bin/$(NAME)
 	IMAGE=$(IMAGE) /bin/bash $(CURDIR)/tmp/build/docker_build.sh
 
-docker-mongod:
-	docker build --build-arg PSMDB_VERSION=$(PSMDB_VERSION) -t $(MONGOD_IMAGE) $(CURDIR)/tmp/psmdb
-
 docker-push:
 	docker push $(IMAGE)
-
-docker-mongod-push:
-	docker push $(MONGOD_IMAGE)
 
 release:
 	mkdir -p $(CURDIR)/tmp/_output

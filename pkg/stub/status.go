@@ -31,7 +31,7 @@ func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 
 // getReplsetMemberStatuses returns a list of ReplsetMemberStatus structs for a given replset
 func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []*v1alpha1.ReplsetMemberStatus {
-	members := []*v1alpha1.ReplsetMemberStatus{}
+	members := make([]*v1alpha1.ReplsetMemberStatus, 0)
 	for _, pod := range pods {
 		dialInfo := getReplsetDialInfo(m, replset, []corev1.Pod{pod}, usersSecret)
 		dialInfo.Direct = true
@@ -40,7 +40,6 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 			logrus.Debugf("Cannot connect to mongodb host %s: %v", dialInfo.Addrs[0], err)
 			continue
 		}
-		defer session.Close()
 		session.SetMode(mgo.Eventual, true)
 
 		logrus.Debugf("Updating status for host: %s", dialInfo.Addrs[0])
@@ -55,6 +54,7 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 			Name:    dialInfo.Addrs[0],
 			Version: buildInfo.Version,
 		})
+		session.Close()
 	}
 	return members
 }
@@ -63,8 +63,8 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*corev1.PodList, error) {
 	var doUpdate bool
 
-	podList := podList()
-	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(
+	podsList := podList()
+	err := h.client.List(m.Namespace, podsList, sdk.WithListOptions(
 		internal.GetLabelSelectorListOpts(m, replset),
 	))
 	if err != nil {
@@ -72,7 +72,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	}
 
 	// Update status pods list
-	podNames := getPodNames(podList.Items)
+	podNames := getPodNames(podsList.Items)
 	status := getReplsetStatus(m, replset)
 	if !reflect.DeepEqual(podNames, status.Pods) {
 		status.Pods = podNames
@@ -80,7 +80,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	}
 
 	// Update mongodb replset member status list
-	members := getReplsetMemberStatuses(m, replset, podList.Items, usersSecret)
+	members := getReplsetMemberStatuses(m, replset, podsList.Items, usersSecret)
 	if !reflect.DeepEqual(members, status.Members) {
 		status.Members = members
 		doUpdate = true
@@ -98,7 +98,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	if h.pods == nil {
 		h.pods = podk8s.NewPods(m.Name, m.Namespace)
 	}
-	h.pods.SetPods(podList.Items)
+	h.pods.SetPods(podsList.Items)
 
-	return podList, nil
+	return podsList, nil
 }

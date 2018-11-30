@@ -18,6 +18,11 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
    1. [MongoDB System Users](#mongodb-system-users)
       1. [Development Mode](#development-mode)
    1. [MongoDB Internal Authentication Key (optional)](#mongodb-internal-authentication-key-optional)
+1. [Configuration](#configuration)
+   1. [Spec](#spec)
+   1. [Secrets](#secrets)
+   1. [Replsets](#replsets)
+   1. [Mongod](#mongod)
 <!-- ToC end -->
 
 # DISCLAIMER
@@ -26,10 +31,12 @@ A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/s
 
 # Requirements
 
-The operator was developed/tested for only:
-1. Percona Server for MongoDB 3.6 or greater
-1. Kubernetes version 1.10 to 1.11
-1. Go 1.11
+The operator was developed/tested for:
+1. [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) 3.6 or greater with:
+   1. [Authentication](https://docs.mongodb.com/manual/core/authentication/) enabled
+   1. [Replication](https://docs.mongodb.com/manual/replication/) enabled
+1. [Kubernetes](https://kubernetes.io/) version 1.10 to 1.11 or [OpenShift](https://www.openshift.com/) 3.9 to 3.11
+1. [Go](https://golang.org) 1.11
 
 # Run the Operator
 1. Add the 'psmdb' Namespace
@@ -125,7 +132,7 @@ The operator was developed/tested for only:
 1. From a *'mongo'* shell add a [readWrite](https://docs.mongodb.com/manual/reference/built-in-roles/#readWrite) user for use with an application *(hostname/replicaSet in mongo uri may vary for your situation)*:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
-    mongodb@percona-client:/$ mongo mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0
+    mongodb@percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
     rs0:PRIMARY> db.createUser({
         user: "myApp",
         pwd: "myAppPassword",
@@ -146,7 +153,7 @@ The operator was developed/tested for only:
 1. Again from a *'mongo'* shell, insert and retrieve a test document in the *'myApp'* database as the new application user:
     ```
     $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
-    mongodb@percona-client:/$ mongo mongodb+srv://myApp:myAppPassword@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0
+    mongodb@percona-client:/$ mongo "mongodb+srv://myApp:myAppPassword@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
     rs0:PRIMARY> use myApp
     switched to db myApp
     rs0:PRIMARY> db.test.insert({ x: 1 })
@@ -161,19 +168,8 @@ If you prefer to use a static server list *(instead of using mongodb+srv:// to d
 
 Example *(see 'Endpoints:' below)*:
     ```
-    $ kubectl describe service my-cluster-name-rs0
-    Name:              my-cluster-name-rs0
-    Namespace:         myproject
-    Labels:            <none>
-    Annotations:       <none>
-    Selector:          app=percona-server-mongodb,percona-server-mongodb_cr=my-cluster-name,replset=rs0
-    Type:              ClusterIP
-    IP:                None
-    Port:              mongodb  27017/TCP
-    TargetPort:        27017/TCP
+    $ kubectl describe service my-cluster-name-rs0 | grep 'Endpoints:'
     Endpoints:         172.17.0.10:27017,172.17.0.12:27017,172.17.0.9:27017
-    Session Affinity:  None
-    Events:            <none>
     ```
 
 # Required Secrets
@@ -223,3 +219,67 @@ The development-mode credentials from *deploy/mongodb-users.yaml* are:
 By default, the operator will create a random, 1024-byte key for [MongoDB Internal Authentication](https://docs.mongodb.com/manual/core/security-internal-authentication/) if it does not already exist.
 
 If you would like to deploy a different key, create the secret manually before starting the operator.
+
+# Configuration
+
+The operator is configured via the *spec* section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file.
+
+## Spec
+YAML Path: *spec*
+
+| Key                   | Value Type  | Default    | Description                                                                                                          |
+|-----------------------|-------------|------------|----------------------------------------------------------------------------------------------------------------------|
+| platform              | string      | kubernetes | Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set *openshift* on OpenShift 3.11+                |
+| version               | string      | 3.6        | The Dockerhub tag of [percona/percona-server-mongodb](https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/) to deploy |
+| [secrets](#secrets)   | subdoc      |            | Operator secrets section                                                                                             |
+| [replsets](#replsets) | array       |            | Operator MongoDB Replica Set section                                                                                 |
+| [mongod](#mongod)     | subdoc      |            | Operator MongoDB Mongod configuration section                                                                        |
+
+## Secrets
+YAML Path: *spec.secrets*
+
+| Key      | Value Type  | Default                       | Description                                                                                                          |
+|----------|-------------|-------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| key      | string      | my-cluster-name-mongodb-key   | The secret name for the [MongoDB Internal Auth Key](https://docs.mongodb.com/manual/core/security-internal-authentication/). This secret is auto-created by the operator if it doesn't exist   |
+| users    | string      | my-cluster-name-mongodb-users | The secret name for the MongoDB users required to run the operator. **This secret is required to run the operator!** |
+
+## Replsets
+YAML Path: *spec.replsets*
+
+| Key                       | Value Type  | Default | Description                                                                                                          |
+|---------------------------|-------------|---------|----------------------------------------------------------------------------------------------------------------------|
+| name                      | string      | rs0     | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/)                                  |
+| size                      | int         | 3       | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
+| storageClass              | string      |         | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
+| resources.limits.cpu      | string      |         | [Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+| resources.limits.memory   | string      |         | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+| resources.limits.storage  | string      |         | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
+| resources.requests.cpu    | string      |         | [Kubernetes CPU requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+| resources.requests.memory | string      |         | [Kubernetes Memory requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+
+## Mongod
+YAML Path: *spec.mongod*
+
+| Key                                                 | Value Type | Default    | Description                                                                                                             |
+|-----------------------------------------------------|------------|------------|-------------------------------------------------------------------------------------------------------------------------|
+| net.port                                            | int        | 27017      | Sets the MongoDB ['net.port' option](https://docs.mongodb.com/manual/reference/configuration-options/#net.port)  |
+| net.hostPort                                        | int        | 0          | Sets the Kubernetes ['hostPort' option](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#support-hostport) |
+| security.redactClientLogData                        | bool       | false      | Enables/disables [PSMDB Log Redaction](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html) |
+| setParameter.ttlMonitorSleepSecs                    | int        | 60         | Sets the PSMDB 'ttlMonitorSleepSecs' option                                                   |
+| setParameter.wiredTigerConcurrentReadTransactions   | int        | 128        | Sets the ['wiredTigerConcurrentReadTransactions' option](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions) |
+| setParameter.wiredTigerConcurrentWriteTransactions  | int        | 128        | Sets the ['wiredTigerConcurrentWriteTransactions' option](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions) |
+| storage.engine                                      | string     | wiredTiger | Sets the ['storage.engine' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine) |
+| storage.inMemory.inMemorySizeRatio                  | float      | 0.9        | Ratio used to compute the ['storage.engine.inMemory.inMemorySizeGb' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html#--inMemorySizeGB) |
+| storage.mmapv1.nsSize                               | int        | 16         | Sets the ['storage.mmapv1.nsSize' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.nsSize) |
+| storage.mmapv1.smallfiles                           | bool       | false      | Sets the ['storage.mmapv1.smallfiles' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.smallFiles) |
+| storage.wiredTiger.engineConfig.cacheSizeRatio      | float      | 0.5        | Ratio used to compute the ['storage.wiredTiger.engineConfig.cacheSizeGB' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB) |
+| storage.wiredTiger.engineConfig.directoryForIndexes | bool       | false      | Sets the ['storage.wiredTiger.engineConfig.directoryForIndexes' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.directoryForIndexes) |
+| storage.wiredTiger.engineConfig.journalCompressor   | string     | snappy     | Sets the ['storage.wiredTiger.engineConfig.journalCompressor' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.journalCompressor) |
+| storage.wiredTiger.collectionConfig.blockCompressor | string     | snappy     | Sets the ['storage.wiredTiger.collectionConfig.blockCompressor' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.collectionConfig.blockCompressor) |
+| storage.wiredTiger.indexConfig.prefixCompression    | bool       | true       | Sets the ['storage.wiredTiger.indexConfig.prefixCompression' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.indexConfig.prefixCompression) |
+| operationProfiling.mode                             | string     | slowOp     | Sets the ['operationProfiling.mode' option](https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.mode) |
+| operationProfiling.slowOpThresholdMs                | int        | 100        | Sets the ['operationProfiling.slowOpThresholdMs' option](https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.slowOpThresholdMs) |
+| operationProfiling.rateLimit                        | int        | 1          | Sets the ['operationProfiling.rateLimit' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html) |
+| auditLog.destination                                | string     |            | Sets the ['auditLog.destination' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html) |
+| auditLog.format                                     | string     | BSON       | Sets the ['auditLog.format' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html) |
+| auditLog.filter                                     | string     | {}         | Sets the ['auditLog.filter' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html) |

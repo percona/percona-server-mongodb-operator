@@ -22,9 +22,9 @@ const (
 
 // getPSMDBDockerImageName returns the prefix for the Dockerhub image name.
 // This image name should be in the following format:
-// perconalab/percona-server-mongodb-operator:<VERSION>-mongod<PSMDB-VERSION>
+// percona/percona-server-mongodb-operator:<VERSION>-mongod<PSMDB-VERSION>
 func getPSMDBDockerImageName(m *v1alpha1.PerconaServerMongoDB) string {
-	return "perconalab/percona-server-mongodb-operator:" + version.Version + "-mongod" + m.Spec.Version
+	return "percona/percona-server-mongodb-operator:" + version.Version + "-mongod" + m.Spec.Version
 }
 
 // getMongodPort returns the mongod port number as a string
@@ -106,7 +106,6 @@ func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 		"--bind_ip_all",
 		"--auth",
 		"--dbpath=" + mongodContainerDataDir,
-		"--keyFile=" + mongodContainerDataDir + "/.mongod.key",
 		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mongod.Storage.Engine),
@@ -140,10 +139,12 @@ func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 	if mongod.Storage != nil {
 		switch mongod.Storage.Engine {
 		case v1alpha1.StorageEngineWiredTiger:
-			args = append(args, fmt.Sprintf(
-				"--wiredTigerCacheSizeGB=%.2f",
-				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
-			))
+			if limit, ok := resources.Limits[corev1.ResourceCPU]; ok && !limit.IsZero() {
+				args = append(args, fmt.Sprintf(
+					"--wiredTigerCacheSizeGB=%.2f",
+					getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
+				))
+			}
 			if mongod.Storage.WiredTiger.CollectionConfig != nil {
 				if mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
 					args = append(args,
@@ -160,6 +161,9 @@ func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 				if mongod.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
 					args = append(args, "--wiredTigerDirectoryForIndexes")
 				}
+			}
+			if mongod.Storage.WiredTiger.IndexConfig != nil && mongod.Storage.WiredTiger.IndexConfig.PrefixCompression {
+				args = append(args, "--wiredTigerIndexPrefixCompression=true")
 			}
 		case v1alpha1.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(

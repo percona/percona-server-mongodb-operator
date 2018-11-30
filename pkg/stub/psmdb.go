@@ -11,23 +11,23 @@ import (
 )
 
 var (
-	defaultVersion                  string  = "latest"
-	defaultRunUID                   int64   = 1001
-	defaultKeySecretName            string  = "percona-server-mongodb-key"
-	defaultUsersSecretName          string  = "percona-server-mongodb-users"
-	defaultMongodSize               int32   = 3
-	defaultReplsetName              string  = "rs"
-	defaultStorageEngine                    = v1alpha1.StorageEngineWiredTiger
-	defaultMongodPort               int32   = 27017
-	defaultWiredTigerCacheSizeRatio float64 = 0.5
-	defaultInMemorySizeRatio        float64 = 0.9
-	defaultOperationProfilingMode           = v1alpha1.OperationProfilingModeSlowOp
-	defaultImagePullPolicy                  = corev1.PullIfNotPresent
-	mongodContainerDataDir          string  = "/data/db"
-	mongodContainerName             string  = "mongod"
-	mongodDataVolClaimName          string  = "mongod-data"
-	mongodPortName                  string  = "mongodb"
-	secretFileMode                  int32   = 0060
+	defaultVersion                        = "latest"
+	defaultRunUID                   int64 = 1001
+	defaultKeySecretName                  = "percona-server-mongodb-key"
+	defaultUsersSecretName                = "percona-server-mongodb-users"
+	defaultMongodSize               int32 = 3
+	defaultReplsetName                    = "rs"
+	defaultStorageEngine                  = v1alpha1.StorageEngineWiredTiger
+	defaultMongodPort               int32 = 27017
+	defaultWiredTigerCacheSizeRatio       = 0.5
+	defaultInMemorySizeRatio              = 0.9
+	defaultOperationProfilingMode         = v1alpha1.OperationProfilingModeSlowOp
+	defaultImagePullPolicy                = corev1.PullIfNotPresent
+	mongodContainerDataDir                = "/data/db"
+	mongodContainerName                   = "mongod"
+	mongodDataVolClaimName                = "mongod-data"
+	mongodPortName                        = "mongodb"
+	secretFileMode                  int32 = 0060
 )
 
 // addPSMDBSpecDefaults sets default values for unset config params
@@ -117,55 +117,60 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	}
 }
 
-// newPSMDBStatefulSet returns a PSMDB stateful set
-func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	h.addPSMDBSpecDefaults(m)
-
-	ls := internal.LabelsForPerconaServerMongoDB(m, replset)
-	set := &appsv1.StatefulSet{
+// newStatefulSet returns a StatefulSet object configured for a name
+func newStatefulSet(m *v1alpha1.PerconaServerMongoDB, name string) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + replset.Name,
+			Name:      name,
 			Namespace: m.Namespace,
 		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: m.Name + "-" + replset.Name,
-			Replicas:    &replset.Size,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: ls,
+	}
+}
+
+// newPSMDBStatefulSet returns a PSMDB stateful set
+func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+	h.addPSMDBSpecDefaults(m)
+
+	ls := internal.LabelsForPerconaServerMongoDB(m, replset)
+	set := newStatefulSet(m, m.Name+"-"+replset.Name)
+	set.Spec = appsv1.StatefulSetSpec{
+		ServiceName: m.Name + "-" + replset.Name,
+		Replicas:    &replset.Size,
+		Selector: &metav1.LabelSelector{
+			MatchLabels: ls,
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: ls,
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
+			Spec: corev1.PodSpec{
+				Affinity:      newPSMDBPodAffinity(ls),
+				RestartPolicy: corev1.RestartPolicyAlways,
+				Containers: []corev1.Container{
+					h.newPSMDBMongodContainer(m, replset, resources),
 				},
-				Spec: corev1.PodSpec{
-					Affinity:      newPSMDBPodAffinity(ls),
-					RestartPolicy: corev1.RestartPolicyAlways,
-					Containers: []corev1.Container{
-						h.newPSMDBMongodContainer(m, replset, resources),
-					},
-					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup: GetContainerRunUID(m, h.serverVersion),
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: m.Spec.Secrets.Key,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									DefaultMode: &secretFileMode,
-									SecretName:  m.Spec.Secrets.Key,
-									Optional:    &internal.FalseVar,
-								},
+				SecurityContext: &corev1.PodSecurityContext{
+					FSGroup: internal.GetContainerRunUID(m, h.serverVersion),
+				},
+				Volumes: []corev1.Volume{
+					{
+						Name: m.Spec.Secrets.Key,
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								DefaultMode: &secretFileMode,
+								SecretName:  m.Spec.Secrets.Key,
+								Optional:    &internal.FalseVar,
 							},
 						},
 					},
 				},
 			},
-			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClass),
 		},
+		VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClass),
 	}
 	internal.AddOwnerRefToObject(set, internal.AsOwner(m))
 	return set, nil

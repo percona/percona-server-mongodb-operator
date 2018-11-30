@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:0.0.1
+          image: percona/percona-server-mongodb-operator:master
           ports:
           - containerPort: 60000
             name: metrics
@@ -28,3 +28,7 @@ spec:
                   fieldPath: metadata.namespace
             - name: OPERATOR_NAME
               value: percona-server-mongodb-operator
+            - name: RESYNC_PERIOD
+              value: 5s
+            - name: LOG_VERBOSE
+              value: "false"
