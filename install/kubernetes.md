@@ -27,7 +27,7 @@ Install Percona server for MongoDB on Kubernetes
 
    More details about secrets can be found in a [separate section](../configure/secrets).
 
-3. Now RBAC (role-based access control) and Custom Resource Definition for PSMDB should be created from the following two files: `deploy/rbac.yaml` and `deploy/crd.yaml`. Briefly speaking, role-based access is based on specifically defined roles and actions corresponding to them, allowed to be done on specific Kubernetes resources (details about users and roles can be found in [Kubernetes documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings)). Custom Resource Definition extends the standard set of resources which Kubernetes “knows” about with the new items (in our case ones which are the core of the percona-server-mongodb-operator). 
+3. Now RBAC (role-based access control) and Custom Resource Definition for PSMDB should be created from the following two files: `deploy/rbac.yaml` and `deploy/crd.yaml`. Briefly speaking, role-based access is based on specifically defined roles and actions corresponding to them, allowed to be done on specific Kubernetes resources (details about users and roles can be found in [Kubernetes documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings)). Custom Resource Definition extends the standard set of resources which Kubernetes “knows” about with the new items (in our case ones which are the core of the percona-server-mongodb-operator).
 
    ```bash
    $ kubectl apply -f deploy/crd.yaml -f deploy/rbac.yaml
@@ -46,6 +46,12 @@ Install Percona server for MongoDB on Kubernetes
    $ kubectl apply -f deploy/cr.yaml
    ```
 
+6. After the operator is started, Percona Server for MongoDB cluster can be created at any time with the following two steps:
+
+      ```bash
+      $ oc apply -f deploy/cr.yaml
+      ```
+
    Creation process will take some time. The process is over when both operator and replica set pod have reached their Running status:
 
    ```bash
@@ -57,8 +63,9 @@ Install Percona server for MongoDB on Kubernetes
    percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
    ```
 
-6. Check connectivity to newly created cluster
+7. Check connectivity to newly created cluster
 
    ```bash
-   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash
+   percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
    ```
