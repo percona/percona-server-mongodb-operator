@@ -64,7 +64,7 @@ func (c *Controller) getMongoDBURI(replset *v1alpha1.ReplsetSpec) string {
 	)
 }
 
-func (c *Controller) newMCBConfigYAML(replset *v1alpha1.ReplsetSpec, backup *v1alpha1.BackupSpec, pods []corev1.Pod, usersSecret *corev1.Secret) ([]byte, error) {
+func (c *Controller) newMCBConfigYAML(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) ([]byte, error) {
 	config := &MCBConfig{
 		Host: c.getMongoDBURI(replset),
 		Backup: &MCBConfigBackup{
