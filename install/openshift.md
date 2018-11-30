@@ -21,7 +21,7 @@ Install Percona server for MongoDB on OpenShift
    After editing is finished, mongodb-users secrets should be created (or updated with the new passwords) using the following command:
 
    ```bash
-   $ oc create -f deploy/mongodb-users.yaml
+   $ oc apply -f deploy/mongodb-users.yaml
    ```
 
    More details about secrets can be found in a [separate section](../configure/secrets).
@@ -45,7 +45,7 @@ Install Percona server for MongoDB on OpenShift
 5. Finally, it’s time to start the percona-server-mongodb-operator within OpenShift:
 
    ```bash
-   $ oc create -f deploy/operator.yaml
+   $ oc apply -f deploy/operator.yaml
    ```
 
 6. After the operator is started, Percona Server for MongoDB cluster can be created at any time with the following two steps:
