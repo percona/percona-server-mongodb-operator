@@ -64,24 +64,24 @@ func (c *Controller) getMongoDBURI(replset *v1alpha1.ReplsetSpec) string {
 	)
 }
 
-func (c *Controller) newMCBConfigYAML(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) ([]byte, error) {
+func (c *Controller) newMCBConfigYAML(replset *v1alpha1.ReplsetSpec, backup *v1alpha1.BackupSpec, pods []corev1.Pod, usersSecret *corev1.Secret) ([]byte, error) {
 	config := &MCBConfig{
 		Host: c.getMongoDBURI(replset),
 		Backup: &MCBConfigBackup{
-			Name:     c.psmdb.Name,
+			Name:     backup.Name,
 			Location: "/data",
 		},
-		Verbose: c.psmdb.Spec.Backup.Verbose,
+		Verbose: backup.Verbose,
 	}
-	if c.psmdb.Spec.Backup.ArchiveMode != v1alpha1.BackupArchiveModeNone {
+	if backup.ArchiveMode != v1alpha1.BackupArchiveModeNone {
 		config.Archive = &MCBConfigArchive{
-			Method: c.psmdb.Spec.Backup.ArchiveMode,
+			Method: backup.ArchiveMode,
 		}
 	}
-	if c.psmdb.Spec.Backup.Rotate != nil {
+	if backup.Rotate != nil {
 		config.Rotate = &MCBConfigRotate{
-			MaxBackups: c.psmdb.Spec.Backup.MaxBackups,
-			MaxDays:    c.psmdb.Spec.Backup.MaxDays,
+			MaxBackups: backup.MaxBackups,
+			MaxDays:    backup.MaxDays,
 		}
 	}
 	data := map[string]*MCBConfig{"production": config}

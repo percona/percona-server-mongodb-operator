@@ -460,10 +460,16 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 		*out = new(SecretsSpec)
 		**out = **in
 	}
-	if in.Backup != nil {
-		in, out := &in.Backup, &out.Backup
-		*out = new(BackupSpec)
-		(*in).DeepCopyInto(*out)
+	if in.Backups != nil {
+		in, out := &in.Backups, &out.Backups
+		*out = make([]*BackupSpec, len(*in))
+		for i := range *in {
+			if (*in)[i] != nil {
+				in, out := &(*in)[i], &(*out)[i]
+				*out = new(BackupSpec)
+				(*in).DeepCopyInto(*out)
+			}
+		}
 	}
 	return
 }
