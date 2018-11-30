@@ -79,7 +79,7 @@ Install Percona server for MongoDB on OpenShift
    percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
    ```
 
-7. Check connectivity to newly created cluster 
+7. Check connectivity to newly created cluster
 
    ```bash
    $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash
