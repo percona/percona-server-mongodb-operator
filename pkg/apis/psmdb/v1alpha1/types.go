@@ -30,8 +30,8 @@ type PerconaServerMongoDBSpec struct {
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
+	Backups         []*BackupSpec     `json:"backups,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-	Backup          *BackupSpec       `json:"backup,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
@@ -234,7 +234,7 @@ var (
 type BackupSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Enabled        bool              `json:"enabled,omitempty"`
-	Schedule       string            `json:"schedule,omitempty"`
+	Schedules      string            `json:"schedule,omitempty"`
 	ArchiveMode    BackupArchiveMode `json:"archiveMode,omitempty"`
 	Destination    BackupDestination `json:"destination,omitempty"`
 	Verbose        bool              `json:"verbose,omitempty"`
