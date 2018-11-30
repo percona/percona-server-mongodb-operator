@@ -58,7 +58,7 @@ spec:
     #  filter: '{}'
   backups:
     - name: default
-      enabled: false 
+      enabled: true
       destination: pvc
       schedule: "*/2 * * * *"
       resources:

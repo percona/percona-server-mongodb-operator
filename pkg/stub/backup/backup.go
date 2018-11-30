@@ -5,6 +5,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
+	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
@@ -177,14 +178,24 @@ func (c *Controller) updateStatus() error {
 			Kind:       "CronJobList",
 		},
 	}
-	err := c.client.Get(cronJobList)
+	err := c.client.List(
+		c.psmdb.Namespace,
+		cronJobList,
+		opSdk.WithListOptions(
+			internal.GetLabelSelectorListOpts(c.psmdb, nil),
+		),
+	)
 	if err != nil {
+		logrus.Errorf("failed to fetch backup cronjob list: %v", err)
 		return err
 	}
 
 	logrus.Infof("=====\nCRONJOBS:\n%v\n=====", cronJobList.Items)
 
 	for _, cronJob := range cronJobList.Items {
+		if cronJob.Status.LastScheduleTime == nil {
+			continue
+		}
 		newStatus := &v1alpha1.BackupStatus{
 			Name:           cronJob.Name,
 			LastBackupTime: cronJob.Status.LastScheduleTime,
@@ -232,7 +243,7 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 			return nil
 		}
 		if !backup.Enabled {
-			return nil
+			continue
 		}
 
 		// create the config secret for the backup tool config file
@@ -249,18 +260,24 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 			}
 		}
 
-		// create the backup cronJob
+		// create the backup cronJob or update it if it exists
 		cronJob = c.newPSMDBBackupCronJob(backup, replset, pods, configSecret)
 		err = c.client.Create(cronJob)
 		if err != nil {
 			if k8serrors.IsAlreadyExists(err) {
-				return c.updateBackupCronJob(backup, replset, pods, cronJob)
+				err = c.updateBackupCronJob(backup, replset, pods, cronJob)
+				if err != nil {
+					logrus.Errorf("failed to update backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
+					return err
+				}
 			} else {
 				logrus.Errorf("failed to create backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
 				return err
 			}
 		}
+
 		logrus.Infof("created backup cronJob for replset %s backup: %s", replset.Name, backup.Name)
 	}
+
 	return c.updateStatus()
 }

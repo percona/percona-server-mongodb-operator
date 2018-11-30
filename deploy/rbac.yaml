@@ -40,11 +40,13 @@ rules:
   - batch
   resources:
   - cronjobs
+  - cronjoblists
   verbs:
   - "create"
   - "update"
   - "delete"
   - "get"
+  - "list"
 
 ---
 

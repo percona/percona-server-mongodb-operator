@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
-	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -48,15 +47,6 @@ func persistentVolumeClaimList() *corev1.PersistentVolumeClaimList {
 	}
 }
 
-// getPersistentVolumeClaims returns a list of Persistent Volume Claims for a given replset
-func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client sdk.Client, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
-	pvcList := persistentVolumeClaimList()
-	err := client.List(m.Namespace, pvcList, opSdk.WithListOptions(
-		internal.GetLabelSelectorListOpts(m, replset),
-	))
-	return pvcList.Items, err
-}
-
 // isStatefulSetUpdating returns a boolean reflecting if a StatefulSet is updating or
 // scaling. If the currentRevision is different than the updateRevision or if the
 // number of readyReplicas is different than currentReplicas, the set is updating
@@ -67,9 +57,18 @@ func isStatefulSetUpdating(set *appsv1.StatefulSet) bool {
 	return set.Status.ReadyReplicas != set.Status.CurrentReplicas
 }
 
+// getPersistentVolumeClaims returns a list of Persistent Volume Claims for a given replset
+func (h *Handler) getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
+	pvcList := persistentVolumeClaimList()
+	err := h.client.List(m.Namespace, pvcList, opSdk.WithListOptions(
+		internal.GetLabelSelectorListOpts(m, replset),
+	))
+	return pvcList.Items, err
+}
+
 // deletePersistentVolumeClaim deletes a Persistent Volume Claim
-func deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, client sdk.Client, pvcName string) error {
-	return client.Delete(&corev1.PersistentVolumeClaim{
+func (h *Handler) deletePersistentVolumeClaim(m *v1alpha1.PerconaServerMongoDB, pvcName string) error {
+	return h.client.Delete(&corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
@@ -94,7 +93,7 @@ func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, 
 		return nil
 	}
 
-	pvcs, err := getPersistentVolumeClaims(m, h.client, replset)
+	pvcs, err := h.getPersistentVolumeClaims(m, replset)
 	if err != nil {
 		logrus.Errorf("failed to get persistent volume claims: %v", err)
 		return err
@@ -110,7 +109,7 @@ func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, 
 		if statusHasPod(replsetStatus, pvcPodName) {
 			continue
 		}
-		err = deletePersistentVolumeClaim(m, h.client, pvc.Name)
+		err = h.deletePersistentVolumeClaim(m, pvc.Name)
 		if err != nil {
 			logrus.Errorf("failed to delete persistent volume claim %s: %v", pvc.Name, err)
 			return err

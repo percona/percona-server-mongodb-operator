@@ -10,11 +10,14 @@ import (
 // LabelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
 func LabelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
-	return map[string]string{
+	ls := map[string]string{
 		"app":                       "percona-server-mongodb",
 		"percona-server-mongodb_cr": m.Name,
-		"replset":                   replset.Name,
 	}
+	if replset != nil {
+		ls["replset"] = replset.Name
+	}
+	return ls
 }
 
 // GetLabelSelectorListOpts returns metav1.ListOptions with a label-selector for a given replset
