@@ -25,11 +25,12 @@ type Controller struct {
 	usersSecret   *corev1.Secret
 }
 
-func New(psmdb *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion, client sdk.Client) *Controller {
+func New(client sdk.Client, psmdb *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion, usersSecret *corev1.Secret) *Controller {
 	return &Controller{
 		client:        client,
 		psmdb:         psmdb,
 		serverVersion: serverVersion,
+		usersSecret:   usersSecret,
 	}
 }
 
@@ -37,8 +38,8 @@ func (c *Controller) backupConfigSecretName(backup *v1alpha1.BackupSpec, replset
 	return c.psmdb.Name + "-" + replset.Name + "-backup-config-" + backup.Name
 }
 
-func (c *Controller) newMCBConfigSecret(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) (*corev1.Secret, error) {
-	config, err := c.newMCBConfigYAML(replset, backup, pods, usersSecret)
+func (c *Controller) newMCBConfigSecret(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) (*corev1.Secret, error) {
+	config, err := c.newMCBConfigYAML(backup, replset, pods)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset 
 	return cronJob
 }
 
-func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret, cronJob *batchv1b.CronJob) error {
+func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, cronJob *batchv1b.CronJob) error {
 	err := c.client.Get(cronJob)
 	if err != nil {
 		logrus.Errorf("failed to get cronJob %s: %v", cronJob.Name, err)
@@ -148,7 +149,7 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	}
 
 	configSecret := internal.NewPSMDBSecret(c.psmdb, c.backupConfigSecretName(backup, replset), map[string]string{})
-	expectedConfig, err := c.newMCBConfigYAML(backup, replset, pods, usersSecret)
+	expectedConfig, err := c.newMCBConfigYAML(backup, replset, pods)
 	if err != nil {
 		logrus.Errorf("failed to marshal config to yaml: %v")
 		return err
@@ -167,7 +168,7 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	return nil
 }
 
-func (c *Controller) ensureReplsetBackupsCronJob(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) error {
+func (c *Controller) EnsureReplsetBackupCronJobs(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
 	for _, backup := range c.psmdb.Spec.Backups {
 		// check if backup should be disabled
 		cronJob := c.newCronJob(backup, replset)
@@ -179,7 +180,7 @@ func (c *Controller) ensureReplsetBackupsCronJob(replset *v1alpha1.ReplsetSpec, 
 				logrus.Errorf("failed to remove backup cronJob: %v", err)
 				return err
 			}
-			err = c.client.Delete(internal.NewPSMDBSecret(m, c.backupConfigSecretName(), map[string]string{}))
+			err = c.client.Delete(internal.NewPSMDBSecret(c.psmdb, c.backupConfigSecretName(backup, replset), map[string]string{}))
 			if err != nil {
 				logrus.Errorf("failed to remove backup configMap: %v", err)
 				return err
@@ -191,7 +192,7 @@ func (c *Controller) ensureReplsetBackupsCronJob(replset *v1alpha1.ReplsetSpec, 
 		}
 
 		// create the config secret for the backup tool config file
-		configSecret, err := c.newMCBConfigSecret(backup, replset, pods, usersSecret)
+		configSecret, err := c.newMCBConfigSecret(backup, replset, pods)
 		if err != nil {
 			logrus.Errorf("failed to to create config secret for replset %s backup %s: %v", replset.Name, backup.Name, err)
 			return err
@@ -209,7 +210,7 @@ func (c *Controller) ensureReplsetBackupsCronJob(replset *v1alpha1.ReplsetSpec, 
 		err = c.client.Create(cronJob)
 		if err != nil {
 			if k8serrors.IsAlreadyExists(err) {
-				return c.updateBackupCronJob(backup, replset, pods, usersSecret, cronJob)
+				return c.updateBackupCronJob(backup, replset, pods, cronJob)
 			} else {
 				logrus.Errorf("failed to create backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
 				return err

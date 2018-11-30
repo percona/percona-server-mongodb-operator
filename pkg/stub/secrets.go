@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
@@ -39,7 +40,7 @@ func NewPSMDBSecret(m *v1alpha1.PerconaServerMongoDB, name string, data map[stri
 		},
 		StringData: data,
 	}
-	addOwnerRefToObject(secret, asOwner(m))
+	internal.AddOwnerRefToObject(secret, internal.AsOwner(m))
 	return secret
 }
 

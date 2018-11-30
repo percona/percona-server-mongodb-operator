@@ -112,7 +112,7 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 			}
 		}
 	}
-	if spec.RunUID == 0 && getPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {
+	if spec.RunUID == 0 && internal.GetPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {
 		spec.RunUID = defaultRunUID
 	}
 }
@@ -121,7 +121,7 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addPSMDBSpecDefaults(m)
 
-	ls := labelsForPerconaServerMongoDB(m, replset)
+	ls := internal.LabelsForPerconaServerMongoDB(m, replset)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -157,7 +157,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 								Secret: &corev1.SecretVolumeSource{
 									DefaultMode: &secretFileMode,
 									SecretName:  m.Spec.Secrets.Key,
-									Optional:    &internal.falseVar,
+									Optional:    &internal.FalseVar,
 								},
 							},
 						},
@@ -167,13 +167,13 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 			VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClass),
 		},
 	}
-	addOwnerRefToObject(set, asOwner(m))
+	internal.AddOwnerRefToObject(set, internal.AsOwner(m))
 	return set, nil
 }
 
 // newPSMDBService returns a core/v1 API Service
 func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
-	ls := labelsForPerconaServerMongoDB(m, replset)
+	ls := internal.LabelsForPerconaServerMongoDB(m, replset)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -195,6 +195,6 @@ func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 			Selector:  ls,
 		},
 	}
-	addOwnerRefToObject(service, asOwner(m))
+	internal.AddOwnerRefToObject(service, internal.AsOwner(m))
 	return service
 }

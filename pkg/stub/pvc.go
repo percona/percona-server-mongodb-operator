@@ -3,6 +3,7 @@ package stub
 import (
 	"strings"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
@@ -50,7 +51,9 @@ func persistentVolumeClaimList() *corev1.PersistentVolumeClaimList {
 // getPersistentVolumeClaims returns a list of Persistent Volume Claims for a given replset
 func getPersistentVolumeClaims(m *v1alpha1.PerconaServerMongoDB, client pkgSdk.Client, replset *v1alpha1.ReplsetSpec) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := persistentVolumeClaimList()
-	err := client.List(m.Namespace, pvcList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
+	err := client.List(m.Namespace, pvcList, sdk.WithListOptions(
+		internal.GetLabelSelectorListOpts(m, replset),
+	))
 	return pvcList.Items, err
 }
 

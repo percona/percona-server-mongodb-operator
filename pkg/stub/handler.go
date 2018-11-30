@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	pkgSdk "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/sdk"
 
@@ -86,13 +87,13 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 
 		// Get server/platform info if not exists
 		if h.serverVersion == nil {
-			serverVersion, err := getServerVersion()
+			serverVersion, err := internal.GetServerVersion()
 			if err != nil {
 				logrus.Errorf("error fetching server/platform version info: %v", err)
 				return err
 			}
 			h.serverVersion = serverVersion
-			logrus.Infof("detected Kubernetes platform: %s, version: %s", getPlatform(psmdb, h.serverVersion), h.serverVersion.Info)
+			logrus.Infof("detected Kubernetes platform: %s, version: %s", internal.GetPlatform(psmdb, h.serverVersion), h.serverVersion.Info)
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist

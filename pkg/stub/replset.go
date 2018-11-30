@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
@@ -24,8 +25,8 @@ var (
 	MongoDBTimeout               = 3 * time.Second
 )
 
-// getReplsetAddrs returns a slice of replset host:port addresses
-func getReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) []string {
+// GetReplsetAddrs returns a slice of replset host:port addresses
+func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) []string {
 	addrs := []string{}
 	for _, pod := range pods {
 		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
@@ -37,7 +38,7 @@ func getReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 // getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
 func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
 	return &mgo.DialInfo{
-		Addrs:          getReplsetAddrs(m, replset, pods),
+		Addrs:          GetReplsetAddrs(m, replset, pods),
 		ReplicaSetName: replset.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
@@ -177,11 +178,11 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
 func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.StatefulSet, error) {
-	limits, err := parseSpecResourceRequirements(replset.Limits)
+	limits, err := internal.ParseSpecResourceRequirements(replset.Limits)
 	if err != nil {
 		return nil, err
 	}
-	requests, err := parseSpecResourceRequirements(replset.Requests)
+	requests, err := internal.ParseSpecResourceRequirements(replset.Requests)
 	if err != nil {
 		return nil, err
 	}
@@ -258,8 +259,8 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 
 		if !isStatefulSetUpdating(set) {
 			// Ensure backup cronJob is created if backups are enabled
-			bkp := backup.New(m, h.serverVersion)
-			err = backup.EnsureReplsetBackupCronJob(replset, podList.Items, usersSecret)
+			bkp := backup.New(h.client, m, h.serverVersion, usersSecret)
+			err = bkp.EnsureReplsetBackupCronJobs(replset, podList.Items)
 			if err != nil {
 				return err
 			}

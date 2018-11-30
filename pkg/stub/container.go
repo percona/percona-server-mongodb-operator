@@ -238,7 +238,7 @@ func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 // GetContainerRunUID returns an int64-pointer reflecting the user ID a container
 // should run as
 func GetContainerRunUID(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) *int64 {
-	if getPlatform(m, serverVersion) != v1alpha1.PlatformOpenshift {
+	if internal.GetPlatform(m, serverVersion) != v1alpha1.PlatformOpenshift {
 		return &m.Spec.RunUID
 	}
 	return nil
@@ -264,7 +264,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: m.Spec.Secrets.Users,
 					},
-					Optional: &internal.falseVar,
+					Optional: &internal.FalseVar,
 				},
 			},
 		},
@@ -306,7 +306,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: &internal.trueVar,
+			RunAsNonRoot: &internal.TrueVar,
 			RunAsUser:    GetContainerRunUID(m, h.serverVersion),
 		},
 		VolumeMounts: []corev1.VolumeMount{

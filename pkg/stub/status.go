@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -63,7 +64,9 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	var doUpdate bool
 
 	podList := podList()
-	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
+	err := h.client.List(m.Namespace, podList, sdk.WithListOptions(
+		internal.GetLabelSelectorListOpts(m, replset),
+	))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods for replset %s: %v", replset.Name, err)
 	}
