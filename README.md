@@ -17,7 +17,7 @@ See the [Official Documentation](https://percona-lab.github.io/percona-server-mo
 
 ## Submitting Bug Reports
 
-If you find a bug in Percona Docker Images or one of the related projects, you should submit a report to that project's [JIRA](https://jira.percona.com) issue tracker.
+If you find a bug in Percona Docker Images or in one of the related projects, please submit a report to that project's [JIRA](https://jira.percona.com) issue tracker.
 
 Your first step should be [to search](https://jira.percona.com/issues/?jql=project%20%3D%20%22Cloud%20Dev%22) the existing set of open tickets for a similar report. If you find that someone else has already reported your problem, then you can upvote that report to increase its visibility.
 
