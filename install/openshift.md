@@ -82,5 +82,6 @@ Install Percona server for MongoDB on OpenShift
 7. Check connectivity to newly created cluster 
 
    ```bash
-   $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+   $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash
+   percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
    ```
