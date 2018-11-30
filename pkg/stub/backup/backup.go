@@ -168,7 +168,51 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	return nil
 }
 
-func (c *Controller) EnsureReplsetBackupCronJobs(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
+func (c *Controller) updateStatus() error {
+	var doUpdate bool
+
+	cronJobList := &batchv1b.CronJobList{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "batch/v1beta1",
+			Kind:       "CronJobList",
+		},
+	}
+	err := c.client.Get(cronJobList)
+	if err != nil {
+		return err
+	}
+
+	logrus.Infof("=====\nCRONJOBS:\n%v\n=====", cronJobList.Items)
+
+	for _, cronJob := range cronJobList.Items {
+		newStatus := &v1alpha1.BackupStatus{
+			Name:           cronJob.Name,
+			LastBackupTime: cronJob.Status.LastScheduleTime,
+		}
+		var status *v1alpha1.BackupStatus
+		for i, bkpStatus := range c.psmdb.Status.Backups {
+			if bkpStatus.Name != cronJob.Name {
+				continue
+			}
+			status = c.psmdb.Status.Backups[i]
+			break
+		}
+		if status != nil {
+			status = newStatus
+		} else {
+			c.psmdb.Status.Backups = append(c.psmdb.Status.Backups, newStatus)
+		}
+		doUpdate = true
+	}
+
+	if doUpdate {
+		return c.client.Update(c.psmdb)
+	}
+
+	return nil
+}
+
+func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
 	for _, backup := range c.psmdb.Spec.Backups {
 		// check if backup should be disabled
 		cronJob := c.newCronJob(backup, replset)
@@ -218,5 +262,5 @@ func (c *Controller) EnsureReplsetBackupCronJobs(replset *v1alpha1.ReplsetSpec, 
 		}
 		logrus.Infof("created backup cronJob for replset %s backup: %s", replset.Name, backup.Name)
 	}
-	return nil
+	return c.updateStatus()
 }
