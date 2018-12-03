@@ -1,7 +1,7 @@
 Percona Server for MongoDB Operator
 ===================================
 
-![PSMDB Replication](./assets/images/psmdb-logo.png "Percona Server for MongoDB replication"){: .align-center}
+![PSMDB logo](./assets/images/psmdb-logo.png "Percona Server for MongoDB logo"){: .align-center}
 
 With the appearance of container orchestration systems, managing containerized database clusters have reached the new level of automation. The Kubernetes and the OpenShift platform based on it have enriched the relatively new config-driven deployment approach with a set of such strong features, as scaling on demand, self-healing, and high availability. These features are achieved by relatively-simple *controllers*, operating in the Kubernetes environment as declared in correspondent configuration files: they create different objects (including containers or container groups called pods) to do some job, listen for events and take actions based on them (re-create, delete, etc.).
 
