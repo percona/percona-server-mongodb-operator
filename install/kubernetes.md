@@ -42,14 +42,8 @@ Install Percona server for MongoDB on Kubernetes
    ```
 5. After the operator is started, Percona Server for MongoDB cluster can be created at any time with the following command:
 
-   ```bash
-   $ kubectl apply -f deploy/cr.yaml
-   ```
-
-6. After the operator is started, Percona Server for MongoDB cluster can be created at any time with the following two steps:
-
       ```bash
-      $ oc apply -f deploy/cr.yaml
+      $ kubectl apply -f deploy/cr.yaml
       ```
 
    Creation process will take some time. The process is over when both operator and replica set pod have reached their Running status:
@@ -63,7 +57,7 @@ Install Percona server for MongoDB on Kubernetes
    percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
    ```
 
-7. Check connectivity to newly created cluster
+6. Check connectivity to newly created cluster
 
    ```bash
    $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash
