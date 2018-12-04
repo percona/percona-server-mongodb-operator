@@ -3,8 +3,9 @@
 set -o errexit
 set -o xtrace
 
-src_dir=$(realpath $(dirname $0)/..)
+test_dir="$(dirname $0)"
 . $(dirname $0)/functions
+src_dir="$(realpath $test_dir/..)"
 
 build() {
     repo=$(
