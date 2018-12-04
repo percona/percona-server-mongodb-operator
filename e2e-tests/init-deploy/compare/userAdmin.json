@@ -1,0 +1,152 @@
+{
+	"authInfo" : {
+		"authenticatedUsers" : [
+			{
+				"user" : "userAdmin",
+				"db" : "admin"
+			}
+		],
+		"authenticatedUserRoles" : [
+			{
+				"role" : "userAdminAnyDatabase",
+				"db" : "admin"
+			}
+		],
+		"authenticatedUserPrivileges" : [
+			{
+				"resource" : {
+					"db" : "admin",
+					"collection" : "system.users"
+				},
+				"actions" : [
+					"changeStream",
+					"collStats",
+					"createIndex",
+					"dbHash",
+					"dbStats",
+					"dropIndex",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "",
+					"collection" : "system.users"
+				},
+				"actions" : [
+					"changeStream",
+					"collStats",
+					"dbHash",
+					"dbStats",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "",
+					"collection" : ""
+				},
+				"actions" : [
+					"changeCustomData",
+					"changePassword",
+					"createRole",
+					"createUser",
+					"dropRole",
+					"dropUser",
+					"grantRole",
+					"revokeRole",
+					"setAuthenticationRestriction",
+					"viewRole",
+					"viewUser"
+				]
+			},
+			{
+				"resource" : {
+					"cluster" : true
+				},
+				"actions" : [
+					"authSchemaUpgrade",
+					"invalidateUserCache",
+					"listDatabases"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "admin",
+					"collection" : "system.backup_users"
+				},
+				"actions" : [
+					"changeStream",
+					"collStats",
+					"dbHash",
+					"dbStats",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "admin",
+					"collection" : "system.new_users"
+				},
+				"actions" : [
+					"changeStream",
+					"collStats",
+					"dbHash",
+					"dbStats",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "admin",
+					"collection" : "system.roles"
+				},
+				"actions" : [
+					"changeStream",
+					"collStats",
+					"createIndex",
+					"dbHash",
+					"dbStats",
+					"dropIndex",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "admin",
+					"collection" : "system.version"
+				},
+				"actions" : [
+					"changeStream",
+					"collStats",
+					"dbHash",
+					"dbStats",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
+				]
+			}
+		]
+	},

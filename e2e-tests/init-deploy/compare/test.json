@@ -1,0 +1,4 @@
+ E QUERY    [thread1] Error: Authentication failed. :
+DB.prototype._authOrThrow@src/mongo/shell/db.js:1608:20
+@(auth):6:1
+@(auth):1:2

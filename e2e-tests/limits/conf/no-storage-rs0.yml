@@ -1,0 +1,56 @@
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDB
+metadata:
+  name: no-storage
+spec:
+  #platform: openshift
+  version: "3.6"
+  imagePullPolicy: Always
+  secrets:
+    key: some-key
+    users: some-users
+  replsets:
+  - name: rs0
+    size: 3
+    resources:
+      limits:
+        cpu: "600m"
+        memory: "1G"
+      requests:
+        cpu: "600m"
+        memory: "1G"
+  mongod:
+    net:
+      port: 27017
+      hostPort: 0
+    security:
+      redactClientLogData: false
+    setParameter:
+      ttlMonitorSleepSecs: 60
+      wiredTigerConcurrentReadTransactions: 128
+      wiredTigerConcurrentWriteTransactions: 128
+    storage:
+      engine: wiredTiger
+      inMemory:
+        engineConfig:
+          inMemorySizeRatio: 0.9
+      mmapv1:
+        nsSize: 16
+        smallfiles: false
+      wiredTiger:
+        engineConfig:
+          cacheSizeRatio: 0.5
+          directoryForIndexes: false
+          journalCompressor: snappy
+        collectionConfig:
+          blockCompressor: snappy
+        indexConfig:
+          prefixCompression: true
+    operationProfiling:
+      mode: slowOp
+      slowOpThresholdMs: 100
+      rateLimit: 1
+    #auditLog:
+    #  destination: file
+    #  format: BSON
+    #  filter: '{}'

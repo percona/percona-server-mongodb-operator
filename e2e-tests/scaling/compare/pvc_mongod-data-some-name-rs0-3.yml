@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: kubernetes.io/gce-pd
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app: percona-server-mongodb
+    percona-server-mongodb_cr: some-name
+    replset: rs0
+  name: mongod-data-some-name-rs0-3
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard

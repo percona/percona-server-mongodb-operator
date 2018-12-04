@@ -1,0 +1,58 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+cluster="some-name-rs0"
+
+create_namespace $namespace
+deploy_operator
+
+desc 'create PSMDB cluster'
+kubectl apply \
+    -f $conf_dir/secrets.yml \
+    -f $conf_dir/client.yml \
+    -f $conf_dir/$cluster.yml
+desc 'check if all 3 Pods started'
+wait_for_running $cluster 3
+
+desc 'check data consistency: write data, read from all'
+run_mongo \
+    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+    "userAdmin:userAdmin123456@$cluster.$namespace"
+run_mongo \
+    'use myApp\n db.test.insert({ x: 100500 })' \
+    "myApp:myPass@$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+
+desc 'scale up from 3 to 5'
+sed -e 's/size: 3/size: 5/' $conf_dir/$cluster.yml \
+    | kubectl apply -f-
+
+desc 'check if all 5 Pods started'
+wait_for_running $cluster 5
+
+desc 'check if PVC created'
+compare_kubectl pvc/mongod-data-$cluster-3
+compare_kubectl pvc/mongod-data-$cluster-4
+
+desc 'check data consistency for new Pods'
+compare_mongo_cmd "find" "myApp:myPass@$cluster-3.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-4.$cluster.$namespace"
+
+desc 'scale down from 5 to 3'
+kubectl apply -f $conf_dir/$cluster.yml
+
+desc 'check if Pod deleted'
+wait_for_delete pod/$cluster-3
+wait_for_delete pod/$cluster-4
+
+desc 'check if PVC deleted'
+wait_for_delete pvc/mongod-data-$cluster-3
+wait_for_delete pvc/mongod-data-$cluster-4
+
+destroy $namespace
