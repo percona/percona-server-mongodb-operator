@@ -1,0 +1,122 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+cluster="some-name-rs0"
+
+
+setup_cluster() {
+    # create first PSMDB cluster
+    kubectl apply \
+        -f $conf_dir/secrets.yml \
+        -f $conf_dir/$cluster.yml \
+        -f $conf_dir/pumba.yml \
+        -f $conf_dir/client.yml
+
+    # check if all 3 Pods started
+    wait_for_running $cluster 3
+
+    # write data, read from all
+    run_mongo \
+        'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+        "userAdmin:userAdmin123456@$cluster.$namespace"
+    run_mongo \
+        'use myApp\n db.test.insert({ x: 100500 })' \
+        "myApp:myPass@$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+}
+
+pumba_pod() {
+    local action=$1
+    local pod=$2
+
+    # run chaos for Pod
+    run_pumba $action "re2:$pod"
+    sleep 2
+
+    # check if all 3 Pods started
+    wait_for_running $cluster 3
+
+    desc 'check data consistency for chaosed Pod'
+    compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
+}
+
+pause_pod() {
+    local pod=$1
+
+    # run chaos for Pod
+    kubectl exec -it "$(get_pumba)" -- /pumba -l info pause --duration 1m "re2:$pod" &
+    pid=$!
+    sleep 10
+
+    # write data
+    run_mongo \
+        'use myApp\n db.test.insert({ x: 100501 })' \
+        "myApp:myPass@$cluster.$namespace"
+
+    # wait for unpause
+    wait $pid
+
+    # check if all 3 Pods started
+    wait_for_running $cluster 3
+
+    desc 'check data consistency for chaosed Pod'
+    compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
+}
+
+netem_pod() {
+    local pod=$1
+
+    # run chaos for Pod
+    kubectl exec -it "$(get_pumba)" -- /pumba -l info netem --tc-image 'gaiadocker/iproute2' --duration 1m loss --percent 100 --correlation 100 "re2:$pod" &
+    pid=$!
+    sleep 10
+
+    # write data
+    run_mongo \
+        'use myApp\n db.test.insert({ x: 100502 })' \
+        "myApp:myPass@$cluster.$namespace"
+
+    # wait for unpause
+    wait $pid
+
+    # check if all 3 Pods started
+    wait_for_running $cluster 3
+    sleep 2
+
+    desc 'check data consistency for chaosed Pod'
+    compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-3rd"
+}
+
+
+main() {
+    create_namespace $namespace
+    deploy_operator
+
+    desc 'start cluster'
+    setup_cluster
+
+    desc 'kill some-name-rs0-0 pod'
+    pumba_pod kill "$cluster-0"
+
+    desc 'rm some-name-rs0-0 pod'
+    pumba_pod rm "$cluster-0"
+
+    desc 'stop some-name-rs0-0 pod'
+    pumba_pod stop "$cluster-0"
+
+    desc 'pause some-name-rs0-0 pod'
+    pause_pod "$cluster-0"
+
+    desc 'emulate bad network'
+    netem_pod "$cluster-0"
+
+    destroy $namespace
+}
+
+main
