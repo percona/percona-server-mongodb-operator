@@ -79,7 +79,7 @@ func TestParseReplsetResourceRequirements(t *testing.T) {
 			},
 		},
 	}
-	r, err := ParseReplsetResourceRequirements(replset)
+	r, err := ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	assert.Len(t, r.Limits, 3)
@@ -93,7 +93,7 @@ func TestParseReplsetResourceRequirements(t *testing.T) {
 	assert.Equal(t, "500m", cpuRequests.String())
 
 	replset.ResourcesSpec.Limits.Cpu = ""
-	r, err = ParseReplsetResourceRequirements(replset)
+	r, err = ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	cpuLimits = r.Limits[corev1.ResourceCPU]

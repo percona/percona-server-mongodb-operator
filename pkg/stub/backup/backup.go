@@ -1,11 +1,12 @@
 package backup
 
 import (
+	"reflect"
+
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
-	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
@@ -66,13 +67,20 @@ func (c *Controller) newCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.R
 	}
 }
 
-func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, configSecret *corev1.Secret) *batchv1b.CronJob {
+func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, configSecret *corev1.Secret) (*batchv1b.CronJob, error) {
+	resources, err := internal.ParseResourceSpecRequirements(backup.Limits, backup.Requests)
+	if err != nil {
+		return nil, err
+	}
+
+	ls := internal.LabelsForPerconaServerMongoDB(c.psmdb, replset)
 	backupPod := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
 			{
-				Name:  backupContainerName,
-				Image: backupImagePrefix + ":" + backupImageVersion,
+				Name:            backupContainerName,
+				Image:           backupImagePrefix + ":" + backupImageVersion,
+				ImagePullPolicy: corev1.PullIfNotPresent,
 				Args: []string{
 					"--config=/etc/mongodb-consistent-backup/" + backupConfigFile,
 				},
@@ -83,6 +91,7 @@ func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset 
 					},
 				},
 				WorkingDir: "/data",
+				Resources:  resources,
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &internal.TrueVar,
 					RunAsUser:    internal.GetContainerRunUID(c.psmdb, c.serverVersion),
@@ -124,12 +133,13 @@ func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset 
 		},
 	}
 	cronJob := c.newCronJob(backup, replset)
+	cronJob.ObjectMeta.Labels = ls
 	cronJob.Spec = batchv1b.CronJobSpec{
 		Schedule:          backup.Schedule,
 		ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 		JobTemplate: batchv1b.JobTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: internal.LabelsForPerconaServerMongoDB(c.psmdb, replset),
+				Labels: ls,
 			},
 			Spec: batchv1.JobSpec{
 				Template: corev1.PodTemplateSpec{
@@ -139,20 +149,22 @@ func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset 
 		},
 	}
 	internal.AddOwnerRefToObject(cronJob, internal.AsOwner(c.psmdb))
-	return cronJob
+	return cronJob, nil
 }
 
-func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, cronJob *batchv1b.CronJob) error {
+func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
+	cronJob := c.newCronJob(backup, replset)
 	err := c.client.Get(cronJob)
 	if err != nil {
 		logrus.Errorf("failed to get cronJob %s: %v", cronJob.Name, err)
 		return err
 	}
 
+	// update the config file secret if necessary
 	configSecret := internal.NewPSMDBSecret(c.psmdb, c.backupConfigSecretName(backup, replset), map[string]string{})
 	expectedConfig, err := c.newMCBConfigYAML(backup, replset, pods)
 	if err != nil {
-		logrus.Errorf("failed to marshal config to yaml: %v")
+		logrus.Errorf("failed to marshal config to yaml: %v", err)
 		return err
 	}
 	err = c.client.Get(configSecret)
@@ -163,73 +175,60 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	if string(configSecret.Data[backupConfigFile]) != string(expectedConfig) {
 		logrus.Infof("updating backup cronjob for replset %s", replset.Name)
 		configSecret.Data[backupConfigFile] = []byte(expectedConfig)
-		return c.client.Update(configSecret)
+		err = c.client.Update(configSecret)
+		if err != nil {
+			logrus.Errorf("failed to update backup cronjob secret for replset %s: %v", replset.Name, err)
+			return err
+		}
 	}
 
-	return nil
-}
-
-func (c *Controller) updateStatus() error {
-	var doUpdate bool
-
-	cronJobList := &batchv1b.CronJobList{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1beta1",
-			Kind:       "CronJobList",
-		},
-	}
-	err := c.client.List(
-		c.psmdb.Namespace,
-		cronJobList,
-		opSdk.WithListOptions(
-			internal.GetLabelSelectorListOpts(c.psmdb, nil),
-		),
-	)
+	expectedCronJob, err := c.newPSMDBBackupCronJob(backup, replset, pods, configSecret)
 	if err != nil {
-		logrus.Errorf("failed to fetch backup cronjob list: %v", err)
 		return err
 	}
 
-	logrus.Infof("=====\nCRONJOBS:\n%v\n=====", cronJobList.Items)
-
-	for _, cronJob := range cronJobList.Items {
-		if cronJob.Status.LastScheduleTime == nil {
-			continue
-		}
-		newStatus := &v1alpha1.BackupStatus{
-			Name:           cronJob.Name,
-			LastBackupTime: cronJob.Status.LastScheduleTime,
-		}
-		var status *v1alpha1.BackupStatus
-		for i, bkpStatus := range c.psmdb.Status.Backups {
-			if bkpStatus.Name != cronJob.Name {
-				continue
-			}
-			status = c.psmdb.Status.Backups[i]
-			break
-		}
-		if status != nil {
-			status = newStatus
-		} else {
-			c.psmdb.Status.Backups = append(c.psmdb.Status.Backups, newStatus)
-		}
+	// update the cronJob spec if necessary
+	var doUpdate bool
+	cronJobContainer := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	expectedContainer := expectedCronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	if cronJob.Spec.Schedule != expectedCronJob.Spec.Schedule {
+		doUpdate = true
+	}
+	if cronJobContainer.Image != expectedContainer.Image {
+		doUpdate = true
+	}
+	if !reflect.DeepEqual(cronJobContainer.Resources, expectedContainer.Resources) {
 		doUpdate = true
 	}
 
 	if doUpdate {
-		return c.client.Update(c.psmdb)
+		logrus.Infof("updating backup cronJob spec for replset %s backup: %s", replset.Name, backup.Name)
+		err = c.client.Update(expectedCronJob)
+		if err != nil {
+			logrus.Errorf("failed to update cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
+			return err
+		}
 	}
 
 	return nil
 }
 
+func (c *Controller) updateBackupStatus(backupStatuses []*v1alpha1.BackupStatus) error {
+	if !reflect.DeepEqual(c.psmdb.Status.Backups, backupStatuses) {
+		c.psmdb.Status.Backups = backupStatuses
+		return c.client.Update(c.psmdb)
+	}
+	return nil
+}
+
 func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
+	statuses := make([]*v1alpha1.BackupStatus, 0)
 	for _, backup := range c.psmdb.Spec.Backups {
 		// check if backup should be disabled
 		cronJob := c.newCronJob(backup, replset)
 		err := c.client.Get(cronJob)
 		if err == nil && !backup.Enabled {
-			logrus.Info("backup %s is disabled, removing backup cronJob and config", backup.Name)
+			logrus.Infof("backup %s is disabled, removing backup cronJob and config", backup.Name)
 			err = c.client.Delete(cronJob)
 			if err != nil {
 				logrus.Errorf("failed to remove backup cronJob: %v", err)
@@ -260,24 +259,35 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 			}
 		}
 
-		// create the backup cronJob or update it if it exists
-		cronJob = c.newPSMDBBackupCronJob(backup, replset, pods, configSecret)
+		// create the backup cronJob
+		cronJob, err = c.newPSMDBBackupCronJob(backup, replset, pods, configSecret)
+		if err != nil {
+			logrus.Errorf("failed to create backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
+			return err
+		}
 		err = c.client.Create(cronJob)
 		if err != nil {
-			if k8serrors.IsAlreadyExists(err) {
-				err = c.updateBackupCronJob(backup, replset, pods, cronJob)
-				if err != nil {
-					logrus.Errorf("failed to update backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
-					return err
-				}
-			} else {
+			if !k8serrors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
 				return err
 			}
+		} else {
+			logrus.Infof("created backup cronJob for replset %s backup: %s", replset.Name, backup.Name)
 		}
 
-		logrus.Infof("created backup cronJob for replset %s backup: %s", replset.Name, backup.Name)
+		// update cronJob
+		err = c.updateBackupCronJob(backup, replset, pods)
+		if err != nil {
+			logrus.Errorf("failed to update backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
+			return err
+		}
+
+		statuses = append(statuses, &v1alpha1.BackupStatus{
+			Enabled: backup.Enabled,
+			Name:    cronJob.Name,
+			Replset: replset.Name,
+		})
 	}
 
-	return c.updateStatus()
+	return c.updateBackupStatus(statuses)
 }

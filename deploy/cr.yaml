@@ -60,7 +60,7 @@ spec:
     - name: default
       enabled: true
       destination: pvc
-      schedule: "*/2 * * * *"
+      schedule: "*/1 * * * *"
       resources:
         limits:
           cpu: "100m"

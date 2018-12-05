@@ -12,7 +12,7 @@ import (
 
 const (
 	backupImagePrefix  = "perconalab/mongodb_consistent_backup"
-	backupImageVersion = "1.3.0-3.6"
+	backupImageVersion = "1.4.1-3.6"
 	backupConfigFile   = "config.yaml"
 )
 
@@ -46,17 +46,17 @@ type MCBConfigRotate struct {
 // MCBConfig represents the config file for mongodb_consistent_backup
 // See: https://github.com/Percona-Lab/mongodb_consistent_backup/blob/master/conf/mongodb-consistent-backup.example.conf
 type MCBConfig struct {
-	Host    string            `yaml:"host"`
-	Archive *MCBConfigArchive `yaml:"archive,omitempty"`
-	Backup  *MCBConfigBackup  `yaml:"backup,omitempty"`
-	Rotate  *MCBConfigRotate  `yaml:"rotate,omitempty"`
-	Verbose bool              `yaml:"verbose,omitempty"`
+	Host     string            `yaml:"host"`
+	Username string            `yaml:"username,omitempty"`
+	Password string            `yaml:"password,omitempty"`
+	Archive  *MCBConfigArchive `yaml:"archive,omitempty"`
+	Backup   *MCBConfigBackup  `yaml:"backup,omitempty"`
+	Rotate   *MCBConfigRotate  `yaml:"rotate,omitempty"`
+	Verbose  bool              `yaml:"verbose,omitempty"`
 }
 
 func (c *Controller) getMongoDBURI(replset *v1alpha1.ReplsetSpec) string {
-	return fmt.Sprintf("mongodb+srv://%s:%s@%s-%s.%s.svc.cluster.local/admin?ssl=false&replicaSet=%s",
-		string(c.usersSecret.Data[motPkg.EnvMongoDBBackupUser]),
-		string(c.usersSecret.Data[motPkg.EnvMongoDBBackupPassword]),
+	return fmt.Sprintf("mongodb+srv://%s-%s.%s.svc.cluster.local/admin?ssl=false&replicaSet=%s",
 		c.psmdb.Name,
 		replset.Name,
 		c.psmdb.Namespace,
@@ -66,7 +66,9 @@ func (c *Controller) getMongoDBURI(replset *v1alpha1.ReplsetSpec) string {
 
 func (c *Controller) newMCBConfigYAML(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) ([]byte, error) {
 	config := &MCBConfig{
-		Host: c.getMongoDBURI(replset),
+		Host:     c.getMongoDBURI(replset),
+		Username: string(c.usersSecret.Data[motPkg.EnvMongoDBBackupUser]),
+		Password: string(c.usersSecret.Data[motPkg.EnvMongoDBBackupPassword]),
 		Backup: &MCBConfigBackup{
 			Name:     backup.Name,
 			Location: "/data",

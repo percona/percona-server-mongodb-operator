@@ -243,6 +243,7 @@ type BackupSpec struct {
 }
 
 type BackupStatus struct {
-	Name           string       `json:"name,omitempty"`
-	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Name    string `json:"name,omitempty"`
+	Replset string `json:"replset,omitempty"`
 }
