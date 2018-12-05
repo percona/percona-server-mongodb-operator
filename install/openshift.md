@@ -14,11 +14,11 @@ Install Percona server for MongoDB on OpenShift
    $ oc new-project psmdb
    ```
 
-2. Now that’s time to add the MongoDB Users secrets to OpenShift. They should be placed in the data section of the `deploy/mongodb-users.yaml` file as base64-encoded logins and passwords for the MongoDB specific user accounts (see https://kubernetes.io/docs/concepts/configuration/secret/ for details).
+2. Now that’s time to add the MongoDB Users secrets to OpenShift. They should be placed in the data section of the `deploy/mongodb-users.yaml` file as base64-encoded logins and passwords for the user accounts (see https://kubernetes.io/docs/concepts/configuration/secret/ for details).
 
    **Note:** *the following command can be used to get base64-encoded password from a plain text string:* `$ echo -n 'plain-text-password' | base64`
 
-   After editing is finished, mongodb-users secrets should be created (or updated with the new passwords) using the following command:
+   After editing is finished, users secrets should be created (or updated with the new passwords) using the following command:
 
    ```bash
    $ oc apply -f deploy/mongodb-users.yaml
@@ -26,7 +26,7 @@ Install Percona server for MongoDB on OpenShift
 
    More details about secrets can be found in a [separate section](../configure/secrets).
 
-3. Now RBAC (role-based access control) and Custom Resource Definition for PSMDB should be created from the following two files: `deploy/rbac.yaml` and `deploy/crd.yaml`. Briefly speaking, role-based access is based on specifically defined roles and actions corresponding to them, allowed to be done on specific Kubernetes resources (details about users and roles can be found in [OpenShift documentation](https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html)). Custom Resource Definition extends the standard set of resources which Kubernetes “knows” about with the new items (in our case ones which are the core of the percona-server-mongodb-operator).
+3. Now RBAC (role-based access control) and Custom Resource Definition for PSMDB should be created from the following two files: `deploy/rbac.yaml` and `deploy/crd.yaml`. Briefly speaking, role-based access is based on specifically defined roles and actions corresponding to them, allowed to be done on specific Kubernetes resources (details about users and roles can be found in [OpenShift documentation](https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html)). Custom Resource Definition extends the standard set of resources which Kubernetes “knows” about with the new items (in our case ones which are the core of the operator).
 
    ```bash
    $ oc project psmdb
@@ -42,7 +42,7 @@ Install Percona server for MongoDB on OpenShift
    $ oc adm policy add-cluster-role-to-user psmdb-admin <some-user>
    ```
 
-5. Finally, it’s time to start the percona-server-mongodb-operator within OpenShift:
+5. Finally, it’s time to start the operator within OpenShift:
 
    ```bash
    $ oc apply -f deploy/operator.yaml
@@ -82,6 +82,6 @@ Install Percona server for MongoDB on OpenShift
 7. Check connectivity to newly created cluster
 
    ```bash
-   $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash
+   $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
    percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
    ```
