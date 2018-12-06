@@ -226,12 +226,18 @@ var (
 	BackupArchiveMethodTar  BackupArchiveMethod = "tar"
 )
 
+type BackupSpecRotate struct {
+	MaxBackups int `json:"maxBackups,omitempty"`
+	MaxDays    int `json:"maxDays,omitempty"`
+}
+
 type BackupSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Name           string              `json:"name,omitempty"`
 	Enabled        bool                `json:"enabled,omitempty"`
 	Schedule       string              `json:"schedule,omitempty"`
 	ArchiveMethod  BackupArchiveMethod `json:"archiveMethod,omitempty"`
+	Rotate         *BackupSpecRotate   `json:"rotate,omitempty"`
 	Verbose        bool                `json:"verbose,omitempty"`
 }
 

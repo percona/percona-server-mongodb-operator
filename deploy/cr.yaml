@@ -60,6 +60,9 @@ spec:
     - name: default
       enabled: true
       schedule: "*/1 * * * *"
+      rotate:
+        maxBackups: 14
+        maxDays: 14
       resources:
         limits:
           cpu: "100m"

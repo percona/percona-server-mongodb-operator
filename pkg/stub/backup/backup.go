@@ -58,9 +58,13 @@ func (c *Controller) newMCBConfigSecret(backup *v1alpha1.BackupSpec, replset *v1
 	if err != nil {
 		return nil, err
 	}
-	return internal.NewPSMDBSecret(c.psmdb, c.backupConfigSecretName(backup, replset), map[string]string{
-		backupConfigFile: string(config),
-	}), nil
+	return internal.NewSecret(
+		c.psmdb,
+		c.backupConfigSecretName(backup, replset),
+		map[string]string{
+			backupConfigFile: string(config),
+		},
+	), nil
 }
 
 func (c *Controller) backupCronJobName(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) string {
@@ -170,7 +174,7 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	}
 
 	// update the config file secret if necessary
-	configSecret := internal.NewPSMDBSecret(
+	configSecret := internal.NewSecret(
 		c.psmdb,
 		c.backupConfigSecretName(backup, replset),
 		map[string]string{},
@@ -247,7 +251,11 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 				logrus.Errorf("failed to remove backup cronJob: %v", err)
 				return err
 			}
-			err = c.client.Delete(internal.NewPSMDBSecret(c.psmdb, c.backupConfigSecretName(backup, replset), map[string]string{}))
+			err = c.client.Delete(internal.NewSecret(
+				c.psmdb,
+				c.backupConfigSecretName(backup, replset),
+				nil,
+			))
 			if err != nil {
 				logrus.Errorf("failed to remove backup configMap: %v", err)
 				return err

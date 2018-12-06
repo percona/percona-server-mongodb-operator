@@ -73,12 +73,12 @@ func (c *Controller) newMCBConfigYAML(backup *v1alpha1.BackupSpec, replset *v1al
 			Method: backup.ArchiveMethod,
 		}
 	}
-	//if backup.Rotate != nil {
-	//	config.Rotate = &MCBConfigRotate{
-	//		MaxBackups: backup.MaxBackups,
-	//		MaxDays:    backup.MaxDays,
-	//	}
-	//}
+	if backup.Rotate != nil {
+		config.Rotate = &MCBConfigRotate{
+			MaxBackups: backup.Rotate.MaxBackups,
+			MaxDays:    backup.Rotate.MaxDays,
+		}
+	}
 	data := map[string]*MCBConfig{
 		backupConfigEnvironment: config,
 	}

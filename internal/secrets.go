@@ -7,8 +7,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// newSecret returns a Core API Secret structure
-func NewPSMDBSecret(m *v1alpha1.PerconaServerMongoDB, name string, data map[string]string) *corev1.Secret {
+// NewSecret returns a Core API Secret structure
+func NewSecret(m *v1alpha1.PerconaServerMongoDB, name string, data map[string]string) *corev1.Secret {
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
