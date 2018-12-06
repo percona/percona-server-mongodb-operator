@@ -1,4 +1,4 @@
-package internal
+package util
 
 import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"

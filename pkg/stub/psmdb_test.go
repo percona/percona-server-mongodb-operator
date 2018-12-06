@@ -3,14 +3,15 @@ package stub
 import (
 	"testing"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestAddPSMDBSpecDefaults(t *testing.T) {
+func TestAddSpecDefaults(t *testing.T) {
 	h := &Handler{
 		serverVersion: &v1alpha1.ServerVersion{
 			Platform: v1alpha1.PlatformKubernetes,
@@ -20,20 +21,20 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 		Spec: v1alpha1.PerconaServerMongoDBSpec{},
 	}
 
-	h.addPSMDBSpecDefaults(m)
+	h.addSpecDefaults(m)
 
-	assert.Equal(t, defaultVersion, m.Spec.Version)
-	assert.Equal(t, int64(defaultRunUID), m.Spec.RunUID)
+	assert.Equal(t, config.DefaultVersion, m.Spec.Version)
+	assert.Equal(t, int64(config.DefaultRunUID), m.Spec.RunUID)
 
 	assert.Len(t, m.Spec.Replsets, 1)
-	assert.Equal(t, defaultReplsetName, m.Spec.Replsets[0].Name)
-	assert.Equal(t, defaultMongodSize, m.Spec.Replsets[0].Size)
+	assert.Equal(t, config.DefaultReplsetName, m.Spec.Replsets[0].Name)
+	assert.Equal(t, config.DefaultMongodSize, m.Spec.Replsets[0].Size)
 
 	assert.NotNil(t, m.Spec.Mongod)
-	assert.Equal(t, defaultStorageEngine, m.Spec.Mongod.Storage.Engine)
+	assert.Equal(t, config.DefaultStorageEngine, m.Spec.Mongod.Storage.Engine)
 	assert.NotNil(t, m.Spec.Mongod.Storage.WiredTiger)
 	assert.NotNil(t, m.Spec.Mongod.Storage.WiredTiger.EngineConfig)
-	assert.Equal(t, defaultWiredTigerCacheSizeRatio, m.Spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
+	assert.Equal(t, config.DefaultWiredTigerCacheSizeRatio, m.Spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio)
 
 	m.Spec = v1alpha1.PerconaServerMongoDBSpec{
 		Mongod: &v1alpha1.MongodSpec{
@@ -42,19 +43,19 @@ func TestAddPSMDBSpecDefaults(t *testing.T) {
 			},
 		},
 	}
-	h.addPSMDBSpecDefaults(m)
+	h.addSpecDefaults(m)
 	assert.NotNil(t, m.Spec.Mongod.Storage.InMemory)
 	assert.NotNil(t, m.Spec.Mongod.Storage.InMemory.EngineConfig)
-	assert.Equal(t, m.Spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, defaultInMemorySizeRatio)
+	assert.Equal(t, m.Spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, config.DefaultInMemorySizeRatio)
 
 	// test runUID default is skipped on Openshift
 	m.Spec = v1alpha1.PerconaServerMongoDBSpec{}
 	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
-	h.addPSMDBSpecDefaults(m)
+	h.addSpecDefaults(m)
 	assert.Equal(t, int64(0), m.Spec.RunUID)
 }
 
-func TestNewPSMDBStatefulSet(t *testing.T) {
+func TestNewStatefulSet(t *testing.T) {
 	psmdb := &v1alpha1.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      t.Name(),
@@ -62,12 +63,12 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
 			Secrets: &v1alpha1.SecretsSpec{
-				Key: defaultKeySecretName,
+				Key: config.DefaultKeySecretName,
 			},
 			Replsets: []*v1alpha1.ReplsetSpec{
 				{
-					Name: defaultReplsetName,
-					Size: defaultMongodSize,
+					Name: config.DefaultReplsetName,
+					Size: config.DefaultMongodSize,
 					ResourcesSpec: &v1alpha1.ResourcesSpec{
 						Limits: &v1alpha1.ResourceSpecRequirements{
 							Cpu:     "1",
@@ -99,7 +100,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	replset := psmdb.Spec.Replsets[0]
 
 	// parse resources
-	resources, err := internal.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	assert.NoError(t, err)
 
 	h := &Handler{
@@ -109,10 +110,10 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	}
 
 	// default/wiredTiger set
-	set, err := h.newPSMDBStatefulSet(psmdb, replset, &resources)
+	set, err := h.newStatefulSet(psmdb, replset, resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, set)
-	assert.Equal(t, t.Name()+"-"+defaultReplsetName, set.Name)
+	assert.Equal(t, t.Name()+"-"+config.DefaultReplsetName, set.Name)
 	assert.Len(t, set.Spec.Template.Spec.Containers, 1)
 	assert.Contains(t, set.Spec.Template.Spec.Containers[0].Args, "--storageEngine=wiredTiger")
 	assert.Contains(t, set.Spec.Template.Spec.Containers[0].Args, "--wiredTigerCacheSizeGB=0.25")
@@ -125,7 +126,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	psmdb.Spec.Mongod.Storage.MMAPv1 = &v1alpha1.MongodSpecMMAPv1{
 		Smallfiles: true,
 	}
-	mmapSet, err := h.newPSMDBStatefulSet(psmdb, replset, &resources)
+	mmapSet, err := h.newStatefulSet(psmdb, replset, resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, mmapSet)
 	assert.Contains(t, mmapSet.Spec.Template.Spec.Containers[0].Args, "--storageEngine=mmapv1")
@@ -138,14 +139,14 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 			InMemorySizeRatio: 1.0,
 		},
 	}
-	imSet, err := h.newPSMDBStatefulSet(psmdb, replset, &resources)
+	imSet, err := h.newStatefulSet(psmdb, replset, resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, imSet)
 	assert.Contains(t, imSet.Spec.Template.Spec.Containers[0].Args, "--inMemorySizeGB=0.93")
 
 	// test runUID is disabled on Openshift
 	h.serverVersion.Platform = v1alpha1.PlatformOpenshift
-	osSet, err := h.newPSMDBStatefulSet(psmdb, psmdb.Spec.Replsets[0], &resources)
+	osSet, err := h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
 	assert.Nil(t, osSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 }

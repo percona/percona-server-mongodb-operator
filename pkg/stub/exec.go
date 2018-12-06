@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
+
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -61,7 +63,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 	}
 
 	// find the mongod container
-	container := getPodContainer(&pod, containerName)
+	container := util.GetPodContainer(&pod, containerName)
 	if container == nil {
 		return nil
 	}

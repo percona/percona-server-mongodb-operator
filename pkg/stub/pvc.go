@@ -3,7 +3,7 @@ package stub
 import (
 	"strings"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/sirupsen/logrus"
@@ -15,7 +15,7 @@ import (
 func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod, replset *v1alpha1.ReplsetSpec, replsetStatus *v1alpha1.ReplsetStatus) error {
 	var runningPods int
 	for _, pod := range pods {
-		if isPodReady(pod) && isContainerAndPodRunning(pod, mongodContainerName) {
+		if util.IsPodReady(pod) && util.IsContainerAndPodRunning(pod, mongodContainerName) {
 			runningPods++
 		}
 	}
@@ -23,7 +23,7 @@ func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, 
 		return nil
 	}
 
-	pvcs, err := internal.GetPersistentVolumeClaims(h.client, m, replset)
+	pvcs, err := util.GetPersistentVolumeClaims(h.client, m, replset)
 	if err != nil {
 		logrus.Errorf("failed to get persistent volume claims: %v", err)
 		return err
@@ -39,10 +39,10 @@ func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, 
 			continue
 		}
 		pvcPodName := strings.Replace(pvc.Name, mongodDataVolClaimName+"-", "", 1)
-		if statusHasPod(replsetStatus, pvcPodName) {
+		if util.ReplsetStatusHasPod(replsetStatus, pvcPodName) {
 			continue
 		}
-		err = internal.DeletePersistentVolumeClaim(h.client, m, pvc.Name)
+		err = util.DeletePersistentVolumeClaim(h.client, m, pvc.Name)
 		if err != nil {
 			logrus.Errorf("failed to delete persistent volume claim %s: %v", pvc.Name, err)
 			return err

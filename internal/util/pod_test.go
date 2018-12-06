@@ -1,4 +1,4 @@
-package stub
+package util
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestPodList(t *testing.T) {
-	podList := podList()
+	podList := PodList()
 	assert.Equal(t, "Pod", podList.TypeMeta.Kind)
 }
 
@@ -26,7 +26,7 @@ func TestGetPodNames(t *testing.T) {
 			},
 		},
 	}
-	podNames := getPodNames(pods)
+	podNames := GetPodNames(pods)
 	assert.Len(t, podNames, 2)
 	assert.Equal(t, []string{t.Name() + "-0", t.Name() + "-1"}, podNames)
 }
@@ -41,6 +41,6 @@ func TestGetPodContainer(t *testing.T) {
 			},
 		},
 	}
-	assert.NotNil(t, getPodContainer(&pod, t.Name()))
-	assert.Nil(t, getPodContainer(&pod, "doesnt exist"))
+	assert.NotNil(t, GetPodContainer(&pod, t.Name()))
+	assert.Nil(t, GetPodContainer(&pod, "doesnt exist"))
 }

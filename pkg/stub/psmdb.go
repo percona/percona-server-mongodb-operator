@@ -1,7 +1,8 @@
 package stub
 
 import (
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -11,42 +12,30 @@ import (
 )
 
 var (
-	defaultVersion                        = "latest"
-	defaultRunUID                   int64 = 1001
-	defaultKeySecretName                  = "percona-server-mongodb-key"
-	defaultUsersSecretName                = "percona-server-mongodb-users"
-	defaultMongodSize               int32 = 3
-	defaultReplsetName                    = "rs"
-	defaultStorageEngine                  = v1alpha1.StorageEngineWiredTiger
-	defaultMongodPort               int32 = 27017
-	defaultWiredTigerCacheSizeRatio       = 0.5
-	defaultInMemorySizeRatio              = 0.9
-	defaultOperationProfilingMode         = v1alpha1.OperationProfilingModeSlowOp
-	defaultImagePullPolicy                = corev1.PullIfNotPresent
-	mongodContainerDataDir                = "/data/db"
-	mongodContainerName                   = "mongod"
-	mongodDataVolClaimName                = "mongod-data"
-	mongodPortName                        = "mongodb"
-	secretFileMode                  int32 = 0060
+	mongodContainerDataDir       = "/data/db"
+	mongodContainerName          = "mongod"
+	mongodDataVolClaimName       = "mongod-data"
+	mongodPortName               = "mongodb"
+	secretFileMode         int32 = 0060
 )
 
-// addPSMDBSpecDefaults sets default values for unset config params
-func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
+// addSpecDefaults sets default values for unset config params
+func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	spec := &m.Spec
 	if spec.Version == "" {
-		spec.Version = defaultVersion
+		spec.Version = config.DefaultVersion
 	}
 	if spec.ImagePullPolicy == "" {
-		spec.ImagePullPolicy = defaultImagePullPolicy
+		spec.ImagePullPolicy = config.DefaultImagePullPolicy
 	}
 	if spec.Secrets == nil {
 		spec.Secrets = &v1alpha1.SecretsSpec{}
 	}
 	if spec.Secrets.Key == "" {
-		spec.Secrets.Key = defaultKeySecretName
+		spec.Secrets.Key = config.DefaultKeySecretName
 	}
 	if spec.Secrets.Users == "" {
-		spec.Secrets.Users = defaultUsersSecretName
+		spec.Secrets.Users = config.DefaultUsersSecretName
 	}
 	if spec.Mongod == nil {
 		spec.Mongod = &v1alpha1.MongodSpec{}
@@ -55,13 +44,13 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		spec.Mongod.Net = &v1alpha1.MongodSpecNet{}
 	}
 	if spec.Mongod.Net.Port == 0 {
-		spec.Mongod.Net.Port = defaultMongodPort
+		spec.Mongod.Net.Port = config.DefaultMongodPort
 	}
 	if spec.Mongod.Storage == nil {
 		spec.Mongod.Storage = &v1alpha1.MongodSpecStorage{}
 	}
 	if spec.Mongod.Storage.Engine == "" {
-		spec.Mongod.Storage.Engine = defaultStorageEngine
+		spec.Mongod.Storage.Engine = config.DefaultStorageEngine
 	}
 
 	switch spec.Mongod.Storage.Engine {
@@ -73,7 +62,7 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 			spec.Mongod.Storage.InMemory.EngineConfig = &v1alpha1.MongodSpecInMemoryEngineConfig{}
 		}
 		if spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio == 0 {
-			spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio = defaultInMemorySizeRatio
+			spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio = config.DefaultInMemorySizeRatio
 		}
 	case v1alpha1.StorageEngineWiredTiger:
 		if spec.Mongod.Storage.WiredTiger == nil {
@@ -86,7 +75,7 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 			spec.Mongod.Storage.WiredTiger.EngineConfig = &v1alpha1.MongodSpecWiredTigerEngineConfig{}
 		}
 		if spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio == 0 {
-			spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+			spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio = config.DefaultWiredTigerCacheSizeRatio
 		}
 		if spec.Mongod.Storage.WiredTiger.IndexConfig == nil {
 			spec.Mongod.Storage.WiredTiger.IndexConfig = &v1alpha1.MongodSpecWiredTigerIndexConfig{
@@ -97,23 +86,23 @@ func (h *Handler) addPSMDBSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 
 	if spec.Mongod.OperationProfiling == nil {
 		spec.Mongod.OperationProfiling = &v1alpha1.MongodSpecOperationProfiling{
-			Mode: defaultOperationProfilingMode,
+			Mode: config.DefaultOperationProfilingMode,
 		}
 	}
 	if len(spec.Replsets) == 0 {
 		spec.Replsets = []*v1alpha1.ReplsetSpec{{
-			Name: defaultReplsetName,
-			Size: defaultMongodSize,
+			Name: config.DefaultReplsetName,
+			Size: config.DefaultMongodSize,
 		}}
 	} else {
 		for _, replset := range spec.Replsets {
 			if replset.Size == 0 {
-				replset.Size = defaultMongodSize
+				replset.Size = config.DefaultMongodSize
 			}
 		}
 	}
-	if spec.RunUID == 0 && internal.GetPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {
-		spec.RunUID = defaultRunUID
+	if spec.RunUID == 0 && util.GetPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {
+		spec.RunUID = config.DefaultRunUID
 	}
 }
 
@@ -131,11 +120,11 @@ func newStatefulSet(m *v1alpha1.PerconaServerMongoDB, name string) *appsv1.State
 	}
 }
 
-// newPSMDBStatefulSet returns a PSMDB stateful set
-func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	h.addPSMDBSpecDefaults(m)
+// newStatefulSet returns a PSMDB stateful set
+func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+	h.addSpecDefaults(m)
 
-	ls := internal.LabelsForPerconaServerMongoDB(m, replset)
+	ls := util.LabelsForPerconaServerMongoDB(m, replset)
 	set := newStatefulSet(m, m.Name+"-"+replset.Name)
 	set.Spec = appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
@@ -148,13 +137,13 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 				Labels: ls,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:      newPSMDBPodAffinity(ls),
+				Affinity:      newPodAffinity(ls),
 				RestartPolicy: corev1.RestartPolicyAlways,
 				Containers: []corev1.Container{
-					h.newPSMDBMongodContainer(m, replset, resources),
+					h.newMongodContainer(m, replset, resources),
 				},
 				SecurityContext: &corev1.PodSecurityContext{
-					FSGroup: internal.GetContainerRunUID(m, h.serverVersion),
+					FSGroup: util.GetContainerRunUID(m, h.serverVersion),
 				},
 				Volumes: []corev1.Volume{
 					{
@@ -163,7 +152,7 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 							Secret: &corev1.SecretVolumeSource{
 								DefaultMode: &secretFileMode,
 								SecretName:  m.Spec.Secrets.Key,
-								Optional:    &internal.FalseVar,
+								Optional:    &util.FalseVar,
 							},
 						},
 					},
@@ -171,16 +160,16 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 			},
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			internal.NewPersistentVolumeClaim(m, resources, mongodDataVolClaimName, replset.StorageClass),
+			util.NewPersistentVolumeClaim(m, resources, mongodDataVolClaimName, replset.StorageClass),
 		},
 	}
-	internal.AddOwnerRefToObject(set, internal.AsOwner(m))
+	util.AddOwnerRefToObject(set, util.AsOwner(m))
 	return set, nil
 }
 
-// newPSMDBService returns a core/v1 API Service
-func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
-	ls := internal.LabelsForPerconaServerMongoDB(m, replset)
+// newService returns a core/v1 API Service
+func newService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
+	ls := util.LabelsForPerconaServerMongoDB(m, replset)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -202,6 +191,6 @@ func newPSMDBService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 			Selector:  ls,
 		},
 	}
-	internal.AddOwnerRefToObject(service, internal.AsOwner(m))
+	util.AddOwnerRefToObject(service, util.AsOwner(m))
 	return service
 }

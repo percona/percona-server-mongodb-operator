@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -63,16 +63,16 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*corev1.PodList, error) {
 	var doUpdate bool
 
-	podsList := podList()
+	podsList := util.PodList()
 	err := h.client.List(m.Namespace, podsList, sdk.WithListOptions(
-		internal.GetLabelSelectorListOpts(m, replset),
+		util.GetLabelSelectorListOpts(m, replset),
 	))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods for replset %s: %v", replset.Name, err)
 	}
 
 	// Update status pods list
-	podNames := getPodNames(podsList.Items)
+	podNames := util.GetPodNames(podsList.Items)
 	status := getReplsetStatus(m, replset)
 	if !reflect.DeepEqual(podNames, status.Pods) {
 		status.Pods = podNames

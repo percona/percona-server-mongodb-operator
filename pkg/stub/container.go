@@ -5,7 +5,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 
@@ -37,20 +37,6 @@ func getMongodPort(container *corev1.Container) string {
 	return ""
 }
 
-// isContainerAndPodRunning returns a boolean reflecting if
-// a container and pod are in a running state
-func isContainerAndPodRunning(pod corev1.Pod, containerName string) bool {
-	if pod.Status.Phase != corev1.PodRunning {
-		return false
-	}
-	for _, container := range pod.Status.ContainerStatuses {
-		if container.Name == containerName && container.State.Running != nil {
-			return true
-		}
-	}
-	return false
-}
-
 // The WiredTiger internal cache, by default, will use the larger of either 50% of
 // (RAM - 1 GB), or 256 MB. For example, on a system with a total of 4GB of RAM the
 // WiredTiger cache will use 1.5GB of RAM (0.5 * (4 GB - 1 GB) = 1.5 GB).
@@ -76,8 +62,8 @@ func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float
 	return sizeGB
 }
 
-// newPSMDBContainerEnv returns environment variables for a container
-func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) []corev1.EnvVar {
+// newContainerEnv returns environment variables for a container
+func newContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) []corev1.EnvVar {
 	mSpec := m.Spec.Mongod
 	return []corev1.EnvVar{
 		{
@@ -99,8 +85,8 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 	}
 }
 
-// newPSMDBMongodContainerArgs returns the args to pass to the mongod container
-func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []string {
+// newMongodContainerArgs returns the args to pass to the mongod container
+func newMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []string {
 	mongod := m.Spec.Mongod
 	args := []string{
 		"--bind_ip_all",
@@ -242,18 +228,18 @@ func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 // GetContainerRunUID returns an int64-pointer reflecting the user ID a container
 // should run as
 func GetContainerRunUID(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) *int64 {
-	if internal.GetPlatform(m, serverVersion) != v1alpha1.PlatformOpenshift {
+	if util.GetPlatform(m, serverVersion) != v1alpha1.PlatformOpenshift {
 		return &m.Spec.RunUID
 	}
 	return nil
 }
 
-func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) corev1.Container {
+func (h *Handler) newMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) corev1.Container {
 	return corev1.Container{
 		Name:            mongodContainerName,
 		Image:           getPSMDBDockerImageName(m),
 		ImagePullPolicy: m.Spec.ImagePullPolicy,
-		Args:            newPSMDBMongodContainerArgs(m, replset, resources),
+		Args:            newMongodContainerArgs(m, replset, resources),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
@@ -261,14 +247,14 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 				ContainerPort: m.Spec.Mongod.Net.Port,
 			},
 		},
-		Env: newPSMDBContainerEnv(m, replset),
+		Env: newContainerEnv(m, replset),
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: m.Spec.Secrets.Users,
 					},
-					Optional: &internal.FalseVar,
+					Optional: &util.FalseVar,
 				},
 			},
 		},
@@ -299,9 +285,9 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 			PeriodSeconds:       int32(3),
 			FailureThreshold:    int32(8),
 		},
-		Resources: internal.GetContainerResourceRequirements(resources),
+		Resources: util.GetContainerResourceRequirements(resources),
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: &internal.TrueVar,
+			RunAsNonRoot: &util.TrueVar,
 			RunAsUser:    GetContainerRunUID(m, h.serverVersion),
 		},
 		VolumeMounts: []corev1.VolumeMount{

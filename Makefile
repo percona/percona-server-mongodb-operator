@@ -26,7 +26,7 @@ test-cover:
 pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go: pkg/apis/psmdb/v1alpha1/doc.go pkg/apis/psmdb/v1alpha1/register.go pkg/apis/psmdb/v1alpha1/types.go       
 	$(GOPATH)/bin/operator-sdk generate k8s
 
-tmp/_output/bin/$(NAME): pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go pkg/apis/psmdb/v1alpha1/*.go pkg/*/*.go pkg/*/*/*.go internal/*.go internal/*/*.go version/*.go cmd/$(NAME)/main.go
+tmp/_output/bin/$(NAME): pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go pkg/apis/psmdb/v1alpha1/*.go pkg/*/*.go pkg/*/*/*.go internal/*/*.go version/*.go cmd/$(NAME)/main.go
 	GO_LDFLAGS="$(GO_LDFLAGS)" GIT_COMMIT=$(GIT_COMMIT) GIT_BRANCH=$(GIT_BRANCH) /bin/bash $(CURDIR)/tmp/build/build.sh
 	[ -x $(UPX_PATH) ] && $(UPX_PATH) -q tmp/_output/bin/$(NAME)
 

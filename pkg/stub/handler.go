@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
 	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
@@ -74,7 +74,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		psmdb := o
 
 		// apply Spec defaults
-		h.addPSMDBSpecDefaults(psmdb)
+		h.addSpecDefaults(psmdb)
 
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
@@ -89,17 +89,17 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// Get server/platform info if not exists
 		if h.serverVersion == nil {
-			serverVersion, err := internal.GetServerVersion()
+			serverVersion, err := util.GetServerVersion()
 			if err != nil {
 				logrus.Errorf("error fetching server/platform version info: %v", err)
 				return err
 			}
 			h.serverVersion = serverVersion
-			logrus.Infof("detected Kubernetes platform: %s, version: %s", internal.GetPlatform(psmdb, h.serverVersion), h.serverVersion.Info)
+			logrus.Infof("detected Kubernetes platform: %s, version: %s", util.GetPlatform(psmdb, h.serverVersion), h.serverVersion.Info)
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
-		err := h.client.Create(newPSMDBMongoKeySecret(o))
+		err := h.client.Create(newMongoKeySecret(o))
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create psmdb auth key: %v", err)
@@ -110,7 +110,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		}
 
 		// Load MongoDB system users/passwords from secret
-		usersSecret, err := getPSMDBSecret(psmdb, h.client, psmdb.Spec.Secrets.Users)
+		usersSecret, err := util.GetSecret(psmdb, h.client, psmdb.Spec.Secrets.Users)
 		if err != nil {
 			logrus.Errorf("failed to load psmdb user secrets: %v", err)
 			return err

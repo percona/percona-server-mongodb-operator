@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
@@ -80,7 +80,7 @@ func isReplsetInitialized(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 //
 func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
-		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, mongodContainerName) || !isPodReady(pod) {
+		if !isMongodPod(pod) || !util.IsContainerAndPodRunning(pod, mongodContainerName) || !util.IsPodReady(pod) {
 			continue
 		}
 
@@ -153,7 +153,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	mongod.Resources.Requests = mongodRequests
 
 	// Ensure mongod args are the same as the args from the spec:
-	expectedMongodArgs := newPSMDBMongodContainerArgs(m, replset, resources)
+	expectedMongodArgs := newMongodContainerArgs(m, replset, resources)
 	if !reflect.DeepEqual(expectedMongodArgs, mongod.Args) {
 		logrus.Infof("updating container mongod args for replset %s: %v -> %v", replset.Name, mongod.Args, expectedMongodArgs)
 		mongod.Args = expectedMongodArgs
@@ -174,7 +174,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
 func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.StatefulSet, error) {
-	resources, err := internal.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 			lf["storageClass"] = replset.StorageClass
 		}
 
-		set, err = h.newPSMDBStatefulSet(m, replset, resources)
+		set, err = h.newStatefulSet(m, replset, resources)
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +257,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			return fmt.Errorf("failed to start watchdog: %v", err)
 		}
 
-		if !internal.IsStatefulSetUpdating(set) {
+		if !util.IsStatefulSetUpdating(set) {
 			// Ensure backups are setup if enabled
 			bkp := backup.New(h.client, m, h.serverVersion, usersSecret)
 			err = bkp.Run(replset, podList.Items)
@@ -275,7 +275,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	}
 
 	// Create service for replset
-	service := newPSMDBService(m, replset)
+	service := newService(m, replset)
 	err = h.client.Create(service)
 	if err != nil {
 		if !k8serrors.IsAlreadyExists(err) {

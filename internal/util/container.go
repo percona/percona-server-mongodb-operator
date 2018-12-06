@@ -1,4 +1,4 @@
-package internal
+package util
 
 import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -22,4 +22,18 @@ func GetContainerResourceRequirements(reqs corev1.ResourceRequirements) corev1.R
 	reqs.DeepCopyInto(&containerReqs)
 	delete(containerReqs.Limits, corev1.ResourceStorage)
 	return containerReqs
+}
+
+// IsContainerAndPodRunning returns a boolean reflecting if
+// a container and pod are in a running state
+func IsContainerAndPodRunning(pod corev1.Pod, containerName string) bool {
+	if pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.Name == containerName && container.State.Running != nil {
+			return true
+		}
+	}
+	return false
 }
