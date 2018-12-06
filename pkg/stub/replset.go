@@ -94,7 +94,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 	return ErrNoRunningMongodContainers
 }
 
-func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) error {
+func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) error {
 	var doUpdate bool
 
 	// Ensure the stateful set size is the same as the spec
@@ -201,7 +201,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 			lf["storageClass"] = replset.StorageClass
 		}
 
-		set, err = h.newPSMDBStatefulSet(m, replset, &resources)
+		set, err = h.newPSMDBStatefulSet(m, replset, resources)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +216,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	}
 
 	// Ensure the spec is up to date
-	err = h.handleStatefulSetUpdate(m, set, replset, &resources)
+	err = h.handleStatefulSetUpdate(m, set, replset, resources)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			return fmt.Errorf("failed to start watchdog: %v", err)
 		}
 
-		if !isStatefulSetUpdating(set) {
+		if !internal.IsStatefulSetUpdating(set) {
 			// Ensure backups are setup if enabled
 			bkp := backup.New(h.client, m, h.serverVersion, usersSecret)
 			err = bkp.Run(replset, podList.Items)

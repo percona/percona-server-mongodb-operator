@@ -132,7 +132,7 @@ func newStatefulSet(m *v1alpha1.PerconaServerMongoDB, name string) *appsv1.State
 }
 
 // newPSMDBStatefulSet returns a PSMDB stateful set
-func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addPSMDBSpecDefaults(m)
 
 	ls := internal.LabelsForPerconaServerMongoDB(m, replset)
@@ -170,7 +170,9 @@ func (h *Handler) newPSMDBStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset 
 				},
 			},
 		},
-		VolumeClaimTemplates: newPSMDBMongodVolumeClaims(m, resources, mongodDataVolClaimName, replset.StorageClass),
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+			internal.NewPersistentVolumeClaim(m, resources, mongodDataVolClaimName, replset.StorageClass),
+		},
 	}
 	internal.AddOwnerRefToObject(set, internal.AsOwner(m))
 	return set, nil

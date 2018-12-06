@@ -1,7 +1,7 @@
 NAME=percona-server-mongodb-operator
 UID?=$(shell id -u)
 GOCACHE?=
-GO_TEST_PATH?=./pkg/stub/...
+GO_TEST_PATH?=./...
 GO_TEST_EXTRA?=
 GO_LDFLAGS?=-w -s
 GIT_COMMIT?=$(shell git rev-parse HEAD)

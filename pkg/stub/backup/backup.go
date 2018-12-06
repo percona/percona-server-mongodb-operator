@@ -36,12 +36,25 @@ func New(client sdk.Client, psmdb *v1alpha1.PerconaServerMongoDB, serverVersion 
 	}
 }
 
+func getBackupContainer(podSpec corev1.PodSpec) *corev1.Container {
+	for i, container := range podSpec.Containers {
+		if container.Name == backupContainerName {
+			return &podSpec.Containers[i]
+		}
+	}
+	return nil
+}
+
+func (c *Controller) backupPVCName(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) string {
+	return backupDataVolume + "-" + backup.Name + "-" + c.psmdb.Name + "-" + replset.Name
+}
+
 func (c *Controller) backupConfigSecretName(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) string {
 	return c.psmdb.Name + "-" + replset.Name + "-backup-config-" + backup.Name
 }
 
 func (c *Controller) newMCBConfigSecret(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) (*corev1.Secret, error) {
-	config, err := c.newMCBConfigYAML(backup, replset, pods)
+	config, err := c.newMCBConfigYAML(backup, replset)
 	if err != nil {
 		return nil, err
 	}
@@ -67,12 +80,7 @@ func (c *Controller) newCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.R
 	}
 }
 
-func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, configSecret *corev1.Secret) (*batchv1b.CronJob, error) {
-	resources, err := internal.ParseResourceSpecRequirements(backup.Limits, backup.Requests)
-	if err != nil {
-		return nil, err
-	}
-
+func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, pods []corev1.Pod, configSecret *corev1.Secret) (*batchv1b.CronJob, error) {
 	ls := internal.LabelsForPerconaServerMongoDB(c.psmdb, replset)
 	backupPod := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
@@ -91,7 +99,7 @@ func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset 
 					},
 				},
 				WorkingDir: "/data",
-				Resources:  resources,
+				Resources:  internal.GetContainerResourceRequirements(resources),
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &internal.TrueVar,
 					RunAsUser:    internal.GetContainerRunUID(c.psmdb, c.serverVersion),
@@ -115,10 +123,11 @@ func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset 
 		Volumes: []corev1.Volume{
 			{
 				Name: backupDataVolume,
-				//TODO: make backups persistent
-				//PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				//	ClaimName: m.Name + "-backup-data",
-				//},
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: c.backupPVCName(backup, replset),
+					},
+				},
 			},
 			{
 				Name: configSecret.Name,
@@ -152,7 +161,7 @@ func (c *Controller) newPSMDBBackupCronJob(backup *v1alpha1.BackupSpec, replset 
 	return cronJob, nil
 }
 
-func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
+func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, pods []corev1.Pod) error {
 	cronJob := c.newCronJob(backup, replset)
 	err := c.client.Get(cronJob)
 	if err != nil {
@@ -161,8 +170,12 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	}
 
 	// update the config file secret if necessary
-	configSecret := internal.NewPSMDBSecret(c.psmdb, c.backupConfigSecretName(backup, replset), map[string]string{})
-	expectedConfig, err := c.newMCBConfigYAML(backup, replset, pods)
+	configSecret := internal.NewPSMDBSecret(
+		c.psmdb,
+		c.backupConfigSecretName(backup, replset),
+		map[string]string{},
+	)
+	expectedConfig, err := c.newMCBConfigYAML(backup, replset)
 	if err != nil {
 		logrus.Errorf("failed to marshal config to yaml: %v", err)
 		return err
@@ -182,24 +195,24 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 		}
 	}
 
-	expectedCronJob, err := c.newPSMDBBackupCronJob(backup, replset, pods, configSecret)
+	expectedCronJob, err := c.newBackupCronJob(backup, replset, resources, pods, configSecret)
 	if err != nil {
 		return err
 	}
 
 	// update the cronJob spec if necessary
 	var doUpdate bool
-	cronJobContainer := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
-	expectedContainer := expectedCronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	cronJobContainer := getBackupContainer(cronJob.Spec.JobTemplate.Spec.Template.Spec)
+	expectedContainer := getBackupContainer(expectedCronJob.Spec.JobTemplate.Spec.Template.Spec)
 	if cronJob.Spec.Schedule != expectedCronJob.Spec.Schedule {
 		doUpdate = true
 	}
 	if cronJobContainer.Image != expectedContainer.Image {
 		doUpdate = true
 	}
-	if !reflect.DeepEqual(cronJobContainer.Resources, expectedContainer.Resources) {
-		doUpdate = true
-	}
+	//if cronJobContainer != nil && expectedContainer != nil && !reflect.DeepEqual(cronJobContainer.Resources, expectedContainer.Resources) {
+	//	doUpdate = true
+	//}
 
 	if doUpdate {
 		logrus.Infof("updating backup cronJob spec for replset %s backup: %s", replset.Name, backup.Name)
@@ -245,6 +258,24 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 			continue
 		}
 
+		// parse resources
+		resources, err := internal.ParseResourceSpecRequirements(backup.Limits, backup.Requests)
+		if err != nil {
+			return err
+		}
+
+		// create the PVC for the backup data
+		backupPVC := internal.NewPersistentVolumeClaim(c.psmdb, resources, c.backupPVCName(backup, replset), backup.StorageClass)
+		err = c.client.Create(&backupPVC)
+		if err != nil {
+			if !k8serrors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to persistent volume claim for replset %s backup: %v", replset.Name, err)
+				return err
+			}
+		} else {
+			logrus.Infof("created backup PVC for replset %s backup: %s", replset.Name, backup.Name)
+		}
+
 		// create the config secret for the backup tool config file
 		configSecret, err := c.newMCBConfigSecret(backup, replset, pods)
 		if err != nil {
@@ -257,10 +288,12 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 				logrus.Errorf("failed to create config secret for replset %s backup: %v", replset.Name, err)
 				return err
 			}
+		} else {
+			logrus.Infof("created backup config-file secret for replset %s backup: %s", replset.Name, backup.Name)
 		}
 
 		// create the backup cronJob
-		cronJob, err = c.newPSMDBBackupCronJob(backup, replset, pods, configSecret)
+		cronJob, err = c.newBackupCronJob(backup, replset, resources, pods, configSecret)
 		if err != nil {
 			logrus.Errorf("failed to create backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
 			return err
@@ -276,7 +309,7 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 		}
 
 		// update cronJob
-		err = c.updateBackupCronJob(backup, replset, pods)
+		err = c.updateBackupCronJob(backup, replset, resources, pods)
 		if err != nil {
 			logrus.Errorf("failed to update backup cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
 			return err
@@ -284,7 +317,8 @@ func (c *Controller) Run(replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error
 
 		statuses = append(statuses, &v1alpha1.BackupStatus{
 			Enabled: backup.Enabled,
-			Name:    cronJob.Name,
+			Name:    backup.Name,
+			CronJob: cronJob.Name,
 			Replset: replset.Name,
 		})
 	}

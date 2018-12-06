@@ -7,28 +7,21 @@ import (
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	yaml "gopkg.in/yaml.v2"
-	corev1 "k8s.io/api/core/v1"
 )
 
 const (
-	backupImagePrefix  = "perconalab/mongodb_consistent_backup"
-	backupImageVersion = "1.4.1-3.6"
-	backupConfigFile   = "config.yaml"
+	backupImagePrefix       = "perconalab/mongodb_consistent_backup"
+	backupImageVersion      = "1.4.1-3.6"
+	backupConfigFile        = "config.yaml"
+	backupConfigEnvironment = "production"
 )
 
 var (
 	backupConfigFileMode = int32(0060)
 )
 
-type MCBArchiveMethod string
-
-var (
-	MCBArchiveMethodTar  MCBArchiveMethod = "tar"
-	MCBArchiveMethodNone MCBArchiveMethod = "none"
-)
-
 type MCBConfigArchive struct {
-	Method v1alpha1.BackupArchiveMode `yaml:"method,omitempty"`
+	Method v1alpha1.BackupArchiveMethod `yaml:"method,omitempty"`
 }
 
 // MCBConfig represents the backup section of the config file for mongodb_consistent_backup
@@ -64,20 +57,20 @@ func (c *Controller) getMongoDBURI(replset *v1alpha1.ReplsetSpec) string {
 	)
 }
 
-func (c *Controller) newMCBConfigYAML(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) ([]byte, error) {
+func (c *Controller) newMCBConfigYAML(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) ([]byte, error) {
 	config := &MCBConfig{
 		Host:     c.getMongoDBURI(replset),
 		Username: string(c.usersSecret.Data[motPkg.EnvMongoDBBackupUser]),
 		Password: string(c.usersSecret.Data[motPkg.EnvMongoDBBackupPassword]),
 		Backup: &MCBConfigBackup{
 			Name:     backup.Name,
-			Location: "/data",
+			Location: "/data/" + c.psmdb.Name,
 		},
 		Verbose: backup.Verbose,
 	}
-	if backup.ArchiveMode != v1alpha1.BackupArchiveModeNone {
+	if backup.ArchiveMethod != v1alpha1.BackupArchiveMethodNone {
 		config.Archive = &MCBConfigArchive{
-			Method: backup.ArchiveMode,
+			Method: backup.ArchiveMethod,
 		}
 	}
 	//if backup.Rotate != nil {
@@ -86,6 +79,8 @@ func (c *Controller) newMCBConfigYAML(backup *v1alpha1.BackupSpec, replset *v1al
 	//		MaxDays:    backup.MaxDays,
 	//	}
 	//}
-	data := map[string]*MCBConfig{"production": config}
+	data := map[string]*MCBConfig{
+		backupConfigEnvironment: config,
+	}
 	return yaml.Marshal(data)
 }

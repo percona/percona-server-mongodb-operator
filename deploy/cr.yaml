@@ -12,7 +12,6 @@ spec:
   replsets:
   - name: rs0
     size: 3
-    #storageClass: aws-gp2
     resources:
       limits:
         cpu: "300m"
@@ -21,6 +20,7 @@ spec:
       requests:
         cpu: "300m"
         memory: "0.5G"
+      #storageClass: aws-gp2
   mongod:
     net:
       port: 27017
@@ -59,7 +59,6 @@ spec:
   backups:
     - name: default
       enabled: true
-      destination: pvc
       schedule: "*/1 * * * *"
       resources:
         limits:
@@ -69,4 +68,5 @@ spec:
         requests:
           cpu: "100m"
           memory: "0.1G"
+        #storageClass: aws-gp2
       verbose: false

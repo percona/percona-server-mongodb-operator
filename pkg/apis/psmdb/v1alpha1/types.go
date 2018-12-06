@@ -46,8 +46,9 @@ type ResourceSpecRequirements struct {
 }
 
 type ResourcesSpec struct {
-	Limits   *ResourceSpecRequirements `json:"limits,omitempty"`
-	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
+	Limits       *ResourceSpecRequirements `json:"limits,omitempty"`
+	Requests     *ResourceSpecRequirements `json:"requests,omitempty"`
+	StorageClass string                    `json:"storageClass,omitempty"`
 }
 
 type Platform string
@@ -72,7 +73,6 @@ type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Name           string      `json:"name"`
 	Size           int32       `json:"size"`
-	StorageClass   string      `json:"storageClass,omitempty"`
 	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
@@ -219,31 +219,25 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
-type BackupArchiveMode string
+type BackupArchiveMethod string
 
 var (
-	BackupArchiveModeNone BackupArchiveMode = "none"
-	BackupArchiveModeTar  BackupArchiveMode = "tar"
-)
-
-type BackupDestination string
-
-var (
-	BackupDestinationPVC BackupDestination = "pvc"
+	BackupArchiveMethodNone BackupArchiveMethod = "none"
+	BackupArchiveMethodTar  BackupArchiveMethod = "tar"
 )
 
 type BackupSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string            `json:"name,omitempty"`
-	Enabled        bool              `json:"enabled,omitempty"`
-	Schedule       string            `json:"schedule,omitempty"`
-	ArchiveMode    BackupArchiveMode `json:"archiveMode,omitempty"`
-	Destination    BackupDestination `json:"destination,omitempty"`
-	Verbose        bool              `json:"verbose,omitempty"`
+	Name           string              `json:"name,omitempty"`
+	Enabled        bool                `json:"enabled,omitempty"`
+	Schedule       string              `json:"schedule,omitempty"`
+	ArchiveMethod  BackupArchiveMethod `json:"archiveMethod,omitempty"`
+	Verbose        bool                `json:"verbose,omitempty"`
 }
 
 type BackupStatus struct {
 	Enabled bool   `json:"enabled"`
 	Name    string `json:"name,omitempty"`
+	CronJob string `json:"cronJob,omitempty"`
 	Replset string `json:"replset,omitempty"`
 }

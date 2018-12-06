@@ -52,29 +52,27 @@ func parseResourceRequirementsList(rsr *v1alpha1.ResourceSpecRequirements) (core
 
 // ParseResourceSpecRequirements parses the resource section of the spec to a
 // corev1.ResourceRequirements object
-func ParseResourceSpecRequirements(limits, requests *v1alpha1.ResourceSpecRequirements) (corev1.ResourceRequirements, error) {
-	var err error
-	rr := corev1.ResourceRequirements{
-		Limits:   corev1.ResourceList{},
-		Requests: corev1.ResourceList{},
+func ParseResourceSpecRequirements(specLimits, specRequests *v1alpha1.ResourceSpecRequirements) (corev1.ResourceRequirements, error) {
+	var rr corev1.ResourceRequirements
+
+	if specLimits != nil {
+		limits, err := parseResourceRequirementsList(specLimits)
+		if err != nil {
+			return rr, err
+		}
+		if len(limits) > 0 {
+			rr.Limits = limits
+		}
 	}
 
-	rr.Limits, err = parseResourceRequirementsList(limits)
-	if err != nil {
-		return rr, err
-	}
-
-	// only set cpu+memory resource requests if limits are set
-	// https://jira.percona.com/browse/CLOUD-44
-	rl, err := parseResourceRequirementsList(requests)
-	if err != nil {
-		return rr, err
-	}
-	if _, ok := rr.Limits[corev1.ResourceCPU]; ok {
-		rr.Requests[corev1.ResourceCPU] = rl[corev1.ResourceCPU]
-	}
-	if _, ok := rr.Limits[corev1.ResourceMemory]; ok {
-		rr.Requests[corev1.ResourceMemory] = rl[corev1.ResourceMemory]
+	if specRequests != nil {
+		requests, err := parseResourceRequirementsList(specRequests)
+		if err != nil {
+			return rr, err
+		}
+		if len(requests) > 0 {
+			rr.Requests = requests
+		}
 	}
 
 	return rr, nil

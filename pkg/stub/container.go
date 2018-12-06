@@ -100,7 +100,7 @@ func newPSMDBContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 }
 
 // newPSMDBMongodContainerArgs returns the args to pass to the mongod container
-func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) []string {
+func newPSMDBMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []string {
 	mongod := m.Spec.Mongod
 	args := []string{
 		"--bind_ip_all",
@@ -248,7 +248,7 @@ func GetContainerRunUID(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha
 	return nil
 }
 
-func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) corev1.Container {
+func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) corev1.Container {
 	return corev1.Container{
 		Name:            mongodContainerName,
 		Image:           getPSMDBDockerImageName(m),
@@ -299,16 +299,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 			PeriodSeconds:       int32(3),
 			FailureThreshold:    int32(8),
 		},
-		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resources.Limits[corev1.ResourceCPU],
-				corev1.ResourceMemory: resources.Limits[corev1.ResourceMemory],
-			},
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resources.Requests[corev1.ResourceCPU],
-				corev1.ResourceMemory: resources.Requests[corev1.ResourceMemory],
-			},
-		},
+		Resources: internal.GetContainerResourceRequirements(resources),
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &internal.TrueVar,
 			RunAsUser:    GetContainerRunUID(m, h.serverVersion),
