@@ -22,15 +22,6 @@ var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
 
-// NewHandler return new instance of sdk.Handler interface.
-func NewHandler(client sdk.Client) opSdk.Handler {
-	return &Handler{
-		client:       client,
-		startedAt:    time.Now(),
-		watchdogQuit: make(chan bool, 1),
-	}
-}
-
 // Handler implements sdk.Handler interface.
 type Handler struct {
 	client        sdk.Client
@@ -39,6 +30,15 @@ type Handler struct {
 	watchdog      *watchdog.Watchdog
 	watchdogQuit  chan bool
 	startedAt     time.Time
+}
+
+// NewHandler return new instance of sdk.Handler interface.
+func NewHandler(client sdk.Client) opSdk.Handler {
+	return &Handler{
+		client:       client,
+		startedAt:    time.Now(),
+		watchdogQuit: make(chan bool, 1),
+	}
 }
 
 // ensureWatchdog ensures the PSMDB watchdog has started. This process controls the replica set and sharding
