@@ -1,7 +1,7 @@
 Design overview
 ================
 
-The design of the operator is highly bound to the Percona Server for MongoDB replica set, which is be briefly described in the following diagram.
+The design of the operator is highly bound to the Percona Server for MongoDB replica set, which is briefly described in the following diagram.
 
 ![PSMDB Replication](./assets/images/replication.png "Percona Server for MongoDB replication"){: .align-center}
 
