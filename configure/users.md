@@ -1,7 +1,7 @@
-Secrets
+Users
 ------------------------
 
-As it was already written in the installation part, the operator requires Kubernetes Secrets to be deployed before it is started. The name of the required secrets can be set in `deploy/cr.yaml` under the `spec.secrets` section.
+As it is written in the installation part, the Operator requires Kubernetes Secrets to be deployed before it is started. The name of the required secrets can be set in `deploy/cr.yaml` under the `spec.secrets` section.
 
 ### MongoDB System Users
 
@@ -9,7 +9,7 @@ As it was already written in the installation part, the operator requires Kubern
 
 *Secret name field:* `spec.secrets.users`
 
-The operator requires system-level MongoDB Users to automate the MongoDB deployment. 
+The operator requires system-level MongoDB users to automate the MongoDB deployment. 
 
 **Warning:** *These users should not be used to run an application.*
 
@@ -23,7 +23,7 @@ The operator requires system-level MongoDB Users to automate the MongoDB deploym
 
 ### Development Mode
 
-To make development and testing easier, a secrets file with default MongoDB System User/Passwords is located at `deploy/mongodb-users.yaml`.
+To make development and testing easier, `deploy/mongodb-users.yaml` secrets file contains default passwords for MongoDB system users.
 
 The development-mode credentials from `deploy/mongodb-users.yaml` are:
 
