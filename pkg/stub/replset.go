@@ -258,11 +258,24 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 
 		if !util.IsStatefulSetUpdating(set) {
-			// Ensure backups are setup if enabled
-			bkp := backup.New(h.client, m, h.serverVersion, usersSecret)
-			err = bkp.Run(replset, podList.Items)
-			if err != nil {
-				return err
+			// Ensure backups are enabled/disabled
+			for _, backupSpec := range m.Spec.Backups {
+				bkp := backup.New(h.client, m, backupSpec, replset, h.serverVersion, podList.Items, usersSecret)
+				err = bkp.Create()
+				if err != nil {
+					if k8serrors.IsAlreadyExists(err) {
+						logrus.Infof("updating backup %s", backupSpec.Name)
+						err = bkp.Update()
+						if err != nil {
+							logrus.Errorf("failed to update backup %s: %v", backupSpec.Name, err)
+							return err
+						}
+						continue
+					}
+					logrus.Errorf("failed to create backup %s: %v", backupSpec.Name, err)
+					return err
+				}
+				logrus.Infof("created backup %s", backupSpec.Name)
 			}
 
 			// Remove PVCs left-behind from scaling down if no update is running

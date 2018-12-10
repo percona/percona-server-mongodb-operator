@@ -2,7 +2,6 @@ package backup
 
 import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
@@ -17,25 +16,25 @@ const (
 	backupDataMount     = "/data"
 )
 
-func (c *Controller) backupCronJobName(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) string {
-	return c.psmdb.Name + "-" + replset.Name + "-backup-" + backup.Name
+func (c *Controller) cronJobName() string {
+	return c.psmdb.Name + "-" + c.replset.Name + "-backup-" + c.backup.Name
 }
 
-func (c *Controller) newCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) *batchv1b.CronJob {
+func (c *Controller) newCronJob() *batchv1b.CronJob {
 	return &batchv1b.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1beta1",
 			Kind:       "CronJob",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.backupCronJobName(backup, replset),
+			Name:      c.cronJobName(),
 			Namespace: c.psmdb.Namespace,
 		},
 	}
 }
 
-func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, pods []corev1.Pod, configSecret *corev1.Secret) (*batchv1b.CronJob, error) {
-	ls := util.LabelsForPerconaServerMongoDB(c.psmdb, replset)
+func (c *Controller) newBackupCronJob(resources corev1.ResourceRequirements, configSecret *corev1.Secret) (*batchv1b.CronJob, error) {
+	ls := util.LabelsForPerconaServerMongoDB(c.psmdb, c.replset)
 	backupPod := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyOnFailure,
 		Containers: []corev1.Container{
@@ -79,7 +78,7 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1al
 				Name: backupDataVolume,
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: c.backupPVCName(backup, replset),
+						ClaimName: c.pvcName(),
 					},
 				},
 			},
@@ -95,10 +94,10 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1al
 			},
 		},
 	}
-	cronJob := c.newCronJob(backup, replset)
+	cronJob := c.newCronJob()
 	cronJob.ObjectMeta.Labels = ls
 	cronJob.Spec = batchv1b.CronJobSpec{
-		Schedule:          backup.Schedule,
+		Schedule:          c.backup.Schedule,
 		ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 		JobTemplate: batchv1b.JobTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -115,9 +114,15 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1al
 	return cronJob, nil
 }
 
-func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, pods []corev1.Pod) error {
-	cronJob := c.newCronJob(backup, replset)
-	err := c.client.Get(cronJob)
+func (c *Controller) Update() error {
+	// parse resources
+	resources, err := util.ParseResourceSpecRequirements(c.backup.Limits, c.backup.Requests)
+	if err != nil {
+		return err
+	}
+
+	cronJob := c.newCronJob()
+	err = c.client.Get(cronJob)
 	if err != nil {
 		logrus.Errorf("failed to get cronJob %s: %v", cronJob.Name, err)
 		return err
@@ -126,10 +131,10 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	// update the config file secret if necessary
 	configSecret := util.NewSecret(
 		c.psmdb,
-		c.backupConfigSecretName(backup, replset),
-		map[string]string{},
+		c.configSecretName(),
+		nil,
 	)
-	expectedConfig, err := c.newMCBConfigYAML(backup, replset)
+	expectedConfig, err := c.newMCBConfigYAML()
 	if err != nil {
 		logrus.Errorf("failed to marshal config to yaml: %v", err)
 		return err
@@ -140,24 +145,24 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 		return err
 	}
 	if string(configSecret.Data[backupConfigFile]) != string(expectedConfig) {
-		logrus.Infof("updating backup cronjob for replset %s", replset.Name)
+		logrus.WithFields(c.logFields()).Infof("updating backup cronjob: %s", cronJob.Name)
 		configSecret.Data[backupConfigFile] = []byte(expectedConfig)
 		err = c.client.Update(configSecret)
 		if err != nil {
-			logrus.Errorf("failed to update backup cronjob secret for replset %s: %v", replset.Name, err)
+			logrus.WithFields(c.logFields()).Errorf("failed to update backup cronjob secret: %v", err)
 			return err
 		}
 	}
 
-	expectedCronJob, err := c.newBackupCronJob(backup, replset, resources, pods, configSecret)
+	expectedCronJob, err := c.newBackupCronJob(resources, configSecret)
 	if err != nil {
 		return err
 	}
 
 	// update the cronJob spec if necessary
 	var doUpdate bool
-	cronJobContainer := getBackupContainer(cronJob.Spec.JobTemplate.Spec.Template.Spec)
-	expectedContainer := getBackupContainer(expectedCronJob.Spec.JobTemplate.Spec.Template.Spec)
+	cronJobContainer := util.GetPodSpecContainer(&cronJob.Spec.JobTemplate.Spec.Template.Spec, backupContainerName)
+	expectedContainer := util.GetPodSpecContainer(&expectedCronJob.Spec.JobTemplate.Spec.Template.Spec, backupContainerName)
 	if cronJob.Spec.Schedule != expectedCronJob.Spec.Schedule {
 		doUpdate = true
 	}
@@ -169,13 +174,13 @@ func (c *Controller) updateBackupCronJob(backup *v1alpha1.BackupSpec, replset *v
 	//}
 
 	if doUpdate {
-		logrus.Infof("updating backup cronJob spec for replset %s backup: %s", replset.Name, backup.Name)
+		logrus.WithFields(c.logFields()).Infof("updating backup cronJob: %s", cronJob.Name)
 		err = c.client.Update(expectedCronJob)
 		if err != nil {
-			logrus.Errorf("failed to update cronJob for replset %s backup %s: %v", replset.Name, backup.Name, err)
+			logrus.WithFields(c.logFields()).Errorf("failed to update cronJob %s: %v", cronJob.Name, err)
 			return err
 		}
 	}
 
-	return nil
+	return c.updateStatus()
 }

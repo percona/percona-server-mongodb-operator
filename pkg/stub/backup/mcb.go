@@ -48,35 +48,35 @@ type MCBConfig struct {
 	Verbose  bool              `yaml:"verbose,omitempty"`
 }
 
-func (c *Controller) getMongoDBURI(replset *v1alpha1.ReplsetSpec) string {
+func (c *Controller) mongoDBURI() string {
 	return fmt.Sprintf("mongodb+srv://%s-%s.%s.svc.cluster.local/admin?ssl=false&replicaSet=%s",
 		c.psmdb.Name,
-		replset.Name,
+		c.replset.Name,
 		c.psmdb.Namespace,
-		replset.Name,
+		c.replset.Name,
 	)
 }
 
-func (c *Controller) newMCBConfigYAML(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) ([]byte, error) {
+func (c *Controller) newMCBConfigYAML() ([]byte, error) {
 	config := &MCBConfig{
-		Host:     c.getMongoDBURI(replset),
+		Host:     c.mongoDBURI(),
 		Username: string(c.usersSecret.Data[motPkg.EnvMongoDBBackupUser]),
 		Password: string(c.usersSecret.Data[motPkg.EnvMongoDBBackupPassword]),
 		Backup: &MCBConfigBackup{
-			Name:     backup.Name,
+			Name:     c.backup.Name,
 			Location: "/data/" + c.psmdb.Name,
 		},
-		Verbose: backup.Verbose,
+		Verbose: c.backup.Verbose,
 	}
-	if backup.ArchiveMethod != v1alpha1.BackupArchiveMethodNone {
+	if c.backup.ArchiveMethod != v1alpha1.BackupArchiveMethodNone {
 		config.Archive = &MCBConfigArchive{
-			Method: backup.ArchiveMethod,
+			Method: c.backup.ArchiveMethod,
 		}
 	}
-	if backup.Rotate != nil {
+	if c.backup.Rotate != nil {
 		config.Rotate = &MCBConfigRotate{
-			MaxBackups: backup.Rotate.MaxBackups,
-			MaxDays:    backup.Rotate.MaxDays,
+			MaxBackups: c.backup.Rotate.MaxBackups,
+			MaxDays:    c.backup.Rotate.MaxDays,
 		}
 	}
 	data := map[string]*MCBConfig{
