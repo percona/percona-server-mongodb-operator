@@ -148,37 +148,52 @@ func (c *Controller) Create() error {
 	return nil
 }
 
+// updateStatus updates the BackupStatus struct
 func (c *Controller) updateStatus() error {
-	err = c.client.Get(c.psmdb)
-	if err != nil {
-		return err
-	}
 	status := &v1alpha1.BackupStatus{
 		Enabled: c.backup.Enabled,
 		Name:    c.backup.Name,
 		CronJob: c.cronJobName(),
 		Replset: c.replset.Name,
 	}
-	for i, bkpStatus := range c.psmdb.Status.Backups {
+	data := c.psmdb.DeepCopy()
+	for i, bkpStatus := range data.Status.Backups {
 		if bkpStatus.Name == c.backup.Name {
-			c.psmdb.Status.Backups[i] = status
-			return c.client.Update(c.psmdb)
+			data.Status.Backups[i] = status
+			err := c.client.Update(data)
+			if err != nil {
+				return err
+			}
+			c.psmdb.Status = data.Status
+			return nil
 		}
 	}
-	c.psmdb.Status.Backups = append(c.psmdb.Status.Backups, status)
-	return c.client.Update(c.psmdb)
-}
-
-func (c *Controller) deleteStatus() error {
-	err = c.client.Get(c.psmdb)
+	data.Status.Backups = append(data.Status.Backups, status)
+	err := c.client.Update(data)
 	if err != nil {
 		return err
 	}
-	for i, bkpStatus := range c.psmdb.Status.Backups {
-		if bkpStatus.Name == c.backup.Name {
-			c.psmdb.Status.Backups = append(c.psmdb.Status.Backups[:i], c.psmdb.Status.Backups[i+1:]...)
-			return c.client.Update(c.psmdb)
+	c.psmdb = data
+	return nil
+}
+
+func (c *Controller) deleteStatus() error {
+	err := c.client.Get(c.psmdb)
+	if err != nil {
+		return err
+	}
+	data := c.psmdb.DeepCopy()
+	for i, bkpStatus := range data.Status.Backups {
+		if bkpStatus.Name != c.backup.Name {
+			continue
 		}
+		data.Status.Backups = append(data.Status.Backups[:i], data.Status.Backups[i+1:]...)
+		err = c.client.Update(data)
+		if err != nil {
+			return err
+		}
+		c.psmdb = data
+		break
 	}
 	return nil
 }

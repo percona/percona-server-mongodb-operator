@@ -8,6 +8,7 @@ rules:
   resources:
   - perconaservermongodbs
   verbs:
+  - "get"
   - "list"
   - "update"
   - "watch"

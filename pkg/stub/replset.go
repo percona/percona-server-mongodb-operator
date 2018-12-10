@@ -264,7 +264,6 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 				err = bkp.Create()
 				if err != nil {
 					if k8serrors.IsAlreadyExists(err) {
-						logrus.Infof("updating backup %s", backupSpec.Name)
 						err = bkp.Update()
 						if err != nil {
 							logrus.Errorf("failed to update backup %s: %v", backupSpec.Name, err)
@@ -275,7 +274,6 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 					logrus.Errorf("failed to create backup %s: %v", backupSpec.Name, err)
 					return err
 				}
-				logrus.Infof("created backup %s", backupSpec.Name)
 			}
 
 			// Remove PVCs left-behind from scaling down if no update is running
