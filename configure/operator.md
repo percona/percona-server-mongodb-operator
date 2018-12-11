@@ -48,8 +48,8 @@ security.redactClientLogData|bool|false|Enables/disables [PSMDB Log Redaction](h
 |setParameter.wiredTigerConcurrentReadTransactions| int|128|Sets the ['wiredTigerConcurrentReadTransactions' option](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions) |
 |setParameter.wiredTigerConcurrentWriteTransactions|int|128|Sets the ['wiredTigerConcurrentWriteTransactions' option](https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions)|
 |storage.engine|string|wiredTiger| Sets the ['storage.engine' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine)|
-|storage.inMemory.inMemorySizeRatio|float|0.9|Ratio used to compute the ['storage.engine.inMemory.inMemorySizeGb' option|
-|storage.mmapv1.nsSize|int|16    | Sets the 'storage.mmapv1.nsSize' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html#--inMemorySizeGB)|
+|storage.inMemory.inMemorySizeRatio|float|0.9|Ratio used to compute the ['storage.engine.inMemory.inMemorySizeGb' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html#--inMemorySizeGB)|
+|storage.mmapv1.nsSize|int|16    | Sets the ['storage.mmapv1.nsSize' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.nsSize)|
 |storage.mmapv1.smallfiles|bool|false| Sets the ['storage.mmapv1.smallfiles' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.smallFiles) |
 |storage.wiredTiger.engineConfig.cacheSizeRatio|float|0.5|Ratio used to compute the ['storage.wiredTiger.engineConfig.cacheSizeGB' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB) |
 |storage.wiredTiger.engineConfig.directoryForIndexes|bool|false|Sets the ['storage.wiredTiger.engineConfig.directoryForIndexes' option](https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.directoryForIndexes)|
