@@ -106,8 +106,19 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	}
 }
 
-// newStatefulSet returns a StatefulSet object configured for a name
-func newStatefulSet(m *v1alpha1.PerconaServerMongoDB, name string) *appsv1.StatefulSet {
+// hasBackupsEnabled returns a boolean reflecting if there are any backups
+// enabled in the PSMDB spec
+func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
+	for _, backup := range m.Spec.Backups {
+		if backup.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
+// NewStatefulSet returns a StatefulSet object configured for a name
+func NewStatefulSet(m *v1alpha1.PerconaServerMongoDB, name string) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -124,8 +135,8 @@ func newStatefulSet(m *v1alpha1.PerconaServerMongoDB, name string) *appsv1.State
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addSpecDefaults(m)
 
-	ls := util.LabelsForPerconaServerMongoDB(m, replset)
-	set := newStatefulSet(m, m.Name+"-"+replset.Name)
+	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
+	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
 	set.Spec = appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &replset.Size,
@@ -139,9 +150,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 			Spec: corev1.PodSpec{
 				Affinity:      newPodAffinity(ls),
 				RestartPolicy: corev1.RestartPolicyAlways,
-				Containers: []corev1.Container{
-					h.newMongodContainer(m, replset, resources),
-				},
+				Containers:    h.newMongodContainers(m, replset, resources),
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: util.GetContainerRunUID(m, h.serverVersion),
 				},
@@ -169,7 +178,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 
 // newService returns a core/v1 API Service
 func newService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
-	ls := util.LabelsForPerconaServerMongoDB(m, replset)
+	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",

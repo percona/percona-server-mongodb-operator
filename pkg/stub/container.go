@@ -225,13 +225,14 @@ func newMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.
 	return args
 }
 
-// GetContainerRunUID returns an int64-pointer reflecting the user ID a container
-// should run as
-func GetContainerRunUID(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion) *int64 {
-	if util.GetPlatform(m, serverVersion) != v1alpha1.PlatformOpenshift {
-		return &m.Spec.RunUID
+func (h *Handler) newMongodContainers(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []corev1.Container {
+	containers := []corev1.Container{
+		h.newMongodContainer(m, replset, resources),
 	}
-	return nil
+	if h.hasBackupsEnabled(m) {
+		containers = append(containers, h.backups.NewAgentContainer(m, replset))
+	}
+	return containers
 }
 
 func (h *Handler) newMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) corev1.Container {
@@ -288,7 +289,7 @@ func (h *Handler) newMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *
 		Resources: util.GetContainerResourceRequirements(resources),
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &util.TrueVar,
-			RunAsUser:    GetContainerRunUID(m, h.serverVersion),
+			RunAsUser:    util.GetContainerRunUID(m, h.serverVersion),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{

@@ -9,156 +9,150 @@ import (
 
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type Controller struct {
 	client        sdk.Client
 	psmdb         *v1alpha1.PerconaServerMongoDB
-	backup        *v1alpha1.BackupSpec
-	replset       *v1alpha1.ReplsetSpec
 	serverVersion *v1alpha1.ServerVersion
-	pods          []corev1.Pod
 	usersSecret   *corev1.Secret
 }
 
-func New(client sdk.Client,
-	psmdb *v1alpha1.PerconaServerMongoDB,
-	backup *v1alpha1.BackupSpec,
-	replset *v1alpha1.ReplsetSpec,
-	serverVersion *v1alpha1.ServerVersion,
-	pods []corev1.Pod,
-	usersSecret *corev1.Secret) *Controller {
+func New(client sdk.Client, psmdb *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion, usersSecret *corev1.Secret) *Controller {
 	return &Controller{
 		client:        client,
 		psmdb:         psmdb,
-		backup:        backup,
-		replset:       replset,
 		serverVersion: serverVersion,
-		pods:          pods,
 		usersSecret:   usersSecret,
 	}
 }
 
-func (c *Controller) logFields() logrus.Fields {
+func (c *Controller) logFields(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) logrus.Fields {
 	return logrus.Fields{
-		"backup":  c.backup.Name,
-		"replset": c.replset.Name,
+		"backup":  backup.Name,
+		"replset": replset.Name,
 	}
 }
 
-func (c *Controller) pvcName() string {
-	return backupDataVolume + "-" + c.backup.Name + "-" + c.psmdb.Name + "-" + c.replset.Name
+func (c *Controller) pvcName(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) string {
+	return backupDataVolume + "-" + backup.Name + "-" + c.psmdb.Name + "-" + replset.Name
 }
 
-func (c *Controller) configSecretName() string {
-	return c.psmdb.Name + "-" + c.replset.Name + "-backup-config-" + c.backup.Name
+func (c *Controller) configSecretName(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) string {
+	return c.psmdb.Name + "-" + replset.Name + "-backup-config-" + backup.Name
 }
 
-func (c *Controller) newMCBConfigSecret() (*corev1.Secret, error) {
-	config, err := c.newMCBConfigYAML()
+func (c *Controller) newMCBConfigSecret(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) (*corev1.Secret, error) {
+	config, err := c.newMCBConfigYAML(backup, replset)
 	if err != nil {
 		return nil, err
 	}
 	return util.NewSecret(
 		c.psmdb,
-		c.configSecretName(),
+		c.configSecretName(backup, replset),
 		map[string]string{
 			backupConfigFile: string(config),
 		},
 	), nil
 }
 
-func (c *Controller) Delete() error {
-	cronJob := c.newCronJob()
-	err := c.client.Delete(cronJob)
-	if err != nil {
-		logrus.Errorf("failed to remove backup cronJob %s: %v", cronJob.Name, err)
-		return err
-	}
-	err = c.client.Delete(util.NewSecret(
-		c.psmdb,
-		c.configSecretName(),
-		nil,
-	))
-	if err != nil {
-		logrus.Errorf("failed to remove backup cronJob %s: %v", cronJob.Name, err)
-		return err
-	}
-	return c.deleteStatus()
+func (c *Controller) Delete(backup *v1alpha1.BackupSpec) error {
+	//cronJob := c.newCronJob()
+	//err := c.client.Delete(cronJob)
+	//if err != nil {
+	//	logrus.Errorf("failed to remove backup cronJob %s: %v", cronJob.Name, err)
+	//	return err
+	//}
+	//err = c.client.Delete(util.NewSecret(
+	//	c.psmdb,
+	//	c.configSecretName(),
+	//	nil,
+	//))
+	//if err != nil {
+	//	logrus.Errorf("failed to remove backup cronJob %s: %v", cronJob.Name, err)
+	//	return err
+	//}
+	return c.deleteStatus(backup)
 }
 
-func (c *Controller) Create() error {
-	// check if backup should be disabled
-	err := c.client.Get(c.newCronJob())
-	if err == nil && !c.backup.Enabled {
-		logrus.WithFields(c.logFields()).Info("backup is disabled, removing backup cronJob and config")
-		return c.Delete()
-	}
-	if !c.backup.Enabled {
-		return nil
-	}
+func (c *Controller) Get(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) error {
+	return c.client.Get(c.newCronJob(backup, replset))
+}
 
+func (c *Controller) Create(backup *v1alpha1.BackupSpec) error {
 	// parse resources
-	resources, err := util.ParseResourceSpecRequirements(c.backup.Limits, c.backup.Requests)
-	if err != nil {
-		return err
-	}
+	//resources, err := util.ParseResourceSpecRequirements(backup.Limits, backup.Requests)
+	//if err != nil {
+	//	return err
+	//}
 
 	// create the PVC for the backup data
-	backupPVC := util.NewPersistentVolumeClaim(c.psmdb, resources, c.pvcName(), c.backup.StorageClass)
-	err = c.client.Create(&backupPVC)
-	if err != nil {
-		if !k8serrors.IsAlreadyExists(err) {
-			logrus.WithFields(c.logFields()).Errorf("failed to create persistent volume claim: %v", err)
-			return err
-		}
-	} else {
-		logrus.WithFields(c.logFields()).Infof("created backup persistent volume claim: %s", backupPVC.Name)
-	}
+	//backupPVC := util.NewPersistentVolumeClaim(c.psmdb, resources, c.pvcName(), backup.StorageClass)
+	//err = c.client.Create(&backupPVC)
+	//if err != nil {
+	//	if !k8serrors.IsAlreadyExists(err) {
+	//		logrus.WithFields(c.logFields()).Errorf("failed to create persistent volume claim: %v", err)
+	//		return err
+	//	}
+	//} else {
+	//	logrus.WithFields(c.logFields()).Infof("created backup persistent volume claim: %s", backupPVC.Name)
+	//}
 
-	// create the config secret for the backup tool config file
-	configSecret, err := c.newMCBConfigSecret()
-	if err != nil {
-		logrus.WithFields(c.logFields()).Errorf("failed to to create config secret: %v", err)
-		return err
-	}
-	err = c.client.Create(configSecret)
-	if err != nil {
-		if !k8serrors.IsAlreadyExists(err) {
-			logrus.WithFields(c.logFields()).Errorf("failed to create config secret: %v", err)
-			return err
-		}
-	} else {
-		logrus.WithFields(c.logFields()).Infof("created backup config secret: %s", configSecret.Name)
-	}
+	//// create the config secret for the backup tool config file
+	//configSecret, err := c.newMCBConfigSecret()
+	//if err != nil {
+	//	logrus.WithFields(c.logFields()).Errorf("failed to to create config secret: %v", err)
+	//	return err
+	//}
+	//err = c.client.Create(configSecret)
+	//if err != nil {
+	//	if !k8serrors.IsAlreadyExists(err) {
+	//		logrus.WithFields(c.logFields()).Errorf("failed to create config secret: %v", err)
+	//		return err
+	//	}
+	//} else {
+	//	logrus.WithFields(c.logFields()).Infof("created backup config secret: %s", configSecret.Name)
+	//}
 
-	// create the backup cronJob, pass any error (including the already-exists error) up
-	cronJob, err := c.newBackupCronJob(resources, configSecret)
-	if err != nil {
-		logrus.WithFields(c.logFields()).Errorf("failed to generate backup cronJob: %v", err)
-		return err
-	}
-	err = c.client.Create(cronJob)
-	if err != nil {
-		return err
-	}
-	logrus.WithFields(c.logFields()).Infof("created backup cronJob: %s", cronJob.Name)
+	//// create the backup cronJob, pass any error (including the already-exists error) up
+	//cronJob, err := c.newBackupCronJob(resources, configSecret)
+	//if err != nil {
+	//	logrus.WithFields(c.logFields()).Errorf("failed to generate backup cronJob: %v", err)
+	//	return err
+	//}
+	//err = c.client.Create(cronJob)
+	//if err != nil {
+	//	return err
+	//}
+	//logrus.WithFields(c.logFields()).Infof("created backup cronJob: %s", cronJob.Name)
 
 	return nil
 }
 
-// updateStatus updates the BackupStatus struct
-func (c *Controller) updateStatus() error {
-	status := &v1alpha1.BackupStatus{
-		Enabled: c.backup.Enabled,
-		Name:    c.backup.Name,
-		CronJob: c.cronJobName(),
-		Replset: c.replset.Name,
+func (c *Controller) getPSMDBCopy() (*v1alpha1.PerconaServerMongoDB, error) {
+	err := c.client.Get(c.psmdb)
+	if err != nil {
+		return nil, err
 	}
-	data := c.psmdb.DeepCopy()
+	return c.psmdb.DeepCopy(), nil
+}
+
+// updateStatus updates the backup BackupStatus struct in the PSMDB status
+func (c *Controller) updateStatus(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) error {
+	status := &v1alpha1.BackupStatus{
+		Enabled: backup.Enabled,
+		Name:    backup.Name,
+		CronJob: c.cronJobName(backup, replset),
+		Replset: replset.Name,
+	}
+
+	data, err := c.getPSMDBCopy()
+	if err != nil {
+		return err
+	}
+
 	for i, bkpStatus := range data.Status.Backups {
-		if bkpStatus.Name == c.backup.Name {
+		if bkpStatus.Name == backup.Name {
 			data.Status.Backups[i] = status
 			err := c.client.Update(data)
 			if err != nil {
@@ -168,23 +162,26 @@ func (c *Controller) updateStatus() error {
 			return nil
 		}
 	}
+
 	data.Status.Backups = append(data.Status.Backups, status)
-	err := c.client.Update(data)
+	err = c.client.Update(data)
 	if err != nil {
 		return err
 	}
 	c.psmdb = data
+
 	return nil
 }
 
-func (c *Controller) deleteStatus() error {
-	err := c.client.Get(c.psmdb)
+// deleteStatus deletes the backup BackupStatus struct from the PSMDB status
+func (c *Controller) deleteStatus(backup *v1alpha1.BackupSpec) error {
+	data, err := c.getPSMDBCopy()
 	if err != nil {
 		return err
 	}
-	data := c.psmdb.DeepCopy()
+
 	for i, bkpStatus := range data.Status.Backups {
-		if bkpStatus.Name != c.backup.Name {
+		if bkpStatus.Name != backup.Name {
 			continue
 		}
 		data.Status.Backups = append(data.Status.Backups[:i], data.Status.Backups[i+1:]...)
@@ -195,5 +192,6 @@ func (c *Controller) deleteStatus() error {
 		c.psmdb = data
 		break
 	}
+
 	return nil
 }

@@ -9,20 +9,29 @@ import (
 
 // LabelsForPerconaServerMongoDB returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB CR name.
-func LabelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
+func LabelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, labels map[string]string) map[string]string {
 	ls := map[string]string{
 		"app":                       "percona-server-mongodb",
 		"percona-server-mongodb_cr": m.Name,
 	}
-	if replset != nil {
-		ls["replset"] = replset.Name
+	for k, v := range labels {
+		ls[k] = v
 	}
 	return ls
 }
 
+// LabelsForPerconaServerMongoDB returns the labels for selecting the resources
+// belonging to the given PerconaServerMongoDB Replset.
+func LabelsForPerconaServerMongoDBReplset(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
+	return LabelsForPerconaServerMongoDB(m, map[string]string{"replset": replset.Name})
+}
+
 // GetLabelSelectorListOpts returns metav1.ListOptions with a label-selector for a given replset
 func GetLabelSelectorListOpts(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *metav1.ListOptions {
-	labelSelector := labels.SelectorFromSet(LabelsForPerconaServerMongoDB(m, replset)).String()
+	labelSelector := labels.SelectorFromSet(LabelsForPerconaServerMongoDB(
+		m,
+		map[string]string{"replset": replset.Name},
+	)).String()
 	return &metav1.ListOptions{LabelSelector: labelSelector}
 }
 

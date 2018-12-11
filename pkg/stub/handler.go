@@ -7,6 +7,7 @@ import (
 	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
@@ -40,6 +41,7 @@ type Handler struct {
 	watchdog      *watchdog.Watchdog
 	watchdogQuit  chan bool
 	startedAt     time.Time
+	backups       *backup.Controller
 }
 
 // ensureWatchdog ensures the PSMDB watchdog has started. This process controls the replica set and sharding
@@ -114,6 +116,16 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		if err != nil {
 			logrus.Errorf("failed to load psmdb user secrets: %v", err)
 			return err
+		}
+
+		// Start the backup controller if any backup is enabled
+		if h.hasBackupsEnabled(psmdb) {
+			h.backups = backup.New(h.client, psmdb, h.serverVersion, usersSecret)
+			err = h.backups.EnsureCoordinator()
+			if err != nil {
+				logrus.Errorf("failed to start/update backup coordinator: %v", err)
+				return err
+			}
 		}
 
 		// Ensure all replica sets exist. When sharding is supported this

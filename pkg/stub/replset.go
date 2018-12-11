@@ -9,7 +9,7 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
+	//"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
@@ -186,7 +186,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	}
 
 	// create the statefulset if a Get on the set name returns an error
-	set := newStatefulSet(m, m.Name+"-"+replset.Name)
+	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
 	err = h.client.Get(set)
 	if err != nil {
 
@@ -257,26 +257,8 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			return fmt.Errorf("failed to start watchdog: %v", err)
 		}
 
+		// Remove PVCs left-behind from scaling down if no update is running
 		if !util.IsStatefulSetUpdating(set) {
-			// Ensure backups are enabled/disabled
-			for _, backupSpec := range m.Spec.Backups {
-				bkp := backup.New(h.client, m, backupSpec, replset, h.serverVersion, podList.Items, usersSecret)
-				err = bkp.Create()
-				if err != nil {
-					if k8serrors.IsAlreadyExists(err) {
-						err = bkp.Update()
-						if err != nil {
-							logrus.Errorf("failed to update backup %s: %v", backupSpec.Name, err)
-							return err
-						}
-						continue
-					}
-					logrus.Errorf("failed to create backup %s: %v", backupSpec.Name, err)
-					return err
-				}
-			}
-
-			// Remove PVCs left-behind from scaling down if no update is running
 			err = h.persistentVolumeClaimReaper(m, podList.Items, replset, status)
 			if err != nil {
 				logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
