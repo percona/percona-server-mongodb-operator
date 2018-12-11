@@ -45,6 +45,9 @@ func (c *Controller) newCoordinatorPodSpec() corev1.PodSpec {
 				Name:            coordinatorContainerName,
 				Image:           coordinatorDockerImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
+				Args: []string{
+					"--enable-clients-logging",
+				},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "PMB_COORDINATOR_API_PORT",
