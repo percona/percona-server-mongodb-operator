@@ -2,8 +2,10 @@ package stub
 
 import (
 	"fmt"
+	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/operator-framework/operator-sdk/pkg/sdk"
+	opsSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,7 +14,7 @@ import (
 
 func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) error {
 	podsList := podList()
-	if err := h.client.List(m.Namespace, podsList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset))); err != nil {
+	if err := h.client.List(m.Namespace, podsList, opsSdk.WithListOptions(getLabelSelectorListOpts(m, replset))); err != nil {
 		return fmt.Errorf("failed to list pods for replset %s: %v", replset.Name, err)
 	}
 
@@ -24,7 +26,7 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 			}
 		}
 		svc := extService(m, pod.Name)
-		if err := h.createExtService(svc); err != nil {
+		if err := createExtService(h.client, svc); err != nil {
 			return fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
 		}
 	}
@@ -32,8 +34,8 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 	return nil
 }
 
-func (h *Handler) createExtService(svc *corev1.Service) error {
-	if err := h.client.Create(svc); err != nil {
+func createExtService(cli sdk.Client, svc *corev1.Service) error {
+	if err := cli.Create(svc); err != nil {
 		if !errors.IsAlreadyExists(err) {
 			return err
 		}
