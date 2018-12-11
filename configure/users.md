@@ -3,6 +3,31 @@ Users
 
 As it is written in the installation part, the Operator requires Kubernetes Secrets to be deployed before it is started. The name of the required secrets can be set in `deploy/cr.yaml` under the `spec.secrets` section.
 
+### Unprivileged users
+
+There are no unprivileged (general purpose) user accounts created by default.
+If you need general purpose users, please run commands below:
+```bash
+$ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
+mongodb@percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+rs0:PRIMARY> db.createUser({
+    user: "myApp",
+    pwd: "myAppPassword",
+    roles: [
+      { db: "myApp", role: "readWrite" }
+    ]
+})
+```
+
+Now check the newly created user:
+```bash
+$ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:3.6 --restart=Never -- bash -il
+mongodb@percona-client:/$ mongo "mongodb+srv://myApp:myAppPassword@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+rs0:PRIMARY> use myApp
+rs0:PRIMARY> db.test.insert({ x: 1 })
+rs0:PRIMARY> db.test.findOne()
+```
+
 ### MongoDB System Users
 
 *Default Secret name:* `my-cluster-name-mongodb-users`
