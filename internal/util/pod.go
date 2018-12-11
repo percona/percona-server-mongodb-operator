@@ -70,17 +70,3 @@ func IsPodReady(pod corev1.Pod) bool {
 	}
 	return false
 }
-
-// isContainerAndPodRunning returns a boolean reflecting if
-// a container and pod are in a running state
-func isContainerAndPodRunning(pod corev1.Pod, containerName string) bool {
-	if pod.Status.Phase != corev1.PodRunning {
-		return false
-	}
-	for _, container := range pod.Status.ContainerStatuses {
-		if container.Name == containerName && container.State.Running != nil {
-			return true
-		}
-	}
-	return false
-}

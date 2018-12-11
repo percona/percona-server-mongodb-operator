@@ -40,3 +40,17 @@ func GetSecret(m *v1alpha1.PerconaServerMongoDB, client sdk.Client, secretName s
 	err := client.Get(secret)
 	return secret, err
 }
+
+// EnvVarSourceFromSecret returns an corev1.EnvVarSource based
+// on a secret key
+func EnvVarSourceFromSecret(name, key string) *corev1.EnvVarSource {
+	return &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			Key: key,
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: name,
+			},
+			Optional: &FalseVar,
+		},
+	}
+}

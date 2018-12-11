@@ -44,27 +44,17 @@ func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, rep
 			},
 			{
 				Name: "PMB_AGENT_MONGODB_USER",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: motPkg.EnvMongoDBBackupUser,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: psmdb.Spec.Secrets.Users,
-						},
-						Optional: &util.FalseVar,
-					},
-				},
+				ValueFrom: util.EnvVarSourceFromSecret(
+					psmdb.Spec.Secrets.Users,
+					motPkg.EnvMongoDBBackupUser,
+				),
 			},
 			{
 				Name: "PMB_AGENT_MONGODB_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: motPkg.EnvMongoDBBackupPassword,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: psmdb.Spec.Secrets.Users,
-						},
-						Optional: &util.FalseVar,
-					},
-				},
+				ValueFrom: util.EnvVarSourceFromSecret(
+					psmdb.Spec.Secrets.Users,
+					motPkg.EnvMongoDBBackupPassword,
+				),
 			},
 		},
 		//WorkingDir: mongodContainerDataDir,
