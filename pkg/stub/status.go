@@ -62,6 +62,7 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*corev1.PodList, error) {
 	var doUpdate bool
 
+	// List the PSMDB pods
 	podsList := podList()
 	err := h.client.List(m.Namespace, podsList, sdk.WithListOptions(getLabelSelectorListOpts(m, replset)))
 	if err != nil {

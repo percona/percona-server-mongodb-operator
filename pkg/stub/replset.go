@@ -25,7 +25,7 @@ var (
 
 // getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
 func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
-	addrs := []string{}
+	addrs := make([]string, 0)
 	for _, pod := range pods {
 		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
 		addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
