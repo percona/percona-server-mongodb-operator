@@ -126,6 +126,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			return err
 		}
 
+		// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
 		err = h.ensureWatchdog(psmdb, usersSecret)
 		if err != nil {
 			return err
