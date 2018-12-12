@@ -137,10 +137,12 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 
 			// Ensure replset has external services
-			err = h.ensureExtServices(psmdb, replset)
-			if err != nil {
-				logrus.Errorf("failed to get services of replset %s: %v", replset.Name, err)
-				return err
+			if psmdb.Spec.ExposeExternally {
+				err = h.ensureExtServices(psmdb, replset)
+				if err != nil {
+					logrus.Errorf("failed to get services of replset %s: %v", replset.Name, err)
+					return err
+				}
 			}
 		}
 	}

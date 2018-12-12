@@ -38,13 +38,14 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Platform        *Platform         `json:"platform,omitempty"`
-	Version         string            `json:"version,omitempty"`
-	RunUID          int64             `json:"runUid,omitempty"`
-	Mongod          *MongodSpec       `json:"mongod,omitempty"`
-	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
-	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	Platform         *Platform         `json:"platform,omitempty"`
+	Version          string            `json:"version,omitempty"`
+	RunUID           int64             `json:"runUid,omitempty"`
+	Mongod           *MongodSpec       `json:"mongod,omitempty"`
+	Replsets         []*ReplsetSpec    `json:"replsets,omitempty"`
+	Secrets          *SecretsSpec      `json:"secrets,omitempty"`
+	ImagePullPolicy  corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	ExposeExternally bool              `json:"exposeExternally,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {

@@ -6,6 +6,7 @@ spec:
   #platform: openshift
   version: "3.6.8"
   imagePullPolicy: Always
+  exposeExternally: false
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users

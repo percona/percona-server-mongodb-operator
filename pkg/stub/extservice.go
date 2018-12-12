@@ -2,7 +2,7 @@ package stub
 
 import (
 	"fmt"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
+	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	opsSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	corev1 "k8s.io/api/core/v1"
@@ -58,7 +58,7 @@ func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 		if errors.IsConflict(err) {
 			retries += 1
 			time.Sleep(500 * time.Millisecond)
-			_ := updateExtService(cli, svc)
+			err = updateExtService(cli, svc)
 		}
 		return err
 	}
