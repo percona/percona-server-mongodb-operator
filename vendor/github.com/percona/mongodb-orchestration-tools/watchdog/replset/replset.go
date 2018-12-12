@@ -46,7 +46,7 @@ func New(config *config.Config, name string) *Replset {
 
 func (r *Replset) getAddrs() []string {
 	addrs := []string{}
-	for _, member := range r.GetMembers() {
+	for _, member := range r.members {
 		addrs = append(addrs, member.Name())
 	}
 	return addrs
@@ -105,6 +105,9 @@ func (r *Replset) GetMembers() map[string]*Mongod {
 
 // GetReplsetDBConfig returns a db.Config for the MongoDB Replica Set
 func (r *Replset) GetReplsetDBConfig(sslCnf *db.SSLConfig) *db.Config {
+	r.Lock()
+	defer r.Unlock()
+
 	cnf := &db.Config{
 		DialInfo: &mgo.DialInfo{
 			Addrs:          r.getAddrs(),

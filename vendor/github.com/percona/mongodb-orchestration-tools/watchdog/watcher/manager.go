@@ -78,10 +78,12 @@ func (wm *WatcherManager) Watch(rs *replset.Replset) {
 }
 
 func (wm *WatcherManager) Get(rsName string) *Watcher {
-	if !wm.HasWatcher(rsName) {
-		return nil
+	wm.Lock()
+	defer wm.Unlock()
+	if _, ok := wm.watchers[rsName]; ok {
+		return wm.watchers[rsName]
 	}
-	return wm.watchers[rsName]
+	return nil
 }
 
 func (wm *WatcherManager) Stop(rsName string) {

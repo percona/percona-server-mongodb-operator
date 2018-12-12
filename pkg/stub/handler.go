@@ -11,9 +11,12 @@ import (
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
+	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 
 	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
@@ -46,22 +49,30 @@ type Handler struct {
 //
 // See: https://github.com/percona/mongodb-orchestration-tools/tree/master/watchdog
 //
-func (h *Handler) ensureWatchdog(m *v1alpha1.PerconaServerMongoDB, usersSecret *corev1.Secret) error {
+func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecret *corev1.Secret) error {
 	// Skip if watchdog is started
 	if h.watchdog != nil {
 		return nil
 	}
 
+	if h.pods == nil {
+		h.pods = podk8s.NewPods(psmdb.Name, psmdb.Namespace)
+	}
+
 	// Start the watchdog if it has not been started
+	metricsCollector := wdMetrics.NewCollector()
 	h.watchdog = watchdog.New(&wdConfig.Config{
-		ServiceName:    m.Name,
+		ServiceName:    psmdb.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 3 * time.Second,
-	}, &h.watchdogQuit, h.pods)
+	}, h.pods, metricsCollector, &h.watchdogQuit)
 	go h.watchdog.Run()
+
+	// register prometheus collector
+	prometheus.MustRegister(metricsCollector)
 
 	return nil
 }
@@ -115,8 +126,15 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			return err
 		}
 
+		err = h.ensureWatchdog(psmdb, usersSecret)
+		if err != nil {
+			return err
+		}
+
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
+		clusterPods := make([]corev1.Pod, 0)
+		clusterSets := make([]appsv1.StatefulSet, 0)
 		for _, replset := range psmdb.Spec.Replsets {
 			// Update the PSMDB status
 			podsList, err := h.updateStatus(psmdb, replset, usersSecret)
@@ -124,9 +142,10 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to update psmdb status for replset %s: %v", replset.Name, err)
 				return err
 			}
+			clusterPods = append(clusterPods, podsList.Items...)
 
 			// Ensure replset exists and has correct state, PVCs, etc
-			err = h.ensureReplset(psmdb, podsList, replset, usersSecret)
+			set, err := h.ensureReplset(psmdb, podsList, replset, usersSecret)
 			if err != nil {
 				if err == ErrNoRunningMongodContainers {
 					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)
@@ -135,7 +154,11 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
 				return err
 			}
+			clusterSets = append(clusterSets, *set)
 		}
+
+		// Update the pods+statefulsets list that is read by the watchdog
+		h.pods.Update(clusterPods, clusterSets)
 	}
 	return nil
 }
