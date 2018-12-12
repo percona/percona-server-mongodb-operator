@@ -4,8 +4,8 @@
 [[projects]]
   name = "cloud.google.com/go"
   packages = ["compute/metadata"]
-  revision = "1fd54cf41e6e0e178ffe3c52b0e2260281f603e3"
-  version = "v0.32.0"
+  revision = "0ebda48a7f143b1cce9eb37a8c1106ac762a3430"
+  version = "v0.34.0"
 
 [[projects]]
   name = "github.com/PuerkitoBio/purell"
@@ -106,8 +106,8 @@
     "proto",
     "sortkeys"
   ]
-  revision = "636bf0302bc95575d69441b25a2603156ffdddf1"
-  version = "v1.1.1"
+  revision = "4cbf7e384e768b4e01799441fdf2a706a5635ae7"
+  version = "v1.2.0"
 
 [[projects]]
   branch = "master"
@@ -156,7 +156,7 @@
     ".",
     "diskcache"
   ]
-  revision = "9cad4c3443a7200dd6400aef47183728de563a38"
+  revision = "c63ab54fda8f77302f8d414e19933f2b6026a089"
 
 [[projects]]
   name = "github.com/hashicorp/golang-lru"
@@ -186,14 +186,14 @@
     "gzip",
     "zlib"
   ]
-  revision = "b939724e787a27c0005cabe3f78e7ed7987ac74f"
-  version = "v1.4.0"
+  revision = "30be6041bed523c18e269a700ebd9c2ea9328574"
+  version = "v1.4.1"
 
 [[projects]]
   name = "github.com/klauspost/cpuid"
   packages = ["."]
-  revision = "ae7887de9fa5d2db4eaa8174a7eff2c1ac00f2da"
-  version = "v1.1"
+  revision = "e7e905edc00ea8827e58662220139109efea09db"
+  version = "v1.2.0"
 
 [[projects]]
   name = "github.com/konsorten/go-windows-terminal-sequences"
@@ -286,8 +286,8 @@
     "prometheus/internal",
     "prometheus/promhttp"
   ]
-  revision = "abad2d1bd44235a26707c172eab6bca5bf2dbad3"
-  version = "v0.9.1"
+  revision = "505eaef017263e299324067d40ca2c48f6a2cf50"
+  version = "v0.9.2"
 
 [[projects]]
   branch = "master"
@@ -303,7 +303,7 @@
     "internal/bitbucket.org/ww/goautoneg",
     "model"
   ]
-  revision = "7e9e6cabbd393fc208072eedef99188d0ce788b6"
+  revision = "4724e9255275ce38f7179b2478abeae4e28c904f"
 
 [[projects]]
   branch = "master"
@@ -314,7 +314,7 @@
     "nfs",
     "xfs"
   ]
-  revision = "185b4288413d2a0dd0806f78c90dde719829e5ae"
+  revision = "1dc9a6cbc91aacc3e8b2d63db4d2e957a5394ac4"
 
 [[projects]]
   name = "github.com/sirupsen/logrus"
@@ -372,7 +372,7 @@
   branch = "master"
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
-  revision = "e4dc69e5b2fd71dcaf8bd5d054eb936deb78d1fa"
+  revision = "505ab145d0a99da450461ae2c1a9f6cd10d1f447"
 
 [[projects]]
   branch = "master"
@@ -385,7 +385,7 @@
     "http2/hpack",
     "idna"
   ]
-  revision = "10aee181995363b41f712a55844a0dd52ea04646"
+  revision = "610586996380ceef02dd726cc09df7e00a3f8e56"
 
 [[projects]]
   branch = "master"
@@ -397,7 +397,7 @@
     "jws",
     "jwt"
   ]
-  revision = "f42d05182288abf10faef86d16c0d07b8d40ea2d"
+  revision = "d668ce993890a79bda886613ee587a69dd5da7a6"
 
 [[projects]]
   branch = "master"
@@ -406,7 +406,7 @@
     "unix",
     "windows"
   ]
-  revision = "3a76605856fddce5718553cbb8bd50ca492a7274"
+  revision = "b05ddf57801d2239d6ab0ee35f9d981e0420f4ac"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -434,7 +434,7 @@
   branch = "master"
   name = "golang.org/x/time"
   packages = ["rate"]
-  revision = "fbb02b2291d28baffd63558aa44b4b56f178d650"
+  revision = "85acf8d2951cb2a3bde7632f9ff273ef0379bcbd"
 
 [[projects]]
   branch = "master"
@@ -445,7 +445,7 @@
     "internal/fastwalk",
     "internal/gopathwalk"
   ]
-  revision = "e21233ffa6c386fc230b4328493f77af54ff9372"
+  revision = "49db546f375eee2dbfef045773161e6a4ea59c2f"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -485,8 +485,8 @@
 [[projects]]
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  revision = "5420a8b6744d3b0345ab293f6fcba19c978f1183"
-  version = "v2.2.1"
+  revision = "51d6538a90f86fe93ac480b35f37b2be17fef232"
+  version = "v2.2.2"
 
 [[projects]]
   name = "k8s.io/api"
@@ -525,7 +525,6 @@
   version = "kubernetes-1.11.4"
 
 [[projects]]
-  branch = "release-1.11"
   name = "k8s.io/apimachinery"
   packages = [
     "pkg/api/errors",
@@ -572,6 +571,7 @@
     "third_party/forked/golang/reflect"
   ]
   revision = "8ee1a638bafa4ae9691077e690cb45dd54f45111"
+  version = "kubernetes-1.11.4"
 
 [[projects]]
   name = "k8s.io/client-go"
@@ -647,7 +647,6 @@
   version = "kubernetes-1.11.4"
 
 [[projects]]
-  branch = "release-1.11"
   name = "k8s.io/code-generator"
   packages = [
     "cmd/client-gen",
@@ -676,6 +675,7 @@
     "pkg/util"
   ]
   revision = "8c97d6ab64da020f8b151e9d3ed8af3172f5c390"
+  version = "kubernetes-1.11.3"
 
 [[projects]]
   branch = "master"
@@ -690,13 +690,13 @@
     "parser",
     "types"
   ]
-  revision = "51747d6e00da1fc578d5a333a93bb2abcbce7a95"
+  revision = "fd15ee9cc2f77baa4f31e59e6acbf21146455073"
 
 [[projects]]
-  branch = "master"
   name = "k8s.io/klog"
   packages = ["."]
-  revision = "b9b56d5dfc9208f60ea747056670942d8b0afdc8"
+  revision = "a5bc97fbc634d635061f3146511332c7e313a55a"
+  version = "v0.1.0"
 
 [[projects]]
   branch = "master"
@@ -708,7 +708,7 @@
     "pkg/generators/rules",
     "pkg/util/sets"
   ]
-  revision = "a9a16210091c9a2b6a937e06a182955c03654c4c"
+  revision = "0317810137be915b9cf888946c6e115c1bfac693"
 
 [solve-meta]
   analyzer-name = "dep"
