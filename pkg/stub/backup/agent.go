@@ -31,10 +31,6 @@ func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, rep
 				Value: c.coordinatorRPCAddress(psmdb),
 			},
 			{
-				Name:  "PMB_AGENT_REPLICASET",
-				Value: replset.Name,
-			},
-			{
 				Name:  "PMB_AGENT_MONGODB_HOST",
 				Value: "127.0.0.1",
 			},
@@ -55,6 +51,10 @@ func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, rep
 					psmdb.Spec.Secrets.Users,
 					motPkg.EnvMongoDBBackupPassword,
 				),
+			},
+			{
+				Name:  "PMB_AGENT_MONGODB_RECONNECT_DELAY",
+				Value: "30",
 			},
 		},
 		//WorkingDir: mongodContainerDataDir,

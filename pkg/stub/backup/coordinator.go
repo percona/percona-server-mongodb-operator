@@ -31,7 +31,7 @@ var coordinatorLabels = map[string]string{
 }
 
 func (c *Controller) coordinatorRPCAddress(psmdb *v1alpha1.PerconaServerMongoDB) string {
-	return c.coordinatorStatefulSetName() + "." + psmdb.Namespace + ".svc:" + strconv.Itoa(int(coordinatorRPCPort))
+	return c.coordinatorStatefulSetName() + "." + psmdb.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(coordinatorRPCPort))
 }
 
 func (c *Controller) coordinatorStatefulSetName() string {
