@@ -210,11 +210,6 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 
 	// Ensure the spec is up to date
 	return h.handleStatefulSetUpdate(m, set, replset, &resources)
-	//if err != nil {
-	//		return nil, err
-	//	}
-
-	//	return set, nil
 }
 
 // ensureReplset ensures resources for a PSMDB replset exist
@@ -242,14 +237,6 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 		logrus.Infof("changed state to initialised for replset %s", replset.Name)
 	}
-
-	// ensure the watchdog is started if a replset is initialized
-	//if isReplsetInitialized(m, replset, status, podList, usersSecret) {
-	//	err = h.ensureWatchdog(m, usersSecret)
-	//	if err != nil {
-	//		return nil, fmt.Errorf("failed to start watchdog: %v", err)
-	//	}
-	//}
 
 	// Remove PVCs left-behind from scaling down if no update is running
 	if !isStatefulSetUpdating(set) {
