@@ -112,17 +112,14 @@ func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 	defer p.Unlock()
 
 	tasks := make([]pod.Task, 0)
-	for _, pod := range p.pods {
+	for i := range p.pods {
+		pod := &p.pods[i]
 		if pod.Name != podName {
 			continue
 		}
-		statefulset := p.getStatefulSetFromPod(&pod)
-		if statefulset == nil {
-			return tasks, errors.New("cannot find statefulset for pod")
-		}
 		tasks = append(
 			tasks,
-			NewTask(&pod, statefulset, p.serviceName, p.namespace),
+			NewTask(pod, p.getStatefulSetFromPod(pod), p.serviceName, p.namespace),
 		)
 	}
 	return tasks, nil
