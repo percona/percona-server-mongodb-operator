@@ -7,7 +7,6 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
-	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/sirupsen/logrus"
 	mgo "gopkg.in/mgo.v2"
 	corev1 "k8s.io/api/core/v1"
@@ -90,12 +89,6 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 		}
 	}
-
-	// Update the pods list that is read by the watchdog
-	if h.pods == nil {
-		h.pods = podk8s.NewPods(m.Name, m.Namespace)
-	}
-	h.pods.SetPods(podsList.Items)
 
 	return podsList, nil
 }

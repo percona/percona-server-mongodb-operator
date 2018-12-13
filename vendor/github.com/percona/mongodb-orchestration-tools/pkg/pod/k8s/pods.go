@@ -15,10 +15,13 @@
 package k8s
 
 import (
+	"errors"
 	"os"
 	"sync"
 
+	"github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -29,17 +32,30 @@ const (
 
 func NewPods(serviceName, namespace string) *Pods {
 	return &Pods{
-		namespace:   namespace,
-		serviceName: serviceName,
-		pods:        make([]corev1.Pod, 0),
+		namespace:    namespace,
+		serviceName:  serviceName,
+		pods:         make([]corev1.Pod, 0),
+		statefulsets: make([]appsv1.StatefulSet, 0),
 	}
 }
 
 type Pods struct {
 	sync.Mutex
-	namespace   string
-	serviceName string
-	pods        []corev1.Pod
+	namespace    string
+	serviceName  string
+	pods         []corev1.Pod
+	statefulsets []appsv1.StatefulSet
+}
+
+func getPodReplsetName(pod *corev1.Pod) (string, error) {
+	for _, container := range pod.Spec.Containers {
+		for _, env := range container.Env {
+			if env.Name == pkg.EnvMongoDBReplset {
+				return env.Value, nil
+			}
+		}
+	}
+	return "", errors.New("could not find mongodb replset name")
 }
 
 func (p *Pods) Name() string {
@@ -55,10 +71,11 @@ func (p *Pods) URL() string {
 	return "tcp://" + host + ":" + port
 }
 
-func (p *Pods) SetPods(pods []corev1.Pod) {
+func (p *Pods) Update(pods []corev1.Pod, statefulsets []appsv1.StatefulSet) {
 	p.Lock()
 	defer p.Unlock()
 	p.pods = pods
+	p.statefulsets = statefulsets
 }
 
 func (p *Pods) Pods() ([]string, error) {
@@ -75,16 +92,35 @@ func (p *Pods) Pods() ([]string, error) {
 	return pods, nil
 }
 
+func (p *Pods) getStatefulSetFromPod(pod *corev1.Pod) *appsv1.StatefulSet {
+	replsetName, err := getPodReplsetName(pod)
+	if err != nil {
+		return nil
+	}
+	setServiceName := p.serviceName + "-" + replsetName
+	for i, statefulset := range p.statefulsets {
+		if statefulset.Spec.ServiceName != setServiceName {
+			continue
+		}
+		return &p.statefulsets[i]
+	}
+	return nil
+}
+
 func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 	p.Lock()
 	defer p.Unlock()
 
 	tasks := make([]pod.Task, 0)
-	for _, pod := range p.pods {
+	for i := range p.pods {
+		pod := &p.pods[i]
 		if pod.Name != podName {
 			continue
 		}
-		tasks = append(tasks, NewTask(pod, p.serviceName, p.namespace))
+		tasks = append(
+			tasks,
+			NewTask(pod, p.getStatefulSetFromPod(pod), p.serviceName, p.namespace),
+		)
 	}
 	return tasks, nil
 }

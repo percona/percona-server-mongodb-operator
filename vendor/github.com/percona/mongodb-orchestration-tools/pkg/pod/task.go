@@ -21,8 +21,10 @@ import (
 type TaskType string
 
 var (
-	TaskTypeMongod TaskType = "mongod"
-	TaskTypeMongos TaskType = "mongos"
+	TaskTypeMongod    TaskType = "mongod"
+	TaskTypeArbiter   TaskType = "arbiter"
+	TaskTypeConfigSvr TaskType = "configsvr"
+	TaskTypeMongos    TaskType = "mongos"
 )
 
 func (t TaskType) String() string {
@@ -38,6 +40,7 @@ type Task interface {
 	State() TaskState
 	HasState() bool
 	IsRunning() bool
+	IsUpdating() bool
 	IsTaskType(taskType TaskType) bool
 	GetMongoAddr() (*db.Addr, error)
 	GetMongoReplsetName() (string, error)
