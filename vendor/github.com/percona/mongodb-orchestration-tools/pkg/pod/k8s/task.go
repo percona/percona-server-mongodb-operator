@@ -18,9 +18,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -49,13 +49,15 @@ func (ts TaskState) String() string {
 
 type Task struct {
 	pod         *corev1.Pod
+	statefulset *appsv1.StatefulSet
 	serviceName string
 	namespace   string
 }
 
-func NewTask(pod corev1.Pod, serviceName, namespace string) *Task {
+func NewTask(pod *corev1.Pod, statefulset *appsv1.StatefulSet, serviceName, namespace string) *Task {
 	return &Task{
-		pod:         &pod,
+		pod:         pod,
+		statefulset: statefulset,
 		namespace:   namespace,
 		serviceName: serviceName,
 	}
@@ -83,6 +85,17 @@ func (t *Task) IsRunning() bool {
 		}
 	}
 	return true
+}
+
+func (t *Task) IsUpdating() bool {
+	if t.statefulset == nil {
+		return false
+	}
+	status := t.statefulset.Status
+	if status.CurrentRevision != status.UpdateRevision {
+		return true
+	}
+	return status.ReadyReplicas != status.CurrentReplicas
 }
 
 func (t *Task) IsTaskType(taskType pod.TaskType) bool {
@@ -127,12 +140,5 @@ func (t *Task) GetMongoAddr() (*db.Addr, error) {
 }
 
 func (t *Task) GetMongoReplsetName() (string, error) {
-	for _, container := range t.pod.Spec.Containers {
-		for _, env := range container.Env {
-			if env.Name == pkg.EnvMongoDBReplset {
-				return env.Value, nil
-			}
-		}
-	}
-	return "", errors.New("could not find mongodb replset name")
+	return getPodReplsetName(t.pod)
 }

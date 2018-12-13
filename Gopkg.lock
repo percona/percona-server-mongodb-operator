@@ -255,10 +255,11 @@
     "pkg/pod/k8s",
     "watchdog",
     "watchdog/config",
+    "watchdog/metrics",
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "e64e668d6d516e4f224e936adca9fae3c97932f7"
+  revision = "a354b7681f625ac7657dbaf3e50485cf792af769"
 
 [[projects]]
   branch = "master"
@@ -405,7 +406,7 @@
     "unix",
     "windows"
   ]
-  revision = "b05ddf57801d2239d6ab0ee35f9d981e0420f4ac"
+  revision = "73d4af5aa059c8c2dfcf25aad4efd6ce7bc9adc1"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -712,6 +713,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6bfc57972a44aacfd1c908e3a6e35075ba82f68085db32edd66647126fcbf04a"
+  inputs-digest = "9f59ffcb4e3dfbe28367230c2e87dc8209b25430bd2bc5f09c879af93ee08a1f"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -76,8 +76,10 @@ func TestHandlerHandle(t *testing.T) {
 		watchdogQuit: make(chan bool),
 	}
 
-	// test Handler with no existing stateful sets
+	// test Handler with no existing stateful sets, test watchdog is started
+	assert.Nil(t, h.watchdog)
 	assert.NoError(t, h.Handle(context.TODO(), event))
+	assert.NotNil(t, h.watchdog)
 	client.AssertExpectations(t)
 
 	// test Handler with existing stateful set (mocked)
@@ -105,20 +107,6 @@ func TestHandlerHandle(t *testing.T) {
 	lastCall := client.Calls[calls-1]
 	assert.Equal(t, "Create", lastCall.Method)
 	assert.IsType(t, &corev1.Service{}, lastCall.Arguments.Get(0))
-
-	// test watchdog is started when 1+ replsets are initializaed
-	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
-	assert.Nil(t, h.watchdog)
-	psmdb.Status = v1alpha1.PerconaServerMongoDBStatus{
-		Replsets: []*v1alpha1.ReplsetStatus{
-			{
-				Name:        config.DefaultReplsetName,
-				Initialized: true,
-			},
-		},
-	}
-	assert.NoError(t, h.Handle(context.TODO(), event))
-	assert.NotNil(t, h.watchdog)
 
 	// test watchdog is stopped by a 'Deleted' SDK event
 	event.Deleted = true
