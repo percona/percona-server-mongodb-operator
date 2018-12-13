@@ -137,6 +137,13 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		clusterPods := make([]corev1.Pod, 0)
 		clusterSets := make([]appsv1.StatefulSet, 0)
 		for _, replset := range psmdb.Spec.Replsets {
+			// multiple replica sets is not supported until sharding is
+			// added to the operator
+			if i > 0 {
+				logrus.Errorf("multiple replica sets is not yet supported, skipping replset: %s", replset.Name)
+				continue
+			}
+
 			// Update the PSMDB status
 			podsList, err := h.updateStatus(psmdb, replset, usersSecret)
 			if err != nil {
