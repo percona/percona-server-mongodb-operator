@@ -129,8 +129,8 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			return err
 		}
 
-		// Start the backup controller if any backup is enabled
-		if h.hasBackupsEnabled(psmdb) {
+		// Ensure the backup coordinator is started if any backups are enabled
+		if h.backups == nil && h.hasBackupsEnabled(psmdb) {
 			h.backups = backup.New(h.client, psmdb, h.serverVersion, usersSecret)
 			err = h.backups.EnsureCoordinator()
 			if err != nil {
