@@ -136,7 +136,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// loop will create the cluster shards and config server replset
 		clusterPods := make([]corev1.Pod, 0)
 		clusterSets := make([]appsv1.StatefulSet, 0)
-		for _, replset := range psmdb.Spec.Replsets {
+		for i, replset := range psmdb.Spec.Replsets {
 			// multiple replica sets is not supported until sharding is
 			// added to the operator
 			if i > 0 {
