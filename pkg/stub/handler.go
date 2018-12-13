@@ -117,7 +117,14 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
-		for _, replset := range psmdb.Spec.Replsets {
+		for i, replset := range psmdb.Spec.Replsets {
+			// multiple replica sets is not supported until sharding is
+			// added to the operator
+			if i > 0 {
+				logrus.Errorf("multiple replica sets is not yet supported, skipping replset: %s", replset.Name)
+				continue
+			}
+
 			// Update the PSMDB status
 			podsList, err := h.updateStatus(psmdb, replset, usersSecret)
 			if err != nil {
