@@ -172,9 +172,10 @@ func (c *Controller) EnsureCoordinator() error {
 				logrus.Infof("failed to update backup coordinator stateful set %s: %v", set.Name, err)
 				return err
 			}
+		} else {
+			logrus.Infof("failed to create backup coordinator stateful set %s: %v", set.Name, err)
+			return err
 		}
-		logrus.Infof("failed to create backup coordinator stateful set %s: %v", set.Name, err)
-		return err
 	} else {
 		logrus.Infof("created backup coordinator stateful set: %s", set.Name)
 	}

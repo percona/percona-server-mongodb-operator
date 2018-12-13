@@ -226,7 +226,6 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	// Create the StatefulSet if it doesn't exist
 	set, err := h.ensureReplsetStatefulSet(m, replset)
 	if err != nil {
-		logrus.Errorf("failed to create stateful set for replset %s: %v", replset.Name, err)
 		return nil, err
 	}
 

@@ -244,6 +244,5 @@ type BackupSpec struct {
 type BackupStatus struct {
 	Enabled bool   `json:"enabled"`
 	Name    string `json:"name,omitempty"`
-	CronJob string `json:"cronJob,omitempty"`
 	Replset string `json:"replset,omitempty"`
 }
