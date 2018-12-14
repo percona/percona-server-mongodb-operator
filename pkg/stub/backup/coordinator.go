@@ -17,7 +17,7 @@ import (
 
 const (
 	coordinatorContainerName = "backup-coordinator"
-	coordinatorDockerImage   = "percona/mongodb-backup:coordinator"
+	coordinatorDockerImage   = "percona/percona-backup-mongodb:coordinator"
 	coordinatorDataMount     = "/data"
 	coordinatorDataVolume    = "backup-coordinator-data"
 	coordinatorAPIPort       = int32(10001)
@@ -50,15 +50,15 @@ func (c *Controller) newCoordinatorPodSpec() corev1.PodSpec {
 				},
 				Env: []corev1.EnvVar{
 					{
-						Name:  "PMB_COORDINATOR_API_PORT",
+						Name:  "PBM_COORDINATOR_API_PORT",
 						Value: strconv.Itoa(int(coordinatorAPIPort)),
 					},
 					{
-						Name:  "PMB_COORDINATOR_GRPC_PORT",
+						Name:  "PBM_COORDINATOR_GRPC_PORT",
 						Value: strconv.Itoa(int(coordinatorRPCPort)),
 					},
 					{
-						Name:  "PMB_COORDINATOR_WORK_DIR",
+						Name:  "PBM_COORDINATOR_WORK_DIR",
 						Value: coordinatorDataMount,
 					},
 				},

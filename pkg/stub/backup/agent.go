@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	agentContainerImage       = "percona/mongodb-backup:agent"
+	agentContainerImage       = "percona/percona-backup-mongodb:agent"
 	agentContainerName        = "backup-agent"
 	agentBackupDataMount      = "/backup"
 	agentBackupDataVolumeName = "backup-data"
@@ -23,41 +23,41 @@ func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, rep
 		Image: agentContainerImage,
 		Env: []corev1.EnvVar{
 			//{
-			//	Name: "PMB_AGENT_BACKUP_DIR",
+			//	Name: "PBM_AGENT_BACKUP_DIR",
 			//	Value: agentBackupDataMount,
 			//},
 			{
-				Name:  "PMB_AGENT_SERVER_ADDRESS",
+				Name:  "PBM_AGENT_SERVER_ADDRESS",
 				Value: c.coordinatorRPCAddress(psmdb),
 			},
 			{
-				Name:  "PMB_AGENT_MONGODB_HOST",
+				Name:  "PBM_AGENT_MONGODB_HOST",
 				Value: "127.0.0.1",
 			},
 			{
-				Name:  "PMB_AGENT_MONGODB_PORT",
+				Name:  "PBM_AGENT_MONGODB_PORT",
 				Value: strconv.Itoa(int(psmdb.Spec.Mongod.Net.Port)),
 			},
 			{
-				Name: "PMB_AGENT_MONGODB_USER",
+				Name: "PBM_AGENT_MONGODB_USER",
 				ValueFrom: util.EnvVarSourceFromSecret(
 					psmdb.Spec.Secrets.Users,
 					motPkg.EnvMongoDBBackupUser,
 				),
 			},
 			{
-				Name: "PMB_AGENT_MONGODB_PASSWORD",
+				Name: "PBM_AGENT_MONGODB_PASSWORD",
 				ValueFrom: util.EnvVarSourceFromSecret(
 					psmdb.Spec.Secrets.Users,
 					motPkg.EnvMongoDBBackupPassword,
 				),
 			},
 			{
-				Name:  "PMB_AGENT_MONGODB_RECONNECT_DELAY",
+				Name:  "PBM_AGENT_MONGODB_RECONNECT_DELAY",
 				Value: "30",
 			},
 		},
-		//WorkingDir: mongodContainerDataDir,
+		//WorkingDir: agentBackupDataMount,
 		//Resources: util.GetContainerResourceRequirements(resources),
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &util.TrueVar,

@@ -8,7 +8,7 @@ import (
 
 const (
 	schedulerContainerName = "backup-scheduler"
-	schedulerDockerImage   = "percona/mongodb-backup:scheduler"
+	schedulerDockerImage   = "percona/percona-backup-mongodb:scheduler"
 )
 
 func (c *Controller) newSchedulerPodSpec() corev1.PodSpec {
@@ -20,7 +20,7 @@ func (c *Controller) newSchedulerPodSpec() corev1.PodSpec {
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Env: []corev1.EnvVar{
 					{
-						Name:  "PMB_SCHEDULER_SERVER_ADDRESS",
+						Name:  "PBM_SCHEDULER_SERVER_ADDRESS",
 						Value: c.coordinatorRPCAddress(c.psmdb),
 					},
 				},
