@@ -17,7 +17,7 @@ const (
 	agentBackupDataVolumeName = "backup-data"
 )
 
-func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) corev1.Container {
+func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Container {
 	return corev1.Container{
 		Name:  agentContainerName,
 		Image: agentContainerImage,
@@ -28,7 +28,7 @@ func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, rep
 			//},
 			{
 				Name:  "PBM_AGENT_SERVER_ADDRESS",
-				Value: c.coordinatorRPCAddress(psmdb),
+				Value: c.coordinatorRPCAddress(),
 			},
 			{
 				Name:  "PBM_AGENT_MONGODB_HOST",
@@ -36,19 +36,19 @@ func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, rep
 			},
 			{
 				Name:  "PBM_AGENT_MONGODB_PORT",
-				Value: strconv.Itoa(int(psmdb.Spec.Mongod.Net.Port)),
+				Value: strconv.Itoa(int(c.psmdb.Spec.Mongod.Net.Port)),
 			},
 			{
 				Name: "PBM_AGENT_MONGODB_USER",
 				ValueFrom: util.EnvVarSourceFromSecret(
-					psmdb.Spec.Secrets.Users,
+					c.psmdb.Spec.Secrets.Users,
 					motPkg.EnvMongoDBBackupUser,
 				),
 			},
 			{
 				Name: "PBM_AGENT_MONGODB_PASSWORD",
 				ValueFrom: util.EnvVarSourceFromSecret(
-					psmdb.Spec.Secrets.Users,
+					c.psmdb.Spec.Secrets.Users,
 					motPkg.EnvMongoDBBackupPassword,
 				),
 			},
@@ -61,7 +61,7 @@ func (c *Controller) NewAgentContainer(psmdb *v1alpha1.PerconaServerMongoDB, rep
 		//Resources: util.GetContainerResourceRequirements(resources),
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &util.TrueVar,
-			RunAsUser:    util.GetContainerRunUID(psmdb, c.serverVersion),
+			RunAsUser:    util.GetContainerRunUID(c.psmdb, c.serverVersion),
 		},
 		//VolumeMounts: []corev1.VolumeMount{
 		//	{

@@ -116,7 +116,7 @@ func (s *State) getMaxIDVotingMember() *rsConfig.Member {
 func (s *State) getMinIDNonVotingMember() *rsConfig.Member {
 	var minIDMember *rsConfig.Member
 	for _, member := range s.Config.Members {
-		if member.Votes == 1 {
+		if member.Votes == 1 || member.Hidden {
 			continue
 		}
 		if minIDMember == nil || member.Id < minIDMember.Id {
@@ -127,7 +127,14 @@ func (s *State) getMinIDNonVotingMember() *rsConfig.Member {
 }
 
 func (s *State) resetConfigVotes() {
-	totalMembers := len(s.Config.Members)
+	totalMembers := 0
+	totalVoteable := 0
+	for _, member := range s.Config.Members {
+		if !member.Hidden {
+			totalVoteable++
+		}
+		totalMembers++
+	}
 	votingMembers := s.VotingMembers()
 
 	if !isEven(votingMembers) && votingMembers <= MaxVotingMembers && votingMembers >= MinVotingMembers {
@@ -136,12 +143,13 @@ func (s *State) resetConfigVotes() {
 
 	log.WithFields(log.Fields{
 		"total_members":  totalMembers,
-		"voting_members": votingMembers,
+		"total_voteable": totalVoteable,
+		"voting":         votingMembers,
 		"voting_max":     MaxVotingMembers,
 	}).Info("Adjusting replica set votes")
 
 	for isEven(votingMembers) || votingMembers > MaxVotingMembers {
-		if isEven(votingMembers) && votingMembers < MaxVotingMembers && totalMembers > votingMembers {
+		if isEven(votingMembers) && votingMembers < MaxVotingMembers && totalVoteable > votingMembers {
 			member := s.getMinIDNonVotingMember()
 			if member != nil && votingMembers < MaxVotingMembers {
 				log.Infof("Adding replica set vote to member: %s", member.Host)

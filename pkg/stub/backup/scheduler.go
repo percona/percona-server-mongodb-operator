@@ -21,7 +21,7 @@ func (c *Controller) newSchedulerPodSpec() corev1.PodSpec {
 				Env: []corev1.EnvVar{
 					{
 						Name:  "PBM_SCHEDULER_SERVER_ADDRESS",
-						Value: c.coordinatorRPCAddress(c.psmdb),
+						Value: c.coordinatorRPCAddress(),
 					},
 				},
 				//Resources:  util.GetContainerResourceRequirements(resources),

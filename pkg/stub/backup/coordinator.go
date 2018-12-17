@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -30,8 +29,8 @@ var coordinatorLabels = map[string]string{
 	"backup-coordinator": "true",
 }
 
-func (c *Controller) coordinatorRPCAddress(psmdb *v1alpha1.PerconaServerMongoDB) string {
-	return c.coordinatorStatefulSetName() + "." + psmdb.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(coordinatorRPCPort))
+func (c *Controller) coordinatorRPCAddress() string {
+	return c.coordinatorStatefulSetName() + "." + c.psmdb.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(coordinatorRPCPort))
 }
 
 func (c *Controller) coordinatorStatefulSetName() string {

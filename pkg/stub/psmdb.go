@@ -132,6 +132,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 				RestartPolicy: corev1.RestartPolicyAlways,
 				Containers: []corev1.Container{
 					mongod.NewContainer(m, replset, resources, runUID),
+					h.backups.NewAgentContainer(replset),
 				},
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: runUID,

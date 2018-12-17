@@ -10,7 +10,6 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
@@ -265,7 +264,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			continue
 		}
 
-		set := backup.NewBackupStatefulSet(m, replset, resources, resources, nil)
+		set := h.backups.NewBackupStatefulSet(m, replset, resources, resources, nil)
 		err = h.client.Create(set)
 		if err != nil {
 			if !k8serrors.IsAlreadyExists(err) {
