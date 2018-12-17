@@ -10,7 +10,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	//"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
@@ -167,12 +167,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 }
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
-func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.StatefulSet, error) {
-	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
-	if err != nil {
-		return nil, err
-	}
-
+func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	// Check if 'resources.limits.storage' is unset
 	// https://jira.percona.com/browse/CLOUD-42
 	if _, ok := resources.Limits[corev1.ResourceStorage]; !ok {
@@ -181,7 +176,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 
 	// create the statefulset if a Get on the set name returns an error
 	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
-	err = h.client.Get(set)
+	err := h.client.Get(set)
 	if err != nil {
 
 		lf := logrus.Fields{
@@ -217,8 +212,13 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*appsv1.StatefulSet, error) {
 	status := getReplsetStatus(m, replset)
 
+	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the StatefulSet if it doesn't exist
-	set, err := h.ensureReplsetStatefulSet(m, replset)
+	set, err := h.ensureReplsetStatefulSet(m, replset, resources)
 	if err != nil {
 		return nil, err
 	}
@@ -257,6 +257,24 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	} else {
 		logrus.Infof("created service %s", service.Name)
+	}
+
+	// Start hidden backup stateful set
+	for _, taskSpec := range m.Spec.Backup.Tasks {
+		if !taskSpec.Enabled {
+			continue
+		}
+
+		set := backup.NewBackupStatefulSet(m, replset, resources, resources, nil)
+		err = h.client.Create(set)
+		if err != nil {
+			if !k8serrors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create backup statefulset for replset %s: %v", replset.Name, err)
+				return nil, err
+			}
+		} else {
+			logrus.Infof("created backup statefulset: %s", set.Name)
+		}
 	}
 
 	return set, nil

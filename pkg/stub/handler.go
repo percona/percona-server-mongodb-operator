@@ -130,6 +130,8 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		}
 
 		// Ensure the backup coordinator is started if any backups are enabled
+		logrus.Infof("HAS BACKUPS ENABLED: %v", h.hasBackupsEnabled(psmdb))
+
 		if h.backups == nil && h.hasBackupsEnabled(psmdb) {
 			h.backups = backup.New(h.client, psmdb, h.serverVersion, usersSecret)
 			err = h.backups.EnsureCoordinator()

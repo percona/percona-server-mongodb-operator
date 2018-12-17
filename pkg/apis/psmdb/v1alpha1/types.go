@@ -30,7 +30,7 @@ type PerconaServerMongoDBSpec struct {
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
-	Backups         []*BackupSpec     `json:"backups,omitempty"`
+	Backup          *BackupSpec       `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 }
 
@@ -220,6 +220,10 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupSpec struct {
+	Tasks []*BackupTaskSpec `json:"tasks,omitempty"`
+}
+
+type BackupTaskSpec struct {
 	Name     string `json:"name,omitempty"`
 	Enabled  bool   `json:"enabled,omitempty"`
 	Schedule string `json:"schedule,omitempty"`

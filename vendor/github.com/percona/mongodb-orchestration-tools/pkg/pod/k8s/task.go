@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	mongodContainerName     string = "mongod"
-	mongosContainerName     string = "mongos"
-	mongodbPortName         string = "mongodb"
-	clusterServiceDNSSuffix string = "svc.cluster.local"
+	mongodContainerName       = "mongod"
+	mongodBackupContainerName = "mongod-backup"
+	mongosContainerName       = "mongos"
+	mongodbPortName           = "mongodb"
+	clusterServiceDNSSuffix   = "svc.cluster.local"
 )
 
 func GetMongoHost(pod, service, replset, namespace string) string {
@@ -103,6 +104,8 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 	switch taskType {
 	case pod.TaskTypeMongod:
 		containerName = mongodContainerName
+	case pod.TaskTypeMongodBackup:
+		containerName = mongodBackupContainerName
 	case pod.TaskTypeMongos:
 		containerName = mongosContainerName
 	default:

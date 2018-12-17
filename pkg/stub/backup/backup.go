@@ -27,15 +27,15 @@ func New(client sdk.Client, psmdb *v1alpha1.PerconaServerMongoDB, serverVersion 
 	}
 }
 
-func (c *Controller) logFields(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) logrus.Fields {
+func (c *Controller) logFields(backupTask *v1alpha1.BackupTaskSpec, replset *v1alpha1.ReplsetSpec) logrus.Fields {
 	return logrus.Fields{
-		"backup":  backup.Name,
+		"backup":  backupTask.Name,
 		"replset": replset.Name,
 	}
 }
 
-func (c *Controller) Delete(backup *v1alpha1.BackupSpec) error {
-	return c.deleteStatus(backup)
+func (c *Controller) Delete(backupTask *v1alpha1.BackupTaskSpec) error {
+	return c.deleteStatus(backupTask)
 }
 
 func (c *Controller) Get(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) error {
@@ -60,10 +60,10 @@ func (c *Controller) getPSMDBCopy() (*v1alpha1.PerconaServerMongoDB, error) {
 }
 
 // updateStatus updates the backup BackupStatus struct in the PSMDB status
-func (c *Controller) updateStatus(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) error {
+func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec, replset *v1alpha1.ReplsetSpec) error {
 	status := &v1alpha1.BackupStatus{
-		Enabled: backup.Enabled,
-		Name:    backup.Name,
+		Enabled: backupTask.Enabled,
+		Name:    backupTask.Name,
 		Replset: replset.Name,
 	}
 
@@ -73,7 +73,7 @@ func (c *Controller) updateStatus(backup *v1alpha1.BackupSpec, replset *v1alpha1
 	}
 
 	for i, bkpStatus := range data.Status.Backups {
-		if bkpStatus.Name == backup.Name {
+		if bkpStatus.Name == backupTask.Name {
 			data.Status.Backups[i] = status
 			err := c.client.Update(data)
 			if err != nil {
@@ -95,14 +95,14 @@ func (c *Controller) updateStatus(backup *v1alpha1.BackupSpec, replset *v1alpha1
 }
 
 // deleteStatus deletes the backup BackupStatus struct from the PSMDB status
-func (c *Controller) deleteStatus(backup *v1alpha1.BackupSpec) error {
+func (c *Controller) deleteStatus(backupTask *v1alpha1.BackupTaskSpec) error {
 	data, err := c.getPSMDBCopy()
 	if err != nil {
 		return err
 	}
 
 	for i, bkpStatus := range data.Status.Backups {
-		if bkpStatus.Name != backup.Name {
+		if bkpStatus.Name != backupTask.Name {
 			continue
 		}
 		data.Status.Backups = append(data.Status.Backups[:i], data.Status.Backups[i+1:]...)

@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
+
 	log "github.com/sirupsen/logrus"
 	rsConfig "github.com/timvaillancourt/go-mongodb-replset/config"
 	rsStatus "github.com/timvaillancourt/go-mongodb-replset/status"
@@ -230,7 +232,7 @@ func (s *State) AddConfigMembers(session *mgo.Session, configManager rsConfig.Ma
 			member.Priority = 0
 			member.Votes = 0
 		}
-		if mongod.IsBackupNode() {
+		if mongod.Task.IsTaskType(pod.TaskTypeMongodBackup) {
 			log.Infof("Adding dedicated backup mongod as a hidden-secondary: %s", mongod.Name())
 			member.Hidden = true
 			member.Priority = 0
