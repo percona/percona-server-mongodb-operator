@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
@@ -69,7 +70,7 @@ func TestEnsureReplsetStatefulSet(t *testing.T) {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name: mongodContainerName,
+							Name: mongod.MongodContainerName,
 						},
 					},
 				},

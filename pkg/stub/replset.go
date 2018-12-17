@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	//"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
@@ -80,13 +81,13 @@ func isReplsetInitialized(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 //
 func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
-		if !isMongodPod(pod) || !util.IsContainerAndPodRunning(pod, mongodContainerName) || !util.IsPodReady(pod) {
+		if !isMongodPod(pod) || !util.IsContainerAndPodRunning(pod, mongod.MongodContainerName) || !util.IsPodReady(pod) {
 			continue
 		}
 
 		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
 
-		return execCommandInContainer(pod, mongodContainerName, []string{
+		return execCommandInContainer(pod, mongod.MongodContainerName, []string{
 			"k8s-mongodb-initiator",
 			"init",
 		})
@@ -105,23 +106,16 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	}
 
 	// Find the mongod container
-	var mongod *corev1.Container
-	for i, container := range set.Spec.Template.Spec.Containers {
-		if container.Name != mongodContainerName {
-			continue
-		}
-		mongod = &set.Spec.Template.Spec.Containers[i]
-		break
-	}
-	if mongod == nil {
+	container := util.GetPodSpecContainer(&set.Spec.Template.Spec, mongod.MongodContainerName)
+	if container == nil {
 		return nil, fmt.Errorf("could not find mongod container in pod")
 	}
 
 	// Ensure the PSMDB version is the same as the spec
-	expectedImage := getPSMDBDockerImageName(m)
-	if mongod.Image != expectedImage {
-		logrus.Infof("updating spec image for replset %s: %s -> %s", replset.Name, mongod.Image, expectedImage)
-		mongod.Image = expectedImage
+	expectedImage := mongod.GetPSMDBDockerImageName(m)
+	if container.Image != expectedImage {
+		logrus.Infof("updating spec image for replset %s: %s -> %s", replset.Name, container.Image, expectedImage)
+		container.Image = expectedImage
 		doUpdate = true
 	}
 
@@ -129,9 +123,9 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	mongodLimits := corev1.ResourceList{}
 	mongodRequests := corev1.ResourceList{}
 	for _, resourceName := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
-		mongodRequest := mongod.Resources.Requests[resourceName]
+		mongodRequest := container.Resources.Requests[resourceName]
 		specRequest := resources.Requests[resourceName]
-		if specRequest.Cmp(mongod.Resources.Requests[resourceName]) != 0 {
+		if specRequest.Cmp(container.Resources.Requests[resourceName]) != 0 {
 			logrus.Infof("updating %s resource request: %s -> %s", resourceName, mongodRequest.String(), specRequest.String())
 			mongodRequests[resourceName] = specRequest
 			doUpdate = true
@@ -139,7 +133,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 			mongodRequests[resourceName] = mongodRequest
 		}
 
-		mongodLimit := mongod.Resources.Limits[resourceName]
+		mongodLimit := container.Resources.Limits[resourceName]
 		specLimit := resources.Limits[resourceName]
 		if specLimit.Cmp(mongodLimit) != 0 && specLimit.Cmp(mongodRequest) >= 0 {
 			logrus.Infof("updating %s resource limit: %s -> %s", resourceName, mongodLimit.String(), specLimit.String())
@@ -149,14 +143,14 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 			mongodLimits[resourceName] = mongodLimit
 		}
 	}
-	mongod.Resources.Limits = mongodLimits
-	mongod.Resources.Requests = mongodRequests
+	container.Resources.Limits = mongodLimits
+	container.Resources.Requests = mongodRequests
 
 	// Ensure mongod args are the same as the args from the spec:
-	expectedMongodArgs := newMongodContainerArgs(m, replset, resources)
-	if !reflect.DeepEqual(expectedMongodArgs, mongod.Args) {
-		logrus.Infof("updating container mongod args for replset %s: %v -> %v", replset.Name, mongod.Args, expectedMongodArgs)
-		mongod.Args = expectedMongodArgs
+	expectedMongodArgs := mongod.NewContainerArgs(m, replset, resources)
+	if !reflect.DeepEqual(expectedMongodArgs, container.Args) {
+		logrus.Infof("updating container mongod args for replset %s: %v -> %v", replset.Name, container.Args, expectedMongodArgs)
+		container.Args = expectedMongodArgs
 		doUpdate = true
 	}
 

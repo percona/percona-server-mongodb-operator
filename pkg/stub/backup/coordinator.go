@@ -182,9 +182,13 @@ func (c *Controller) EnsureCoordinator() error {
 
 	service := c.newCoordinatorService()
 	err = c.client.Create(service)
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		logrus.Errorf("failed to create backup coordinator service %s: %v", service.Name, err)
-		return err
+	if err != nil {
+		if !k8serrors.IsAlreadyExists(err) {
+			logrus.Errorf("failed to create backup coordinator service %s: %v", service.Name, err)
+			return err
+		}
+	} else {
+		logrus.Infof("created backup coordinator service: %s", service.Name)
 	}
 
 	return nil

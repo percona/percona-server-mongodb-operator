@@ -1,4 +1,4 @@
-package stub
+package mongod
 
 import (
 	"fmt"
@@ -18,19 +18,26 @@ import (
 const (
 	gigaByte                 int64   = 1024 * 1024 * 1024
 	minWiredTigerCacheSizeGB float64 = 0.25
+
+	MongodContainerDataDir    = "/data/db"
+	MongodContainerName       = "mongod"
+	MongodBackupContainerName = "mongod-backup"
+	MongodDataVolClaimName    = "mongod-data"
+	MongodPortName            = "mongodb"
+	MongodSecretsDir          = "/etc/mongodb-secrets"
 )
 
-// getPSMDBDockerImageName returns the prefix for the Dockerhub image name.
+// GetPSMDBDockerImageName returns the prefix for the Dockerhub image name.
 // This image name should be in the following format:
 // percona/percona-server-mongodb-operator:<VERSION>-mongod<PSMDB-VERSION>
-func getPSMDBDockerImageName(m *v1alpha1.PerconaServerMongoDB) string {
+func GetPSMDBDockerImageName(m *v1alpha1.PerconaServerMongoDB) string {
 	return "percona/percona-server-mongodb-operator:" + version.Version + "-mongod" + m.Spec.Version
 }
 
-// getMongodPort returns the mongod port number as a string
-func getMongodPort(container *corev1.Container) string {
+// GetMongodPort returns the mongod port number as a string
+func GetMongodPort(container *corev1.Container) string {
 	for _, port := range container.Ports {
-		if port.Name == mongodPortName {
+		if port.Name == MongodPortName {
 			return strconv.Itoa(int(port.ContainerPort))
 		}
 	}
@@ -85,16 +92,16 @@ func newContainerEnv(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 	}
 }
 
-// newMongodContainerArgs returns the args to pass to the mongod container
-func newMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []string {
-	mongod := m.Spec.Mongod
+// NewContainerArgs returns the args to pass to the mSpec container
+func NewContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []string {
+	mSpec := m.Spec.Mongod
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
-		"--dbpath=" + mongodContainerDataDir,
-		"--port=" + strconv.Itoa(int(mongod.Net.Port)),
+		"--dbpath=" + MongodContainerDataDir,
+		"--port=" + strconv.Itoa(int(mSpec.Net.Port)),
 		"--replSet=" + replset.Name,
-		"--storageEngine=" + string(mongod.Storage.Engine),
+		"--storageEngine=" + string(mSpec.Storage.Engine),
 	}
 
 	// sharding
@@ -106,144 +113,134 @@ func newMongodContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.
 	}
 
 	// operationProfiling
-	if mongod.OperationProfiling != nil {
-		switch mongod.OperationProfiling.Mode {
+	if mSpec.OperationProfiling != nil {
+		switch mSpec.OperationProfiling.Mode {
 		case v1alpha1.OperationProfilingModeAll:
 			args = append(args, "--profile=2")
 		case v1alpha1.OperationProfilingModeSlowOp:
 			args = append(args,
-				"--slowms="+strconv.Itoa(int(mongod.OperationProfiling.SlowOpThresholdMs)),
+				"--slowms="+strconv.Itoa(int(mSpec.OperationProfiling.SlowOpThresholdMs)),
 				"--profile=1",
 			)
 		}
-		if mongod.OperationProfiling.RateLimit > 0 {
-			args = append(args, "--rateLimit="+strconv.Itoa(mongod.OperationProfiling.RateLimit))
+		if mSpec.OperationProfiling.RateLimit > 0 {
+			args = append(args, "--rateLimit="+strconv.Itoa(mSpec.OperationProfiling.RateLimit))
 		}
 	}
 
 	// storage
-	if mongod.Storage != nil {
-		switch mongod.Storage.Engine {
+	if mSpec.Storage != nil {
+		switch mSpec.Storage.Engine {
 		case v1alpha1.StorageEngineWiredTiger:
 			if limit, ok := resources.Limits[corev1.ResourceCPU]; ok && !limit.IsZero() {
 				args = append(args, fmt.Sprintf(
 					"--wiredTigerCacheSizeGB=%.2f",
-					getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
+					getWiredTigerCacheSizeGB(resources.Limits, mSpec.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
 				))
 			}
-			if mongod.Storage.WiredTiger.CollectionConfig != nil {
-				if mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
+			if mSpec.Storage.WiredTiger.CollectionConfig != nil {
+				if mSpec.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
 					args = append(args,
-						"--wiredTigerCollectionBlockCompressor="+string(*mongod.Storage.WiredTiger.CollectionConfig.BlockCompressor),
+						"--wiredTigerCollectionBlockCompressor="+string(*mSpec.Storage.WiredTiger.CollectionConfig.BlockCompressor),
 					)
 				}
 			}
-			if mongod.Storage.WiredTiger.EngineConfig != nil {
-				if mongod.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
+			if mSpec.Storage.WiredTiger.EngineConfig != nil {
+				if mSpec.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
 					args = append(args,
-						"--wiredTigerJournalCompressor="+string(*mongod.Storage.WiredTiger.EngineConfig.JournalCompressor),
+						"--wiredTigerJournalCompressor="+string(*mSpec.Storage.WiredTiger.EngineConfig.JournalCompressor),
 					)
 				}
-				if mongod.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
+				if mSpec.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
 					args = append(args, "--wiredTigerDirectoryForIndexes")
 				}
 			}
-			if mongod.Storage.WiredTiger.IndexConfig != nil && mongod.Storage.WiredTiger.IndexConfig.PrefixCompression {
+			if mSpec.Storage.WiredTiger.IndexConfig != nil && mSpec.Storage.WiredTiger.IndexConfig.PrefixCompression {
 				args = append(args, "--wiredTigerIndexPrefixCompression=true")
 			}
 		case v1alpha1.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(
 				"--inMemorySizeGB=%.2f",
-				getWiredTigerCacheSizeGB(resources.Limits, mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio, false),
+				getWiredTigerCacheSizeGB(resources.Limits, mSpec.Storage.InMemory.EngineConfig.InMemorySizeRatio, false),
 			))
 		case v1alpha1.StorageEngineMMAPv1:
-			if mongod.Storage.MMAPv1.NsSize > 0 {
-				args = append(args, "--nssize="+strconv.Itoa(mongod.Storage.MMAPv1.NsSize))
+			if mSpec.Storage.MMAPv1.NsSize > 0 {
+				args = append(args, "--nssize="+strconv.Itoa(mSpec.Storage.MMAPv1.NsSize))
 			}
-			if mongod.Storage.MMAPv1.Smallfiles {
+			if mSpec.Storage.MMAPv1.Smallfiles {
 				args = append(args, "--smallfiles")
 			}
 		}
-		if mongod.Storage.DirectoryPerDB {
+		if mSpec.Storage.DirectoryPerDB {
 			args = append(args, "--directoryperdb")
 		}
-		if mongod.Storage.SyncPeriodSecs > 0 {
-			args = append(args, "--syncdelay="+strconv.Itoa(mongod.Storage.SyncPeriodSecs))
+		if mSpec.Storage.SyncPeriodSecs > 0 {
+			args = append(args, "--syncdelay="+strconv.Itoa(mSpec.Storage.SyncPeriodSecs))
 		}
 	}
 
 	// security
-	if mongod.Security != nil && mongod.Security.RedactClientLogData {
+	if mSpec.Security != nil && mSpec.Security.RedactClientLogData {
 		args = append(args, "--redactClientLogData")
 	}
 
 	// replication
-	if mongod.Replication != nil && mongod.Replication.OplogSizeMB > 0 {
-		args = append(args, "--oplogSize="+strconv.Itoa(mongod.Replication.OplogSizeMB))
+	if mSpec.Replication != nil && mSpec.Replication.OplogSizeMB > 0 {
+		args = append(args, "--oplogSize="+strconv.Itoa(mSpec.Replication.OplogSizeMB))
 	}
 
 	// setParameter
-	if mongod.SetParameter != nil {
-		if mongod.SetParameter.TTLMonitorSleepSecs > 0 {
+	if mSpec.SetParameter != nil {
+		if mSpec.SetParameter.TTLMonitorSleepSecs > 0 {
 			args = append(args,
 				"--setParameter",
-				"ttlMonitorSleepSecs="+strconv.Itoa(mongod.SetParameter.TTLMonitorSleepSecs),
+				"ttlMonitorSleepSecs="+strconv.Itoa(mSpec.SetParameter.TTLMonitorSleepSecs),
 			)
 		}
-		if mongod.SetParameter.WiredTigerConcurrentReadTransactions > 0 {
+		if mSpec.SetParameter.WiredTigerConcurrentReadTransactions > 0 {
 			args = append(args,
 				"--setParameter",
-				"wiredTigerConcurrentReadTransactions="+strconv.Itoa(mongod.SetParameter.WiredTigerConcurrentReadTransactions),
+				"wiredTigerConcurrentReadTransactions="+strconv.Itoa(mSpec.SetParameter.WiredTigerConcurrentReadTransactions),
 			)
 		}
-		if mongod.SetParameter.WiredTigerConcurrentWriteTransactions > 0 {
+		if mSpec.SetParameter.WiredTigerConcurrentWriteTransactions > 0 {
 			args = append(args,
 				"--setParameter",
-				"wiredTigerConcurrentWriteTransactions="+strconv.Itoa(mongod.SetParameter.WiredTigerConcurrentWriteTransactions),
+				"wiredTigerConcurrentWriteTransactions="+strconv.Itoa(mSpec.SetParameter.WiredTigerConcurrentWriteTransactions),
 			)
 		}
 	}
 
 	// auditLog
-	if mongod.AuditLog != nil && mongod.AuditLog.Destination == v1alpha1.AuditLogDestinationFile {
-		if mongod.AuditLog.Filter == "" {
-			mongod.AuditLog.Filter = "{}"
+	if mSpec.AuditLog != nil && mSpec.AuditLog.Destination == v1alpha1.AuditLogDestinationFile {
+		if mSpec.AuditLog.Filter == "" {
+			mSpec.AuditLog.Filter = "{}"
 		}
 		args = append(args,
 			"--auditDestination=file",
-			"--auditFilter="+mongod.AuditLog.Filter,
-			"--auditFormat="+string(mongod.AuditLog.Format),
+			"--auditFilter="+mSpec.AuditLog.Filter,
+			"--auditFormat="+string(mSpec.AuditLog.Format),
 		)
-		switch mongod.AuditLog.Format {
+		switch mSpec.AuditLog.Format {
 		case v1alpha1.AuditLogFormatBSON:
-			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.bson")
+			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
 		default:
-			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.json")
+			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
 		}
 	}
 
 	return args
 }
 
-func (h *Handler) newMongodContainers(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []corev1.Container {
-	containers := []corev1.Container{
-		h.newMongodContainer(m, replset, resources),
-	}
-	if h.hasBackupsEnabled(m) {
-		containers = append(containers, h.backups.NewAgentContainer(m, replset))
-	}
-	return containers
-}
-
-func (h *Handler) newMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) corev1.Container {
+func newContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
 	return corev1.Container{
-		Name:            mongodContainerName,
-		Image:           getPSMDBDockerImageName(m),
+		Name:            name,
+		Image:           GetPSMDBDockerImageName(m),
 		ImagePullPolicy: m.Spec.ImagePullPolicy,
-		Args:            newMongodContainerArgs(m, replset, resources),
+		Args:            NewContainerArgs(m, replset, resources),
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          mongodPortName,
+				Name:          MongodPortName,
 				HostPort:      m.Spec.Mongod.Net.HostPort,
 				ContainerPort: m.Spec.Mongod.Net.Port,
 			},
@@ -259,7 +256,7 @@ func (h *Handler) newMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *
 				},
 			},
 		},
-		WorkingDir: mongodContainerDataDir,
+		WorkingDir: MongodContainerDataDir,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
@@ -289,18 +286,26 @@ func (h *Handler) newMongodContainer(m *v1alpha1.PerconaServerMongoDB, replset *
 		Resources: util.GetContainerResourceRequirements(resources),
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &util.TrueVar,
-			RunAsUser:    util.GetContainerRunUID(m, h.serverVersion),
+			RunAsUser:    runUID,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      mongodDataVolClaimName,
-				MountPath: mongodContainerDataDir,
+				Name:      MongodDataVolClaimName,
+				MountPath: MongodContainerDataDir,
 			},
 			{
 				Name:      m.Spec.Secrets.Key,
-				MountPath: mongoDBSecretsDir,
+				MountPath: MongodSecretsDir,
 				ReadOnly:  true,
 			},
 		},
 	}
+}
+
+func NewContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
+	return newContainer(m, replset, MongodContainerName, resources, runUID)
+}
+
+func NewBackupContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
+	return newContainer(m, replset, MongodBackupContainerName, resources, runUID)
 }

@@ -56,13 +56,8 @@ spec:
     #  destination: file
     #  format: BSON
     #  filter: '{}'
-  backups:
-    - name: default
-      enabled: true
-      schedule: "*/1 * * * *"
-      rotate:
-        maxBackups: 14
-        maxDays: 14
+  backup:
+    coordinator:
       resources:
         limits:
           cpu: "100m"
@@ -72,4 +67,18 @@ spec:
           cpu: "100m"
           memory: "0.1G"
         #storageClass: aws-gp2
+    mongod:
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "0.1G"
+          storage: "1Gi"
+        requests:
+          cpu: "100m"
+          memory: "0.1G"
+        #storageClass: aws-gp2
+    tasks:
+    - name: default
+      enabled: true
+      schedule: "*/1 * * * *"
       verbose: false

@@ -3,6 +3,7 @@ package stub
 import (
 	"strings"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
@@ -15,7 +16,7 @@ import (
 func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, pods []corev1.Pod, replset *v1alpha1.ReplsetSpec, replsetStatus *v1alpha1.ReplsetStatus) error {
 	var runningPods int
 	for _, pod := range pods {
-		if util.IsPodReady(pod) && util.IsContainerAndPodRunning(pod, mongodContainerName) {
+		if util.IsPodReady(pod) && util.IsContainerAndPodRunning(pod, mongod.MongodContainerName) {
 			runningPods++
 		}
 	}
@@ -35,10 +36,10 @@ func (h *Handler) persistentVolumeClaimReaper(m *v1alpha1.PerconaServerMongoDB, 
 		if pvc.Status.Phase != corev1.ClaimBound {
 			continue
 		}
-		if !strings.Contains(pvc.Name, mongodDataVolClaimName) {
+		if !strings.Contains(pvc.Name, mongod.MongodDataVolClaimName) {
 			continue
 		}
-		pvcPodName := strings.Replace(pvc.Name, mongodDataVolClaimName+"-", "", 1)
+		pvcPodName := strings.Replace(pvc.Name, mongod.MongodDataVolClaimName+"-", "", 1)
 		if util.ReplsetStatusHasPod(replsetStatus, pvcPodName) {
 			continue
 		}

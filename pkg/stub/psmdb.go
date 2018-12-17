@@ -2,6 +2,7 @@ package stub
 
 import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
@@ -9,14 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-)
-
-var (
-	mongodContainerDataDir       = "/data/db"
-	mongodContainerName          = "mongod"
-	mongodDataVolClaimName       = "mongod-data"
-	mongodPortName               = "mongodb"
-	secretFileMode         int32 = 0060
 )
 
 // addSpecDefaults sets default values for unset config params
@@ -117,25 +110,12 @@ func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
 	return false
 }
 
-// NewStatefulSet returns a StatefulSet object configured for a name
-func NewStatefulSet(m *v1alpha1.PerconaServerMongoDB, name string) *appsv1.StatefulSet {
-	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: m.Namespace,
-		},
-	}
-}
-
 // newStatefulSet returns a PSMDB stateful set
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addSpecDefaults(m)
 
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
+	runUID := util.GetContainerRunUID(m, h.serverVersion)
 	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
 	set.Spec = appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
@@ -148,11 +128,13 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 				Labels: ls,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:      newPodAffinity(ls),
+				Affinity:      mongod.NewPodAffinity(ls),
 				RestartPolicy: corev1.RestartPolicyAlways,
-				Containers:    h.newMongodContainers(m, replset, resources),
+				Containers: []corev1.Container{
+					mongod.NewContainer(m, replset, resources, runUID),
+				},
 				SecurityContext: &corev1.PodSecurityContext{
-					FSGroup: util.GetContainerRunUID(m, h.serverVersion),
+					FSGroup: runUID,
 				},
 				Volumes: []corev1.Volume{
 					{
@@ -169,7 +151,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 			},
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			util.NewPersistentVolumeClaim(m, resources, mongodDataVolClaimName, replset.StorageClass),
+			util.NewPersistentVolumeClaim(m, resources, mongod.MongodDataVolClaimName, replset.StorageClass),
 		},
 	}
 	util.AddOwnerRefToObject(set, util.AsOwner(m))
@@ -191,7 +173,7 @@ func newService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec)
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       mongodPortName,
+					Name:       mongod.MongodPortName,
 					Port:       m.Spec.Mongod.Net.Port,
 					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 				},

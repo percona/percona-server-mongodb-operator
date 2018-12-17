@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
@@ -69,7 +70,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 	}
 
 	// find the mongod port
-	containerPort := getMongodPort(container)
+	containerPort := mongod.GetMongodPort(container)
 	if containerPort == "" {
 		return fmt.Errorf("cannot find mongod port in container: %s", container.Name)
 	}

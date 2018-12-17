@@ -11,8 +11,11 @@ import (
 )
 
 const (
-	mongoDBSecretsDir        = "/etc/mongodb-secrets"
 	mongoDBSecretMongoKeyVal = "mongodb-key"
+)
+
+var (
+	secretFileMode int32 = 0060
 )
 
 // generateMongoDBKey generates a 1024 byte-length random key for MongoDB Internal Authentication
