@@ -99,12 +99,6 @@ func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Servic
 		},
 	}
 	switch m.Spec.Expose.ExposeType {
-	case corev1.ServiceTypeLoadBalancer:
-		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
-		svc.Spec.ExternalTrafficPolicy = "Local"
-	case corev1.ServiceTypeNodePort:
-		svc.Spec.Type = corev1.ServiceTypeNodePort
-		svc.Spec.ExternalTrafficPolicy = "Local"
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
