@@ -2,7 +2,7 @@ package stub
 
 import (
 	"fmt"
-	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	opsSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	corev1 "k8s.io/api/core/v1"
@@ -95,10 +95,18 @@ func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Servic
 					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 				},
 			},
-			Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": podName},
-			ExternalTrafficPolicy: "Local",
-			Type:                  "LoadBalancer",
+			Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 		},
+	}
+	switch m.Spec.Expose.ExposeType {
+	case corev1.ServiceTypeLoadBalancer:
+		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
+		svc.Spec.ExternalTrafficPolicy = "Local"
+	case corev1.ServiceTypeNodePort:
+		svc.Spec.Type = corev1.ServiceTypeNodePort
+		svc.Spec.ExternalTrafficPolicy = "Local"
+	default:
+		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
 	addOwnerRefToObject(svc, asOwner(m))
 	return svc

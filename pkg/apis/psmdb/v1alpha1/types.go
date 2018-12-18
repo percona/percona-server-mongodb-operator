@@ -38,14 +38,14 @@ type PerconaServerMongoDB struct {
 }
 
 type PerconaServerMongoDBSpec struct {
-	Platform         *Platform         `json:"platform,omitempty"`
-	Version          string            `json:"version,omitempty"`
-	RunUID           int64             `json:"runUid,omitempty"`
-	Mongod           *MongodSpec       `json:"mongod,omitempty"`
-	Replsets         []*ReplsetSpec    `json:"replsets,omitempty"`
-	Secrets          *SecretsSpec      `json:"secrets,omitempty"`
-	ImagePullPolicy  corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-	ExposeExternally bool              `json:"exposeExternally,omitempty"`
+	Platform        *Platform         `json:"platform,omitempty"`
+	Version         string            `json:"version,omitempty"`
+	RunUID          int64             `json:"runUid,omitempty"`
+	Mongod          *MongodSpec       `json:"mongod,omitempty"`
+	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
+	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	Expose          Expose            `json:"expose,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
@@ -216,4 +216,9 @@ type MongodSpecOperationProfiling struct {
 	Mode              OperationProfilingMode `json:"mode,omitempty"`
 	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
 	RateLimit         int                    `json:"rateLimit,omitempty"`
+}
+
+type Expose struct {
+	On         bool               `json:"on"`
+	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 }

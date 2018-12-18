@@ -165,7 +165,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			clusterSets = append(clusterSets, *set)
 
 			// Ensure replset has external services
-			if psmdb.Spec.ExposeExternally {
+			if psmdb.Spec.Expose.On {
 				err = h.ensureExtServices(psmdb, replset)
 				if err != nil {
 					logrus.Errorf("failed to get services of replset %s: %v", replset.Name, err)
