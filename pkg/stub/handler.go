@@ -62,6 +62,18 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 		h.pods = podk8s.NewPods(psmdb.Name, psmdb.Namespace)
 	}
 
+	// Skip if there are no initialized replsets
+	var doStart bool
+	for _, replset := range psmdb.Status.Replsets {
+		if replset.Initialized == true {
+			doStart = true
+			break
+		}
+	}
+	if !doStart {
+		return nil
+	}
+
 	// Start the watchdog if it has not been started
 	metricsCollector := wdMetrics.NewCollector()
 	h.watchdog = watchdog.New(&wdConfig.Config{

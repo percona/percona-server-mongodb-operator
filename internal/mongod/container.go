@@ -232,7 +232,41 @@ func NewContainerArgs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 	return args
 }
 
-func newContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
+func newContainerVolumeMounts(m *v1alpha1.PerconaServerMongoDB) []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      MongodDataVolClaimName,
+			MountPath: MongodContainerDataDir,
+		},
+		{
+			Name:      m.Spec.Secrets.Key,
+			MountPath: MongodSecretsDir,
+			ReadOnly:  true,
+		},
+	}
+
+}
+
+func NewBackupContainerVolumeMounts(m *v1alpha1.PerconaServerMongoDB, backupVolName, backupMountDir string) []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      backupVolName,
+			MountPath: backupMountDir,
+		},
+		{
+			Name:      MongodDataVolClaimName,
+			MountPath: MongodContainerDataDir,
+		},
+		{
+			Name:      m.Spec.Secrets.Key,
+			MountPath: MongodSecretsDir,
+			ReadOnly:  true,
+		},
+	}
+
+}
+
+func newContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64, vms []corev1.VolumeMount) corev1.Container {
 	return corev1.Container{
 		Name:            name,
 		Image:           GetPSMDBDockerImageName(m),
@@ -303,9 +337,9 @@ func newContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpe
 }
 
 func NewContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
-	return newContainer(m, replset, MongodContainerName, resources, runUID)
+	return newContainer(m, replset, MongodContainerName, resources, runUID, newContainerVolumeMounts(m))
 }
 
-func NewBackupContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
-	return newContainer(m, replset, MongodBackupContainerName, resources, runUID)
+func NewBackupContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64, vms []corev1.VolumeMount) corev1.Container {
+	return newContainer(m, replset, MongodBackupContainerName, resources, runUID, vms)
 }

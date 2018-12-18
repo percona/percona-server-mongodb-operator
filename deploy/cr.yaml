@@ -21,6 +21,16 @@ spec:
         cpu: "300m"
         memory: "0.5G"
       #storageClass: aws-gp2
+    backup:
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "0.5G"
+          storage: "3Gi"
+        requests:
+          cpu: "100m"
+          memory: "0.5G"
+        #storageClass: aws-gp2
   mongod:
     net:
       port: 27017
@@ -62,17 +72,7 @@ spec:
         limits:
           cpu: "100m"
           memory: "0.1G"
-          storage: "1Gi"
-        requests:
-          cpu: "100m"
-          memory: "0.1G"
-        #storageClass: aws-gp2
-    mongod:
-      resources:
-        limits:
-          cpu: "100m"
-          memory: "0.1G"
-          storage: "1Gi"
+          storage: "5Gi"
         requests:
           cpu: "100m"
           memory: "0.1G"

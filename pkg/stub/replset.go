@@ -264,7 +264,11 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			continue
 		}
 
-		set := h.backups.NewBackupStatefulSet(m, replset, resources, resources, nil)
+		set, err := h.backups.NewBackupStatefulSet(m, replset, resources, util.GetContainerRunUID(m, h.serverVersion))
+		if err != nil {
+			logrus.Errorf("failed to construct backup statefulset for replset %s: %v", replset.Name, err)
+			return nil, err
+		}
 		err = h.client.Create(set)
 		if err != nil {
 			if !k8serrors.IsAlreadyExists(err) {

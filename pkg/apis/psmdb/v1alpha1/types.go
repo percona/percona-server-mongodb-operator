@@ -69,11 +69,16 @@ type SecretsSpec struct {
 	Users string `json:"users,omitempty"`
 }
 
+type ReplsetBackupSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+}
+
 type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string      `json:"name"`
-	Size           int32       `json:"size"`
-	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
+	Name           string             `json:"name"`
+	Size           int32              `json:"size"`
+	ClusterRole    ClusterRole        `json:"clusterRole,omitempty"`
+	Backup         *ReplsetBackupSpec `json:"backup,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -219,8 +224,14 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
+type BackupCoordinatorSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+	Tag            string `json:"tag,omitempty"`
+}
+
 type BackupSpec struct {
-	Tasks []*BackupTaskSpec `json:"tasks,omitempty"`
+	Coordinator *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+	Tasks       []*BackupTaskSpec      `json:"tasks,omitempty"`
 }
 
 type BackupTaskSpec struct {

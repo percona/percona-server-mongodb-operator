@@ -5,11 +5,11 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 
+	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -37,7 +37,7 @@ func (c *Controller) coordinatorStatefulSetName() string {
 	return c.psmdb.Name + "-backup-coordinator"
 }
 
-func (c *Controller) newCoordinatorPodSpec() corev1.PodSpec {
+func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements) corev1.PodSpec {
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
@@ -60,8 +60,22 @@ func (c *Controller) newCoordinatorPodSpec() corev1.PodSpec {
 						Name:  "PBM_COORDINATOR_WORK_DIR",
 						Value: coordinatorDataMount,
 					},
+					{
+						Name: "PBM_COORDINATOR_API_USERNAME",
+						ValueFrom: util.EnvVarSourceFromSecret(
+							c.psmdb.Spec.Secrets.Users,
+							motPkg.EnvMongoDBBackupUser,
+						),
+					},
+					{
+						Name: "PBM_COORDINATOR_API_PASSWORD",
+						ValueFrom: util.EnvVarSourceFromSecret(
+							c.psmdb.Spec.Secrets.Users,
+							motPkg.EnvMongoDBBackupPassword,
+						),
+					},
 				},
-				//Resources:  util.GetContainerResourceRequirements(resources),
+				Resources: util.GetContainerResourceRequirements(resources),
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &util.TrueVar,
 					RunAsUser:    util.GetContainerRunUID(c.psmdb, c.serverVersion),
@@ -97,12 +111,15 @@ func (c *Controller) newCoordinatorPodSpec() corev1.PodSpec {
 	}
 }
 
-func (c *Controller) newCoordinatorStatefulSet() *appsv1.StatefulSet {
-	resources := corev1.ResourceRequirements{
-		Limits: corev1.ResourceList{
-			corev1.ResourceStorage: resource.MustParse("1G"),
-		},
+func (c *Controller) newCoordinatorStatefulSet() (*appsv1.StatefulSet, error) {
+	resources, err := util.ParseResourceSpecRequirements(
+		c.psmdb.Spec.Backup.Coordinator.Limits,
+		c.psmdb.Spec.Backup.Coordinator.Requests,
+	)
+	if err != nil {
+		return nil, err
 	}
+
 	ls := util.LabelsForPerconaServerMongoDB(c.psmdb, coordinatorLabels)
 	set := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -122,7 +139,7 @@ func (c *Controller) newCoordinatorStatefulSet() *appsv1.StatefulSet {
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
 				},
-				Spec: c.newCoordinatorPodSpec(),
+				Spec: c.newCoordinatorPodSpec(resources),
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				util.NewPersistentVolumeClaim(c.psmdb, resources, coordinatorDataVolume, ""),
@@ -130,7 +147,7 @@ func (c *Controller) newCoordinatorStatefulSet() *appsv1.StatefulSet {
 		},
 	}
 	util.AddOwnerRefToObject(set, util.AsOwner(c.psmdb))
-	return set
+	return set, nil
 }
 
 func (c *Controller) newCoordinatorService() *corev1.Service {
@@ -162,8 +179,12 @@ func (c *Controller) newCoordinatorService() *corev1.Service {
 }
 
 func (c *Controller) EnsureCoordinator() error {
-	set := c.newCoordinatorStatefulSet()
-	err := c.client.Create(set)
+	set, err := c.newCoordinatorStatefulSet()
+	if err != nil {
+		return err
+	}
+
+	err = c.client.Create(set)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) {
 			err = c.client.Update(set)

@@ -12,6 +12,7 @@ import (
 
 const (
 	BackupDataVolClaimName = "mongod-backup"
+	BackupDataMountDir     = "/data/backup"
 	statefulSetSuffix      = "backup"
 )
 
@@ -20,7 +21,20 @@ var (
 )
 
 // NewBackupStatefulSet returns a Hidden-node stateful set for backups
-func (c *Controller) NewBackupStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, mongodResources, bkpResources corev1.ResourceRequirements, runUID *int64) *appsv1.StatefulSet {
+func (c *Controller) NewBackupStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) (*appsv1.StatefulSet, error) {
+	var err error
+	bkpResources := resources
+	bkpStorageClass := replset.StorageClass
+	if replset.Backup != nil {
+		if replset.Backup.Limits != nil || replset.Backup.Requests != nil {
+			bkpResources, err = util.ParseResourceSpecRequirements(replset.Backup.Limits, replset.Backup.Requests)
+			if err != nil {
+				return nil, err
+			}
+			bkpStorageClass = replset.Backup.StorageClass
+		}
+	}
+
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-"+statefulSetSuffix)
 	set.Spec = appsv1.StatefulSetSpec{
@@ -35,7 +49,9 @@ func (c *Controller) NewBackupStatefulSet(m *v1alpha1.PerconaServerMongoDB, repl
 			Spec: corev1.PodSpec{
 				Affinity: mongod.NewPodAffinity(ls),
 				Containers: []corev1.Container{
-					mongod.NewBackupContainer(m, replset, mongodResources, runUID),
+					mongod.NewBackupContainer(m, replset, resources, runUID,
+						mongod.NewBackupContainerVolumeMounts(m, BackupDataVolClaimName, BackupDataMountDir),
+					),
 					c.NewAgentContainer(replset),
 				},
 				SecurityContext: &corev1.PodSecurityContext{
@@ -56,10 +72,10 @@ func (c *Controller) NewBackupStatefulSet(m *v1alpha1.PerconaServerMongoDB, repl
 			},
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			util.NewPersistentVolumeClaim(m, mongodResources, mongod.MongodDataVolClaimName, replset.StorageClass),
-			util.NewPersistentVolumeClaim(m, bkpResources, BackupDataVolClaimName, ""),
+			util.NewPersistentVolumeClaim(m, resources, mongod.MongodDataVolClaimName, replset.StorageClass),
+			util.NewPersistentVolumeClaim(m, bkpResources, BackupDataVolClaimName, bkpStorageClass),
 		},
 	}
 	util.AddOwnerRefToObject(set, util.AsOwner(m))
-	return set
+	return set, nil
 }
