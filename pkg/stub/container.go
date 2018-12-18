@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 
@@ -298,16 +299,7 @@ func (h *Handler) newPSMDBMongodContainer(m *v1alpha1.PerconaServerMongoDB, repl
 			PeriodSeconds:       int32(3),
 			FailureThreshold:    int32(8),
 		},
-		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resources.Limits[corev1.ResourceCPU],
-				corev1.ResourceMemory: resources.Limits[corev1.ResourceMemory],
-			},
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resources.Requests[corev1.ResourceCPU],
-				corev1.ResourceMemory: resources.Requests[corev1.ResourceMemory],
-			},
-		},
+		Resources: util.GetContainerResourceRequirements(*resources),
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &trueVar,
 			RunAsUser:    h.getContainerRunUID(m),

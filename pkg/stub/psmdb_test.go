@@ -3,6 +3,7 @@ package stub
 import (
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
@@ -98,7 +99,7 @@ func TestNewPSMDBStatefulSet(t *testing.T) {
 	replset := psmdb.Spec.Replsets[0]
 
 	// parse resources
-	resources, err := parseReplsetResourceRequirements(replset)
+	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	assert.NoError(t, err)
 
 	h := &Handler{

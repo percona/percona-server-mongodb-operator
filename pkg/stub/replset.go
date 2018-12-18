@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
@@ -167,7 +168,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
 func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.StatefulSet, error) {
-	resources, err := parseReplsetResourceRequirements(replset)
+	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	if err != nil {
 		return nil, err
 	}
