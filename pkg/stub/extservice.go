@@ -56,7 +56,7 @@ func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 
 	if err := cli.Update(svc); err != nil {
 		if errors.IsConflict(err) {
-			retries += 1
+			retries = retries + 1
 			time.Sleep(500 * time.Millisecond)
 			err = updateExtService(cli, svc)
 		}
