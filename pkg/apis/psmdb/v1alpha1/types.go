@@ -237,7 +237,6 @@ type BackupSpec struct {
 
 type BackupTaskSpec struct {
 	Name     string `json:"name,omitempty"`
-	Replset  string `json:"replset,omitempty"`
 	Enabled  bool   `json:"enabled,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
 }
@@ -245,5 +244,4 @@ type BackupTaskSpec struct {
 type BackupStatus struct {
 	Enabled bool   `json:"enabled"`
 	Name    string `json:"name,omitempty"`
-	Replset string `json:"replset,omitempty"`
 }

@@ -17,7 +17,6 @@ func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec, replset *
 	status := &v1alpha1.BackupStatus{
 		Enabled: backupTask.Enabled,
 		Name:    backupTask.Name,
-		Replset: replset.Name,
 	}
 
 	data, err := c.getPSMDBCopy()
@@ -48,14 +47,14 @@ func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec, replset *
 }
 
 // deleteStatus deletes the backup BackupStatus struct from the PSMDB status
-func (c *Controller) deleteStatus(backup *v1alpha1.Backup) error {
+func (c *Controller) deleteStatus(backup *v1alpha1.BackupTaskSpec) error {
 	data, err := c.getPSMDBCopy()
 	if err != nil {
 		return err
 	}
 
 	for i, bkpStatus := range data.Status.Backups {
-		if bkpStatus.Name != backup.Task.Name {
+		if bkpStatus.Name != backup.Name {
 			continue
 		}
 		data.Status.Backups = append(data.Status.Backups[:i], data.Status.Backups[i+1:]...)

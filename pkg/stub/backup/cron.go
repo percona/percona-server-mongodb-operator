@@ -16,21 +16,21 @@ const (
 	backupCtlContainerName = "backup-pmbctl"
 )
 
-func newCronJob(m *v1alpha1.PerconaServerMongoDB, backup *v1alpha1.Backup) *batchv1b.CronJob {
+func newCronJob(m *v1alpha1.PerconaServerMongoDB, backup *v1alpha1.BackupTaskSpec) *batchv1b.CronJob {
 	return &batchv1b.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1beta1",
 			Kind:       "CronJob",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-backup-" + backup.Replset.Name + "-" + backup.Task.Name,
+			Name:      m.Name + "-backup-" + backup.Name,
 			Namespace: m.Namespace,
 		},
 	}
 }
 
-func (c *Controller) newBackupCronJob(backup *v1alpha1.Backup) *batchv1b.CronJob {
-	backupName := c.psmdb.Name + "-" + backup.Replset.Name + "-" + backup.Task.Name
+func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b.CronJob {
+	backupName := c.psmdb.Name + "-" + backup.Name
 	backupPod := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
@@ -55,11 +55,11 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.Backup) *batchv1b.CronJob
 
 	cronJob := newCronJob(c.psmdb, backup)
 	cronJob.Spec = batchv1b.CronJobSpec{
-		Schedule:          backup.Task.Schedule,
+		Schedule:          backup.Schedule,
 		ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 		JobTemplate: batchv1b.JobTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: util.LabelsForPerconaServerMongoDBReplset(c.psmdb, backup.Replset),
+				Labels: util.LabelsForPerconaServerMongoDB(c.psmdb, nil),
 			},
 			Spec: batchv1.JobSpec{
 				Template: corev1.PodTemplateSpec{

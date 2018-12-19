@@ -21,11 +21,22 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
+
+// getReplsetSpec returns a ReplicaSpec object for a replica set by name
+func getReplsetSpec(psmdb *v1alpha1.PerconaServerMongoDB, name string) *v1alpha1.ReplsetSpec {
+	for _, replset := range psmdb.Spec.Replsets {
+		if replset.Name == name {
+			return replset
+		}
+	}
+	return nil
+}
 
 // NewHandler return new instance of sdk.Handler interface.
 func NewHandler(client sdk.Client) opSdk.Handler {
@@ -192,6 +203,29 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// Update the pods+statefulsets list that is read by the watchdog
 		h.pods.Update(clusterPods, clusterSets)
+
+		// Create cronJobs for each backup:
+		for _, backupTask := range psmdb.Spec.Backup.Tasks {
+			if !backupTask.Enabled || backupTask.Schedule == "" {
+				logrus.Debugf("backup %s is disabled, skipping cronJob creation", backupTask.Name)
+				continue
+			}
+			err := h.backups.Create(backupTask)
+			if err != nil {
+				if !k8serrors.IsAlreadyExists(err) {
+					logrus.Errorf("failed to create backup task %s: %v", backupTask.Name, err)
+					return err
+				} else {
+					err = h.backups.Update(backupTask)
+					if err != nil {
+						logrus.Errorf("failed to update backup task %s: %v", backupTask.Name, err)
+						return err
+					}
+				}
+			} else {
+				logrus.Infof("create cronJob for backup: %s", backupTask.Name)
+			}
+		}
 	}
 	return nil
 }

@@ -2,10 +2,8 @@ package backup
 
 import (
 	"fmt"
-	//"reflect"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
-	//"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/sirupsen/logrus"
@@ -46,21 +44,24 @@ func (c *Controller) logFields(backupTask *v1alpha1.BackupTaskSpec, replset *v1a
 	}
 }
 
-func (c *Controller) Delete(backup *v1alpha1.Backup) error {
+func (c *Controller) Delete(backup *v1alpha1.BackupTaskSpec) error {
 	err := c.client.Delete(newCronJob(c.psmdb, backup))
 	if err != nil {
-		logrus.Errorf("failed to delete cronJob for backup %s for replica set %s", backup.Task.Name, backup.Replset.Name)
+		logrus.Errorf("failed to delete cronJob for backup: %s", backup.Name)
 		return err
 	}
 	return c.deleteStatus(backup)
+}
+
+func (c *Controller) Update(backup *v1alpha1.BackupTaskSpec) error {
+	return nil
 }
 
 //func (c *Controller) Get(backup *v1alpha1.Backup) error {
 //	return nil
 //}
 
-func (c *Controller) Create(backup *v1alpha1.Backup) error {
-	logrus.Infof("creating cronJob for backup %s for replset: %s", backup.Task.Name, backup.Replset.Name)
+func (c *Controller) Create(backup *v1alpha1.BackupTaskSpec) error {
 	cronJob := c.newBackupCronJob(backup)
 	return c.client.Create(cronJob)
 }
