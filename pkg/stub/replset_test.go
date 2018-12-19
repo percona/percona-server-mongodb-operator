@@ -3,7 +3,10 @@ package stub
 import (
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
@@ -30,7 +33,7 @@ func TestGetReplsetDialInfo(t *testing.T) {
 			},
 		},
 		&v1alpha1.ReplsetSpec{
-			Name: defaultReplsetName,
+			Name: config.DefaultReplsetName,
 		},
 		[]corev1.Pod{
 			{
@@ -47,9 +50,9 @@ func TestGetReplsetDialInfo(t *testing.T) {
 		},
 	)
 	assert.NotNil(t, di)
-	assert.Equal(t, defaultReplsetName, di.ReplicaSetName)
+	assert.Equal(t, config.DefaultReplsetName, di.ReplicaSetName)
 	assert.Len(t, di.Addrs, 1)
-	assert.Equal(t, "testPod."+t.Name()+"-"+defaultReplsetName+".default.svc.cluster.local:99999", di.Addrs[0])
+	assert.Equal(t, "testPod."+t.Name()+"-"+config.DefaultReplsetName+".default.svc.cluster.local:99999", di.Addrs[0])
 	assert.Equal(t, "clusterAdmin", di.Username)
 	assert.Equal(t, "123456", di.Password)
 	assert.Equal(t, MongoDBTimeout, di.Timeout)
@@ -63,12 +66,12 @@ func TestEnsureReplsetStatefulSet(t *testing.T) {
 	client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Run(func(args mock.Arguments) {
 		set := args.Get(0).(*appsv1.StatefulSet)
 		set.Spec = appsv1.StatefulSetSpec{
-			Replicas: &defaultMongodSize,
+			Replicas: &config.DefaultMongodSize,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name: mongodContainerName,
+							Name: mongod.MongodContainerName,
 						},
 					},
 				},
@@ -78,7 +81,7 @@ func TestEnsureReplsetStatefulSet(t *testing.T) {
 	client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
 
 	psmdb := &v1alpha1.PerconaServerMongoDB{}
-	h.addPSMDBSpecDefaults(psmdb)
+	h.addSpecDefaults(psmdb)
 
 	replset := &v1alpha1.ReplsetSpec{
 		Name: t.Name(),
@@ -95,14 +98,17 @@ func TestEnsureReplsetStatefulSet(t *testing.T) {
 			},
 		},
 	}
-	ss, err := h.ensureReplsetStatefulSet(psmdb, replset)
+	resources, _ := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+
+	ss, err := h.ensureReplsetStatefulSet(psmdb, replset, resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, ss)
 
 	// test an error is returned when no storage limit is set
 	// https://jira.percona.com/browse/CLOUD-42
 	replset.ResourcesSpec.Limits.Storage = ""
-	_, err = h.ensureReplsetStatefulSet(psmdb, replset)
+	resources, _ = util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+	_, err = h.ensureReplsetStatefulSet(psmdb, replset, resources)
 	assert.Error(t, err)
 }
 
