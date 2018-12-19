@@ -258,27 +258,5 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		logrus.Infof("created service %s", service.Name)
 	}
 
-	// Start hidden backup stateful set
-	for _, taskSpec := range m.Spec.Backup.Tasks {
-		if !taskSpec.Enabled {
-			continue
-		}
-
-		set, err := h.backups.NewBackupStatefulSet(m, replset, resources, util.GetContainerRunUID(m, h.serverVersion))
-		if err != nil {
-			logrus.Errorf("failed to construct backup statefulset for replset %s: %v", replset.Name, err)
-			return nil, err
-		}
-		err = h.client.Create(set)
-		if err != nil {
-			if !k8serrors.IsAlreadyExists(err) {
-				logrus.Errorf("failed to create backup statefulset for replset %s: %v", replset.Name, err)
-				return nil, err
-			}
-		} else {
-			logrus.Infof("created backup statefulset: %s", set.Name)
-		}
-	}
-
 	return set, nil
 }
