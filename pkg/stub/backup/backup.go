@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"fmt"
 	//"reflect"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
@@ -31,6 +32,13 @@ func New(client sdk.Client, psmdb *v1alpha1.PerconaServerMongoDB, serverVersion 
 	}
 }
 
+func (c *Controller) getImageName(component string) string {
+	if c.psmdb.Spec.Backup.Version != "" {
+		return fmt.Sprintf("%s:%s-backup-%s", backupImagePrefix, c.psmdb.Spec.Backup.Version, component)
+	}
+	return fmt.Sprintf("%s:backup-%s", backupImagePrefix, component)
+}
+
 func (c *Controller) logFields(backupTask *v1alpha1.BackupTaskSpec, replset *v1alpha1.ReplsetSpec) logrus.Fields {
 	return logrus.Fields{
 		"backup":  backupTask.Name,
@@ -38,85 +46,21 @@ func (c *Controller) logFields(backupTask *v1alpha1.BackupTaskSpec, replset *v1a
 	}
 }
 
-func (c *Controller) Delete(backupTask *v1alpha1.BackupTaskSpec) error {
-	return c.deleteStatus(backupTask)
-}
-
-func (c *Controller) Get(backup *v1alpha1.BackupSpec, replset *v1alpha1.ReplsetSpec) error {
-	return nil
-}
-
-func (c *Controller) Create(backup *v1alpha1.BackupSpec) error {
-	// parse resources
-	//resources, err := util.ParseResourceSpecRequirements(backup.Limits, backup.Requests)
-	//if err != nil {
-	//	return err
-	//}
-	return nil
-}
-
-func (c *Controller) getPSMDBCopy() (*v1alpha1.PerconaServerMongoDB, error) {
-	err := c.client.Get(c.psmdb)
+func (c *Controller) Delete(backup *v1alpha1.Backup) error {
+	err := c.client.Delete(newCronJob(c.psmdb, backup))
 	if err != nil {
-		return nil, err
-	}
-	return c.psmdb.DeepCopy(), nil
-}
-
-// updateStatus updates the backup BackupStatus struct in the PSMDB status
-func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec, replset *v1alpha1.ReplsetSpec) error {
-	status := &v1alpha1.BackupStatus{
-		Enabled: backupTask.Enabled,
-		Name:    backupTask.Name,
-		Replset: replset.Name,
-	}
-
-	data, err := c.getPSMDBCopy()
-	if err != nil {
+		logrus.Errorf("failed to delete cronJob for backup %s for replica set %s", backup.Task.Name, backup.Replset.Name)
 		return err
 	}
-
-	for i, bkpStatus := range data.Status.Backups {
-		if bkpStatus.Name == backupTask.Name {
-			data.Status.Backups[i] = status
-			err := c.client.Update(data)
-			if err != nil {
-				return err
-			}
-			c.psmdb.Status = data.Status
-			return nil
-		}
-	}
-
-	data.Status.Backups = append(data.Status.Backups, status)
-	err = c.client.Update(data)
-	if err != nil {
-		return err
-	}
-	c.psmdb = data
-
-	return nil
+	return c.deleteStatus(backup)
 }
 
-// deleteStatus deletes the backup BackupStatus struct from the PSMDB status
-func (c *Controller) deleteStatus(backupTask *v1alpha1.BackupTaskSpec) error {
-	data, err := c.getPSMDBCopy()
-	if err != nil {
-		return err
-	}
+//func (c *Controller) Get(backup *v1alpha1.Backup) error {
+//	return nil
+//}
 
-	for i, bkpStatus := range data.Status.Backups {
-		if bkpStatus.Name != backupTask.Name {
-			continue
-		}
-		data.Status.Backups = append(data.Status.Backups[:i], data.Status.Backups[i+1:]...)
-		err = c.client.Update(data)
-		if err != nil {
-			return err
-		}
-		c.psmdb = data
-		break
-	}
-
-	return nil
+func (c *Controller) Create(backup *v1alpha1.Backup) error {
+	logrus.Infof("creating cronJob for backup %s for replset: %s", backup.Task.Name, backup.Replset.Name)
+	cronJob := c.newBackupCronJob(backup)
+	return c.client.Create(cronJob)
 }

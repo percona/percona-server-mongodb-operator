@@ -51,6 +51,10 @@ func TestHandlerHandle(t *testing.T) {
 					Port: 99999,
 				},
 			},
+			Backup: &v1alpha1.BackupSpec{
+				Coordinator: &v1alpha1.BackupCoordinatorSpec{},
+				Tasks:       []*v1alpha1.BackupTaskSpec{},
+			},
 		},
 	}
 	event := sdk.Event{

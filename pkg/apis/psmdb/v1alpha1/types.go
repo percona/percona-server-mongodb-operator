@@ -69,16 +69,11 @@ type SecretsSpec struct {
 	Users string `json:"users,omitempty"`
 }
 
-type ReplsetBackupSpec struct {
-	*ResourcesSpec `json:"resources,omitempty"`
-}
-
 type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string             `json:"name"`
-	Size           int32              `json:"size"`
-	ClusterRole    ClusterRole        `json:"clusterRole,omitempty"`
-	Backup         *ReplsetBackupSpec `json:"backup,omitempty"`
+	Name           string      `json:"name"`
+	Size           int32       `json:"size"`
+	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -224,21 +219,27 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
+type Backup struct {
+	Replset *ReplsetSpec
+	Task    *BackupTaskSpec
+}
+
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Tag            string `json:"tag,omitempty"`
+	Debug          bool `json:"debug,omitempty"`
 }
 
 type BackupSpec struct {
+	Version     string                 `json:"version,omitempty"`
 	Coordinator *BackupCoordinatorSpec `json:"coordinator,omitempty"`
 	Tasks       []*BackupTaskSpec      `json:"tasks,omitempty"`
 }
 
 type BackupTaskSpec struct {
 	Name     string `json:"name,omitempty"`
+	Replset  string `json:"replset,omitempty"`
 	Enabled  bool   `json:"enabled,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
-	Verbose  bool   `json:"verbose,omitempty"`
 }
 
 type BackupStatus struct {

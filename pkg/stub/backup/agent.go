@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	agentContainerImage       = backupImagePrefix + ":backup-agent"
 	agentContainerName        = "backup-agent"
 	agentBackupDataMount      = "/backup"
 	agentBackupDataVolumeName = "backup-data"
@@ -20,7 +19,7 @@ const (
 func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Container {
 	return corev1.Container{
 		Name:  agentContainerName,
-		Image: agentContainerImage,
+		Image: c.getImageName("agent"),
 		Env: []corev1.EnvVar{
 			//{
 			//	Name: "PBM_AGENT_BACKUP_DIR",

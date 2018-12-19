@@ -16,7 +16,6 @@ import (
 
 const (
 	coordinatorContainerName = "backup-coordinator"
-	coordinatorDockerImage   = backupImagePrefix + ":backup-coordinator"
 	coordinatorDataMount     = "/data"
 	coordinatorDataVolume    = "backup-coordinator-data"
 	coordinatorAPIPort       = int32(10001)
@@ -27,6 +26,10 @@ const (
 
 var coordinatorLabels = map[string]string{
 	"backup-coordinator": "true",
+}
+
+func (c *Controller) coordinatorAPIAddress() string {
+	return c.coordinatorStatefulSetName() + "." + c.psmdb.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(coordinatorAPIPort))
 }
 
 func (c *Controller) coordinatorRPCAddress() string {
@@ -42,7 +45,7 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 		Containers: []corev1.Container{
 			{
 				Name:            coordinatorContainerName,
-				Image:           coordinatorDockerImage,
+				Image:           c.getImageName("coordinator"),
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Args: []string{
 					"--enable-clients-logging",

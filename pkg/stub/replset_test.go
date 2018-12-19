@@ -6,6 +6,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
@@ -97,14 +98,17 @@ func TestEnsureReplsetStatefulSet(t *testing.T) {
 			},
 		},
 	}
-	ss, err := h.ensureReplsetStatefulSet(psmdb, replset)
+	resources, _ := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+
+	ss, err := h.ensureReplsetStatefulSet(psmdb, replset, resources)
 	assert.NoError(t, err)
 	assert.NotNil(t, ss)
 
 	// test an error is returned when no storage limit is set
 	// https://jira.percona.com/browse/CLOUD-42
 	replset.ResourcesSpec.Limits.Storage = ""
-	_, err = h.ensureReplsetStatefulSet(psmdb, replset)
+	resources, _ = util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+	_, err = h.ensureReplsetStatefulSet(psmdb, replset, resources)
 	assert.Error(t, err)
 }
 
