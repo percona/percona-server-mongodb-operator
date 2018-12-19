@@ -1,27 +1,24 @@
 package backup
 
 import (
+	"reflect"
+
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 )
 
-func (c *Controller) getPSMDBCopy() (*v1alpha1.PerconaServerMongoDB, error) {
+// updateStatus updates the backup BackupStatus struct in the PSMDB status
+func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec) error {
 	err := c.client.Get(c.psmdb)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return c.psmdb.DeepCopy(), nil
-}
+	data := c.psmdb.DeepCopy()
 
-// updateStatus updates the backup BackupStatus struct in the PSMDB status
-func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec, replset *v1alpha1.ReplsetSpec) error {
-	status := &v1alpha1.BackupStatus{
+	cronJob := newCronJob(c.psmdb, backupTask)
+	status := &v1alpha1.BackupTaskStatus{
 		Enabled: backupTask.Enabled,
 		Name:    backupTask.Name,
-	}
-
-	data, err := c.getPSMDBCopy()
-	if err != nil {
-		return err
+		CronJob: cronJob.Name,
 	}
 
 	for i, bkpStatus := range data.Status.Backups {
@@ -37,34 +34,27 @@ func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec, replset *
 	}
 
 	data.Status.Backups = append(data.Status.Backups, status)
-	err = c.client.Update(data)
-	if err != nil {
-		return err
-	}
-	c.psmdb = data
-
-	return nil
+	return c.client.Update(data)
 }
 
 // deleteStatus deletes the backup BackupStatus struct from the PSMDB status
 func (c *Controller) deleteStatus(backup *v1alpha1.BackupTaskSpec) error {
-	data, err := c.getPSMDBCopy()
+	err := c.client.Get(c.psmdb)
 	if err != nil {
 		return err
 	}
+	data := c.psmdb.DeepCopy()
 
 	for i, bkpStatus := range data.Status.Backups {
 		if bkpStatus.Name != backup.Name {
 			continue
 		}
 		data.Status.Backups = append(data.Status.Backups[:i], data.Status.Backups[i+1:]...)
-		err = c.client.Update(data)
-		if err != nil {
-			return err
-		}
-		c.psmdb = data
 		break
 	}
 
+	if !reflect.DeepEqual(data, c.psmdb) {
+		return c.client.Update(data)
+	}
 	return nil
 }

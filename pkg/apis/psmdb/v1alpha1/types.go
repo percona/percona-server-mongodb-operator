@@ -35,8 +35,8 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type PerconaServerMongoDBStatus struct {
-	Backups  []*BackupStatus  `json:"backups,omitempty"`
-	Replsets []*ReplsetStatus `json:"replsets,omitempty"`
+	Backups  []*BackupTaskStatus `json:"backups,omitempty"`
+	Replsets []*ReplsetStatus    `json:"replsets,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
@@ -219,11 +219,6 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
-type Backup struct {
-	Replset *ReplsetSpec
-	Task    *BackupTaskSpec
-}
-
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Debug          bool `json:"debug,omitempty"`
@@ -237,11 +232,12 @@ type BackupSpec struct {
 
 type BackupTaskSpec struct {
 	Name     string `json:"name,omitempty"`
-	Enabled  bool   `json:"enabled,omitempty"`
+	Enabled  bool   `json:"enabled"`
 	Schedule string `json:"schedule,omitempty"`
 }
 
-type BackupStatus struct {
-	Enabled bool   `json:"enabled"`
+type BackupTaskStatus struct {
 	Name    string `json:"name,omitempty"`
+	Enabled bool   `json:"enabled"`
+	CronJob string `json:"cronJob,omitempty"`
 }

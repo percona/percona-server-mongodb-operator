@@ -37,13 +37,6 @@ func (c *Controller) getImageName(component string) string {
 	return fmt.Sprintf("%s:backup-%s", backupImagePrefix, component)
 }
 
-func (c *Controller) logFields(backupTask *v1alpha1.BackupTaskSpec, replset *v1alpha1.ReplsetSpec) logrus.Fields {
-	return logrus.Fields{
-		"backup":  backupTask.Name,
-		"replset": replset.Name,
-	}
-}
-
 func (c *Controller) Delete(backup *v1alpha1.BackupTaskSpec) error {
 	err := c.client.Delete(newCronJob(c.psmdb, backup))
 	if err != nil {
@@ -54,14 +47,14 @@ func (c *Controller) Delete(backup *v1alpha1.BackupTaskSpec) error {
 }
 
 func (c *Controller) Update(backup *v1alpha1.BackupTaskSpec) error {
-	return nil
+	return c.updateStatus(backup)
 }
-
-//func (c *Controller) Get(backup *v1alpha1.Backup) error {
-//	return nil
-//}
 
 func (c *Controller) Create(backup *v1alpha1.BackupTaskSpec) error {
 	cronJob := c.newBackupCronJob(backup)
-	return c.client.Create(cronJob)
+	err := c.client.Create(cronJob)
+	if err != nil {
+		return err
+	}
+	return c.updateStatus(backup)
 }

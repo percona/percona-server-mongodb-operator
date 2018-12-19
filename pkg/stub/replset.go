@@ -229,11 +229,18 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		if err != nil {
 			return nil, err
 		}
+
+		err = h.client.Get(m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get status for replset %s: %v", replset.Name, err)
+		}
 		status.Initialized = true
+
 		err = h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 		}
+
 		logrus.Infof("changed state to initialised for replset %s", replset.Name)
 	}
 
