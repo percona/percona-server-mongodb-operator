@@ -1,7 +1,9 @@
-package stub
+package util
 
 import (
 	"testing"
+
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
@@ -10,32 +12,28 @@ import (
 func TestIsStatefulSetUpdating(t *testing.T) {
 	ss := &appsv1.StatefulSet{
 		Status: appsv1.StatefulSetStatus{
-			CurrentReplicas: defaultMongodSize,
-			ReadyReplicas:   defaultMongodSize,
+			CurrentReplicas: config.DefaultMongodSize,
+			ReadyReplicas:   config.DefaultMongodSize,
 			CurrentRevision: t.Name(),
 			UpdateRevision:  t.Name(),
 		},
 	}
 
 	// test success
-	assert.False(t, isStatefulSetUpdating(ss))
+	assert.False(t, IsStatefulSetUpdating(ss))
 
 	// updateRevision != currentRevision
 	ss.Status.UpdateRevision = ss.Status.UpdateRevision + "-true"
-	assert.True(t, isStatefulSetUpdating(ss))
+	assert.True(t, IsStatefulSetUpdating(ss))
 	ss.Status.UpdateRevision = t.Name()
 
 	// readyReplicas < currentReplicas
-	assert.True(t, isStatefulSetUpdating(&appsv1.StatefulSet{
+	assert.True(t, IsStatefulSetUpdating(&appsv1.StatefulSet{
 		Status: appsv1.StatefulSetStatus{
-			CurrentReplicas: defaultMongodSize,
-			ReadyReplicas:   defaultMongodSize - 1,
+			CurrentReplicas: config.DefaultMongodSize,
+			ReadyReplicas:   config.DefaultMongodSize - 1,
 			CurrentRevision: t.Name(),
 			UpdateRevision:  t.Name(),
 		},
 	}))
 }
-
-//func TestGetReplsetStatus(t *testing.T) {}
-//func TestGetReplsetMemberStatuses(t *testing.T) {}
-//func TestHandlerUpdateStatus(t *testing.T) {}
