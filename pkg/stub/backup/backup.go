@@ -11,6 +11,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	backupImagePrefix = "percona/percona-server-mongodb-operator"
+)
+
 type Controller struct {
 	client        sdk.Client
 	psmdb         *v1alpha1.PerconaServerMongoDB

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	agentContainerImage       = "percona/percona-backup-mongodb:agent"
+	agentContainerImage       = backupImagePrefix + ":backup-agent"
 	agentContainerName        = "backup-agent"
 	agentBackupDataMount      = "/backup"
 	agentBackupDataVolumeName = "backup-data"

@@ -16,7 +16,7 @@ import (
 
 const (
 	coordinatorContainerName = "backup-coordinator"
-	coordinatorDockerImage   = "percona/percona-backup-mongodb:coordinator"
+	coordinatorDockerImage   = backupImagePrefix + ":backup-coordinator"
 	coordinatorDataMount     = "/data"
 	coordinatorDataVolume    = "backup-coordinator-data"
 	coordinatorAPIPort       = int32(10001)
