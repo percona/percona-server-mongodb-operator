@@ -46,7 +46,7 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 			{
 				Name:            coordinatorContainerName,
 				Image:           c.getImageName("coordinator"),
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: c.psmdb.Spec.ImagePullPolicy,
 				Args: []string{
 					"--enable-clients-logging",
 				},

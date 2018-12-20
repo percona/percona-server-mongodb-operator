@@ -89,9 +89,10 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 
 func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Container {
 	return corev1.Container{
-		Name:  agentContainerName,
-		Image: c.getImageName("agent"),
-		Env:   c.newAgentContainerArgs(),
+		Name:            agentContainerName,
+		Image:           c.getImageName("agent"),
+		ImagePullPolicy: c.psmdb.Spec.ImagePullPolicy,
+		Env:             c.newAgentContainerArgs(),
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &util.TrueVar,
 			RunAsUser:    util.GetContainerRunUID(c.psmdb, c.serverVersion),
