@@ -59,6 +59,9 @@ spec:
     #  filter: '{}'
   backup:
     version: 0.1.0
+    aws:
+      bucket: BACKUP-BUCKET-NAME-HERE
+      region: us-west-2
     coordinator:
       debug: false
       resources:
@@ -75,5 +78,3 @@ spec:
       enabled: true
       schedule: "*/1 * * * *"
       destinationType: aws
-      #aws:
-      #  region: us-west-2

@@ -232,8 +232,14 @@ type BackupCoordinatorSpec struct {
 	Debug          bool `json:"debug,omitempty"`
 }
 
+type BackupAWSSpec struct {
+	Bucket string `json:"bucket,omitempty"`
+	Region string `json:"region,omitempty"`
+}
+
 type BackupSpec struct {
 	Version     string                 `json:"version,omitempty"`
+	AWS         *BackupAWSSpec         `json:"aws,omitempty"`
 	Coordinator *BackupCoordinatorSpec `json:"coordinator,omitempty"`
 	Tasks       []*BackupTaskSpec      `json:"tasks,omitempty"`
 }

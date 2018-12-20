@@ -14,8 +14,6 @@ const (
 	agentContainerName        = "backup-agent"
 	agentBackupDataMount      = "/backup"
 	agentBackupDataVolumeName = "backup-data"
-	envAWSAccessKey           = "AWS_ACCESS_KEY_ID"
-	envAWSSecretKey           = "AWS_SECRET_ACCESS_KEY"
 )
 
 func (c *Controller) hasAWSBackups() bool {
@@ -63,24 +61,24 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 		awsEnvs := []corev1.EnvVar{
 			{
 				Name:  "PBM_AGENT_BACKUP_DIR",
-				Value: "percona-mongodb-backup-test-s3-psmdbo",
+				Value: c.psmdb.Spec.Backup.AWS.Bucket,
 			},
 			{
 				Name:  "AWS_REGION",
-				Value: "us-west-2",
+				Value: c.psmdb.Spec.Backup.AWS.Region,
 			},
 			{
-				Name: envAWSAccessKey,
+				Name: "AWS_ACCESS_KEY_ID",
 				ValueFrom: util.EnvVarSourceFromSecret(
 					c.psmdb.Spec.Secrets.BackupAWS,
-					envAWSAccessKey,
+					"AWS_ACCESS_KEY_ID",
 				),
 			},
 			{
-				Name: envAWSSecretKey,
+				Name: "AWS_SECRET_ACCESS_KEY",
 				ValueFrom: util.EnvVarSourceFromSecret(
 					c.psmdb.Spec.Secrets.BackupAWS,
-					envAWSSecretKey,
+					"AWS_SECRET_ACCESS_KEY",
 				),
 			},
 		}
