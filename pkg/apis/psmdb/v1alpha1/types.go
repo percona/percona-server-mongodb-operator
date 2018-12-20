@@ -65,8 +65,9 @@ type ServerVersion struct {
 }
 
 type SecretsSpec struct {
-	Key   string `json:"key,omitempty"`
-	Users string `json:"users,omitempty"`
+	Key       string `json:"key,omitempty"`
+	Users     string `json:"users,omitempty"`
+	BackupAWS string `json:"backup-aws,omitempty"`
 }
 
 type ReplsetSpec struct {
@@ -219,6 +220,13 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
+type BackupDestinationType string
+
+var (
+	BackupDestinationAWS  BackupDestinationType = "aws"
+	BackupDestinationFile BackupDestinationType = "file"
+)
+
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Debug          bool `json:"debug,omitempty"`
@@ -231,9 +239,10 @@ type BackupSpec struct {
 }
 
 type BackupTaskSpec struct {
-	Name     string `json:"name,omitempty"`
-	Enabled  bool   `json:"enabled"`
-	Schedule string `json:"schedule,omitempty"`
+	Name            string                `json:"name,omitempty"`
+	Enabled         bool                  `json:"enabled"`
+	Schedule        string                `json:"schedule,omitempty"`
+	DestinationType BackupDestinationType `json:"destinationType,omitempty"`
 }
 
 type BackupTaskStatus struct {

@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	DefaultVersion                        = "latest"
+	DefaultVersion                        = "3.6"
 	DefaultRunUID                   int64 = 1001
 	DefaultKeySecretName                  = "percona-server-mongodb-key"
 	DefaultUsersSecretName                = "percona-server-mongodb-users"
@@ -19,4 +19,8 @@ var (
 	DefaultInMemorySizeRatio              = 0.9
 	DefaultOperationProfilingMode         = v1alpha1.OperationProfilingModeSlowOp
 	DefaultImagePullPolicy                = corev1.PullIfNotPresent
+
+	DefaultBackupAWSSecretName   = "percona-server-mongodb-backup-aws"
+	DefaultBackupVersion         = "0.1.0"
+	DefaultBackupDestinationType = v1alpha1.BackupDestinationAWS
 )

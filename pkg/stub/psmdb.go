@@ -30,6 +30,9 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	if spec.Secrets.Users == "" {
 		spec.Secrets.Users = config.DefaultUsersSecretName
 	}
+	if spec.Secrets.BackupAWS == "" {
+		spec.Secrets.BackupAWS = config.DefaultBackupAWSSecretName
+	}
 	if spec.Mongod == nil {
 		spec.Mongod = &v1alpha1.MongodSpec{}
 	}
@@ -76,7 +79,6 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 			}
 		}
 	}
-
 	if spec.Mongod.OperationProfiling == nil {
 		spec.Mongod.OperationProfiling = &v1alpha1.MongodSpecOperationProfiling{
 			Mode: config.DefaultOperationProfilingMode,
@@ -97,13 +99,24 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	if spec.RunUID == 0 && util.GetPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {
 		spec.RunUID = config.DefaultRunUID
 	}
+
+	if spec.Backup != nil {
+		if spec.Backup.Version == "" {
+			spec.Backup.Version = config.DefaultBackupVersion
+		}
+		for _, backup := range spec.Backup.Tasks {
+			if backup.DestinationType == "" {
+				backup.DestinationType = config.DefaultBackupDestinationType
+			}
+		}
+	}
 }
 
 // hasBackupsEnabled returns a boolean reflecting if there are any backups
 // enabled in the PSMDB spec
 func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
 	for _, backupTask := range m.Spec.Backup.Tasks {
-		if backupTask.Enabled {
+		if backupTask.Enabled && backupTask.Schedule != "" {
 			return true
 		}
 	}

@@ -181,6 +181,14 @@ func (c *Controller) newCoordinatorService() *corev1.Service {
 	return service
 }
 
+func (c *Controller) DeleteCoordinator() error {
+	set, err := c.newCoordinatorStatefulSet()
+	if err != nil {
+		return err
+	}
+	return c.client.Delete(set)
+}
+
 func (c *Controller) EnsureCoordinator() error {
 	set, err := c.newCoordinatorStatefulSet()
 	if err != nil {

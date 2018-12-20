@@ -41,6 +41,7 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b
 					"run", "backup",
 					"--description=" + backupName,
 					"--server-addr=" + c.coordinatorAPIAddress(),
+					"--destination-type=" + string(backup.DestinationType),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &util.TrueVar,

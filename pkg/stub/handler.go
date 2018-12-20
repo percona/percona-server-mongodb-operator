@@ -28,16 +28,6 @@ var ReplsetInitWait = 10 * time.Second
 
 const minPersistentVolumeClaims = 1
 
-// getReplsetSpec returns a ReplicaSpec object for a replica set by name
-func getReplsetSpec(psmdb *v1alpha1.PerconaServerMongoDB, name string) *v1alpha1.ReplsetSpec {
-	for _, replset := range psmdb.Spec.Replsets {
-		if replset.Name == name {
-			return replset
-		}
-	}
-	return nil
-}
-
 // NewHandler return new instance of sdk.Handler interface.
 func NewHandler(client sdk.Client) opSdk.Handler {
 	return &Handler{
@@ -152,7 +142,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			return err
 		}
 
-		// Ensure the backup coordinator is started if any backups are enabled
+		// Ensure the backup coordinator is start/stopped
 		if h.backups == nil && h.hasBackupsEnabled(psmdb) {
 			h.backups = backup.New(h.client, psmdb, h.serverVersion, usersSecret)
 			err = h.backups.EnsureCoordinator()
@@ -160,6 +150,13 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to start/update backup coordinator: %v", err)
 				return err
 			}
+		} else if h.backups != nil && !h.hasBackupsEnabled(psmdb) {
+			err = h.backups.DeleteCoordinator()
+			if err != nil {
+				logrus.Errorf("failed to stop the backup coordinator: %v", err)
+				return err
+			}
+			h.backups = nil
 		}
 
 		// Ensure the watchdog is started (to contol the MongoDB Replica Set config)

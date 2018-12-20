@@ -9,6 +9,7 @@ spec:
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
+    backup-aws: my-cluster-name-backup-aws
   replsets:
   - name: rs0
     size: 3
@@ -67,7 +68,9 @@ spec:
     #  format: BSON
     #  filter: '{}'
   backup:
+    version: 0.1.0
     coordinator:
+      debug: false
       resources:
         limits:
           cpu: "100m"
@@ -81,4 +84,4 @@ spec:
     - name: default
       enabled: true
       schedule: "*/1 * * * *"
-      verbose: false
+      destinationType: aws
