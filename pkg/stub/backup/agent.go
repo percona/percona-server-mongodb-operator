@@ -62,6 +62,14 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 	if c.hasAWSBackups() {
 		awsEnvs := []corev1.EnvVar{
 			{
+				Name:  "PBM_AGENT_BACKUP_DIR",
+				Value: "percona-mongodb-backup-test-s3-psmdbo",
+			},
+			{
+				Name:  "AWS_REGION",
+				Value: "us-west-2",
+			},
+			{
 				Name: envAWSAccessKey,
 				ValueFrom: util.EnvVarSourceFromSecret(
 					c.psmdb.Spec.Secrets.BackupAWS,

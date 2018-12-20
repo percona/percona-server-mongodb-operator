@@ -52,6 +52,10 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 				},
 				Env: []corev1.EnvVar{
 					{
+						Name:  "PBM_COORDINATOR_DEBUG",
+						Value: "true",
+					},
+					{
 						Name:  "PBM_COORDINATOR_API_PORT",
 						Value: strconv.Itoa(int(coordinatorAPIPort)),
 					},
