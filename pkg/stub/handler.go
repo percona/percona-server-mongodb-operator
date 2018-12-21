@@ -205,6 +205,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to remove backup coordinator: %v", err)
 				return err
 			}
+			h.backups = nil
 		}
 
 		// Update the pods+statefulsets list that is read by the watchdog
