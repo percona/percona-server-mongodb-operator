@@ -7,11 +7,13 @@ test_dir="$(dirname $0)"
 . $(dirname $0)/functions
 src_dir="$(realpath $test_dir/..)"
 
-build() {
+build_operator() {
     repo=$(
         git config --get remote.origin.url \
             | sed -e 's^.*github.com[:/]^github.com/^; s/.git$//'
     )
+    $sed -i -e 's^return "percona/percona-server-mongodb-operator:"^return "perconalab/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
+    $sed -i -e "s/master/$GIT_BRANCH/" ${src_dir}/version/version.go
     docker run --rm -v ${src_dir}:/go/src/${repo} golang sh -c "
         set -o errexit
         set -o xtrace
@@ -22,11 +24,21 @@ build() {
         cd /go/src/${repo}
         bash -x tmp/build/build.sh
     "
-	export IMAGE
+    $sed -i -e 's^return "perconalab/percona-server-mongodb-operator:"^return "percona/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
+    $sed -i -e "s/$GIT_BRANCH/master/" ${src_dir}/version/version.go
+    export IMAGE
     pushd ${src_dir}
         bash -x ${src_dir}/tmp/build/docker_build.sh
     popd
     docker push ${IMAGE}
 }
 
-build
+build_mongod36() {
+    pushd ${src_dir}
+        docker build --no-cache --squash -t ${IMAGE_MONGOD36} -f tmp/build/Dockerfile.mongod36 .
+    popd
+    docker push ${IMAGE_MONGOD36}
+}
+
+build_operator
+build_mongod36
