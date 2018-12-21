@@ -8,6 +8,7 @@ rules:
   resources:
   - perconaservermongodbs
   verbs:
+  - "get"
   - "list"
   - "update"
   - "watch"
@@ -31,6 +32,15 @@ rules:
   - deployments
   - replicasets
   - statefulsets
+  verbs:
+  - "create"
+  - "update"
+  - "delete"
+  - "get"
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
   verbs:
   - "create"
   - "update"
