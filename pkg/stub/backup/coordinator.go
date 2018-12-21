@@ -45,10 +45,11 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 				Name:            coordinatorContainerName,
 				Image:           c.getImageName("coordinator"),
 				ImagePullPolicy: c.psmdb.Spec.ImagePullPolicy,
-				Args: []string{
-					"--enable-clients-logging",
-				},
 				Env: []corev1.EnvVar{
+					{
+						Name:  "PBM_COORDINATOR_ENABLE_CLIENTS_LOGGING",
+						Value: "true",
+					},
 					{
 						Name:  "PBM_COORDINATOR_DEBUG",
 						Value: strconv.FormatBool(c.psmdb.Spec.Backup.Coordinator.Debug),
