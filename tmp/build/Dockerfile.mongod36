@@ -1,0 +1,12 @@
+FROM golang
+
+COPY vendor /go/src
+RUN cd /go/src/github.com/percona/mongodb-orchestration-tools \
+    && make bin/mongodb-healthcheck bin/k8s-mongodb-initiator
+
+FROM percona/percona-server-mongodb:3.6
+
+COPY --from=0 \
+	/go/src/github.com/percona/mongodb-orchestration-tools/bin/mongodb-healthcheck \
+	/go/src/github.com/percona/mongodb-orchestration-tools/bin/k8s-mongodb-initiator \
+	/usr/local/bin/
