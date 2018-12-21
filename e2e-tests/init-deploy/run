@@ -12,9 +12,9 @@ deploy_operator
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl apply \
-	-f $conf_dir/secrets.yml \
-	-f $conf_dir/$cluster.yml \
-	-f $conf_dir/client.yml
+    -f $conf_dir/secrets.yml \
+    -f $conf_dir/$cluster.yml \
+    -f $conf_dir/client.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
@@ -32,11 +32,11 @@ compare_mongo_user "test:test@$cluster.$namespace"
 
 desc 'write data, read from all'
 run_mongo \
-	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-	"userAdmin:userAdmin123456@$cluster.$namespace"
+    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+    "userAdmin:userAdmin123456@$cluster.$namespace"
 run_mongo \
-	'use myApp\n db.test.insert({ x: 100500 })' \
-	"myApp:myPass@$cluster.$namespace"
+    'use myApp\n db.test.insert({ x: 100500 })' \
+    "myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
