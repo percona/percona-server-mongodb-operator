@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
@@ -24,13 +26,13 @@ func TestHandlerHandle(t *testing.T) {
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
 			Secrets: &v1alpha1.SecretsSpec{
-				Key:   defaultKeySecretName,
-				Users: defaultUsersSecretName,
+				Key:   config.DefaultKeySecretName,
+				Users: config.DefaultUsersSecretName,
 			},
 			Replsets: []*v1alpha1.ReplsetSpec{
 				{
-					Name: defaultReplsetName,
-					Size: defaultMongodSize,
+					Name: config.DefaultReplsetName,
+					Size: config.DefaultMongodSize,
 					ResourcesSpec: &v1alpha1.ResourcesSpec{
 						Limits: &v1alpha1.ResourceSpecRequirements{
 							Cpu:     "1",
@@ -85,12 +87,12 @@ func TestHandlerHandle(t *testing.T) {
 	client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Run(func(args mock.Arguments) {
 		set := args.Get(0).(*appsv1.StatefulSet)
 		set.Spec = appsv1.StatefulSetSpec{
-			Replicas: &defaultMongodSize,
+			Replicas: &config.DefaultMongodSize,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name: mongodContainerName,
+							Name: mongod.MongodContainerName,
 						},
 					},
 				},

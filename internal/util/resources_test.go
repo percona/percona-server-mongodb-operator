@@ -1,4 +1,4 @@
-package stub
+package util
 
 import (
 	"testing"
@@ -19,6 +19,7 @@ func TestParseResourceRequirementsList(t *testing.T) {
 	assert.NoError(t, err)
 	cpu := parsed[corev1.ResourceCPU]
 	assert.Equal(t, "500m", cpu.String())
+	assert.Len(t, parsed, 3)
 
 	// test float cpu format
 	parsed, err = parseResourceRequirementsList(&v1alpha1.ResourceSpecRequirements{
@@ -65,7 +66,7 @@ func TestParseResourceRequirementsList(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestParseReplsetResourceRequirements(t *testing.T) {
+func TestParseResourceSpecRequirements(t *testing.T) {
 	replset := &v1alpha1.ReplsetSpec{
 		ResourcesSpec: &v1alpha1.ResourcesSpec{
 			Limits: &v1alpha1.ResourceSpecRequirements{
@@ -79,7 +80,7 @@ func TestParseReplsetResourceRequirements(t *testing.T) {
 			},
 		},
 	}
-	r, err := parseReplsetResourceRequirements(replset)
+	r, err := ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	assert.Len(t, r.Limits, 3)
@@ -93,11 +94,31 @@ func TestParseReplsetResourceRequirements(t *testing.T) {
 	assert.Equal(t, "500m", cpuRequests.String())
 
 	replset.ResourcesSpec.Limits.Cpu = ""
-	r, err = parseReplsetResourceRequirements(replset)
+	r, err = ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	cpuLimits = r.Limits[corev1.ResourceCPU]
 	cpuRequests = r.Requests[corev1.ResourceCPU]
 	assert.True(t, cpuLimits.IsZero())
-	assert.True(t, cpuRequests.IsZero())
+
+	// test list is empty if empty requirements are sent
+	// https://jira.percona.com/browse/CLOUD-51 and
+	// https://jira.percona.com/browse/CLOUD-52
+	r, err = ParseResourceSpecRequirements(&v1alpha1.ResourceSpecRequirements{}, &v1alpha1.ResourceSpecRequirements{})
+	assert.NoError(t, err)
+	assert.Len(t, r.Limits, 0)
+	assert.Len(t, r.Requests, 0)
+	r, err = ParseResourceSpecRequirements(&v1alpha1.ResourceSpecRequirements{}, &v1alpha1.ResourceSpecRequirements{
+		Cpu:    "500m",
+		Memory: "0.5Gi",
+	})
+	assert.NoError(t, err)
+	assert.Len(t, r.Limits, 0)
+	assert.Len(t, r.Requests, 2)
+
+	// test nil limits+requests
+	r, err = ParseResourceSpecRequirements(nil, nil)
+	assert.NoError(t, err)
+	assert.Len(t, r.Limits, 0)
+	assert.Len(t, r.Requests, 0)
 }

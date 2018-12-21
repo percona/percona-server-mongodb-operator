@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
@@ -23,15 +25,20 @@ var (
 	MongoDBTimeout               = 3 * time.Second
 )
 
-// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
-func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
-	addrs := make([]string, 0)
+// GetReplsetAddrs returns a slice of replset host:port addresses
+func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) []string {
+	addrs := []string{}
 	for _, pod := range pods {
 		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
 		addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
 	}
+	return addrs
+}
+
+// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
+func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
 	return &mgo.DialInfo{
-		Addrs:          addrs,
+		Addrs:          GetReplsetAddrs(m, replset, pods),
 		ReplicaSetName: replset.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
@@ -73,7 +80,7 @@ func isReplsetInitialized(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 //
 func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
-		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, mongodContainerName) || !isPodReady(pod) {
+		if !isMongodPod(pod) || !util.IsContainerAndPodRunning(pod, mongod.MongodContainerName) || !util.IsPodReady(pod) {
 			continue
 		}
 
@@ -81,7 +88,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 
 		// todo add services support
 
-		return execCommandInContainer(pod, mongodContainerName, []string{
+		return execCommandInContainer(pod, mongod.MongodContainerName, []string{
 			"k8s-mongodb-initiator",
 			"init",
 		})
@@ -89,7 +96,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 	return ErrNoRunningMongodContainers
 }
 
-func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources *corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	var doUpdate bool
 
 	// Ensure the stateful set size is the same as the spec
@@ -100,23 +107,16 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	}
 
 	// Find the mongod container
-	var mongod *corev1.Container
-	for i, container := range set.Spec.Template.Spec.Containers {
-		if container.Name != mongodContainerName {
-			continue
-		}
-		mongod = &set.Spec.Template.Spec.Containers[i]
-		break
-	}
-	if mongod == nil {
+	container := util.GetPodSpecContainer(&set.Spec.Template.Spec, mongod.MongodContainerName)
+	if container == nil {
 		return nil, fmt.Errorf("could not find mongod container in pod")
 	}
 
 	// Ensure the PSMDB version is the same as the spec
-	expectedImage := getPSMDBDockerImageName(m)
-	if mongod.Image != expectedImage {
-		logrus.Infof("updating spec image for replset %s: %s -> %s", replset.Name, mongod.Image, expectedImage)
-		mongod.Image = expectedImage
+	expectedImage := mongod.GetPSMDBDockerImageName(m)
+	if container.Image != expectedImage {
+		logrus.Infof("updating spec image for replset %s: %s -> %s", replset.Name, container.Image, expectedImage)
+		container.Image = expectedImage
 		doUpdate = true
 	}
 
@@ -124,9 +124,9 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	mongodLimits := corev1.ResourceList{}
 	mongodRequests := corev1.ResourceList{}
 	for _, resourceName := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
-		mongodRequest := mongod.Resources.Requests[resourceName]
+		mongodRequest := container.Resources.Requests[resourceName]
 		specRequest := resources.Requests[resourceName]
-		if specRequest.Cmp(mongod.Resources.Requests[resourceName]) != 0 {
+		if specRequest.Cmp(container.Resources.Requests[resourceName]) != 0 {
 			logrus.Infof("updating %s resource request: %s -> %s", resourceName, mongodRequest.String(), specRequest.String())
 			mongodRequests[resourceName] = specRequest
 			doUpdate = true
@@ -134,7 +134,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 			mongodRequests[resourceName] = mongodRequest
 		}
 
-		mongodLimit := mongod.Resources.Limits[resourceName]
+		mongodLimit := container.Resources.Limits[resourceName]
 		specLimit := resources.Limits[resourceName]
 		if specLimit.Cmp(mongodLimit) != 0 && specLimit.Cmp(mongodRequest) >= 0 {
 			logrus.Infof("updating %s resource limit: %s -> %s", resourceName, mongodLimit.String(), specLimit.String())
@@ -144,14 +144,14 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 			mongodLimits[resourceName] = mongodLimit
 		}
 	}
-	mongod.Resources.Limits = mongodLimits
-	mongod.Resources.Requests = mongodRequests
+	container.Resources.Limits = mongodLimits
+	container.Resources.Requests = mongodRequests
 
 	// Ensure mongod args are the same as the args from the spec:
-	expectedMongodArgs := newPSMDBMongodContainerArgs(m, replset, resources)
-	if !reflect.DeepEqual(expectedMongodArgs, mongod.Args) {
-		logrus.Infof("updating container mongod args for replset %s: %v -> %v", replset.Name, mongod.Args, expectedMongodArgs)
-		mongod.Args = expectedMongodArgs
+	expectedMongodArgs := mongod.NewContainerArgs(m, replset, resources)
+	if !reflect.DeepEqual(expectedMongodArgs, container.Args) {
+		logrus.Infof("updating container mongod args for replset %s: %v -> %v", replset.Name, container.Args, expectedMongodArgs)
+		container.Args = expectedMongodArgs
 		doUpdate = true
 	}
 
@@ -168,12 +168,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 }
 
 // ensureReplsetStatefulSet ensures a StatefulSet exists
-func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.StatefulSet, error) {
-	resources, err := parseReplsetResourceRequirements(replset)
-	if err != nil {
-		return nil, err
-	}
-
+func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	// Check if 'resources.limits.storage' is unset
 	// https://jira.percona.com/browse/CLOUD-42
 	if _, ok := resources.Limits[corev1.ResourceStorage]; !ok {
@@ -181,8 +176,8 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	}
 
 	// create the statefulset if a Get on the set name returns an error
-	set := newStatefulSet(m, m.Name+"-"+replset.Name)
-	err = h.client.Get(set)
+	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
+	err := h.client.Get(set)
 	if err != nil {
 
 		lf := logrus.Fields{
@@ -196,7 +191,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 			lf["storageClass"] = replset.StorageClass
 		}
 
-		set, err = h.newPSMDBStatefulSet(m, replset, &resources)
+		set, err = h.newStatefulSet(m, replset, resources)
 		if err != nil {
 			return nil, err
 		}
@@ -211,17 +206,21 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	}
 
 	// Ensure the spec is up to date
-	return h.handleStatefulSetUpdate(m, set, replset, &resources)
+	return h.handleStatefulSetUpdate(m, set, replset, resources)
 }
 
 // ensureReplset ensures resources for a PSMDB replset exist
 func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*appsv1.StatefulSet, error) {
 	status := getReplsetStatus(m, replset)
 
-	// Create the StatefulSet if it doesn't exist
-	set, err := h.ensureReplsetStatefulSet(m, replset)
+	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	if err != nil {
-		logrus.Errorf("failed to create stateful set for replset %s: %v", replset.Name, err)
+		return nil, err
+	}
+
+	// Create the StatefulSet if it doesn't exist
+	set, err := h.ensureReplsetStatefulSet(m, replset, resources)
+	if err != nil {
 		return nil, err
 	}
 
@@ -249,7 +248,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	}
 
 	// Remove PVCs left-behind from scaling down if no update is running
-	if !isStatefulSetUpdating(set) {
+	if !util.IsStatefulSetUpdating(set) {
 		err = h.persistentVolumeClaimReaper(m, podList.Items, replset, status)
 		if err != nil {
 			logrus.Errorf("failed to run persistent volume claim reaper for replset %s: %v", replset.Name, err)
@@ -258,7 +257,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	}
 
 	// Create service for replset
-	service := newPSMDBService(m, replset)
+	service := newService(m, replset)
 	err = h.client.Create(service)
 	if err != nil {
 		if !k8serrors.IsAlreadyExists(err) {

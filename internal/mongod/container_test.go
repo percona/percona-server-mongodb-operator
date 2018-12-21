@@ -1,4 +1,4 @@
-package stub
+package mongod
 
 import (
 	"testing"
@@ -9,15 +9,15 @@ import (
 )
 
 func TestGetMongodPort(t *testing.T) {
-	assert.Equal(t, "27017", getMongodPort(&corev1.Container{
+	assert.Equal(t, "27017", GetMongodPort(&corev1.Container{
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          mongodPortName,
+				Name:          MongodPortName,
 				ContainerPort: int32(27017),
 			},
 		},
 	}))
-	assert.Equal(t, "", getMongodPort(&corev1.Container{
+	assert.Equal(t, "", GetMongodPort(&corev1.Container{
 		Ports: []corev1.ContainerPort{},
 	}))
 }
