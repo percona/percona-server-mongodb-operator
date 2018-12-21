@@ -16,7 +16,7 @@ spec:
       limits:
         cpu: "300m"
         memory: "0.5G"
-        storage: "1Gi"
+        storage: "3Gi"
       requests:
         cpu: "300m"
         memory: "0.5G"
@@ -66,8 +66,8 @@ spec:
       resources:
         limits:
           cpu: "100m"
-          memory: "0.1G"
-          storage: "5Gi"
+          memory: "0.2G"
+          storage: "1Gi"
         requests:
           cpu: "100m"
           memory: "0.1G"
