@@ -12,7 +12,7 @@ build_operator() {
         git config --get remote.origin.url \
             | sed -e 's^.*github.com[:/]^github.com/^; s/.git$//'
     )
-	$sed -i -e 's^return "percona/percona-server-mongodb-operator:"^return "perconalab/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
+    $sed -i -e 's^return "percona/percona-server-mongodb-operator:"^return "perconalab/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
     $sed -i -e "s/master/$GIT_BRANCH/" ${src_dir}/version/version.go
     docker run --rm -v ${src_dir}:/go/src/${repo} golang sh -c "
         set -o errexit
@@ -24,7 +24,7 @@ build_operator() {
         cd /go/src/${repo}
         bash -x tmp/build/build.sh
     "
-	$sed -i -e 's^return "perconalab/percona-server-mongodb-operator:"^return "percona/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
+    $sed -i -e 's^return "perconalab/percona-server-mongodb-operator:"^return "percona/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
     $sed -i -e "s/$GIT_BRANCH/master/" ${src_dir}/version/version.go
     export IMAGE
     pushd ${src_dir}
