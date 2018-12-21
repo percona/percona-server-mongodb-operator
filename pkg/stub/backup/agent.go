@@ -12,9 +12,6 @@ import (
 
 const (
 	AgentContainerName = "backup-agent"
-
-	agentBackupDataMount      = "/backup"
-	agentBackupDataVolumeName = "backup-data"
 )
 
 func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
