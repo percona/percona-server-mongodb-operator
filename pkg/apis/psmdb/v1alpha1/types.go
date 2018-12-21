@@ -30,6 +30,7 @@ type PerconaServerMongoDBSpec struct {
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
+	Backup          *BackupSpec       `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 }
 
@@ -44,8 +45,9 @@ type ResourceSpecRequirements struct {
 }
 
 type ResourcesSpec struct {
-	Limits   *ResourceSpecRequirements `json:"limits,omitempty"`
-	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
+	Limits       *ResourceSpecRequirements `json:"limits,omitempty"`
+	Requests     *ResourceSpecRequirements `json:"requests,omitempty"`
+	StorageClass string                    `json:"storageClass,omitempty"`
 }
 
 type Platform string
@@ -70,7 +72,6 @@ type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Name           string      `json:"name"`
 	Size           int32       `json:"size"`
-	StorageClass   string      `json:"storageClass,omitempty"`
 	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
@@ -215,4 +216,18 @@ type MongodSpecOperationProfiling struct {
 	Mode              OperationProfilingMode `json:"mode,omitempty"`
 	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
 	RateLimit         int                    `json:"rateLimit,omitempty"`
+}
+
+type BackupCoordinatorSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+	APIPort        int32 `json:"apiPort,omitempty"`
+	RPCPort        int32 `json:"rpcPort,omitempty"`
+	Debug          bool  `json:"debug,omitempty"`
+}
+
+type BackupSpec struct {
+	Enabled       bool                   `json:"enabled"`
+	Version       string                 `json:"version,omitempty"`
+	RestartPolicy corev1.RestartPolicy   `json:"restartPolicy,omitempty"`
+	Coordinator   *BackupCoordinatorSpec `json:"coordinator,omitempty"`
 }

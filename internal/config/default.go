@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	DefaultVersion                        = "latest"
+	DefaultVersion                        = "3.6"
 	DefaultRunUID                   int64 = 1001
 	DefaultKeySecretName                  = "percona-server-mongodb-key"
 	DefaultUsersSecretName                = "percona-server-mongodb-users"
