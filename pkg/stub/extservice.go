@@ -55,7 +55,7 @@ func createExtService(cli sdk.Client, svc *corev1.Service) error {
 func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 	var retries uint64 = 0
 
-	for retries <= 5 {
+	for atomic.LoadUint64(&retries) <= 5 {
 		if err := cli.Update(svc); err != nil {
 			if errors.IsConflict(err) {
 				time.Sleep(500 * time.Millisecond)
