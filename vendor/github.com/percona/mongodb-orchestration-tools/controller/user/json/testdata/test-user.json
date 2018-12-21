@@ -1,0 +1,9 @@
+{
+  "user": "testUser",
+  "pwd": "testUser123456",
+  "roles": [
+    { "db": "admin", "role": "clusterAdmin" },
+    { "db": "testApp1", "role": "readWrite" },
+    { "db": "testApp2", "role": "readWrite" }
+  ]
+}

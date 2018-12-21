@@ -16,15 +16,10 @@ package replset
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/percona/mongodb-orchestration-tools/internal/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	"gopkg.in/mgo.v2"
-)
-
-const (
-	backupPodNamePrefix = "backup-"
 )
 
 type Mongod struct {
@@ -61,11 +56,6 @@ func NewMongod(task pod.Task, serviceName string, podName string) (*Mongod, erro
 // Name returns a string representing the host and port of a mongod instance
 func (m *Mongod) Name() string {
 	return m.Host + ":" + strconv.Itoa(m.Port)
-}
-
-// IsBackupNode returns a boolean reflecting whether or not the mongod instance is a backup node
-func (m *Mongod) IsBackupNode() bool {
-	return strings.HasPrefix(m.PodName, backupPodNamePrefix)
 }
 
 // DBConfig returns a direct database connection to a single mongod instance
