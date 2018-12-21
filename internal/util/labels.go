@@ -20,7 +20,7 @@ func LabelsForPerconaServerMongoDB(m *v1alpha1.PerconaServerMongoDB, labels map[
 	return ls
 }
 
-// LabelsForPerconaServerMongoDB returns the labels for selecting the resources
+// LabelsForPerconaServerMongoDBReplset returns the labels for selecting the resources
 // belonging to the given PerconaServerMongoDB Replset.
 func LabelsForPerconaServerMongoDBReplset(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
 	return LabelsForPerconaServerMongoDB(m, map[string]string{"replset": replset.Name})

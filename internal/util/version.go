@@ -21,7 +21,7 @@ func GetPlatform(m *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.Serve
 	return v1alpha1.PlatformKubernetes
 }
 
-// getServerVersion returns server version and platform (k8s|oc)
+// GetServerVersion returns server version and platform (k8s|oc)
 // stolen from: https://github.com/openshift/origin/blob/release-3.11/pkg/oc/cli/version/version.go#L106
 func GetServerVersion() (*v1alpha1.ServerVersion, error) {
 	version := &v1alpha1.ServerVersion{}

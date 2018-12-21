@@ -14,6 +14,7 @@ import (
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 
+	"fmt"
 	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -165,6 +166,15 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				return err
 			}
 			clusterSets = append(clusterSets, *set)
+
+			// Ensure replset has external service
+			if psmdb.Spec.Expose.On {
+				svcs, err := h.ensureExtServices(psmdb, replset)
+				if err != nil {
+					return fmt.Errorf("failed to get services of replset %s: %v", replset.Name, err)
+				}
+				clusterServices = svcs
+			}
 		}
 
 		// Update the pods+statefulsets list that is read by the watchdog

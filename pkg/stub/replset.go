@@ -14,7 +14,7 @@ import (
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/sirupsen/logrus"
-	mgo "gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -85,8 +85,6 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 		}
 
 		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
-
-		// todo add services support
 
 		return execCommandInContainer(pod, mongod.MongodContainerName, []string{
 			"k8s-mongodb-initiator",
@@ -222,14 +220,6 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	set, err := h.ensureReplsetStatefulSet(m, replset, resources)
 	if err != nil {
 		return nil, err
-	}
-
-	// Ensure replset has external service
-	if m.Spec.Expose.On {
-		err = h.ensureExtServices(m, replset)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get services of replset %s: %v", replset.Name, err)
-		}
 	}
 
 	// Initiate the replset if it hasn't already been initiated + there are pods +
