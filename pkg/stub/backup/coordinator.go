@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
@@ -210,7 +209,6 @@ func (c *Controller) EnsureCoordinator() error {
 	err = c.client.Create(set)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) {
-			fmt.Printf("Set: %s\n", set)
 			err = c.client.Update(set)
 			if err != nil {
 				logrus.Infof("failed to update backup coordinator stateful set %s: %v", set.Name, err)
