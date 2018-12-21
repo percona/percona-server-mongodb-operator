@@ -22,13 +22,15 @@ import (
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"fmt"
 )
 
 const (
-	mongodContainerName     string = "mongod"
-	mongosContainerName     string = "mongos"
-	mongodbPortName         string = "mongodb"
-	clusterServiceDNSSuffix string = "svc.cluster.local"
+	mongodContainerName       = "mongod"
+	mongodBackupContainerName = "mongod-backup"
+	mongosContainerName       = "mongos"
+	mongodbPortName           = "mongodb"
+	clusterServiceDNSSuffix   = "svc.cluster.local"
 )
 
 func GetMongoHost(pod, service, replset, namespace string) string {
@@ -50,14 +52,16 @@ func (ts TaskState) String() string {
 type Task struct {
 	pod         *corev1.Pod
 	statefulset *appsv1.StatefulSet
+	service     *corev1.Service
 	serviceName string
 	namespace   string
 }
 
-func NewTask(pod *corev1.Pod, statefulset *appsv1.StatefulSet, serviceName, namespace string) *Task {
+func NewTask(pod *corev1.Pod, statefulset *appsv1.StatefulSet, service *corev1.Service, serviceName, namespace string) *Task {
 	return &Task{
 		pod:         pod,
 		statefulset: statefulset,
+		service:     service,
 		namespace:   namespace,
 		serviceName: serviceName,
 	}
@@ -103,6 +107,8 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 	switch taskType {
 	case pod.TaskTypeMongod:
 		containerName = mongodContainerName
+	case pod.TaskTypeMongodBackup:
+		containerName = mongodBackupContainerName
 	case pod.TaskTypeMongos:
 		containerName = mongosContainerName
 	default:
@@ -117,6 +123,14 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 }
 
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
+	if t.service != nil {
+		addr, err := t.getServiceAddr()
+		if err != nil {
+			return nil, err
+		}
+		return addr, nil
+	}
+
 	for _, container := range t.pod.Spec.Containers {
 		for _, port := range container.Ports {
 			if port.Name != mongodbPortName {
@@ -141,4 +155,40 @@ func (t *Task) GetMongoAddr() (*db.Addr, error) {
 
 func (t *Task) GetMongoReplsetName() (string, error) {
 	return getPodReplsetName(t.pod)
+}
+
+func (t *Task) getServiceAddr() (*db.Addr, error) {
+	addr := &db.Addr{}
+	switch t.service.Spec.Type {
+	case corev1.ServiceTypeClusterIP:
+		addr.Host = t.service.Spec.ClusterIP
+		for _, p := range t.service.Spec.Ports {
+			if p.Name != mongodbPortName {
+				continue
+			}
+			addr.Port = int(p.Port)
+		}
+		return addr, nil
+
+	case corev1.ServiceTypeLoadBalancer:
+		addr.Host = t.service.Spec.LoadBalancerIP
+		for _, p := range t.service.Spec.Ports {
+			if p.Name != mongodbPortName {
+				continue
+			}
+			addr.Port = int(p.Port)
+		}
+		return addr, nil
+
+	case corev1.ServiceTypeNodePort:
+		addr.Host = t.pod.Status.HostIP
+		for _, p := range t.service.Spec.Ports {
+			if p.Name != mongodbPortName {
+				continue
+			}
+			addr.Port = int(p.NodePort)
+		}
+	}
+
+	return nil, fmt.Errorf("could not find mongodb service address")
 }

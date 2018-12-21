@@ -167,7 +167,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		}
 
 		// Update the pods+statefulsets list that is read by the watchdog
-		h.pods.Update(clusterPods, clusterSets)
+		h.pods.Update(clusterPods, clusterSets, nil)
 	}
 	return nil
 }

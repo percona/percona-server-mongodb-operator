@@ -21,10 +21,11 @@ import (
 type TaskType string
 
 var (
-	TaskTypeMongod    TaskType = "mongod"
-	TaskTypeArbiter   TaskType = "arbiter"
-	TaskTypeConfigSvr TaskType = "configsvr"
-	TaskTypeMongos    TaskType = "mongos"
+	TaskTypeMongod       TaskType = "mongod"
+	TaskTypeMongodBackup TaskType = "mongod-backup"
+	TaskTypeArbiter      TaskType = "arbiter"
+	TaskTypeConfigSvr    TaskType = "configsvr"
+	TaskTypeMongos       TaskType = "mongos"
 )
 
 func (t TaskType) String() string {

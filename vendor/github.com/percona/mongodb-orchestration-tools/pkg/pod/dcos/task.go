@@ -24,6 +24,8 @@ import (
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 )
 
+const backupPodNamePrefix = "backup-"
+
 type TaskState string
 
 var (
@@ -43,6 +45,7 @@ func (s TaskState) String() string {
 
 type Task struct {
 	frameworkName string
+	podName       string
 	data          *TaskData
 }
 
@@ -74,8 +77,12 @@ type TaskStatus struct {
 	State *TaskState `json:"state"`
 }
 
-func NewTask(data *TaskData, frameworkName string) *Task {
-	return &Task{data: data, frameworkName: frameworkName}
+func NewTask(data *TaskData, frameworkName, podName string) *Task {
+	return &Task{
+		data:          data,
+		frameworkName: frameworkName,
+		podName:       podName,
+	}
 }
 
 func (task *Task) getEnvVar(variableName string) (string, error) {
@@ -114,8 +121,13 @@ func (task *Task) IsUpdating() bool {
 }
 
 func (task *Task) IsTaskType(taskType pod.TaskType) bool {
-	if task.data.Info != nil && strings.HasSuffix(task.data.Info.Name, "-"+taskType.String()) {
-		return strings.Contains(task.data.Info.Command.Value, "mongodb-executor")
+	switch taskType {
+	case pod.TaskTypeMongod:
+		if task.data.Info != nil && strings.HasSuffix(task.data.Info.Name, "-"+taskType.String()) {
+			return strings.Contains(task.data.Info.Command.Value, "mongodb-executor")
+		}
+	case pod.TaskTypeMongodBackup:
+		return strings.HasPrefix(task.podName, backupPodNamePrefix)
 	}
 	return false
 }
