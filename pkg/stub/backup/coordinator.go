@@ -149,7 +149,7 @@ func (c *Controller) newCoordinatorStatefulSet() (*appsv1.StatefulSet, error) {
 				Spec: c.newCoordinatorPodSpec(resources),
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				util.NewPersistentVolumeClaim(c.psmdb, resources, coordinatorDataVolume, ""),
+				util.NewPersistentVolumeClaim(c.psmdb, resources, coordinatorDataVolume, c.psmdb.Spec.Backup.Coordinator.StorageClass),
 			},
 		},
 	}
