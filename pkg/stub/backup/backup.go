@@ -11,6 +11,9 @@ import (
 )
 
 const (
+	DefaultVersion       = "0.1.0"
+	DefaultRestartPolicy = corev1.RestartPolicyOnFailure
+
 	backupImagePrefix = "percona/percona-server-mongodb-operator"
 )
 

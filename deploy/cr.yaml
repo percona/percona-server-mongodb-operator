@@ -59,11 +59,13 @@ spec:
     #  filter: '{}'
   backup:
     version: 0.1.0
+    restartPolicy: OnFailure
     aws:
-      bucket: BACKUP-BUCKET-NAME-HERE
+      bucket: S3-BACKUP-BUCKET-NAME-HERE
       region: us-west-2
     coordinator:
-      debug: false
+      apiPort: 10001
+      rpcPort: 10000
       resources:
         limits:
           cpu: "100m"
@@ -73,8 +75,9 @@ spec:
           cpu: "100m"
           memory: "0.1G"
         #storageClass: aws-gp2
+      debug: false
     tasks:
     - name: default
       enabled: true
-      schedule: "*/1 * * * *"
+      schedule: "0 0 * * *"
       destinationType: aws

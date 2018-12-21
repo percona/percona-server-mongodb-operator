@@ -15,12 +15,13 @@ import (
 )
 
 const (
+	DefaultCoordinatorAPIPort = int32(10001)
+	DefaultCoordinatorRPCPort = int32(10000)
+
 	coordinatorContainerName = "backup-coordinator"
 	coordinatorDataMount     = "/data"
-	coordinatorDataVolume    = "backup-coordinator-data"
-	coordinatorAPIPort       = int32(10001)
+	coordinatorDataVolume    = "backup-metadata"
 	coordinatorAPIPortName   = "api"
-	coordinatorRPCPort       = int32(10000)
 	coordinatorRPCPortName   = "rpc"
 )
 
@@ -28,12 +29,8 @@ var coordinatorLabels = map[string]string{
 	"backup-coordinator": "true",
 }
 
-func (c *Controller) coordinatorAPIAddress() string {
-	return c.coordinatorStatefulSetName() + "." + c.psmdb.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(coordinatorAPIPort))
-}
-
-func (c *Controller) coordinatorRPCAddress() string {
-	return c.coordinatorStatefulSetName() + "." + c.psmdb.Namespace + ".svc.cluster.local:" + strconv.Itoa(int(coordinatorRPCPort))
+func (c *Controller) coordinatorAddress() string {
+	return c.coordinatorStatefulSetName() + "." + c.psmdb.Namespace + ".svc.cluster.local"
 }
 
 func (c *Controller) coordinatorStatefulSetName() string {
@@ -41,6 +38,7 @@ func (c *Controller) coordinatorStatefulSetName() string {
 }
 
 func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements) corev1.PodSpec {
+	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
@@ -57,11 +55,11 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 					},
 					{
 						Name:  "PBM_COORDINATOR_API_PORT",
-						Value: strconv.Itoa(int(coordinatorAPIPort)),
+						Value: strconv.Itoa(int(coordinatorSpec.APIPort)),
 					},
 					{
 						Name:  "PBM_COORDINATOR_GRPC_PORT",
-						Value: strconv.Itoa(int(coordinatorRPCPort)),
+						Value: strconv.Itoa(int(coordinatorSpec.RPCPort)),
 					},
 					{
 						Name:  "PBM_COORDINATOR_WORK_DIR",
@@ -96,17 +94,19 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 				Ports: []corev1.ContainerPort{
 					{
 						Name:          coordinatorRPCPortName,
-						ContainerPort: coordinatorRPCPort,
+						ContainerPort: coordinatorSpec.RPCPort,
 					},
 					{
 						Name:          coordinatorAPIPortName,
-						ContainerPort: coordinatorAPIPort,
+						ContainerPort: coordinatorSpec.APIPort,
 					},
 				},
 				LivenessProbe: &corev1.Probe{
+					InitialDelaySeconds: int32(5),
+					TimeoutSeconds:      int32(3),
 					Handler: corev1.Handler{
 						TCPSocket: &corev1.TCPSocketAction{
-							Port: intstr.FromInt(int(coordinatorRPCPort)),
+							Port: intstr.FromInt(int(coordinatorSpec.RPCPort)),
 						},
 					},
 				},
@@ -158,6 +158,7 @@ func (c *Controller) newCoordinatorStatefulSet() (*appsv1.StatefulSet, error) {
 }
 
 func (c *Controller) newCoordinatorService() *corev1.Service {
+	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -172,11 +173,11 @@ func (c *Controller) newCoordinatorService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name: coordinatorRPCPortName,
-					Port: coordinatorRPCPort,
+					Port: coordinatorSpec.RPCPort,
 				},
 				{
 					Name: coordinatorAPIPortName,
-					Port: coordinatorAPIPort,
+					Port: coordinatorSpec.APIPort,
 				},
 			},
 		},

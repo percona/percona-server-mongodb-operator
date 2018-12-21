@@ -229,7 +229,9 @@ var (
 
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Debug          bool `json:"debug,omitempty"`
+	APIPort        int32 `json:"apiPort,omitempty"`
+	RPCPort        int32 `json:"rpcPort,omitempty"`
+	Debug          bool  `json:"debug,omitempty"`
 }
 
 type BackupAWSSpec struct {
@@ -238,10 +240,11 @@ type BackupAWSSpec struct {
 }
 
 type BackupSpec struct {
-	Version     string                 `json:"version,omitempty"`
-	AWS         *BackupAWSSpec         `json:"aws,omitempty"`
-	Coordinator *BackupCoordinatorSpec `json:"coordinator,omitempty"`
-	Tasks       []*BackupTaskSpec      `json:"tasks,omitempty"`
+	Version       string                 `json:"version,omitempty"`
+	AWS           *BackupAWSSpec         `json:"aws,omitempty"`
+	Coordinator   *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+	Tasks         []*BackupTaskSpec      `json:"tasks,omitempty"`
+	RestartPolicy corev1.RestartPolicy   `json:"restartPolicy,omitempty"`
 }
 
 type BackupTaskSpec struct {

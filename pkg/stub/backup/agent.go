@@ -29,10 +29,11 @@ func (c *Controller) hasAWSBackups() bool {
 }
 
 func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
+	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	args := []corev1.EnvVar{
 		{
 			Name:  "PBM_AGENT_SERVER_ADDRESS",
-			Value: c.coordinatorRPCAddress(),
+			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorSpec.RPCPort)),
 		},
 		{
 			Name:  "PBM_AGENT_MONGODB_HOST",

@@ -1,6 +1,8 @@
 package backup
 
 import (
+	"strconv"
+
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
@@ -29,16 +31,23 @@ func newCronJob(m *v1alpha1.PerconaServerMongoDB, backup *v1alpha1.BackupTaskSpe
 
 func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b.CronJob {
 	backupName := c.psmdb.Name + "-" + backup.Name
+	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	backupPod := corev1.PodSpec{
-		RestartPolicy: corev1.RestartPolicyNever,
+		RestartPolicy: c.psmdb.Spec.Backup.RestartPolicy,
 		Containers: []corev1.Container{
 			{
-				Name:  backupCtlContainerName,
-				Image: c.getImageName("pbmctl"),
+				Name:            backupCtlContainerName,
+				Image:           c.getImageName("pbmctl"),
+				ImagePullPolicy: c.psmdb.Spec.ImagePullPolicy,
+				Env: []corev1.EnvVar{
+					{
+						Name:  "PBMCTL_SERVER_ADDRESS",
+						Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorSpec.APIPort)),
+					},
+				},
 				Args: []string{
 					"run", "backup",
 					"--description=" + backupName,
-					"--server-addr=" + c.coordinatorAPIAddress(),
 					"--destination-type=" + string(backup.DestinationType),
 				},
 				SecurityContext: &corev1.SecurityContext{
