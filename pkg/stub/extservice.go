@@ -91,6 +91,7 @@ func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Servic
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
+					Name:       mongodPortName,
 					Port:       m.Spec.Mongod.Net.Port,
 					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 				},

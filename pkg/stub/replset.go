@@ -79,6 +79,8 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 
 		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
 
+		// todo add services support
+
 		return execCommandInContainer(pod, mongodContainerName, []string{
 			"k8s-mongodb-initiator",
 			"init",
@@ -175,7 +177,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	// Check if 'resources.limits.storage' is unset
 	// https://jira.percona.com/browse/CLOUD-42
 	if _, ok := resources.Limits[corev1.ResourceStorage]; !ok {
-		return nil, fmt.Errorf("replset %s does not have required-value 'resources.limits.storage' set!", replset.Name)
+		return nil, fmt.Errorf("replset %s does not have required-value 'resources.limits.storage' set", replset.Name)
 	}
 
 	// create the statefulset if a Get on the set name returns an error
@@ -221,6 +223,14 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	if err != nil {
 		logrus.Errorf("failed to create stateful set for replset %s: %v", replset.Name, err)
 		return nil, err
+	}
+
+	// Ensure replset has external service
+	if m.Spec.Expose.On {
+		err = h.ensureExtServices(m, replset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get services of replset %s: %v", replset.Name, err)
+		}
 	}
 
 	// Initiate the replset if it hasn't already been initiated + there are pods +

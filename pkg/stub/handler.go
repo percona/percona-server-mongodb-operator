@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
-	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
+	"github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 
@@ -136,6 +136,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// loop will create the cluster shards and config server replset
 		clusterPods := make([]corev1.Pod, 0)
 		clusterSets := make([]appsv1.StatefulSet, 0)
+		clusterServices := make([]corev1.Service, 0)
 		for i, replset := range psmdb.Spec.Replsets {
 			// multiple replica sets is not supported until sharding is
 			// added to the operator
@@ -163,19 +164,10 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				return err
 			}
 			clusterSets = append(clusterSets, *set)
-
-			// Ensure replset has external services
-			if psmdb.Spec.Expose.On {
-				err = h.ensureExtServices(psmdb, replset)
-				if err != nil {
-					logrus.Errorf("failed to get services of replset %s: %v", replset.Name, err)
-					return err
-				}
-			}
 		}
 
 		// Update the pods+statefulsets list that is read by the watchdog
-		h.pods.Update(clusterPods, clusterSets)
+		h.pods.Update(clusterPods, clusterSets, clusterServices)
 	}
 	return nil
 }
