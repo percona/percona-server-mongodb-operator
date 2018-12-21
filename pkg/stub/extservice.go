@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,21 +53,19 @@ func createExtService(cli sdk.Client, svc *corev1.Service) error {
 }
 
 func updateExtService(cli sdk.Client, svc *corev1.Service) error {
-	var retries int
+	var retries uint64 = 0
 
-	if retries >= 5 {
-		return fmt.Errorf("failed to update service %s, retries limit reached", svc.Name)
-	}
-
-	if err := cli.Update(svc); err != nil {
-		if errors.IsConflict(err) {
-			retries = retries + 1
-			time.Sleep(500 * time.Millisecond)
-			err = updateExtService(cli, svc)
+	for retries <= 5 {
+		if err := cli.Update(svc); err != nil {
+			if errors.IsConflict(err) {
+				time.Sleep(500 * time.Millisecond)
+				atomic.AddUint64(&retries, 1)
+				continue
+			}
 		}
-		return err
+		return nil
 	}
-	return nil
+	return fmt.Errorf("failed to update service %s, retries limit reached", svc.Name)
 }
 
 func serviceMeta(namespace, podName string) *corev1.Service {
