@@ -122,7 +122,7 @@ func (h *Handler) newStatefulSetContainers(m *v1alpha1.PerconaServerMongoDB, rep
 	containers := []corev1.Container{
 		mongod.NewContainer(m, replset, resources, runUID),
 	}
-	if m.Spec.Backup.Enabled {
+	if m.Spec.Backup != nil && m.Spec.Backup.Enabled {
 		containers = append(containers, h.backups.NewAgentContainer(replset))
 	}
 	return containers
