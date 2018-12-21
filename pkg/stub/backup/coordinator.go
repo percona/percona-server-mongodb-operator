@@ -5,7 +5,6 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 
-	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -65,20 +64,6 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 					{
 						Name:  "PBM_COORDINATOR_WORK_DIR",
 						Value: coordinatorDataMount,
-					},
-					{
-						Name: "PBM_COORDINATOR_API_USERNAME",
-						ValueFrom: util.EnvVarSourceFromSecret(
-							c.psmdb.Spec.Secrets.Users,
-							motPkg.EnvMongoDBBackupUser,
-						),
-					},
-					{
-						Name: "PBM_COORDINATOR_API_PASSWORD",
-						ValueFrom: util.EnvVarSourceFromSecret(
-							c.psmdb.Spec.Secrets.Users,
-							motPkg.EnvMongoDBBackupPassword,
-						),
 					},
 				},
 				Resources: util.GetContainerResourceRequirements(resources),
@@ -188,6 +173,24 @@ func (c *Controller) newCoordinatorService() *corev1.Service {
 }
 
 func (c *Controller) DeleteCoordinator() error {
+	// delete service
+	service := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.psmdb.Name + "-backup-coordinator",
+			Namespace: c.psmdb.Namespace,
+		},
+	}
+	err := c.client.Delete(service)
+	if err != nil {
+		logrus.Errorf("failed to delete backup coordinator service %s: %v", service.Name, err)
+		return err
+	}
+
+	// delete stateful set
 	set, err := c.newCoordinatorStatefulSet()
 	if err != nil {
 		return err
@@ -197,6 +200,7 @@ func (c *Controller) DeleteCoordinator() error {
 		logrus.Errorf("failed to delete backup coordinator set %s: %v", set.Name, err)
 		return err
 	}
+
 	logrus.Infof("deleted backup coordinator stateful set: %s", set.Name)
 	return nil
 }
