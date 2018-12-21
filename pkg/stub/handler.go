@@ -65,7 +65,7 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 	// Skip if there are no initialized replsets
 	var doStart bool
 	for _, replset := range psmdb.Status.Replsets {
-		if replset.Initialized == true {
+		if replset.Initialized {
 			doStart = true
 			break
 		}
