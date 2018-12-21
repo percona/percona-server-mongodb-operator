@@ -8,6 +8,7 @@ GIT_COMMIT?=$(shell git rev-parse HEAD)
 GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 GIT_REPO=github.com/Percona-Lab/$(NAME)
 UPX_PATH?=$(shell whereis -b upx|awk '{print $$(NF-0)}')
+OPSDK_VERSION=$(shell $(GOPATH)/bin/operator-sdk --version 2>/dev/null | awk '{print $$(NF-0)}')
 
 VERSION?=$(shell awk '/Version =/{print $$3}' $(CURDIR)/version/version.go | tr -d \")
 IMAGE="percona/$(NAME):$(VERSION)"
@@ -24,6 +25,7 @@ test-cover:
 	GOCACHE=$(GOCACHE) go test -covermode=atomic -coverprofile=cover.out -race -v $(GO_TEST_EXTRA) $(GO_TEST_PATH)
 
 pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go: pkg/apis/psmdb/v1alpha1/doc.go pkg/apis/psmdb/v1alpha1/register.go pkg/apis/psmdb/v1alpha1/types.go       
+	if [ "$(OPSDK_VERSION)" != "0.0.7" ]; then echo "ERROR: build must use operator-sdk 0.0.7!" && exit 1; fi
 	$(GOPATH)/bin/operator-sdk generate k8s
 
 tmp/_output/bin/$(NAME): pkg/apis/psmdb/v1alpha1/zz_generated.deepcopy.go pkg/apis/psmdb/v1alpha1/*.go pkg/*/*.go version/version.go cmd/$(NAME)/main.go
