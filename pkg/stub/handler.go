@@ -150,13 +150,48 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to start/update backup coordinator: %v", err)
 				return err
 			}
-		} else if h.backups != nil && !h.hasBackupsEnabled(psmdb) {
-			err = h.backups.DeleteCoordinator()
-			if err != nil {
-				logrus.Errorf("failed to stop the backup coordinator: %v", err)
-				return err
+		} else if h.backups != nil {
+			if h.hasBackupsEnabled(psmdb) && h.hasReplsetsInitialized(psmdb) {
+				// Create cronJobs for each backup if any replsets are initialized:
+				for _, backupTask := range psmdb.Spec.Backup.Tasks {
+					if !backupTask.Enabled || backupTask.Schedule == "" {
+						logrus.Debugf("backup %s is disabled, skipping cronJob creation", backupTask.Name)
+						continue
+					}
+					err := h.backups.Create(backupTask)
+					if err != nil {
+						if !k8serrors.IsAlreadyExists(err) {
+							logrus.Errorf("failed to create backup task %s: %v", backupTask.Name, err)
+							return err
+						} else {
+							err = h.backups.Update(backupTask)
+							if err != nil {
+								logrus.Errorf("failed to update backup task %s: %v", backupTask.Name, err)
+								return err
+							}
+						}
+					} else {
+						logrus.Infof("create cronJob for backup: %s", backupTask.Name)
+					}
+				}
+			} else {
+				// Disable backups if none are active
+				logrus.Info("No backups are enabled, removing backup coordinator and tasks")
+
+				err = h.backups.DeleteCoordinator()
+				if err != nil {
+					logrus.Errorf("failed to stop the backup coordinator: %v", err)
+				}
+				h.backups = nil
+
+				for _, backupSpec := range psmdb.Spec.Backup.Tasks {
+					err = h.backups.Delete(backupSpec)
+					if err != nil {
+						logrus.Errorf("failed to remove backup: %v", backupSpec.Name)
+						continue
+					}
+				}
 			}
-			h.backups = nil
 		}
 
 		// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
@@ -200,29 +235,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// Update the pods+statefulsets list that is read by the watchdog
 		h.pods.Update(clusterPods, clusterSets)
-
-		// Create cronJobs for each backup:
-		for _, backupTask := range psmdb.Spec.Backup.Tasks {
-			if !backupTask.Enabled || backupTask.Schedule == "" {
-				logrus.Debugf("backup %s is disabled, skipping cronJob creation", backupTask.Name)
-				continue
-			}
-			err := h.backups.Create(backupTask)
-			if err != nil {
-				if !k8serrors.IsAlreadyExists(err) {
-					logrus.Errorf("failed to create backup task %s: %v", backupTask.Name, err)
-					return err
-				} else {
-					err = h.backups.Update(backupTask)
-					if err != nil {
-						logrus.Errorf("failed to update backup task %s: %v", backupTask.Name, err)
-						return err
-					}
-				}
-			} else {
-				logrus.Infof("create cronJob for backup: %s", backupTask.Name)
-			}
-		}
 	}
 	return nil
 }

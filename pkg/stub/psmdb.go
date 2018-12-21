@@ -136,6 +136,17 @@ func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
 	return false
 }
 
+// hasReplsetsInitialized returns a boolean reflecting if there are any replsets
+// initialized in the PSMDB status
+func (h *Handler) hasReplsetsInitialized(m *v1alpha1.PerconaServerMongoDB) bool {
+	for _, replset := range m.Status.Replsets {
+		if replset.Initialized {
+			return true
+		}
+	}
+	return false
+}
+
 // newStatefulSet returns a PSMDB stateful set
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addSpecDefaults(m)
