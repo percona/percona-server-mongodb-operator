@@ -246,16 +246,18 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	}
 
-	// Create service for replset
-	service := newService(m, replset)
-	err = h.client.Create(service)
-	if err != nil {
-		if !k8serrors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create psmdb service: %v", err)
-			return nil, err
+	if !m.Spec.Expose.On {
+		// Create service for replset
+		service := newService(m, replset)
+		err = h.client.Create(service)
+		if err != nil {
+			if !k8serrors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb service: %v", err)
+				return nil, err
+			}
+		} else {
+			logrus.Infof("created service %s", service.Name)
 		}
-	} else {
-		logrus.Infof("created service %s", service.Name)
 	}
 
 	return set, nil
