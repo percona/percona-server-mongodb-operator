@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sync/atomic"
 	"time"
 )
 
@@ -55,11 +54,11 @@ func createExtService(cli sdk.Client, svc *corev1.Service) error {
 func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 	var retries uint64 = 0
 
-	for atomic.LoadUint64(&retries) <= 5 {
+	for retries <= 5 {
 		if err := cli.Update(svc); err != nil {
 			if errors.IsConflict(err) {
 				time.Sleep(500 * time.Millisecond)
-				atomic.AddUint64(&retries, 1)
+				retries += 1
 				continue
 			}
 		}
