@@ -99,6 +99,9 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 	case *v1alpha1.PerconaServerMongoDB:
 		psmdb := o
 
+		fmt.Println(psmdb.Spec.Expose.Enabled, "EXPOSE ON")
+		fmt.Println(psmdb.Spec.Expose.ExposeType, "EXPOSE TYPE")
+
 		// apply Spec defaults
 		h.addSpecDefaults(psmdb)
 

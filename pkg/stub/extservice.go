@@ -87,25 +87,16 @@ func serviceMeta(namespace, podName string) *corev1.Service {
 }
 
 func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Service {
-	svc := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: m.Namespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				{
-					Name:       mongod.MongodPortName,
-					Port:       m.Spec.Mongod.Net.Port,
-					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
-				},
+	svc := serviceMeta(m.Namespace, podName)
+	svc.Spec = corev1.ServiceSpec{
+		Ports: []corev1.ServicePort{
+			{
+				Name:       mongod.MongodPortName,
+				Port:       m.Spec.Mongod.Net.Port,
+				TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 			},
-			Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 		},
+		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 	}
 	switch m.Spec.Expose.ExposeType {
 	case corev1.ServiceTypeNodePort:
