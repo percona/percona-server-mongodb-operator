@@ -29,7 +29,7 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 	addrs := make([]string, 0)
 	var hostname string
 
-	if m.Spec.Expose.On {
+	if m.Spec.Expose.Enabled {
 		for _, pod := range pods {
 			svc, err := getExtServices(m, pod.Name)
 			if err != nil {
@@ -215,7 +215,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	}
 
-	if !m.Spec.Expose.On {
+	if !m.Spec.Expose.Enabled {
 		// Create service for replset
 		service := newService(m, replset)
 		err = h.client.Create(service)

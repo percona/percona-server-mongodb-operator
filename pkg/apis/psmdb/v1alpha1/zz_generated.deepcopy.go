@@ -502,7 +502,11 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 		*out = new(BackupSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	out.Expose = in.Expose
+	if in.Expose != nil {
+		in, out := &in.Expose, &out.Expose
+		*out = new(Expose)
+		**out = **in
+	}
 	return
 }
 

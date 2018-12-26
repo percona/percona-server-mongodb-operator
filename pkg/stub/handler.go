@@ -193,6 +193,15 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 			clusterSets = append(clusterSets, *set)
 
+			// Ensure replset has external service
+			if psmdb.Spec.Expose != nil && psmdb.Spec.Expose.Enabled {
+				svcs, err := h.ensureExtServices(psmdb, replset, podsList)
+				if err != nil {
+					return fmt.Errorf("failed to get services of replset %s: %v", replset.Name, err)
+				}
+				clusterServices = append(clusterServices, svcs...)
+			}
+
 			// Check if backup agent container exists
 			if util.GetPodSpecContainer(&set.Spec.Template.Spec, backup.AgentContainerName) != nil {
 				hasBackupAgents = true
@@ -208,15 +217,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				return err
 			}
 			h.backups = nil
-
-			// Ensure replset has external service
-			if psmdb.Spec.Expose.On {
-				svcs, err := h.ensureExtServices(psmdb, replset, podsList)
-				if err != nil {
-					return fmt.Errorf("failed to get services of replset %s: %v", replset.Name, err)
-				}
-				clusterServices = svcs
-			}
 		}
 
 		// Update the pods+statefulsets list that is read by the watchdog
