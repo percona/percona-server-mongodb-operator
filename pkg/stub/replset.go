@@ -27,10 +27,24 @@ var (
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
 func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) []string {
-	addrs := []string{}
-	for _, pod := range pods {
-		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
-		addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
+	addrs := make([]string, 0)
+	var hostname string
+
+	if m.Spec.Expose.On {
+		for _, pod := range pods {
+			svc, err := getExtServices(m, pod.Name)
+			if err != nil {
+				logrus.Errorf("failed to fetch service address: %v", err)
+				continue
+			}
+			hostname = getServiceAddr(*svc, pod)
+			addrs = append(addrs, hostname)
+		}
+	} else {
+		for _, pod := range pods {
+			hostname = podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
+			addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
+		}
 	}
 	return addrs
 }

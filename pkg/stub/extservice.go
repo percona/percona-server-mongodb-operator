@@ -6,22 +6,17 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	opsSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"strconv"
 	"time"
 )
 
-func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) ([]corev1.Service, error) {
-	podsList := util.PodList()
-	if err := h.client.List(m.Namespace, podsList, opsSdk.WithListOptions(util.GetLabelSelectorListOpts(m, replset))); err != nil {
-		return nil, fmt.Errorf("failed to list pods for replset %s: %v", replset.Name, err)
-	}
-
+func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
 	services := make([]corev1.Service, 0)
-	for _, pod := range podsList.Items {
+	for _, pod := range podList.Items {
 		svcMeta := serviceMeta(m.Namespace, pod.Name)
 		if err := h.client.Get(svcMeta); err != nil {
 			if !errors.IsNotFound(err) {
@@ -40,6 +35,17 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 	}
 
 	return services, nil
+}
+
+func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
+	client := sdk.NewClient()
+	svcMeta := serviceMeta(m.Namespace, podName)
+	if err := client.Get(svcMeta); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to fetch service: %v", err)
+		}
+	}
+	return svcMeta, nil
 }
 
 func createExtService(cli sdk.Client, svc *corev1.Service) error {
@@ -113,4 +119,39 @@ func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Servic
 	}
 	util.AddOwnerRefToObject(svc, util.AsOwner(m))
 	return svc
+}
+
+func getServiceAddr(svc corev1.Service, pod corev1.Pod) string {
+	var hostname string
+	var port int
+
+	switch svc.Spec.Type {
+	case corev1.ServiceTypeClusterIP:
+		hostname = svc.Spec.ClusterIP
+		for _, p := range svc.Spec.Ports {
+			if p.Name != mongod.MongodPortName {
+				continue
+			}
+			port = int(p.Port)
+		}
+
+	case corev1.ServiceTypeLoadBalancer:
+		hostname = svc.Spec.LoadBalancerIP
+		for _, p := range svc.Spec.Ports {
+			if p.Name != mongod.MongodPortName {
+				continue
+			}
+			port = int(p.Port)
+		}
+
+	case corev1.ServiceTypeNodePort:
+		hostname = pod.Status.HostIP
+		for _, p := range svc.Spec.Ports {
+			if p.Name != mongod.MongodPortName {
+				continue
+			}
+			port = int(p.NodePort)
+		}
+	}
+	return hostname + ":" + strconv.Itoa(port)
 }

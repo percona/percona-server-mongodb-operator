@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
-	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
+	"github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 
@@ -169,7 +169,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 			// Ensure replset has external service
 			if psmdb.Spec.Expose.On {
-				svcs, err := h.ensureExtServices(psmdb, replset)
+				svcs, err := h.ensureExtServices(psmdb, replset, podsList)
 				if err != nil {
 					return fmt.Errorf("failed to get services of replset %s: %v", replset.Name, err)
 				}
