@@ -6,6 +6,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,21 +18,31 @@ import (
 func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
 	services := make([]corev1.Service, 0)
 	for _, pod := range podList.Items {
-		svcMeta := serviceMeta(m.Namespace, pod.Name)
-		if err := h.client.Get(svcMeta); err != nil {
-			if !errors.IsNotFound(err) {
+		logrus.Infof("Checking that pod %s of replset %s has attached service", pod.Name, replset.Name)
+
+		meta := serviceMeta(m.Namespace, pod.Name)
+
+		logrus.Debugf("Service meta: %v", meta)
+
+		if err := h.client.Get(meta); err != nil {
+			if errors.IsNotFound(err) {
+				logrus.Infof("pod %s of replset %s doesn't have attached service", pod.Name, replset.Name)
+				svc := extService(m, pod.Name)
+				if err := createExtService(h.client, svc); err != nil {
+					return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
+				}
+				meta = svc
+			} else {
 				return nil, fmt.Errorf("failed to fetch service for replset %s: %v", replset.Name, err)
 			}
 		}
-		svc := extService(m, pod.Name)
-		if err := createExtService(h.client, svc); err != nil {
-			return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
-		}
 
-		if err := updateExtService(h.client, svc); err != nil {
+		logrus.Infof("service %s for pod %s of repleset %s has been found", meta.Name, pod.Name, replset.Name)
+
+		if err := updateExtService(h.client, meta); err != nil {
 			return nil, fmt.Errorf("failed to update external service for replset %s: %v", replset.Name, err)
 		}
-		services = append(services, *svc)
+		services = append(services, *meta)
 	}
 
 	return services, nil
@@ -49,10 +60,12 @@ func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.S
 }
 
 func createExtService(cli sdk.Client, svc *corev1.Service) error {
+	logrus.Infof("Creating service %s", svc.Name)
 	if err := cli.Create(svc); err != nil {
 		if !errors.IsAlreadyExists(err) {
 			return err
 		}
+		logrus.Infof("Service %s already exist. Skipping", svc.Name)
 	}
 	return nil
 }
