@@ -3,7 +3,6 @@ package stub
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -109,73 +108,22 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 }
 
 func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	var doUpdate bool
-
 	// Ensure the stateful set size is the same as the spec
 	if *set.Spec.Replicas != replset.Size {
 		logrus.Infof("setting replicas to %d for replset: %s", replset.Size, replset.Name)
 		set.Spec.Replicas = &replset.Size
-		doUpdate = true
 	}
 
-	// Find the mongod container
-	container := util.GetPodSpecContainer(&set.Spec.Template.Spec, mongod.MongodContainerName)
-	if container == nil {
-		return nil, fmt.Errorf("could not find mongod container in pod")
+	// Ensure the stateful set containers are the same as the spec
+	//
+	// TODO: only send an update if something changed. reflect.DeepEqual
+	// considers two struct to be different always if they contain pointers.
+	// For now we send an update every loop like the PXC operator
+	set.Spec.Template.Spec.Containers = h.newStatefulSetContainers(m, replset, resources)
+	err := h.client.Update(set)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update stateful set for replset %s: %v", replset.Name, err)
 	}
-
-	// Ensure the PSMDB version is the same as the spec
-	expectedImage := mongod.GetPSMDBDockerImageName(m)
-	if container.Image != expectedImage {
-		logrus.Infof("updating spec image for replset %s: %s -> %s", replset.Name, container.Image, expectedImage)
-		container.Image = expectedImage
-		doUpdate = true
-	}
-
-	// Ensure the stateful set resources are the same as the spec
-	mongodLimits := corev1.ResourceList{}
-	mongodRequests := corev1.ResourceList{}
-	for _, resourceName := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
-		mongodRequest := container.Resources.Requests[resourceName]
-		specRequest := resources.Requests[resourceName]
-		if specRequest.Cmp(container.Resources.Requests[resourceName]) != 0 {
-			logrus.Infof("updating %s resource request: %s -> %s", resourceName, mongodRequest.String(), specRequest.String())
-			mongodRequests[resourceName] = specRequest
-			doUpdate = true
-		} else {
-			mongodRequests[resourceName] = mongodRequest
-		}
-
-		mongodLimit := container.Resources.Limits[resourceName]
-		specLimit := resources.Limits[resourceName]
-		if specLimit.Cmp(mongodLimit) != 0 && specLimit.Cmp(mongodRequest) >= 0 {
-			logrus.Infof("updating %s resource limit: %s -> %s", resourceName, mongodLimit.String(), specLimit.String())
-			mongodLimits[resourceName] = specLimit
-			doUpdate = true
-		} else {
-			mongodLimits[resourceName] = mongodLimit
-		}
-	}
-	container.Resources.Limits = mongodLimits
-	container.Resources.Requests = mongodRequests
-
-	// Ensure mongod args are the same as the args from the spec:
-	expectedMongodArgs := mongod.NewContainerArgs(m, replset, resources)
-	if !reflect.DeepEqual(expectedMongodArgs, container.Args) {
-		logrus.Infof("updating container mongod args for replset %s: %v -> %v", replset.Name, container.Args, expectedMongodArgs)
-		container.Args = expectedMongodArgs
-		doUpdate = true
-	}
-
-	// Do update if something changed
-	if doUpdate {
-		logrus.Infof("updating state for replset: %s", replset.Name)
-		err := h.client.Update(set)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update stateful set for replset %s: %v", replset.Name, err)
-		}
-	}
-
 	return set, nil
 }
 
@@ -243,11 +191,18 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		if err != nil {
 			return nil, err
 		}
+
+		err = h.client.Get(m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get status for replset %s: %v", replset.Name, err)
+		}
 		status.Initialized = true
+
 		err = h.client.Update(m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update status for replset %s: %v", replset.Name, err)
 		}
+
 		logrus.Infof("changed state to initialised for replset %s", replset.Name)
 	}
 

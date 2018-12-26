@@ -15,15 +15,15 @@ spec:
   replsets:
   - name: rs0
     size: 3
-    #storageClass: aws-gp2
     resources:
       limits:
         cpu: "300m"
         memory: "0.5G"
-        storage: "1Gi"
+        storage: "3Gi"
       requests:
         cpu: "300m"
         memory: "0.5G"
+      #storageClass: aws-gp2
   mongod:
     net:
       port: 27017
@@ -59,3 +59,20 @@ spec:
     #  destination: file
     #  format: BSON
     #  filter: '{}'
+  backup:
+    enabled: false
+    version: 0.1.0
+    restartPolicy: OnFailure
+    coordinator:
+      apiPort: 10001
+      rpcPort: 10000
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "0.2G"
+          storage: "1Gi"
+        requests:
+          cpu: "100m"
+          memory: "0.1G"
+        #storageClass: aws-gp2
+      debug: false

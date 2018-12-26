@@ -44,6 +44,7 @@ type PerconaServerMongoDBSpec struct {
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
+	Backup          *BackupSpec       `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 	Expose          Expose            `json:"expose,omitempty"`
 }
@@ -71,6 +72,19 @@ type ResourceSpecRequirements struct {
 	Storage string `json:"storage,omitempty"`
 }
 
+type ResourcesSpec struct {
+	Limits       *ResourceSpecRequirements `json:"limits,omitempty"`
+	Requests     *ResourceSpecRequirements `json:"requests,omitempty"`
+	StorageClass string                    `json:"storageClass,omitempty"`
+}
+
+type Platform string
+
+const (
+	PlatformKubernetes Platform = "kubernetes"
+	PlatformOpenshift  Platform = "openshift"
+)
+
 // ServerVersion represents info about k8s / openshift server version
 type ServerVersion struct {
 	Platform Platform
@@ -80,6 +94,13 @@ type ServerVersion struct {
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
+}
+
+type ReplsetSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+	Name           string      `json:"name"`
+	Size           int32       `json:"size"`
+	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -110,6 +131,13 @@ type MongodSpec struct {
 	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
 	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
 }
+
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
 
 type MongodSpecNet struct {
 	Port     int32 `json:"port,omitempty"`
@@ -216,6 +244,20 @@ type MongodSpecOperationProfiling struct {
 	Mode              OperationProfilingMode `json:"mode,omitempty"`
 	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
 	RateLimit         int                    `json:"rateLimit,omitempty"`
+}
+
+type BackupCoordinatorSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+	APIPort        int32 `json:"apiPort,omitempty"`
+	RPCPort        int32 `json:"rpcPort,omitempty"`
+	Debug          bool  `json:"debug,omitempty"`
+}
+
+type BackupSpec struct {
+	Enabled       bool                   `json:"enabled"`
+	Version       string                 `json:"version,omitempty"`
+	RestartPolicy corev1.RestartPolicy   `json:"restartPolicy,omitempty"`
+	Coordinator   *BackupCoordinatorSpec `json:"coordinator,omitempty"`
 }
 
 type Expose struct {
