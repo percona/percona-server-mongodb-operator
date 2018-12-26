@@ -66,6 +66,8 @@ func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 				time.Sleep(500 * time.Millisecond)
 				retries += 1
 				continue
+			} else {
+				return fmt.Errorf("failed to update service: %v", err)
 			}
 		}
 		return nil
