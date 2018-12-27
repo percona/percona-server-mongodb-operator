@@ -127,37 +127,45 @@ func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Servic
 	return svc
 }
 
-func getServiceAddr(svc corev1.Service, pod corev1.Pod) string {
-	var hostname string
-	var port int
+type ServiceAddr struct {
+	Host string
+	Port int
+}
+
+func (s ServiceAddr) String() string {
+	return s.Host + ":" + strconv.Itoa(s.Port)
+}
+
+func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
+	var addr ServiceAddr
 
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeClusterIP:
-		hostname = svc.Spec.ClusterIP
+		addr.Host = svc.Spec.ClusterIP
 		for _, p := range svc.Spec.Ports {
 			if p.Name != mongod.MongodPortName {
 				continue
 			}
-			port = int(p.Port)
+			addr.Port = int(p.Port)
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		hostname = svc.Spec.LoadBalancerIP
+		addr.Host = svc.Spec.LoadBalancerIP
 		for _, p := range svc.Spec.Ports {
 			if p.Name != mongod.MongodPortName {
 				continue
 			}
-			port = int(p.Port)
+			addr.Port = int(p.Port)
 		}
 
 	case corev1.ServiceTypeNodePort:
-		hostname = pod.Status.HostIP
+		addr.Host = pod.Status.HostIP
 		for _, p := range svc.Spec.Ports {
 			if p.Name != mongod.MongodPortName {
 				continue
 			}
-			port = int(p.NodePort)
+			addr.Port = int(p.NodePort)
 		}
 	}
-	return hostname + ":" + strconv.Itoa(port)
+	return addr
 }

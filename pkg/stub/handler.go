@@ -102,8 +102,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// apply Spec defaults
 		h.addSpecDefaults(psmdb)
 
-		fmt.Println(psmdb.Spec.Expose.Enabled)
-
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {

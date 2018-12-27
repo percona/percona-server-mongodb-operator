@@ -29,14 +29,14 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 	addrs := make([]string, 0)
 	var hostname string
 
-	if m.Spec.Expose.Enabled {
+	if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
 		for _, pod := range pods {
 			svc, err := getExtServices(m, pod.Name)
 			if err != nil {
 				logrus.Errorf("failed to fetch service address: %v", err)
 				continue
 			}
-			hostname = getServiceAddr(*svc, pod)
+			hostname = getServiceAddr(*svc, pod).String()
 			addrs = append(addrs, hostname)
 		}
 	} else {
@@ -99,10 +99,22 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 
 		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
 
-		return execCommandInContainer(pod, mongod.MongodContainerName, []string{
+		cmd := []string{
 			"k8s-mongodb-initiator",
 			"init",
-		})
+		}
+
+		if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
+			svc, err := getExtServices(m, pod.Name)
+			if err != nil {
+				logrus.Errorf("failed to fetch service address: %v", err)
+				continue
+			}
+			hostname := getServiceAddr(*svc, pod)
+			cmd = append(cmd, "--ip="+hostname.Host, "--port="+strconv.Itoa(hostname.Port))
+		}
+
+		return execCommandInContainer(pod, mongod.MongodContainerName, cmd)
 	}
 	return ErrNoRunningMongodContainers
 }
