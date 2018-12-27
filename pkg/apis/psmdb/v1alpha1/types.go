@@ -8,6 +8,22 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+type Platform string
+
+const (
+	PlatformKubernetes Platform = "kubernetes"
+	PlatformOpenshift  Platform = "openshift"
+)
+
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
 type PerconaServerMongoDBList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -32,10 +48,19 @@ type PerconaServerMongoDBSpec struct {
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
 	Backup          *BackupSpec       `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	Expose          *Expose           `json:"expose,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
 	Replsets []*ReplsetStatus `json:"replsets,omitempty"`
+}
+
+type ReplsetSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+	Name           string      `json:"name"`
+	Size           int32       `json:"size"`
+	StorageClass   string      `json:"storageClass,omitempty"`
+	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
@@ -50,13 +75,6 @@ type ResourcesSpec struct {
 	StorageClass string                    `json:"storageClass,omitempty"`
 }
 
-type Platform string
-
-const (
-	PlatformKubernetes Platform = "kubernetes"
-	PlatformOpenshift  Platform = "openshift"
-)
-
 // ServerVersion represents info about k8s / openshift server version
 type ServerVersion struct {
 	Platform Platform
@@ -66,13 +84,6 @@ type ServerVersion struct {
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
-}
-
-type ReplsetSpec struct {
-	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string      `json:"name"`
-	Size           int32       `json:"size"`
-	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -103,13 +114,6 @@ type MongodSpec struct {
 	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
 	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
 }
-
-type ClusterRole string
-
-const (
-	ClusterRoleShardSvr  ClusterRole = "shardsvr"
-	ClusterRoleConfigSvr ClusterRole = "configsvr"
-)
 
 type MongodSpecNet struct {
 	Port     int32 `json:"port,omitempty"`
@@ -230,4 +234,9 @@ type BackupSpec struct {
 	Version       string                 `json:"version,omitempty"`
 	RestartPolicy corev1.RestartPolicy   `json:"restartPolicy,omitempty"`
 	Coordinator   *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+}
+
+type Expose struct {
+	Enabled    bool               `json:"enabled"`
+	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 }

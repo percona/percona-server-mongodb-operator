@@ -13,7 +13,7 @@ import (
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/sirupsen/logrus"
-	mgo "gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,10 +26,24 @@ var (
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
 func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) []string {
-	addrs := []string{}
-	for _, pod := range pods {
-		hostname := podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
-		addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
+	addrs := make([]string, 0)
+	var hostname string
+
+	if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
+		for _, pod := range pods {
+			svc, err := getExtServices(m, pod.Name)
+			if err != nil {
+				logrus.Errorf("failed to fetch service address: %v", err)
+				continue
+			}
+			hostname = getServiceAddr(*svc, pod).String()
+			addrs = append(addrs, hostname)
+		}
+	} else {
+		for _, pod := range pods {
+			hostname = podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
+			addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
+		}
 	}
 	return addrs
 }
@@ -85,10 +99,21 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 
 		logrus.Infof("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
 
-		return execCommandInContainer(pod, mongod.MongodContainerName, []string{
+		cmd := []string{
 			"k8s-mongodb-initiator",
 			"init",
-		})
+		}
+
+		if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
+			svc, err := getExtServices(m, pod.Name)
+			if err != nil {
+				return fmt.Errorf("failed to fetch service address: %v", err)
+			}
+			hostname := getServiceAddr(*svc, pod)
+			cmd = append(cmd, "--ip", hostname.Host, "--port", strconv.Itoa(hostname.Port))
+
+		}
+		return execCommandInContainer(pod, mongod.MongodContainerName, cmd)
 	}
 	return ErrNoRunningMongodContainers
 }
@@ -118,7 +143,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 	// Check if 'resources.limits.storage' is unset
 	// https://jira.percona.com/browse/CLOUD-42
 	if _, ok := resources.Limits[corev1.ResourceStorage]; !ok {
-		return nil, fmt.Errorf("replset %s does not have required-value 'resources.limits.storage' set!", replset.Name)
+		return nil, fmt.Errorf("replset %s does not have required-value 'resources.limits.storage' set", replset.Name)
 	}
 
 	// create the statefulset if a Get on the set name returns an error
@@ -170,6 +195,14 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		return nil, err
 	}
 
+	// Ensure replset has external service
+	if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
+		_, err := h.ensureExtServices(m, replset, podList)
+		if err != nil {
+			return nil, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
+		}
+	}
+
 	// Initiate the replset if it hasn't already been initiated + there are pods +
 	// we have waited the ReplsetInitWait period since starting
 	if !isReplsetInitialized(m, replset, status, podList, usersSecret) && len(podList.Items) >= 1 && time.Since(h.startedAt) > ReplsetInitWait {
@@ -201,16 +234,18 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	}
 
-	// Create service for replset
-	service := newService(m, replset)
-	err = h.client.Create(service)
-	if err != nil {
-		if !k8serrors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create psmdb service: %v", err)
-			return nil, err
+	if !m.Spec.Expose.Enabled {
+		// Create service for replset
+		service := newService(m, replset)
+		err = h.client.Create(service)
+		if err != nil {
+			if !k8serrors.IsAlreadyExists(err) {
+				logrus.Errorf("failed to create psmdb service: %v", err)
+				return nil, err
+			}
+		} else {
+			logrus.Infof("created service %s", service.Name)
 		}
-	} else {
-		logrus.Infof("created service %s", service.Name)
 	}
 
 	return set, nil

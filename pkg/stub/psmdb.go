@@ -46,6 +46,12 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	if spec.Mongod.Storage.Engine == "" {
 		spec.Mongod.Storage.Engine = config.DefaultStorageEngine
 	}
+	if spec.Expose == nil {
+		spec.Expose = &v1alpha1.Expose{}
+	}
+	if spec.Expose.Enabled && spec.Expose.ExposeType == "" {
+		spec.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	}
 
 	switch spec.Mongod.Storage.Engine {
 	case v1alpha1.StorageEngineInMemory:
