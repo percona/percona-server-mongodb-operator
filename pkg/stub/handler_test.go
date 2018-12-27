@@ -75,7 +75,7 @@ func TestHandlerHandle(t *testing.T) {
 
 	client := &mocks.Client{}
 	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil)
-	client.On("Create", mock.AnythingOfType("*v1.Service")).Return(nil)
+	client.On("Create", mock.AnythingOfType("*v1.service")).Return(nil)
 	client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
 	client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
 	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
@@ -131,7 +131,7 @@ func TestHandlerHandle(t *testing.T) {
 	assert.NoError(t, h.Handle(context.TODO(), event))
 	assert.NotNil(t, h.watchdog)
 
-	// check last call was a Create with a corev1.Service object:
+	// check last call was a Create with a corev1.service object:
 	calls := len(client.Calls)
 	lastCall := client.Calls[calls-1]
 	assert.Equal(t, "Create", lastCall.Method)

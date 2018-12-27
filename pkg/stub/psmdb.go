@@ -180,13 +180,13 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 	return set, nil
 }
 
-// newService returns a core/v1 API Service
+// newService returns a core/v1 API service
 func newService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
-			Kind:       "Service",
+			Kind:       "service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Name + "-" + replset.Name,
