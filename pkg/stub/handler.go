@@ -4,18 +4,17 @@ import (
 	"context"
 	"time"
 
-	sdk "github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
-	watchdog "github.com/percona/mongodb-orchestration-tools/watchdog"
+	"github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 
-	"fmt"
 	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -150,7 +149,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to start/update backup coordinator: %v", err)
 				return err
 			}
-
 		}
 
 		// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
@@ -192,15 +190,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				return err
 			}
 			clusterSets = append(clusterSets, *set)
-
-			// Ensure replset has external service
-			if psmdb.Spec.Expose != nil && psmdb.Spec.Expose.Enabled {
-				svcs, err := h.ensureExtServices(psmdb, replset, podsList)
-				if err != nil {
-					return fmt.Errorf("failed to get services of replset %s: %v", replset.Name, err)
-				}
-				clusterServices = append(clusterServices, svcs...)
-			}
 
 			// Check if backup agent container exists
 			if util.GetPodSpecContainer(&set.Spec.Template.Spec, backup.AgentContainerName) != nil {

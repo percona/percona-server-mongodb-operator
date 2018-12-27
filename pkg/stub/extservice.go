@@ -17,6 +17,7 @@ import (
 
 func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
 	services := make([]corev1.Service, 0)
+
 	for _, pod := range podList.Items {
 		logrus.Infof("Checking that pod %s of replset %s has attached service", pod.Name, replset.Name)
 
