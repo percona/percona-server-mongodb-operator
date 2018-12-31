@@ -87,6 +87,11 @@ func TestHandlerHandle(t *testing.T) {
 		mock.AnythingOfType("*v1.PodList"),
 		mock.AnythingOfType("sdk.ListOption"),
 	).Return(nil)
+	client.On("List",
+		"test",
+		mock.AnythingOfType("*v1.ServiceList"),
+		mock.AnythingOfType("sdk.ListOption"),
+	).Return(nil)
 
 	h := &Handler{
 		client: client,
@@ -134,8 +139,8 @@ func TestHandlerHandle(t *testing.T) {
 	// check last call was a Create with a corev1.Service object:
 	calls := len(client.Calls)
 	lastCall := client.Calls[calls-1]
-	assert.Equal(t, "Create", lastCall.Method)
-	assert.IsType(t, &corev1.Service{}, lastCall.Arguments.Get(0))
+	assert.Equal(t, "List", lastCall.Method)
+	assert.IsType(t, "", lastCall.Arguments.Get(0))
 
 	// test watchdog is stopped by a 'Deleted' SDK event
 	event.Deleted = true
