@@ -191,6 +191,15 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 			clusterSets = append(clusterSets, *set)
 
+			svc, err := h.extServicesList(psmdb, replset)
+			if err != nil {
+				if !errors.IsAlreadyExists(err) {
+					logrus.Errorf("failed to fetch services for replset %s: %v", replset.Name, err)
+					return err
+				}
+			}
+			clusterServices = append(clusterServices, svc.Items...)
+
 			// Check if backup agent container exists
 			if util.GetPodSpecContainer(&set.Spec.Template.Spec, backup.AgentContainerName) != nil {
 				hasBackupAgents = true

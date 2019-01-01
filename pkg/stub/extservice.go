@@ -6,10 +6,12 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	opSdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"strconv"
 	"time"
@@ -28,7 +30,7 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 		if err := h.client.Get(meta); err != nil {
 			if errors.IsNotFound(err) {
 				logrus.Infof("pod %s of replset %s doesn't have attached service", pod.Name, replset.Name)
-				svc := extService(m, pod.Name)
+				svc := extService(m, replset, pod.Name)
 				if err := createExtService(h.client, svc); err != nil {
 					return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
 				}
@@ -102,8 +104,9 @@ func serviceMeta(namespace, podName string) *corev1.Service {
 	}
 }
 
-func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Service {
+func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podName string) *corev1.Service {
 	svc := serviceMeta(m.Namespace, podName)
+	svc.Labels = extServiseLabels(m, replset)
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
@@ -126,6 +129,31 @@ func extService(m *v1alpha1.PerconaServerMongoDB, podName string) *corev1.Servic
 	}
 	util.AddOwnerRefToObject(svc, util.AsOwner(m))
 	return svc
+}
+
+func (h *Handler) extServicesList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*corev1.ServiceList, error) {
+	svcs := &corev1.ServiceList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+	}
+
+	if err := h.client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{
+		LabelSelector: labels.SelectorFromSet(extServiseLabels(m, replset)).String()})); err != nil {
+		return nil, fmt.Errorf("couldn't fetch services: %v", err)
+	}
+
+	return svcs, nil
+}
+
+func extServiseLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
+	return map[string]string{
+		"app":     "percona-server-mongodb",
+		"type":    "expose-externally",
+		"replset": replset.Name,
+		"cluster": m.ClusterName,
+	}
 }
 
 type ServiceAddr struct {
