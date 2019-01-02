@@ -224,16 +224,14 @@ type MongodSpecOperationProfiling struct {
 
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	APIPort        int32 `json:"apiPort,omitempty"`
-	RPCPort        int32 `json:"rpcPort,omitempty"`
-	Debug          bool  `json:"debug,omitempty"`
+	Debug          bool `json:"debug,omitempty"`
 }
 
 type BackupSpec struct {
-	Enabled       bool                   `json:"enabled"`
-	Version       string                 `json:"version,omitempty"`
-	RestartPolicy corev1.RestartPolicy   `json:"restartPolicy,omitempty"`
-	Coordinator   *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+	Enabled          bool                   `json:"enabled"`
+	Version          string                 `json:"version,omitempty"`
+	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
+	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
 }
 
 type Expose struct {
