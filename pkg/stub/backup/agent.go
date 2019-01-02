@@ -15,11 +15,10 @@ const (
 )
 
 func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
-	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	return []corev1.EnvVar{
 		{
 			Name:  "PBM_AGENT_SERVER_ADDRESS",
-			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorSpec.RPCPort)),
+			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorAPIPort)),
 		},
 		{
 			Name:  "PBM_AGENT_MONGODB_HOST",

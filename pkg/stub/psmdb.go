@@ -105,20 +105,14 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	}
 
 	if spec.Backup != nil {
-		if spec.Backup.RestartPolicy == "" {
-			spec.Backup.RestartPolicy = backup.DefaultRestartPolicy
+		if spec.Backup.RestartOnFailure == nil {
+			spec.Backup.RestartOnFailure = &util.TrueVar
 		}
 		if spec.Backup.Version == "" {
 			spec.Backup.Version = backup.DefaultVersion
 		}
 		if spec.Backup.Coordinator == nil {
 			spec.Backup.Coordinator = &v1alpha1.BackupCoordinatorSpec{}
-		}
-		if spec.Backup.Coordinator.APIPort == int32(0) {
-			spec.Backup.Coordinator.APIPort = backup.DefaultCoordinatorAPIPort
-		}
-		if spec.Backup.Coordinator.RPCPort == int32(0) {
-			spec.Backup.Coordinator.RPCPort = backup.DefaultCoordinatorRPCPort
 		}
 	}
 }
