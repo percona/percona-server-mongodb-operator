@@ -4,9 +4,44 @@ COPY vendor /go/src
 RUN cd /go/src/github.com/percona/mongodb-orchestration-tools \
     && make bin/mongodb-healthcheck bin/k8s-mongodb-initiator
 
-FROM percona/percona-server-mongodb:3.6
+FROM centos:7
+MAINTAINER Percona Development <info@percona.com>
 
 COPY --from=0 \
 	/go/src/github.com/percona/mongodb-orchestration-tools/bin/mongodb-healthcheck \
 	/go/src/github.com/percona/mongodb-orchestration-tools/bin/k8s-mongodb-initiator \
 	/usr/local/bin/
+
+# check repository package signature in secure way
+RUN export GNUPGHOME="$(mktemp -d)" \
+        && gpg --keyserver ha.pool.sks-keyservers.net --recv-keys 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A \
+        && gpg --export --armor 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A > ${GNUPGHOME}/RPM-GPG-KEY-Percona \
+        && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona /etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7 \
+        && curl -L -o /tmp/percona-release.rpm http://www.percona.com/downloads/percona-release/redhat/0.1-6/percona-release-0.1-6.noarch.rpm \
+        && rpmkeys --checksig /tmp/percona-release.rpm \
+        && yum install -y /tmp/percona-release.rpm \
+        && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm
+
+# the numeric UID is needed for OpenShift
+RUN useradd -u 1001 -r -g 0 -s /sbin/nologin \
+            -c "Default Application User" mongodb
+
+ENV PERCONA_MAJOR 36
+ENV PERCONA_VERSION 3.6.8-2.0.el7
+
+RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \
+        && yum install -y \
+                Percona-Server-MongoDB-36-server-${PERCONA_VERSION} \
+                curl \
+                jq \
+        && yum clean all \
+        && rm -rf /var/cache/yum /data/db  && mkdir -p /data/db \
+        && chown -R 1001:0 /data/db
+
+VOLUME ["/data/db"]
+
+RUN curl -o /entrypoint.sh https://raw.githubusercontent.com/percona/percona-docker/master/percona-server-mongodb.36/ps-entry.sh \
+    && chmod 755 /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+EXPOSE 27017
