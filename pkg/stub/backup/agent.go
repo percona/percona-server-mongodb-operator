@@ -18,11 +18,7 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "PBM_AGENT_SERVER_ADDRESS",
-			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorAPIPort)),
-		},
-		{
-			Name:  "PBM_AGENT_MONGODB_HOST",
-			Value: "127.0.0.1",
+			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorRPCPort)),
 		},
 		{
 			Name:  "PBM_AGENT_MONGODB_PORT",
@@ -33,7 +29,7 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 			Value: "15",
 		},
 		{
-			Name: "PBM_AGENT_MONGODB_USER",
+			Name: "PBM_AGENT_MONGODB_USERNAME",
 			ValueFrom: util.EnvVarSourceFromSecret(
 				c.psmdb.Spec.Secrets.Users,
 				motPkg.EnvMongoDBBackupUser,
