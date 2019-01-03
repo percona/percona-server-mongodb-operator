@@ -71,12 +71,6 @@ spec:
       resources:
         limits:
           cpu: "100m"
-          memory: "0.1G"
-          storage: "5Gi"
-    coordinator:
-      resources:
-        limits:
-          cpu: "100m"
           memory: "0.2G"
           storage: "1Gi"
         requests:
