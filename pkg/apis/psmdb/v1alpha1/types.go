@@ -8,6 +8,22 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+type Platform string
+
+const (
+	PlatformKubernetes Platform = "kubernetes"
+	PlatformOpenshift  Platform = "openshift"
+)
+
+type ClusterRole string
+
+const (
+	ClusterRoleShardSvr  ClusterRole = "shardsvr"
+	ClusterRoleConfigSvr ClusterRole = "configsvr"
+)
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
 type PerconaServerMongoDBList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -32,6 +48,7 @@ type PerconaServerMongoDBSpec struct {
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
 	Backup          *BackupSpec       `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	Expose          *Expose           `json:"expose,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
@@ -50,13 +67,6 @@ type ResourcesSpec struct {
 	Requests     *ResourceSpecRequirements `json:"requests,omitempty"`
 	StorageClass string                    `json:"storageClass,omitempty"`
 }
-
-type Platform string
-
-const (
-	PlatformKubernetes Platform = "kubernetes"
-	PlatformOpenshift  Platform = "openshift"
-)
 
 // ServerVersion represents info about k8s / openshift server version
 type ServerVersion struct {
@@ -105,13 +115,6 @@ type MongodSpec struct {
 	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
 	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
 }
-
-type ClusterRole string
-
-const (
-	ClusterRoleShardSvr  ClusterRole = "shardsvr"
-	ClusterRoleConfigSvr ClusterRole = "configsvr"
-)
 
 type MongodSpecNet struct {
 	Port     int32 `json:"port,omitempty"`
@@ -229,9 +232,7 @@ var (
 
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	APIPort        int32 `json:"apiPort,omitempty"`
-	RPCPort        int32 `json:"rpcPort,omitempty"`
-	Debug          bool  `json:"debug,omitempty"`
+	Debug          bool `json:"debug,omitempty"`
 }
 
 type BackupAWSSpec struct {
@@ -240,11 +241,12 @@ type BackupAWSSpec struct {
 }
 
 type BackupSpec struct {
-	Version       string                 `json:"version,omitempty"`
-	AWS           *BackupAWSSpec         `json:"aws,omitempty"`
-	Coordinator   *BackupCoordinatorSpec `json:"coordinator,omitempty"`
-	Tasks         []*BackupTaskSpec      `json:"tasks,omitempty"`
-	RestartPolicy corev1.RestartPolicy   `json:"restartPolicy,omitempty"`
+	Enabled          bool                   `json:"enabled,omitempty"`
+	Version          string                 `json:"version,omitempty"`
+	AWS              *BackupAWSSpec         `json:"aws,omitempty"`
+	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
+	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
 }
 
 type BackupTaskSpec struct {
@@ -258,4 +260,9 @@ type BackupTaskStatus struct {
 	Name    string `json:"name,omitempty"`
 	Enabled bool   `json:"enabled"`
 	CronJob string `json:"cronJob,omitempty"`
+}
+
+type Expose struct {
+	Enabled    bool               `json:"enabled"`
+	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 }

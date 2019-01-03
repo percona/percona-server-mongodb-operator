@@ -52,8 +52,21 @@ func TestHandlerHandle(t *testing.T) {
 				},
 			},
 			Backup: &v1alpha1.BackupSpec{
-				Coordinator: &v1alpha1.BackupCoordinatorSpec{},
-				Tasks:       []*v1alpha1.BackupTaskSpec{},
+				Enabled: true,
+				Tasks:   []*v1alpha1.BackupTaskSpec{},
+				Coordinator: &v1alpha1.BackupCoordinatorSpec{
+					ResourcesSpec: &v1alpha1.ResourcesSpec{
+						Limits: &v1alpha1.ResourceSpecRequirements{
+							Cpu:     "100m",
+							Memory:  "200m",
+							Storage: "1G",
+						},
+						Requests: &v1alpha1.ResourceSpecRequirements{
+							Cpu:    "100m",
+							Memory: "200m",
+						},
+					},
+				},
 			},
 		},
 	}
@@ -65,11 +78,19 @@ func TestHandlerHandle(t *testing.T) {
 	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil)
 	client.On("Create", mock.AnythingOfType("*v1.Service")).Return(nil)
 	client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
+	client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
+	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
+	client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
 	client.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil)
 	client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(errors.New("not found error")).Once()
 	client.On("List",
 		"test",
 		mock.AnythingOfType("*v1.PodList"),
+		mock.AnythingOfType("sdk.ListOption"),
+	).Return(nil)
+	client.On("List",
+		"test",
+		mock.AnythingOfType("*v1.ServiceList"),
 		mock.AnythingOfType("sdk.ListOption"),
 	).Return(nil)
 
@@ -82,9 +103,8 @@ func TestHandlerHandle(t *testing.T) {
 	}
 
 	// test Handler with no existing stateful sets, test watchdog is started
-	assert.Nil(t, h.watchdog)
 	assert.NoError(t, h.Handle(context.TODO(), event))
-	assert.NotNil(t, h.watchdog)
+	assert.Nil(t, h.watchdog)
 	client.AssertExpectations(t)
 
 	// test Handler with existing stateful set (mocked)
@@ -107,11 +127,21 @@ func TestHandlerHandle(t *testing.T) {
 	assert.NoError(t, h.Handle(context.TODO(), event))
 	client.AssertExpectations(t)
 
+	// test watchdog is started if 1+ replsets are initialized
+	psmdb.Status.Replsets = []*v1alpha1.ReplsetStatus{
+		{
+			Name:        t.Name(),
+			Initialized: true,
+		},
+	}
+	assert.NoError(t, h.Handle(context.TODO(), event))
+	assert.NotNil(t, h.watchdog)
+
 	// check last call was a Create with a corev1.Service object:
 	calls := len(client.Calls)
 	lastCall := client.Calls[calls-1]
-	assert.Equal(t, "Create", lastCall.Method)
-	assert.IsType(t, &corev1.Service{}, lastCall.Arguments.Get(0))
+	assert.Equal(t, "List", lastCall.Method)
+	assert.IsType(t, "", lastCall.Arguments.Get(0))
 
 	// test watchdog is stopped by a 'Deleted' SDK event
 	event.Deleted = true

@@ -6,6 +6,9 @@ spec:
   #platform: openshift
   version: "3.6.8"
   imagePullPolicy: Always
+  expose:
+    on: false
+    exposeType: ClusterIP
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
@@ -17,7 +20,7 @@ spec:
       limits:
         cpu: "300m"
         memory: "0.5G"
-        storage: "1Gi"
+        storage: "3Gi"
       requests:
         cpu: "300m"
         memory: "0.5G"
@@ -58,19 +61,24 @@ spec:
     #  format: BSON
     #  filter: '{}'
   backup:
+    enabled: false
     version: 0.1.0
-    restartPolicy: OnFailure
+    restartOnFailure: true
     aws:
       bucket: S3-BACKUP-BUCKET-NAME-HERE
       region: us-west-2
     coordinator:
-      apiPort: 10001
-      rpcPort: 10000
       resources:
         limits:
           cpu: "100m"
           memory: "0.1G"
           storage: "5Gi"
+    coordinator:
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "0.2G"
+          storage: "1Gi"
         requests:
           cpu: "100m"
           memory: "0.1G"

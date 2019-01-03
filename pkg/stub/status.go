@@ -66,6 +66,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	}
 	data := m.DeepCopy()
 
+	// List the PSMDB pods
 	podsList := util.PodList()
 	err = h.client.List(data.Namespace, podsList, sdk.WithListOptions(
 		util.GetLabelSelectorListOpts(data, replset),

@@ -5,7 +5,6 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 
-	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -15,9 +14,8 @@ import (
 )
 
 const (
-	DefaultCoordinatorAPIPort = int32(10001)
-	DefaultCoordinatorRPCPort = int32(10000)
-
+	coordinatorAPIPort       = int32(10001)
+	coordinatorRPCPort       = int32(10000)
 	coordinatorContainerName = "backup-coordinator"
 	coordinatorDataMount     = "/data"
 	coordinatorDataVolume    = "backup-metadata"
@@ -38,46 +36,32 @@ func (c *Controller) coordinatorStatefulSetName() string {
 }
 
 func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements) corev1.PodSpec {
-	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
 				Name:            coordinatorContainerName,
 				Image:           c.getImageName("coordinator"),
 				ImagePullPolicy: c.psmdb.Spec.ImagePullPolicy,
-				Args: []string{
-					"--enable-clients-logging",
-				},
 				Env: []corev1.EnvVar{
+					{
+						Name:  "PBM_COORDINATOR_ENABLE_CLIENTS_LOGGING",
+						Value: "true",
+					},
 					{
 						Name:  "PBM_COORDINATOR_DEBUG",
 						Value: strconv.FormatBool(c.psmdb.Spec.Backup.Coordinator.Debug),
 					},
 					{
 						Name:  "PBM_COORDINATOR_API_PORT",
-						Value: strconv.Itoa(int(coordinatorSpec.APIPort)),
+						Value: strconv.Itoa(int(coordinatorAPIPort)),
 					},
 					{
 						Name:  "PBM_COORDINATOR_GRPC_PORT",
-						Value: strconv.Itoa(int(coordinatorSpec.RPCPort)),
+						Value: strconv.Itoa(int(coordinatorRPCPort)),
 					},
 					{
 						Name:  "PBM_COORDINATOR_WORK_DIR",
 						Value: coordinatorDataMount,
-					},
-					{
-						Name: "PBM_COORDINATOR_API_USERNAME",
-						ValueFrom: util.EnvVarSourceFromSecret(
-							c.psmdb.Spec.Secrets.Users,
-							motPkg.EnvMongoDBBackupUser,
-						),
-					},
-					{
-						Name: "PBM_COORDINATOR_API_PASSWORD",
-						ValueFrom: util.EnvVarSourceFromSecret(
-							c.psmdb.Spec.Secrets.Users,
-							motPkg.EnvMongoDBBackupPassword,
-						),
 					},
 				},
 				Resources: util.GetContainerResourceRequirements(resources),
@@ -93,12 +77,12 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 				},
 				Ports: []corev1.ContainerPort{
 					{
-						Name:          coordinatorRPCPortName,
-						ContainerPort: coordinatorSpec.RPCPort,
+						Name:          coordinatorAPIPortName,
+						ContainerPort: coordinatorRPCPort,
 					},
 					{
 						Name:          coordinatorAPIPortName,
-						ContainerPort: coordinatorSpec.APIPort,
+						ContainerPort: coordinatorAPIPort,
 					},
 				},
 				LivenessProbe: &corev1.Probe{
@@ -106,7 +90,7 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 					TimeoutSeconds:      int32(3),
 					Handler: corev1.Handler{
 						TCPSocket: &corev1.TCPSocketAction{
-							Port: intstr.FromInt(int(coordinatorSpec.RPCPort)),
+							Port: intstr.FromInt(int(coordinatorRPCPort)),
 						},
 					},
 				},
@@ -149,7 +133,7 @@ func (c *Controller) newCoordinatorStatefulSet() (*appsv1.StatefulSet, error) {
 				Spec: c.newCoordinatorPodSpec(resources),
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				util.NewPersistentVolumeClaim(c.psmdb, resources, coordinatorDataVolume, ""),
+				util.NewPersistentVolumeClaim(c.psmdb, resources, coordinatorDataVolume, c.psmdb.Spec.Backup.Coordinator.StorageClass),
 			},
 		},
 	}
@@ -158,7 +142,6 @@ func (c *Controller) newCoordinatorStatefulSet() (*appsv1.StatefulSet, error) {
 }
 
 func (c *Controller) newCoordinatorService() *corev1.Service {
-	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -173,11 +156,11 @@ func (c *Controller) newCoordinatorService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name: coordinatorRPCPortName,
-					Port: coordinatorSpec.RPCPort,
+					Port: coordinatorRPCPort,
 				},
 				{
 					Name: coordinatorAPIPortName,
-					Port: coordinatorSpec.APIPort,
+					Port: coordinatorAPIPort,
 				},
 			},
 		},
@@ -187,11 +170,36 @@ func (c *Controller) newCoordinatorService() *corev1.Service {
 }
 
 func (c *Controller) DeleteCoordinator() error {
+	// delete service
+	service := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.psmdb.Name + "-backup-coordinator",
+			Namespace: c.psmdb.Namespace,
+		},
+	}
+	err := c.client.Delete(service)
+	if err != nil {
+		logrus.Errorf("failed to delete backup coordinator service %s: %v", service.Name, err)
+		return err
+	}
+
+	// delete stateful set
 	set, err := c.newCoordinatorStatefulSet()
 	if err != nil {
 		return err
 	}
-	return c.client.Delete(set)
+	err = c.client.Delete(set)
+	if err != nil {
+		logrus.Errorf("failed to delete backup coordinator set %s: %v", set.Name, err)
+		return err
+	}
+
+	logrus.Infof("deleted backup coordinator stateful set: %s", set.Name)
+	return nil
 }
 
 func (c *Controller) EnsureCoordinator() error {

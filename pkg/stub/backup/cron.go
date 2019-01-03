@@ -31,9 +31,13 @@ func newCronJob(m *v1alpha1.PerconaServerMongoDB, backup *v1alpha1.BackupTaskSpe
 
 func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b.CronJob {
 	backupName := c.psmdb.Name + "-" + backup.Name
-	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
+	restartPolicy := corev1.RestartPolicyNever
+	if c.psmdb.Spec.Backup.RestartOnFailure != nil && *c.psmdb.Spec.Backup.RestartOnFailure {
+		restartPolicy = corev1.RestartPolicyOnFailure
+	}
+
 	backupPod := corev1.PodSpec{
-		RestartPolicy: c.psmdb.Spec.Backup.RestartPolicy,
+		RestartPolicy: restartPolicy,
 		Containers: []corev1.Container{
 			{
 				Name:            backupCtlContainerName,
@@ -42,7 +46,7 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b
 				Env: []corev1.EnvVar{
 					{
 						Name:  "PBMCTL_SERVER_ADDRESS",
-						Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorSpec.APIPort)),
+						Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorAPIPort)),
 					},
 				},
 				Args: []string{

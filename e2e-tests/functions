@@ -2,7 +2,8 @@
 
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD)}
-IMAGE="perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"
+IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
+IMAGE_MONGOD36=${IMAGE_MONGOD36:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}-mongod3.6"}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 

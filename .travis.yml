@@ -6,7 +6,11 @@ go:
 matrix:
   allow_failures:
     - go: master
+before_script:
+  - curl -sLo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.0.7/operator-sdk-v0.0.7-x86_64-linux-gnu
+  - chmod +x operator-sdk
 script:
+  - ./operator-sdk generate k8s
   - make test-cover
 after_success:
   - bash <(curl -s https://codecov.io/bash)

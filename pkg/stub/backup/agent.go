@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	agentContainerName        = "backup-agent"
+	AgentContainerName = "backup-agent"
+
 	agentBackupDataMount      = "/backup"
 	agentBackupDataVolumeName = "backup-data"
 )
@@ -29,22 +30,21 @@ func (c *Controller) hasAWSBackups() bool {
 }
 
 func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
-	coordinatorSpec := c.psmdb.Spec.Backup.Coordinator
 	args := []corev1.EnvVar{
 		{
 			Name:  "PBM_AGENT_SERVER_ADDRESS",
-			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorSpec.RPCPort)),
-		},
-		{
-			Name:  "PBM_AGENT_MONGODB_HOST",
-			Value: "127.0.0.1",
+			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorRPCPort)),
 		},
 		{
 			Name:  "PBM_AGENT_MONGODB_PORT",
 			Value: strconv.Itoa(int(c.psmdb.Spec.Mongod.Net.Port)),
 		},
 		{
-			Name: "PBM_AGENT_MONGODB_USER",
+			Name:  "PBM_AGENT_MONGODB_RECONNECT_DELAY",
+			Value: "15",
+		},
+		{
+			Name: "PBM_AGENT_MONGODB_USERNAME",
 			ValueFrom: util.EnvVarSourceFromSecret(
 				c.psmdb.Spec.Secrets.Users,
 				motPkg.EnvMongoDBBackupUser,
@@ -90,7 +90,7 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 
 func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Container {
 	return corev1.Container{
-		Name:            agentContainerName,
+		Name:            AgentContainerName,
 		Image:           c.getImageName("agent"),
 		ImagePullPolicy: c.psmdb.Spec.ImagePullPolicy,
 		Env:             c.newAgentContainerArgs(),

@@ -49,6 +49,12 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	if spec.Mongod.Storage.Engine == "" {
 		spec.Mongod.Storage.Engine = config.DefaultStorageEngine
 	}
+	if spec.Expose == nil {
+		spec.Expose = &v1alpha1.Expose{}
+	}
+	if spec.Expose.Enabled && spec.Expose.ExposeType == "" {
+		spec.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	}
 
 	switch spec.Mongod.Storage.Engine {
 	case v1alpha1.StorageEngineInMemory:
@@ -102,20 +108,14 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	}
 
 	if spec.Backup != nil {
-		if spec.Backup.RestartPolicy == "" {
-			spec.Backup.RestartPolicy = backup.DefaultRestartPolicy
+		if spec.Backup.RestartOnFailure == nil {
+			spec.Backup.RestartOnFailure = &util.TrueVar
 		}
 		if spec.Backup.Version == "" {
 			spec.Backup.Version = backup.DefaultVersion
 		}
 		if spec.Backup.Coordinator == nil {
 			spec.Backup.Coordinator = &v1alpha1.BackupCoordinatorSpec{}
-		}
-		if spec.Backup.Coordinator.APIPort == int32(0) {
-			spec.Backup.Coordinator.APIPort = backup.DefaultCoordinatorAPIPort
-		}
-		if spec.Backup.Coordinator.RPCPort == int32(0) {
-			spec.Backup.Coordinator.RPCPort = backup.DefaultCoordinatorRPCPort
 		}
 		for _, backup := range spec.Backup.Tasks {
 			if backup.DestinationType == "" {
@@ -147,12 +147,23 @@ func (h *Handler) hasReplsetsInitialized(m *v1alpha1.PerconaServerMongoDB) bool 
 	return false
 }
 
+func (h *Handler) newStatefulSetContainers(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []corev1.Container {
+	runUID := util.GetContainerRunUID(m, h.serverVersion)
+	containers := []corev1.Container{
+		mongod.NewContainer(m, replset, resources, runUID),
+	}
+	if m.Spec.Backup != nil && m.Spec.Backup.Enabled {
+		containers = append(containers, h.backups.NewAgentContainer(replset))
+	}
+	return containers
+}
+
 // newStatefulSet returns a PSMDB stateful set
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addSpecDefaults(m)
 
-	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
+	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
 	set.Spec = appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
@@ -167,10 +178,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 			Spec: corev1.PodSpec{
 				Affinity:      mongod.NewPodAffinity(ls),
 				RestartPolicy: corev1.RestartPolicyAlways,
-				Containers: []corev1.Container{
-					mongod.NewContainer(m, replset, resources, runUID),
-					h.backups.NewAgentContainer(replset),
-				},
+				Containers:    h.newStatefulSetContainers(m, replset, resources),
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: runUID,
 				},

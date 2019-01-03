@@ -34,7 +34,7 @@ required = [
 
 [[override]]
   name = "github.com/percona/mongodb-orchestration-tools"
-  revision = "0272e00bc9c7bc5f2d0319471aa7ad036a476c4e"
+  revision = "230f4b85dec75987e2fe385973a83f6ac6710c92"
 
 [[override]]
   branch = "master"
@@ -51,6 +51,11 @@ required = [
 
   [[prune.project]]
     name = "k8s.io/code-generator"
+    non-go = false
+    unused-packages = false
+
+  [[prune.project]]
+    name = "github.com/percona/mongodb-orchestration-tools"
     non-go = false
     unused-packages = false
 
