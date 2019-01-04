@@ -81,7 +81,7 @@ func (i *Initiator) initReplset(rsCnfMan rsConfig.Manager) error {
 			break
 		} else if isNotAuthorizedError(err) {
 			log.Info("Got mongodb auth error, server appears to be initiated already. Skipping")
-			break
+			return ErrReplsetInitiated
 		} else if err.Error() != ErrMsgDNSNotReady {
 			log.WithFields(log.Fields{
 				"replset": i.config.Replset,
@@ -189,7 +189,16 @@ func (i *Initiator) getReplsetSession() (*mgo.Session, error) {
 }
 
 func (i *Initiator) prepareReplset(session *mgo.Session) error {
-	err := i.initReplset(rsConfig.New(session))
+	// load replset config from session
+	rsCnfMan := rsConfig.New(session)
+	err := rsCnfMan.Load()
+	if err != nil {
+		log.WithError(err).Error("Error loading replset config")
+		return err
+	}
+
+	// init replset
+	err = i.initReplset(rsCnfMan)
 	if err != nil {
 		if err == ErrReplsetInitiated {
 			log.Warning("Replset already initiated, skipping")
