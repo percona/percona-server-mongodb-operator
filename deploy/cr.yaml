@@ -7,7 +7,7 @@ spec:
   version: "3.6.8"
   imagePullPolicy: Always
   expose:
-    on: false
+    enabled: false
     exposeType: ClusterIP
   secrets:
     key: my-cluster-name-mongodb-key

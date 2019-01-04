@@ -9,6 +9,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/stretchr/testify/assert"
@@ -99,7 +100,8 @@ func TestHandlerHandle(t *testing.T) {
 		serverVersion: &v1alpha1.ServerVersion{
 			Platform: v1alpha1.PlatformKubernetes,
 		},
-		watchdogQuit: make(chan bool),
+		watchdogMetrics: wdMetrics.NewCollector(),
+		watchdogQuit:    make(chan bool),
 	}
 
 	// test Handler with no existing stateful sets, test watchdog is started

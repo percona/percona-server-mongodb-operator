@@ -30,21 +30,23 @@ const minPersistentVolumeClaims = 1
 
 // Handler implements sdk.Handler interface.
 type Handler struct {
-	client        sdk.Client
-	serverVersion *v1alpha1.ServerVersion
-	pods          *podk8s.Pods
-	watchdog      *watchdog.Watchdog
-	watchdogQuit  chan bool
-	startedAt     time.Time
-	backups       *backup.Controller
+	client          sdk.Client
+	serverVersion   *v1alpha1.ServerVersion
+	pods            *podk8s.Pods
+	watchdog        *watchdog.Watchdog
+	watchdogMetrics *wdMetrics.Collector
+	watchdogQuit    chan bool
+	startedAt       time.Time
+	backups         *backup.Controller
 }
 
 // NewHandler return new instance of sdk.Handler interface.
 func NewHandler(client sdk.Client) opSdk.Handler {
 	return &Handler{
-		client:       client,
-		startedAt:    time.Now(),
-		watchdogQuit: make(chan bool, 1),
+		client:          client,
+		startedAt:       time.Now(),
+		watchdogMetrics: wdMetrics.NewCollector(),
+		watchdogQuit:    make(chan bool, 1),
 	}
 }
 
@@ -76,7 +78,6 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 	}
 
 	// Start the watchdog if it has not been started
-	metricsCollector := wdMetrics.NewCollector()
 	h.watchdog = watchdog.New(&wdConfig.Config{
 		ServiceName:    psmdb.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
@@ -84,11 +85,12 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 3 * time.Second,
-	}, h.pods, metricsCollector, &h.watchdogQuit)
+	}, h.pods, h.watchdogMetrics, &h.watchdogQuit)
 	go h.watchdog.Run()
 
 	// register prometheus collector
-	prometheus.MustRegister(metricsCollector)
+	prometheus.MustRegister(h.watchdogMetrics)
+	logrus.Debug("Registered watchdog Prometheus collector")
 
 	return nil
 }
@@ -107,8 +109,12 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		if event.Deleted {
 			logrus.Infof("received deleted event for %s", psmdb.Name)
 			if h.watchdog != nil {
+				prometheus.Unregister(h.watchdogMetrics)
+				logrus.Debug("Unregistered watchdog Prometheus collector")
+
 				close(h.watchdogQuit)
 				h.watchdog = nil
+				logrus.Debug("Stopped watchdog")
 			}
 			return nil
 		}
