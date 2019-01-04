@@ -236,10 +236,10 @@ type BackupS3Spec struct {
 type BackupSpec struct {
 	Enabled          bool                   `json:"enabled"`
 	Version          string                 `json:"version,omitempty"`
+	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
 	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
 	S3               *BackupS3Spec          `json:"s3,omitempty"`
 	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
-	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
 }
 
 type BackupDestinationType string
