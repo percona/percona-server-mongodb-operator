@@ -89,7 +89,7 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 
 	// register prometheus collector
 	prometheus.MustRegister(h.watchdogMetrics)
-	log.Debug("Registered watchdog Prometheus collector")
+	logrus.Debug("Registered watchdog Prometheus collector")
 
 	return nil
 }
@@ -109,11 +109,11 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			logrus.Infof("received deleted event for %s", psmdb.Name)
 			if h.watchdog != nil {
 				prometheus.Unregister(h.watchdogMetrics)
-				log.Debug("Unregistered watchdog Prometheus collector")
+				logrus.Debug("Unregistered watchdog Prometheus collector")
 
 				close(h.watchdogQuit)
 				h.watchdog = nil
-				log.Debuf("Stopped watchdog")
+				logrus.Debug("Stopped watchdog")
 			}
 			return nil
 		}
