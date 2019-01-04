@@ -5,7 +5,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// newPodAffinity returns an Affinity configuration that aims to
+// NewPodAffinity returns an Affinity configuration that aims to
 // avoid deploying more than one pod on the same kubelet hostname
 func NewPodAffinity(ls map[string]string) *corev1.Affinity {
 	return &corev1.Affinity{

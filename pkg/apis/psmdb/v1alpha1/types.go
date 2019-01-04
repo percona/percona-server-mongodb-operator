@@ -48,7 +48,6 @@ type PerconaServerMongoDBSpec struct {
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
 	Backup          *BackupSpec       `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-	Expose          *Expose           `json:"expose,omitempty"`
 }
 
 type PerconaServerMongoDBStatus struct {
@@ -61,6 +60,8 @@ type ReplsetSpec struct {
 	Size           int32       `json:"size"`
 	StorageClass   string      `json:"storageClass,omitempty"`
 	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
+	Arbiter        *Arbiter    `json:"arbiter,omitempty"`
+	Expose         *Expose     `json:"expose,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
@@ -234,6 +235,11 @@ type BackupSpec struct {
 	Version       string                 `json:"version,omitempty"`
 	RestartPolicy corev1.RestartPolicy   `json:"restartPolicy,omitempty"`
 	Coordinator   *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+}
+
+type Arbiter struct {
+	Enabled bool  `json:"enabled"`
+	Size    int32 `json:"size"`
 }
 
 type Expose struct {

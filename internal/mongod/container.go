@@ -343,3 +343,8 @@ func NewContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpe
 func NewBackupContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64, vms []corev1.VolumeMount) corev1.Container {
 	return newContainer(m, replset, MongodBackupContainerName, resources, runUID, vms)
 }
+
+func NewArbiterContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
+	// TODO
+	return newContainer(m, replset, MongodContainerName, resources, runUID, newContainerVolumeMounts(m))
+}
