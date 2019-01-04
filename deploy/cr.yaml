@@ -64,7 +64,8 @@ spec:
     enabled: false
     version: 0.1.0
     restartOnFailure: true
-    aws:
+    s3:
+      secret: my-cluster-name-backup-s3
       bucket: S3-BACKUP-BUCKET-NAME-HERE
       region: us-west-2
     coordinator:
@@ -82,4 +83,3 @@ spec:
     - name: default
       enabled: true
       schedule: "0 0 * * *"
-      destinationType: aws
