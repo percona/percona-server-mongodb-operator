@@ -31,9 +31,6 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 	if spec.Secrets.Users == "" {
 		spec.Secrets.Users = config.DefaultUsersSecretName
 	}
-	if spec.Secrets.BackupAWS == "" {
-		spec.Secrets.BackupAWS = config.DefaultBackupAWSSecretName
-	}
 	if spec.Mongod == nil {
 		spec.Mongod = &v1alpha1.MongodSpec{}
 	}
@@ -116,6 +113,12 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		}
 		if spec.Backup.Coordinator == nil {
 			spec.Backup.Coordinator = &v1alpha1.BackupCoordinatorSpec{}
+		}
+		if spec.Backup.S3 == nil {
+			spec.Backup.S3 = &v1alpha1.BackupS3Spec{}
+		}
+		if spec.Backup.S3.Secret == "" {
+			spec.Backup.S3.Secret = config.DefaultBackupS3SecretName
 		}
 		for _, backup := range spec.Backup.Tasks {
 			if backup.DestinationType == "" {

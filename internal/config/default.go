@@ -20,7 +20,7 @@ var (
 	DefaultOperationProfilingMode         = v1alpha1.OperationProfilingModeSlowOp
 	DefaultImagePullPolicy                = corev1.PullIfNotPresent
 
-	DefaultBackupAWSSecretName   = "percona-server-mongodb-backup-aws"
+	DefaultBackupS3SecretName    = "percona-server-mongodb-backup-s3"
 	DefaultBackupVersion         = "0.1.0"
-	DefaultBackupDestinationType = v1alpha1.BackupDestinationAWS
+	DefaultBackupDestinationType = v1alpha1.BackupDestinationS3
 )

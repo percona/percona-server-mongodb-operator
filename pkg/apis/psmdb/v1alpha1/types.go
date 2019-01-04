@@ -75,9 +75,8 @@ type ServerVersion struct {
 }
 
 type SecretsSpec struct {
-	Key       string `json:"key,omitempty"`
-	Users     string `json:"users,omitempty"`
-	BackupAWS string `json:"backup-aws,omitempty"`
+	Key   string `json:"key,omitempty"`
+	Users string `json:"users,omitempty"`
 }
 
 type ReplsetSpec struct {
@@ -223,31 +222,32 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
-type BackupDestinationType string
-
-var (
-	BackupDestinationAWS  BackupDestinationType = "aws"
-	BackupDestinationFile BackupDestinationType = "file"
-)
-
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Debug          bool `json:"debug,omitempty"`
 }
 
-type BackupAWSSpec struct {
+type BackupS3Spec struct {
+	Secret string `json:"secret,omitempty"`
 	Bucket string `json:"bucket,omitempty"`
 	Region string `json:"region,omitempty"`
 }
 
 type BackupSpec struct {
-	Enabled          bool                   `json:"enabled,omitempty"`
+	Enabled          bool                   `json:"enabled"`
 	Version          string                 `json:"version,omitempty"`
-	AWS              *BackupAWSSpec         `json:"aws,omitempty"`
 	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+	S3               *BackupS3Spec          `json:"s3,omitempty"`
 	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
 	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
 }
+
+type BackupDestinationType string
+
+var (
+	BackupDestinationS3   BackupDestinationType = "s3"
+	BackupDestinationFile BackupDestinationType = "file"
+)
 
 type BackupTaskSpec struct {
 	Name            string                `json:"name,omitempty"`

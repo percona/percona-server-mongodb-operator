@@ -12,7 +12,6 @@ spec:
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
-    backup-aws: my-cluster-name-backup-aws
   replsets:
   - name: rs0
     size: 3

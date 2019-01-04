@@ -10,19 +10,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const (
-	AgentContainerName = "backup-agent"
+// AgentContainerName is the name of the backup agent container
+const AgentContainerName = "backup-agent"
 
-	agentBackupDataMount      = "/backup"
-	agentBackupDataVolumeName = "backup-data"
-)
-
-func (c *Controller) hasAWSBackups() bool {
+func (c *Controller) hasS3Backups() bool {
 	if c.psmdb.Spec.Backup == nil {
 		return false
 	}
 	for _, backup := range c.psmdb.Spec.Backup.Tasks {
-		if backup.DestinationType == v1alpha1.BackupDestinationAWS {
+		if backup.DestinationType == v1alpha1.BackupDestinationS3 {
 			return true
 		}
 	}
@@ -58,32 +54,32 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 			),
 		},
 	}
-	if c.hasAWSBackups() {
-		awsEnvs := []corev1.EnvVar{
+	if c.hasS3Backups() {
+		s3Envs := []corev1.EnvVar{
 			{
 				Name:  "PBM_AGENT_BACKUP_DIR",
-				Value: c.psmdb.Spec.Backup.AWS.Bucket,
+				Value: c.psmdb.Spec.Backup.S3.Bucket,
 			},
 			{
-				Name:  "AWS_REGION",
-				Value: c.psmdb.Spec.Backup.AWS.Region,
+				Name:  "S3_REGION",
+				Value: c.psmdb.Spec.Backup.S3.Region,
 			},
 			{
-				Name: "AWS_ACCESS_KEY_ID",
+				Name: "S3_ACCESS_KEY_ID",
 				ValueFrom: util.EnvVarSourceFromSecret(
-					c.psmdb.Spec.Secrets.BackupAWS,
-					"AWS_ACCESS_KEY_ID",
+					c.psmdb.Spec.Backup.S3.Secret,
+					"S3_ACCESS_KEY_ID",
 				),
 			},
 			{
-				Name: "AWS_SECRET_ACCESS_KEY",
+				Name: "S3_SECRET_ACCESS_KEY",
 				ValueFrom: util.EnvVarSourceFromSecret(
-					c.psmdb.Spec.Secrets.BackupAWS,
-					"AWS_SECRET_ACCESS_KEY",
+					c.psmdb.Spec.Backup.S3.Secret,
+					"S3_SECRET_ACCESS_KEY",
 				),
 			},
 		}
-		args = append(args, awsEnvs...)
+		args = append(args, s3Envs...)
 	}
 	return args
 }

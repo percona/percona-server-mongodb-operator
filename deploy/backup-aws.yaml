@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: my-cluster-name-backup-aws
-type: Opaque
-data:
-  AWS_ACCESS_KEY_ID: UkVQTEFDRS1XSVRILUFXUy1BQ0NFU1MtS0VZ
-  AWS_SECRET_KEY_ID: UkVQTEFDRS1XSVRILUFXUy1TRUNSRVQtS0VZ

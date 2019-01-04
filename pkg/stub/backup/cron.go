@@ -12,9 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	backupCtlContainerName = "backup-pmbctl"
-)
+const backupCtlContainerName = "backup-pmbctl"
 
 func newCronJob(m *v1alpha1.PerconaServerMongoDB, backup *v1alpha1.BackupTaskSpec) *batchv1b.CronJob {
 	return &batchv1b.CronJob{
