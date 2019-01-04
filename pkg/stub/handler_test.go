@@ -54,7 +54,6 @@ func TestHandlerHandle(t *testing.T) {
 			},
 			Backup: &v1alpha1.BackupSpec{
 				Enabled: true,
-				Tasks:   []*v1alpha1.BackupTaskSpec{},
 				Coordinator: &v1alpha1.BackupCoordinatorSpec{
 					ResourcesSpec: &v1alpha1.ResourcesSpec{
 						Limits: &v1alpha1.ResourceSpecRequirements{
@@ -68,6 +67,7 @@ func TestHandlerHandle(t *testing.T) {
 						},
 					},
 				},
+				Tasks: []*v1alpha1.BackupTaskSpec{},
 			},
 		},
 	}

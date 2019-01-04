@@ -77,7 +77,7 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 				},
 				Ports: []corev1.ContainerPort{
 					{
-						Name:          coordinatorAPIPortName,
+						Name:          coordinatorRPCPortName,
 						ContainerPort: coordinatorRPCPort,
 					},
 					{

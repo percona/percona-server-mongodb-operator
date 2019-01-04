@@ -104,7 +104,7 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		spec.RunUID = config.DefaultRunUID
 	}
 
-	if spec.Backup != nil {
+	if spec.Backup != nil && spec.Backup.Enabled {
 		if spec.Backup.RestartOnFailure == nil {
 			spec.Backup.RestartOnFailure = &util.TrueVar
 		}
