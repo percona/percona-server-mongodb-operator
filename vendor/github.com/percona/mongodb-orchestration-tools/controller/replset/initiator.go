@@ -17,6 +17,8 @@ package replset
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ const (
 	ErrMsgDNSNotReady         = "No host described in new configuration 1 for replica set rs maps to this node"
 	ErrMsgNotAuthorizedPrefix = "not authorized on admin to execute command"
 	ErrMsgNotPrimary          = "not primary"
+	ErrMsgRsInitRequiresAuth  = "command replSetInitiate requires authentication"
 )
 
 var (
@@ -56,7 +59,7 @@ func isError(err error, prefix string) bool {
 	return false
 }
 
-func (i *Initiator) initReplset(rsCnfMan rsConfig.Manager) error {
+func (i *Initiator) initReplset(rsCnfMan rsConfig.Manager, out io.Writer) error {
 	config := rsConfig.NewConfig(i.config.Replset)
 	member := rsConfig.NewMember(i.config.ReplsetInit.PrimaryAddr)
 	member.Tags = &rsConfig.ReplsetTags{
@@ -66,15 +69,17 @@ func (i *Initiator) initReplset(rsCnfMan rsConfig.Manager) error {
 	rsCnfMan.Set(config)
 
 	log.Info("Initiating replset")
-	fmt.Println(config)
+	fmt.Fprintln(out, config)
 
-	for i.replInitTries <= i.config.ReplsetInit.MaxReplTries {
+	for i.replInitTries < i.config.ReplsetInit.MaxReplTries {
 		err := rsCnfMan.Initiate()
 		if err == nil {
 			log.WithFields(log.Fields{
 				"version": config.Version,
 			}).Info("Initiated replset with config:")
 			break
+		} else if isError(err, ErrMsgRsInitRequiresAuth) || isError(err, ErrMsgNotAuthorizedPrefix) {
+			return err
 		} else if !isError(err, ErrMsgDNSNotReady) {
 			log.WithFields(log.Fields{
 				"replset": i.config.Replset,
@@ -157,7 +162,7 @@ func (i *Initiator) getReplsetSession() (*mgo.Session, error) {
 				Username:       i.config.UserAdminUser,
 				Password:       i.config.UserAdminPassword,
 				ReplicaSetName: i.config.Replset,
-				Direct:         false,
+				Direct:         true,
 				FailFast:       true,
 				Timeout:        db.DefaultMongoDBTimeoutDuration,
 			},
@@ -181,8 +186,8 @@ func (i *Initiator) getReplsetSession() (*mgo.Session, error) {
 	return session, nil
 }
 
-func (i *Initiator) prepareReplset(session *mgo.Session) error {
-	err := i.initReplset(rsConfig.New(session))
+func (i *Initiator) prepareReplset(session *mgo.Session, out io.Writer) error {
+	err := i.initReplset(rsConfig.New(session), out)
 	if err != nil {
 		log.WithError(err).Error("Error intiating replica set")
 		return err
@@ -222,9 +227,9 @@ func (i *Initiator) Run() error {
 	}
 	defer localhostNoAuthSession.Close()
 
-	err = i.prepareReplset(localhostNoAuthSession)
+	err = i.prepareReplset(localhostNoAuthSession, os.Stdout)
 	if err != nil {
-		if isError(err, ErrMsgNotAuthorizedPrefix) || isError(err, ErrMsgNotPrimary) {
+		if isError(err, ErrMsgNotAuthorizedPrefix) || isError(err, ErrMsgNotPrimary) || isError(err, ErrMsgRsInitRequiresAuth) {
 			log.Warning("Replset already initiated, skipping initiation")
 			return nil
 		}
