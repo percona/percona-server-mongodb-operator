@@ -34,7 +34,7 @@ required = [
 
 [[override]]
   name = "github.com/percona/mongodb-orchestration-tools"
-  revision = "230f4b85dec75987e2fe385973a83f6ac6710c92"
+  revision = "6d6bbcc6deeaa60b5206066e98b8a86b7c24f4b4"
 
 [[override]]
   branch = "master"

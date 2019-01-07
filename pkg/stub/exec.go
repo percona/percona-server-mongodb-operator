@@ -92,6 +92,12 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 		return fmt.Errorf("failed to run exec in pod %s: %v", pod.Name, err)
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"pod":       pod.Name,
+		"container": containerName,
+		"command":   cmd[0],
+	}).Info("running command in container")
+
 	var (
 		stdOut bytes.Buffer
 		stdErr bytes.Buffer
@@ -102,14 +108,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 	})
 	if err != nil {
 		logrus.Errorf("error running remote command %s: %v", cmd[0], err)
-		return err
 	}
-
-	logrus.WithFields(logrus.Fields{
-		"pod":       pod.Name,
-		"container": containerName,
-		"command":   cmd[0],
-	}).Info("running command in container")
 
 	return printCommandOutput(cmd[0], pod.Name, &stdOut, &stdErr, os.Stdout)
 }
