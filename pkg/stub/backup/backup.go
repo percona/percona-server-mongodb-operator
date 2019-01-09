@@ -1,9 +1,12 @@
 package backup
 
 import (
+	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/sirupsen/logrus"
@@ -11,12 +14,12 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-const (
-	DefaultVersion = "0.1.0"
+// DefaultVersion is the default version of the percona/percona-backup-mongodb project
+const DefaultVersion = "0.2.0"
 
-	backupImagePrefix = "percona/percona-server-mongodb-operator"
-)
+const backupImagePrefix = "percona/percona-server-mongodb-operator"
 
+// Controller is responsible for controlling backup configuration
 type Controller struct {
 	client        sdk.Client
 	psmdb         *v1alpha1.PerconaServerMongoDB
@@ -24,6 +27,7 @@ type Controller struct {
 	usersSecret   *corev1.Secret
 }
 
+// New returns a new Controller
 func New(client sdk.Client, psmdb *v1alpha1.PerconaServerMongoDB, serverVersion *v1alpha1.ServerVersion, usersSecret *corev1.Secret) *Controller {
 	return &Controller{
 		client:        client,
@@ -40,37 +44,7 @@ func (c *Controller) getImageName(component string) string {
 	return fmt.Sprintf("%s:backup-%s", backupImagePrefix, component)
 }
 
-func (c *Controller) Delete(backup *v1alpha1.BackupTaskSpec) error {
-	err := c.client.Delete(newCronJob(c.psmdb, backup))
-	if err != nil && !k8serrors.IsNotFound(err) {
-		logrus.Errorf("failed to delete cronJob for backup %s: %v", backup.Name, err)
-		return err
-	}
-	return c.deleteStatus(backup)
-}
-
-func (c *Controller) Update(backup *v1alpha1.BackupTaskSpec) error {
-	cronJob := newCronJob(c.psmdb, backup)
-
-	err := c.client.Get(cronJob)
-	if err != nil {
-		logrus.Errorf("failed to get cronJob for backup %s: %v", backup.Name, err)
-		return err
-	}
-
-	if cronJob.Spec.Schedule != backup.Schedule {
-		cronJob.Spec.Schedule = backup.Schedule
-		err = c.client.Update(cronJob)
-		if err != nil {
-			logrus.Errorf("failed to update cronJob for backup %s: %v", backup.Name, err)
-			return err
-		}
-		logrus.Infof("updated cronJob schedulefor backup: %s", backup.Name)
-	}
-
-	return c.updateStatus(backup)
-}
-
+// Create creates a backup task cronJob and updates the CR status
 func (c *Controller) Create(backup *v1alpha1.BackupTaskSpec) error {
 	cronJob := c.newBackupCronJob(backup)
 	err := c.client.Create(cronJob)
@@ -80,10 +54,70 @@ func (c *Controller) Create(backup *v1alpha1.BackupTaskSpec) error {
 	return c.updateStatus(backup)
 }
 
+// Update updates a backup task cronJob and updates the CR spec and status
+func (c *Controller) Update(backup *v1alpha1.BackupTaskSpec) error {
+	var doUpdate bool
+	cronJob := newCronJob(c.psmdb, backup)
+
+	err := c.client.Get(cronJob)
+	if err != nil {
+		logrus.Errorf("failed to get cronJob for backup %s: %v", backup.Name, err)
+		return err
+	}
+
+	cronJobPodSpec := cronJob.Spec.JobTemplate.Spec.Template.Spec
+	container := util.GetPodSpecContainer(&cronJobPodSpec, backupCtlContainerName)
+	if container == nil {
+		logrus.Errorf("cannot find cronJob container spec for backup %s", backup.Name)
+		return errors.New("cannot find cronJob container spec for backup")
+	}
+
+	// update cronJob spec if container args changed
+	if !reflect.DeepEqual(container.Args, c.newBackupCronJobContainerArgs(backup)) {
+		container.Args = c.newBackupCronJobContainerArgs(backup)
+		doUpdate = true
+	}
+
+	// update cronJob spec if container env changed
+	if !reflect.DeepEqual(container.Env, c.newBackupCronJobContainerEnv()) {
+		container.Env = c.newBackupCronJobContainerEnv()
+		doUpdate = true
+	}
+
+	// update cronJob spec if schedule changed
+	if cronJob.Spec.Schedule != backup.Schedule {
+		cronJob.Spec.Schedule = backup.Schedule
+		doUpdate = true
+	}
+
+	if doUpdate {
+		err = c.client.Update(cronJob)
+		if err != nil {
+			logrus.Errorf("failed to update cronJob for backup %s: %v", backup.Name, err)
+			return err
+		}
+		logrus.Infof("updated cronJob spec for backup: %s", backup.Name)
+	}
+
+	return c.updateStatus(backup)
+}
+
+// Delete deletes a backup task cronJob and CR status
+func (c *Controller) Delete(backup *v1alpha1.BackupTaskSpec) error {
+	err := c.client.Delete(newCronJob(c.psmdb, backup))
+	if err != nil && !k8serrors.IsNotFound(err) {
+		logrus.Errorf("failed to delete cronJob for backup %s: %v", backup.Name, err)
+		return err
+	}
+	return c.deleteStatus(backup)
+}
+
+// EnsureBackupTasks ensures backup tasks are created if enabled, updated if
+// they already exist or removed if they are disabled
 func (c *Controller) EnsureBackupTasks() error {
-	// create/update or delete backup tasks
 	for _, task := range c.psmdb.Spec.Backup.Tasks {
 		if task.Enabled && task.Schedule != "" {
+			// create/update or delete backup task
 			err := c.Create(task)
 			if err != nil {
 				if !k8serrors.IsAlreadyExists(err) {
@@ -101,6 +135,7 @@ func (c *Controller) EnsureBackupTasks() error {
 				logrus.Infof("create cronJob for backup: %s", task.Name)
 			}
 		} else {
+			// delete disabled backup task
 			for _, taskStatus := range c.psmdb.Status.Backups {
 				if taskStatus.Name != task.Name {
 					continue
@@ -118,6 +153,7 @@ func (c *Controller) EnsureBackupTasks() error {
 	return nil
 }
 
+// DeleteBackupTasks deletes all cronJobs and CR statuses for backup tasks
 func (c *Controller) DeleteBackupTasks() error {
 	// delete known tasks from CR spec
 	for _, task := range c.psmdb.Spec.Backup.Tasks {

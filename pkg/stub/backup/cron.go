@@ -27,12 +27,8 @@ func newCronJob(m *v1alpha1.PerconaServerMongoDB, backup *v1alpha1.BackupTaskSpe
 	}
 }
 
-func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b.CronJob {
+func (c *Controller) newBackupCronJobContainerArgs(backup *v1alpha1.BackupTaskSpec) []string {
 	backupName := c.psmdb.Name + "-" + backup.Name
-	restartPolicy := corev1.RestartPolicyNever
-	if c.psmdb.Spec.Backup.RestartOnFailure != nil && *c.psmdb.Spec.Backup.RestartOnFailure {
-		restartPolicy = corev1.RestartPolicyOnFailure
-	}
 
 	var destinationType string
 	switch backup.DestinationType {
@@ -42,6 +38,28 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b
 		destinationType = "aws"
 	}
 
+	return []string{
+		"run", "backup",
+		"--description=" + backupName,
+		"--destination-type=" + destinationType,
+	}
+}
+
+func (c *Controller) newBackupCronJobContainerEnv() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "PBMCTL_SERVER_ADDRESS",
+			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorAPIPort)),
+		},
+	}
+}
+
+func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b.CronJob {
+	restartPolicy := corev1.RestartPolicyNever
+	if c.psmdb.Spec.Backup.RestartOnFailure != nil && *c.psmdb.Spec.Backup.RestartOnFailure {
+		restartPolicy = corev1.RestartPolicyOnFailure
+	}
+
 	backupPod := corev1.PodSpec{
 		RestartPolicy: restartPolicy,
 		Containers: []corev1.Container{
@@ -49,17 +67,8 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b
 				Name:            backupCtlContainerName,
 				Image:           c.getImageName("pbmctl"),
 				ImagePullPolicy: c.psmdb.Spec.ImagePullPolicy,
-				Env: []corev1.EnvVar{
-					{
-						Name:  "PBMCTL_SERVER_ADDRESS",
-						Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorAPIPort)),
-					},
-				},
-				Args: []string{
-					"run", "backup",
-					"--description=" + backupName,
-					"--destination-type=" + destinationType,
-				},
+				Env:             c.newBackupCronJobContainerEnv(),
+				Args:            c.newBackupCronJobContainerArgs(backup),
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &util.TrueVar,
 					RunAsUser:    util.GetContainerRunUID(c.psmdb, c.serverVersion),
