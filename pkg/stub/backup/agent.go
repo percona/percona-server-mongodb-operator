@@ -61,21 +61,21 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 				Value: c.psmdb.Spec.Backup.S3.Bucket,
 			},
 			{
-				Name:  "S3_REGION",
+				Name:  "AWS_REGION",
 				Value: c.psmdb.Spec.Backup.S3.Region,
 			},
 			{
-				Name: "S3_ACCESS_KEY_ID",
+				Name: "AWS_ACCESS_KEY_ID",
 				ValueFrom: util.EnvVarSourceFromSecret(
 					c.psmdb.Spec.Backup.S3.Secret,
-					"S3_ACCESS_KEY_ID",
+					"AWS_ACCESS_KEY_ID",
 				),
 			},
 			{
-				Name: "S3_SECRET_ACCESS_KEY",
+				Name: "AWS_SECRET_ACCESS_KEY",
 				ValueFrom: util.EnvVarSourceFromSecret(
 					c.psmdb.Spec.Backup.S3.Secret,
-					"S3_SECRET_ACCESS_KEY",
+					"AWS_SECRET_ACCESS_KEY",
 				),
 			},
 		}
