@@ -215,9 +215,16 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 			clusterServices = append(clusterServices, svc.Items...)
 
-			// Check if backup agent container exists
-			if util.GetPodSpecContainer(&set.Spec.Template.Spec, backup.AgentContainerName) != nil {
-				hasBackupAgents = true
+			// Check if any pod has a backup agent container running
+			for _, pod := range podsList.Items {
+				if util.GetPodContainerStatus(&pod.Status, backup.AgentContainerName) != nil {
+					terminated, err := util.HasContainerTerminated(&pod.Status, backup.AgentContainerName)
+					if terminated || err != nil {
+						continue
+					}
+					hasBackupAgents = true
+					break
+				}
 			}
 		}
 
