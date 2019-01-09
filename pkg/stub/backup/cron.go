@@ -34,6 +34,14 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b
 		restartPolicy = corev1.RestartPolicyOnFailure
 	}
 
+	var destinationType string
+	switch backup.DestinationType {
+	case v1alpha1.BackupDestinationFile:
+		destinationType = "file"
+	case v1alpha1.BackupDestinationS3:
+		destinationType = "aws"
+	}
+
 	backupPod := corev1.PodSpec{
 		RestartPolicy: restartPolicy,
 		Containers: []corev1.Container{
@@ -50,7 +58,7 @@ func (c *Controller) newBackupCronJob(backup *v1alpha1.BackupTaskSpec) *batchv1b
 				Args: []string{
 					"run", "backup",
 					"--description=" + backupName,
-					"--destination-type=" + string(backup.DestinationType),
+					"--destination-type=" + destinationType,
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &util.TrueVar,
