@@ -1,38 +1,92 @@
 package stub
 
 import (
+	"fmt"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (h *Handler) ensureArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) (*appsv1.Deployment, error) {
-}
-
-func arbiterMeta(namespace string, replsetName string) *appsv1.Deployment {
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Deployment",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      namespace + "-" + replsetName,
-			Namespace: namespace,
-		},
+func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) (*appsv1.StatefulSet, error) {
+	if replset.Arbiter == nil {
+		replset.Arbiter = &v1alpha1.Arbiter{
+			Enabled: false,
+			Size:    0,
+		}
 	}
+	if replset.Arbiter.Enabled && replset.Arbiter.Size == 0 {
+		replset.Arbiter.Size = 1
+	}
+
+	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
+	if err != nil {
+		return nil, err
+	}
+
+	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"arbiter")
+	if err := h.client.Get(arbiter); err != nil {
+		lf := logrus.Fields{
+			"version": m.Spec.Version,
+			"size":    replset.Size,
+			"cpu":     replset.Limits.Cpu,
+			"memory":  replset.Limits.Memory,
+			"storage": replset.Limits.Storage,
+		}
+		if replset.StorageClass != "" {
+			lf["storageClass"] = replset.StorageClass
+		}
+
+		arbiter, err := h.newArbiter(m, replset, resources)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := h.client.Create(arbiter); err != nil {
+			if !k8serrors.IsAlreadyExists(err) {
+				return nil, err
+			}
+		} else {
+			logrus.WithFields(lf).Infof("created arbiter stateful set for replset: %s", replset.Name)
+		}
+	}
+
+	return h.handleArbiterUpdate(m, arbiter, replset, resources)
+
 }
 
-func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*appsv1.Deployment, error) {
-	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
-	ls["arbiter"] = "true"
+func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+	if *set.Spec.Replicas != replset.Arbiter.Size {
+		logrus.Infof("setting arbiters count to %d for replset: %s", replset.Arbiter.Size, replset.Name)
+		set.Spec.Replicas = &replset.Arbiter.Size
+	}
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 
-	arbiter := arbiterMeta(m.Namespace, replset.Name)
-	arbiter.Spec = appsv1.DeploymentSpec{
-		Replicas: &replset.Arbiter.Size,
+	set.Spec.Template.Spec.Containers = h.newArbiterContainers(m, replset, resources, runUID)
+	err := h.client.Update(set)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update arbiter stateful set for replset %s: %v", replset.Name, err)
+	}
+	return set, nil
+}
+
+func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+	h.addSpecDefaults(m)
+
+	runUID := util.GetContainerRunUID(m, h.serverVersion)
+
+	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
+	ls["arbiter"] = "true"
+
+	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"arbiter")
+
+	arbiter.Spec = appsv1.StatefulSetSpec{
+		ServiceName: m.Name + "-" + replset.Name + "arbiter",
+		Replicas:    &replset.Arbiter.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
 		},
@@ -41,9 +95,9 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 				Labels: ls,
 			},
 			Spec: corev1.PodSpec{
-				Containers: h.newArbiterContainers(m, replset),
-
+				Affinity:      mongod.NewPodAffinity(ls),
 				RestartPolicy: corev1.RestartPolicyAlways,
+				Containers:    h.newArbiterContainers(m, replset, resources, runUID),
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: runUID,
 				},
@@ -66,6 +120,9 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	return arbiter, nil
 }
 
-func (h *Handler) newArbiterContainers(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) []corev1.Container {
-	return mongod.NewArbiterContainer(m, replset)
+func (h *Handler) newArbiterContainers(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) []corev1.Container {
+	containers := []corev1.Container{
+		mongod.NewArbiterContainer(m, replset, resources, runUID),
+	}
+	return containers
 }

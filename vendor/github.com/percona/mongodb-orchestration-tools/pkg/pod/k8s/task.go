@@ -18,19 +18,20 @@ import (
 	"errors"
 	"strings"
 
+	"fmt"
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"fmt"
 )
 
 const (
-	mongodContainerName       = "mongod"
-	mongodBackupContainerName = "mongod-backup"
-	mongosContainerName       = "mongos"
-	mongodbPortName           = "mongodb"
-	clusterServiceDNSSuffix   = "svc.cluster.local"
+	mongodContainerName        = "mongod"
+	mongodArbiterContainerName = "mongod-arbiter"
+	mongodBackupContainerName  = "mongod-backup"
+	mongosContainerName        = "mongos"
+	mongodbPortName            = "mongodb"
+	clusterServiceDNSSuffix    = "svc.cluster.local"
 )
 
 func GetMongoHost(pod, service, replset, namespace string) string {
@@ -111,6 +112,8 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 		containerName = mongodBackupContainerName
 	case pod.TaskTypeMongos:
 		containerName = mongosContainerName
+	case pod.TaskTypeArbiter:
+		containerName = mongodArbiterContainerName
 	default:
 		return false
 	}

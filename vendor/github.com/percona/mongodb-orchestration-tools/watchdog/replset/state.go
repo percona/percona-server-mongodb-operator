@@ -16,6 +16,8 @@ package replset
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"sync"
 
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
@@ -33,10 +35,11 @@ const (
 // State is a struct reflecting the state of a MongoDB Replica Set
 type State struct {
 	sync.Mutex
-	Replset  string
-	Config   *rsConfig.Config
-	Status   *rsStatus.Status
-	doUpdate bool
+	Replset   string
+	Config    *rsConfig.Config
+	Status    *rsStatus.Status
+	configOut io.Writer
+	doUpdate  bool
 }
 
 func (s *State) updateConfig(configManager rsConfig.Manager) error {
@@ -50,7 +53,7 @@ func (s *State) updateConfig(configManager rsConfig.Manager) error {
 		"replset":        s.Replset,
 		"config_version": config.Version,
 	}).Info("Writing new replset config")
-	fmt.Println(config)
+	fmt.Fprintln(s.configOut, config)
 
 	err := configManager.Save()
 	if err != nil {
@@ -174,7 +177,8 @@ func (s *State) resetConfigVotes() {
 // NewState returns a new State struct
 func NewState(replset string) *State {
 	return &State{
-		Replset: replset,
+		Replset:   replset,
+		configOut: os.Stdout,
 	}
 }
 
@@ -249,6 +253,11 @@ func (s *State) AddConfigMembers(session *mgo.Session, configManager rsConfig.Ma
 				serviceTagName: mongod.ServiceName,
 			}
 			member.Votes = 0
+		} else if mongod.Task.IsTaskType(pod.TaskTypeArbiter) {
+			log.Infof("Adding replset arbiter node: %s", mongod.Name())
+			member.ArbiterOnly = true
+			member.Priority = 0
+			member.Tags = nil
 		}
 		configManager.AddMember(member)
 		s.doUpdate = true
