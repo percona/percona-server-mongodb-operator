@@ -95,7 +95,7 @@ func (c *Controller) EnsureBackupTasks() error {
 						logrus.Errorf("failed to update backup task %s: %v", task.Name, err)
 						return err
 					}
-					logrus.Infof("updated cronJob for backup: %s", task.Name)
+					logrus.Debugf("updated cronJob for backup: %s", task.Name)
 				}
 			} else {
 				logrus.Infof("create cronJob for backup: %s", task.Name)
@@ -129,7 +129,7 @@ func (c *Controller) DeleteBackupTasks() error {
 		logrus.Infof("deleted cronJob for disabled backup: %s", task.Name)
 	}
 
-	// delete tasks from CR status (in case they are not in the Spec)\
+	// delete tasks from CR status (in case they are not in the Spec)
 	for _, taskStatus := range c.psmdb.Status.Backups {
 		cronJob := newCronJob(c.psmdb, &v1alpha1.BackupTaskSpec{
 			Name: taskStatus.Name,
