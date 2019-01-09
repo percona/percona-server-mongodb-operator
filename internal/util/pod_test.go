@@ -44,3 +44,15 @@ func TestGetPodContainer(t *testing.T) {
 	assert.NotNil(t, GetPodContainer(&pod, t.Name()))
 	assert.Nil(t, GetPodContainer(&pod, "doesnt exist"))
 }
+
+func TestGetPodContainerStatus(t *testing.T) {
+	podStatus := corev1.PodStatus{
+		ContainerStatuses: []corev1.ContainerStatus{
+			{
+				Name: t.Name(),
+			},
+		},
+	}
+	assert.NotNil(t, GetPodContainerStatus(&podStatus, t.Name()))
+	assert.Nil(t, GetPodContainerStatus(&podStatus, "doesntexist"))
+}

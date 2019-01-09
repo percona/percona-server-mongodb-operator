@@ -406,7 +406,7 @@
     "unix",
     "windows"
   ]
-  revision = "b05ddf57801d2239d6ab0ee35f9d981e0420f4ac"
+  revision = "73d4af5aa059c8c2dfcf25aad4efd6ce7bc9adc1"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -675,7 +675,7 @@
     "pkg/util"
   ]
   revision = "8c97d6ab64da020f8b151e9d3ed8af3172f5c390"
-  version = "kubernetes-1.11.4"
+  version = "kubernetes-1.11.3"
 
 [[projects]]
   branch = "master"
@@ -713,6 +713,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e1d8ba20bf9c08d5df686ed166d88dbc15affa4119f2c86d2cd59690dff5b98d"
+  inputs-digest = "004c2fef7b91cce99fb2f226cb65c6e5341ae34cb863348cd4f067b2163137a1"
   solver-name = "gps-cdcl"
   solver-version = 1

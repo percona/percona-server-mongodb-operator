@@ -157,6 +157,15 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 		}
 
+		// Ensure scheduled backup tasks are created/updated
+		//if h.backups != nil && h.hasBackupsEnabled(psmdb) && h.hasReplsetsInitialized(psmdb) {
+		if h.backups != nil && h.hasReplsetsInitialized(psmdb) {
+			err = h.backups.EnsureBackupTasks()
+			if err != nil {
+				return err
+			}
+		}
+
 		// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
 		err = h.ensureWatchdog(psmdb, usersSecret)
 		if err != nil {
@@ -206,21 +215,35 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 			clusterServices = append(clusterServices, svc.Items...)
 
-			// Check if backup agent container exists
-			if util.GetPodSpecContainer(&set.Spec.Template.Spec, backup.AgentContainerName) != nil {
-				hasBackupAgents = true
+			// Check if any pod has a backup agent container running
+			for _, pod := range podsList.Items {
+				if util.GetPodContainerStatus(&pod.Status, backup.AgentContainerName) != nil {
+					terminated, err := util.HasContainerTerminated(&pod.Status, backup.AgentContainerName)
+					if terminated || err != nil {
+						continue
+					}
+					hasBackupAgents = true
+					break
+				}
 			}
 		}
 
-		// Remove coordinator if backups are disabled and there are no running
-		// backup agents in replica sets
-		if (psmdb.Spec.Backup == nil || !psmdb.Spec.Backup.Enabled) && h.backups != nil && !hasBackupAgents {
-			err = h.backups.DeleteCoordinator()
+		// If backups are disabled, remove backup task/cronJobs and the backup coordinator
+		// if there are no running backup agents in replica sets
+		if (psmdb.Spec.Backup == nil || !psmdb.Spec.Backup.Enabled) && h.backups != nil {
+			err = h.backups.DeleteBackupTasks()
 			if err != nil {
-				logrus.Errorf("failed to remove backup coordinator: %v", err)
-				return err
+				logrus.Errorf("failed to remove backup cronJobs: %v", err)
 			}
-			h.backups = nil
+
+			if !hasBackupAgents {
+				err = h.backups.DeleteCoordinator()
+				if err != nil {
+					logrus.Errorf("failed to remove backup coordinator: %v", err)
+					return err
+				}
+				h.backups = nil
+			}
 		}
 
 		// Update the pods+statefulsets list that is read by the watchdog

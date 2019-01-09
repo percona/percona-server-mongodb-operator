@@ -38,6 +38,17 @@ func GetPodSpecContainer(spec *corev1.PodSpec, containerName string) *corev1.Con
 	return nil
 }
 
+// GetPodContainerStatus returns a container status from a pod status, if it exists
+func GetPodContainerStatus(status *corev1.PodStatus, containerName string) *corev1.ContainerStatus {
+	for i, c := range status.ContainerStatuses {
+		if c.Name != containerName {
+			continue
+		}
+		return &status.ContainerStatuses[i]
+	}
+	return nil
+}
+
 // GetPodNames returns the pod names of the array of pods passed in
 func GetPodNames(pods []corev1.Pod) []string {
 	var podNames []string

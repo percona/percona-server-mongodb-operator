@@ -52,14 +52,14 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type PerconaServerMongoDBStatus struct {
-	Replsets []*ReplsetStatus `json:"replsets,omitempty"`
+	Backups  []*BackupTaskStatus `json:"backups,omitempty"`
+	Replsets []*ReplsetStatus    `json:"replsets,omitempty"`
 }
 
 type ReplsetSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
 	Name           string      `json:"name"`
 	Size           int32       `json:"size"`
-	StorageClass   string      `json:"storageClass,omitempty"`
 	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
@@ -227,11 +227,39 @@ type BackupCoordinatorSpec struct {
 	Debug          bool `json:"debug,omitempty"`
 }
 
+type BackupS3Spec struct {
+	Secret string `json:"secret,omitempty"`
+	Bucket string `json:"bucket,omitempty"`
+	Region string `json:"region,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled          bool                   `json:"enabled"`
 	Version          string                 `json:"version,omitempty"`
 	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
 	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+	S3               *BackupS3Spec          `json:"s3,omitempty"`
+	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
+}
+
+type BackupDestinationType string
+
+var (
+	BackupDestinationS3   BackupDestinationType = "s3"
+	BackupDestinationFile BackupDestinationType = "file"
+)
+
+type BackupTaskSpec struct {
+	Name            string                `json:"name,omitempty"`
+	Enabled         bool                  `json:"enabled"`
+	Schedule        string                `json:"schedule,omitempty"`
+	DestinationType BackupDestinationType `json:"destinationType,omitempty"`
+}
+
+type BackupTaskStatus struct {
+	Name    string `json:"name,omitempty"`
+	Enabled bool   `json:"enabled"`
+	CronJob string `json:"cronJob,omitempty"`
 }
 
 type Expose struct {
