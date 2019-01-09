@@ -61,8 +61,12 @@ spec:
     #  filter: '{}'
   backup:
     enabled: false
-    version: 0.1.0
+    version: 0.2.0
     restartOnFailure: true
+    s3:
+      secret: my-cluster-name-backup-s3
+      bucket: S3-BACKUP-BUCKET-NAME-HERE
+      region: us-west-2
     coordinator:
       resources:
         limits:
@@ -74,3 +78,10 @@ spec:
           memory: "0.1G"
         #storageClass: aws-gp2
       debug: false
+    tasks:
+    - name: daily
+      enabled: true
+      schedule: "0 0 * * *"
+    - name: weekly
+      enabled: false
+      schedule: "0 0 * * 0"
