@@ -19,6 +19,41 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func TestHasBackupsEnabled(t *testing.T) {
+	psmdb := &v1alpha1.PerconaServerMongoDB{
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{
+				Tasks: []*v1alpha1.BackupTaskSpec{},
+			},
+		},
+	}
+	h := &Handler{}
+	assert.False(t, h.hasBackupsEnabled(psmdb))
+
+	psmdb.Spec.Backup.Tasks = append(psmdb.Spec.Backup.Tasks, &v1alpha1.BackupTaskSpec{
+		Name:     t.Name(),
+		Enabled:  true,
+		Schedule: "* * * * *",
+	})
+	assert.True(t, h.hasBackupsEnabled(psmdb))
+}
+
+func TestHasReplsetsInitialized(t *testing.T) {
+	psmdb := &v1alpha1.PerconaServerMongoDB{
+		Status: v1alpha1.PerconaServerMongoDBStatus{
+			Replsets: []*v1alpha1.ReplsetStatus{},
+		},
+	}
+	h := &Handler{}
+
+	assert.False(t, h.hasReplsetsInitialized(psmdb))
+
+	psmdb.Status.Replsets = append(psmdb.Status.Replsets, &v1alpha1.ReplsetStatus{
+		Initialized: true,
+	})
+	assert.True(t, h.hasReplsetsInitialized(psmdb))
+}
+
 func TestHandlerHandle(t *testing.T) {
 	psmdb := &v1alpha1.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
