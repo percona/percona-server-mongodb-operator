@@ -14,8 +14,14 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
+// DefaultDestinationType is the default backup destination type
+var DefaultDestinationType = v1alpha1.BackupDestinationS3
+
 // DefaultVersion is the default version of the percona/percona-backup-mongodb project
 const DefaultVersion = "0.2.0"
+
+// DefaultS3SecretName is the default name of the AWS S3 credentials secret
+const DefaultS3SecretName = "percona-server-mongodb-backup-s3"
 
 const backupImagePrefix = "percona/percona-server-mongodb-operator"
 
