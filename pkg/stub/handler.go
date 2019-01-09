@@ -21,7 +21,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 var ReplsetInitWait = 10 * time.Second
@@ -156,47 +155,14 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to start/update backup coordinator: %v", err)
 				return err
 			}
-		} else if h.backups != nil {
-			if h.hasBackupsEnabled(psmdb) && h.hasReplsetsInitialized(psmdb) {
-				// Create cronJobs for each backup if any replsets are initialized:
-				for _, backupTask := range psmdb.Spec.Backup.Tasks {
-					if !backupTask.Enabled || backupTask.Schedule == "" {
-						logrus.Debugf("backup %s is disabled, skipping cronJob creation", backupTask.Name)
-						continue
-					}
-					err := h.backups.Create(backupTask)
-					if err != nil {
-						if !k8serrors.IsAlreadyExists(err) {
-							logrus.Errorf("failed to create backup task %s: %v", backupTask.Name, err)
-							return err
-						} else {
-							err = h.backups.Update(backupTask)
-							if err != nil {
-								logrus.Errorf("failed to update backup task %s: %v", backupTask.Name, err)
-								return err
-							}
-						}
-					} else {
-						logrus.Infof("create cronJob for backup: %s", backupTask.Name)
-					}
-				}
-			} else {
-				// Disable backups if none are active
-				logrus.Info("No backups are enabled, removing backup coordinator and tasks")
+		}
 
-				err = h.backups.DeleteCoordinator()
-				if err != nil {
-					logrus.Errorf("failed to stop the backup coordinator: %v", err)
-				}
-				h.backups = nil
-
-				for _, backupSpec := range psmdb.Spec.Backup.Tasks {
-					err = h.backups.Delete(backupSpec)
-					if err != nil {
-						logrus.Errorf("failed to remove backup: %v", backupSpec.Name)
-						continue
-					}
-				}
+		// Ensure scheduled backup tasks are created/updated
+		//if h.backups != nil && h.hasBackupsEnabled(psmdb) && h.hasReplsetsInitialized(psmdb) {
+		if h.backups != nil && h.hasReplsetsInitialized(psmdb) {
+			err = h.backups.EnsureBackupTasks()
+			if err != nil {
+				return err
 			}
 		}
 
@@ -255,15 +221,22 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 		}
 
-		// Remove coordinator if backups are disabled and there are no running
-		// backup agents in replica sets
-		if (psmdb.Spec.Backup == nil || !psmdb.Spec.Backup.Enabled) && h.backups != nil && !hasBackupAgents {
-			err = h.backups.DeleteCoordinator()
+		// If backups are disabled, remove backup task/cronJobs and the backup coordinator
+		// if there are no running backup agents in replica sets
+		if (psmdb.Spec.Backup == nil || !psmdb.Spec.Backup.Enabled) && h.backups != nil {
+			err = h.backups.DeleteBackupTasks()
 			if err != nil {
-				logrus.Errorf("failed to remove backup coordinator: %v", err)
-				return err
+				logrus.Errorf("failed to remove backup cronJobs: %v", err)
 			}
-			h.backups = nil
+
+			if !hasBackupAgents {
+				err = h.backups.DeleteCoordinator()
+				if err != nil {
+					logrus.Errorf("failed to remove backup coordinator: %v", err)
+					return err
+				}
+				h.backups = nil
+			}
 		}
 
 		// Update the pods+statefulsets list that is read by the watchdog

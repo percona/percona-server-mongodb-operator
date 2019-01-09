@@ -79,6 +79,9 @@ spec:
         #storageClass: aws-gp2
       debug: false
     tasks:
-    - name: default
+    - name: daily
       enabled: true
       schedule: "0 0 * * *"
+    - name: weekly
+      enabled: false
+      schedule: "0 0 * * 0"
