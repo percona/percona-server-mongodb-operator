@@ -7,7 +7,7 @@ matrix:
   allow_failures:
     - go: master
 before_script:
-  - curl --retry 5 --retry-sleep 15 -sLo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.0.7/operator-sdk-v0.0.7-x86_64-linux-gnu
+  - curl --retry 6 --retry-delay 20 -sLo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.0.7/operator-sdk-v0.0.7-x86_64-linux-gnu
   - chmod +x operator-sdk
 script:
   - ./operator-sdk generate k8s
