@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) (*appsv1.StatefulSet, error) {
+func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	if replset.Arbiter == nil {
 		replset.Arbiter = &v1alpha1.Arbiter{
 			Enabled: false,
@@ -21,11 +21,6 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 	}
 	if replset.Arbiter.Enabled && replset.Arbiter.Size == 0 {
 		replset.Arbiter.Size = 1
-	}
-
-	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
-	if err != nil {
-		return nil, err
 	}
 
 	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"arbiter")
@@ -56,7 +51,6 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 	}
 
 	return h.handleArbiterUpdate(m, arbiter, replset, resources)
-
 }
 
 func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {

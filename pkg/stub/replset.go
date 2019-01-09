@@ -181,7 +181,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 }
 
 // ensureReplset ensures resources for a PSMDB replset exist
-func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*appsv1.StatefulSet, error) {
+func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (map[string]*appsv1.StatefulSet, error) {
 	status := getReplsetStatus(m, replset)
 
 	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
@@ -189,11 +189,20 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		return nil, err
 	}
 
+	sets := make(map[string]*appsv1.StatefulSet, 2)
+
 	// Create the StatefulSet if it doesn't exist
 	set, err := h.ensureReplsetStatefulSet(m, replset, resources)
 	if err != nil {
 		return nil, err
 	}
+	sets["mongod"] = set
+
+	arbiter, err := h.ensureReplsetArbiter(m, replset, resources)
+	if err != nil {
+		return nil, err
+	}
+	sets["arbiter"] = arbiter
 
 	// Ensure replset has external service
 	if replset.Expose != nil && replset.Expose.Enabled {
@@ -248,5 +257,5 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	}
 
-	return set, nil
+	return sets, nil
 }

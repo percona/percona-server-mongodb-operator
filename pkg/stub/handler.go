@@ -2,6 +2,7 @@ package stub
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk"
@@ -186,7 +187,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			clusterPods = append(clusterPods, podsList.Items...)
 
 			// Ensure replset exists and has correct state, PVCs, etc
-			set, err := h.ensureReplset(psmdb, podsList, replset, usersSecret)
+			sets, err := h.ensureReplset(psmdb, podsList, replset, usersSecret)
 			if err != nil {
 				if err == ErrNoRunningMongodContainers {
 					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)
@@ -195,7 +196,17 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
 				return err
 			}
+			set, ok := sets["mongod"]
+			if !ok {
+				return fmt.Errorf("")
+			}
 			clusterSets = append(clusterSets, *set)
+
+			arbiter, ok := sets["arbiter"]
+			if !ok {
+				return fmt.Errorf("")
+			}
+			clusterSets = append(clusterSets, *arbiter)
 
 			svc, err := h.extServicesList(psmdb, replset)
 			if err != nil {
