@@ -61,7 +61,7 @@ spec:
     #  filter: '{}'
   backup:
     enabled: false
-    version: 0.1.0
+    version: 0.2.0
     restartOnFailure: true
     s3:
       secret: my-cluster-name-backup-s3
