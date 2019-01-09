@@ -56,6 +56,13 @@ type PerconaServerMongoDBStatus struct {
 	Replsets []*ReplsetStatus    `json:"replsets,omitempty"`
 }
 
+type ReplsetSpec struct {
+	*ResourcesSpec `json:"resources,omitempty"`
+	Name           string      `json:"name"`
+	Size           int32       `json:"size"`
+	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
+}
+
 type ResourceSpecRequirements struct {
 	Cpu     string `json:"cpu,omitempty"`
 	Memory  string `json:"memory,omitempty"`
@@ -77,13 +84,6 @@ type ServerVersion struct {
 type SecretsSpec struct {
 	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
-}
-
-type ReplsetSpec struct {
-	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string      `json:"name"`
-	Size           int32       `json:"size"`
-	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
