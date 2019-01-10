@@ -13,27 +13,25 @@ import (
 
 func TestStubBackupUpdateStatus(t *testing.T) {
 	client := &mocks.Client{}
-	c := &Controller{
-		client: client,
-		psmdb: &v1alpha1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: t.Name(),
-			},
-			Spec: v1alpha1.PerconaServerMongoDBSpec{
-				Backup: &v1alpha1.BackupSpec{
-					Tasks: []*v1alpha1.BackupTaskSpec{
-						{
-							Name:    t.Name(),
-							Enabled: true,
-						},
+	c := New(client, &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: t.Name(),
+		},
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{
+				Tasks: []*v1alpha1.BackupTaskSpec{
+					{
+						Name:    t.Name(),
+						Enabled: true,
 					},
 				},
 			},
-			Status: v1alpha1.PerconaServerMongoDBStatus{
-				Backups: []*v1alpha1.BackupTaskStatus{},
-			},
 		},
-	}
+		Status: v1alpha1.PerconaServerMongoDBStatus{
+			Backups: []*v1alpha1.BackupTaskStatus{},
+		},
+	}, nil, nil)
+
 	client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil).Once()
 	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Run(func(args mock.Arguments) {
 		psmdb := args.Get(0).(*v1alpha1.PerconaServerMongoDB)
@@ -53,24 +51,13 @@ func TestStubBackupUpdateStatus(t *testing.T) {
 
 func TestStubBackupDeleteStatus(t *testing.T) {
 	client := &mocks.Client{}
-	c := &Controller{
-		client: client,
-		psmdb: &v1alpha1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: t.Name(),
-			},
-			Spec: v1alpha1.PerconaServerMongoDBSpec{
-				Backup: &v1alpha1.BackupSpec{
-					Tasks: []*v1alpha1.BackupTaskSpec{
-						{
-							Name:    t.Name(),
-							Enabled: true,
-						},
-					},
-				},
-			},
-			Status: v1alpha1.PerconaServerMongoDBStatus{
-				Backups: []*v1alpha1.BackupTaskStatus{
+	c := New(client, &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: t.Name(),
+		},
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{
+				Tasks: []*v1alpha1.BackupTaskSpec{
 					{
 						Name:    t.Name(),
 						Enabled: true,
@@ -78,7 +65,16 @@ func TestStubBackupDeleteStatus(t *testing.T) {
 				},
 			},
 		},
-	}
+		Status: v1alpha1.PerconaServerMongoDBStatus{
+			Backups: []*v1alpha1.BackupTaskStatus{
+				{
+					Name:    t.Name(),
+					Enabled: true,
+				},
+			},
+		},
+	}, nil, nil)
+
 	client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil).Once()
 	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Run(func(args mock.Arguments) {
 		psmdb := args.Get(0).(*v1alpha1.PerconaServerMongoDB)

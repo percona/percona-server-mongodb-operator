@@ -9,15 +9,14 @@ import (
 )
 
 func TestStubBackupHasS3Backups(t *testing.T) {
-	c := &Controller{
-		psmdb: &v1alpha1.PerconaServerMongoDB{
-			Spec: v1alpha1.PerconaServerMongoDBSpec{
-				Backup: &v1alpha1.BackupSpec{
-					Tasks: []*v1alpha1.BackupTaskSpec{},
-				},
+	c := New(nil, &v1alpha1.PerconaServerMongoDB{
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{
+				Tasks: []*v1alpha1.BackupTaskSpec{},
 			},
 		},
-	}
+	}, nil, nil)
+
 	assert.False(t, c.hasS3Backups())
 
 	c.psmdb.Spec.Backup.Tasks = append(c.psmdb.Spec.Backup.Tasks, &v1alpha1.BackupTaskSpec{
@@ -28,21 +27,20 @@ func TestStubBackupHasS3Backups(t *testing.T) {
 }
 
 func TestStubBackupNewAgentContainer(t *testing.T) {
-	c := &Controller{
-		psmdb: &v1alpha1.PerconaServerMongoDB{
-			Spec: v1alpha1.PerconaServerMongoDBSpec{
-				Backup: &v1alpha1.BackupSpec{},
-				Mongod: &v1alpha1.MongodSpec{
-					Net: &v1alpha1.MongodSpecNet{
-						Port: int32(0),
-					},
-				},
-				Secrets: &v1alpha1.SecretsSpec{
-					Users: "users-secret",
+	c := New(nil, &v1alpha1.PerconaServerMongoDB{
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{},
+			Mongod: &v1alpha1.MongodSpec{
+				Net: &v1alpha1.MongodSpecNet{
+					Port: int32(0),
 				},
 			},
+			Secrets: &v1alpha1.SecretsSpec{
+				Users: "users-secret",
+			},
 		},
-	}
+	}, nil, nil)
+
 	replset := &v1alpha1.ReplsetSpec{
 		Name: t.Name() + "-rs",
 	}
