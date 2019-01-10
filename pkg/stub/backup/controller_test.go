@@ -119,3 +119,7 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 		client.AssertExpectations(t)
 	})
 }
+
+func TestStubBackupDeleteBackupTasks(t *testing.T) {
+	assert.FailNow(t, "write test")
+}
