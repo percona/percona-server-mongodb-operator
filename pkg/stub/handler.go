@@ -215,15 +215,19 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 			clusterServices = append(clusterServices, svc.Items...)
 
-			// Check if any pod has a backup agent container running
+			// Check if any pod has a backup agent container running (has not terminated)
 			for _, pod := range podsList.Items {
 				if util.GetPodContainerStatus(&pod.Status, backup.AgentContainerName) != nil {
 					terminated, err := util.IsContainerTerminated(&pod.Status, backup.AgentContainerName)
-					if terminated || err != nil {
-						continue
+					if err != nil {
+						logrus.Errorf("failed to find backup agent container for replset %s, pod %s: %v",
+							replset.Name, pod.Name, err,
+						)
 					}
-					hasBackupAgents = true
-					break
+					if !terminated {
+						hasBackupAgents = true
+						break
+					}
 				}
 			}
 		}
