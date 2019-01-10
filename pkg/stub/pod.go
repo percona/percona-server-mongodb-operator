@@ -13,10 +13,3 @@ func isMongodPod(pod corev1.Pod) bool {
 	container := util.GetPodContainer(&pod, mongod.MongodContainerName)
 	return container != nil
 }
-
-// isMongodArbiterPod returns a boolean reflecting if a pod
-// is running a mongod arbiter container
-func isMongodArbiterPod(pod corev1.Pod) bool {
-	container := util.GetPodContainer(&pod, mongod.MongodArbiterContainerName)
-	return container != nil
-}
