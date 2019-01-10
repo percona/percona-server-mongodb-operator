@@ -174,7 +174,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
-		var hasBackupAgents bool
+		var hasRunningBackupAgents bool
 		clusterPods := make([]corev1.Pod, 0)
 		clusterSets := make([]appsv1.StatefulSet, 0)
 		clusterServices := make([]corev1.Service, 0)
@@ -225,7 +225,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 						)
 					}
 					if !terminated {
-						hasBackupAgents = true
+						hasRunningBackupAgents = true
 						break
 					}
 				}
@@ -240,7 +240,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to remove backup cronJobs: %v", err)
 			}
 
-			if !hasBackupAgents {
+			if !hasRunningBackupAgents {
 				err = h.backups.DeleteCoordinator()
 				if err != nil {
 					logrus.Errorf("failed to remove backup coordinator: %v", err)
