@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestHasContainerTerminated(t *testing.T) {
+func TestIsContainerTerminated(t *testing.T) {
 	podStatus := corev1.PodStatus{
 		ContainerStatuses: []corev1.ContainerStatus{
 			{
@@ -25,17 +25,17 @@ func TestHasContainerTerminated(t *testing.T) {
 	}
 
 	// test terminated container
-	terminated, err := HasContainerTerminated(&podStatus, t.Name())
+	terminated, err := IsContainerTerminated(&podStatus, t.Name())
 	assert.NoError(t, err)
 	assert.True(t, terminated)
 
 	// test non-terminated
 	podStatus.ContainerStatuses[0].State.Terminated = nil
-	terminated, err = HasContainerTerminated(&podStatus, t.Name())
+	terminated, err = IsContainerTerminated(&podStatus, t.Name())
 	assert.NoError(t, err)
 	assert.False(t, terminated)
 
 	// test missing container
-	_, err = HasContainerTerminated(&podStatus, "doesntexit")
+	_, err = IsContainerTerminated(&podStatus, "doesntexit")
 	assert.Error(t, err)
 }

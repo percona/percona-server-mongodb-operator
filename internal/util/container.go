@@ -8,13 +8,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// HasContainerTerminated returns a boolean reflecting if a container has terminated
-func HasContainerTerminated(podStatus *corev1.PodStatus, containerName string) (bool, error) {
+// IsContainerTerminated returns a boolean reflecting if a container has terminated
+func IsContainerTerminated(podStatus *corev1.PodStatus, containerName string) (bool, error) {
 	status := GetPodContainerStatus(podStatus, containerName)
 	if status != nil {
 		return status.State.Terminated != nil, nil
 	}
-	return false, errors.New("not found")
+	return false, errors.New("container status not found")
 }
 
 // GetContainerRunUID returns an int64-pointer reflecting the user ID a container
