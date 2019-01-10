@@ -243,7 +243,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	}
 
-	if !replset.Expose.Enabled {
+	if replset.Expose == nil || !replset.Expose.Enabled {
 		// Create service for replset
 		service := newService(m, replset)
 		err = h.client.Create(service)

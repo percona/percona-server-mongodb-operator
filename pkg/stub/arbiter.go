@@ -53,19 +53,19 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 	return h.handleArbiterUpdate(m, arbiter, replset, resources)
 }
 
-func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, set *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	if *set.Spec.Replicas != replset.Arbiter.Size {
+func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, arbiter *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+	if arbiter.Spec.Replicas != nil && *arbiter.Spec.Replicas != replset.Arbiter.Size {
 		logrus.Infof("setting arbiters count to %d for replset: %s", replset.Arbiter.Size, replset.Name)
-		set.Spec.Replicas = &replset.Arbiter.Size
+		arbiter.Spec.Replicas = &replset.Arbiter.Size
 	}
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 
-	set.Spec.Template.Spec.Containers = h.newArbiterContainers(m, replset, resources, runUID)
-	err := h.client.Update(set)
+	arbiter.Spec.Template.Spec.Containers = h.newArbiterContainers(m, replset, resources, runUID)
+	err := h.client.Update(arbiter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update arbiter stateful set for replset %s: %v", replset.Name, err)
 	}
-	return set, nil
+	return arbiter, nil
 }
 
 func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
