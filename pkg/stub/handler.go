@@ -158,7 +158,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		}
 
 		// Ensure scheduled backup tasks are created/updated
-		//if h.backups != nil && h.hasBackupsEnabled(psmdb) && h.hasReplsetsInitialized(psmdb) {
 		if h.backups != nil && h.hasReplsetsInitialized(psmdb) {
 			err = h.backups.EnsureBackupTasks()
 			if err != nil {
