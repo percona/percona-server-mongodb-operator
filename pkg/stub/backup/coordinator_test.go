@@ -22,31 +22,28 @@ var mockAlreadyExistsError = k8serrors.NewAlreadyExists(schema.GroupResource{
 
 func TestStubBackupEnsureCoordinator(t *testing.T) {
 	client := &mocks.Client{}
-	c := &Controller{
-		client: client,
-		psmdb: &v1alpha1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: t.Name(),
-			},
-			Spec: v1alpha1.PerconaServerMongoDBSpec{
-				Backup: &v1alpha1.BackupSpec{
-					Coordinator: &v1alpha1.BackupCoordinatorSpec{
-						ResourcesSpec: &v1alpha1.ResourcesSpec{
-							Limits: &v1alpha1.ResourceSpecRequirements{
-								Cpu:     "1",
-								Memory:  "1G",
-								Storage: "1G",
-							},
-							Requests: &v1alpha1.ResourceSpecRequirements{
-								Cpu:    "1",
-								Memory: "1G",
-							},
+	c := New(client, &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: t.Name(),
+		},
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{
+				Coordinator: &v1alpha1.BackupCoordinatorSpec{
+					ResourcesSpec: &v1alpha1.ResourcesSpec{
+						Limits: &v1alpha1.ResourceSpecRequirements{
+							Cpu:     "1",
+							Memory:  "1G",
+							Storage: "1G",
+						},
+						Requests: &v1alpha1.ResourceSpecRequirements{
+							Cpu:    "1",
+							Memory: "1G",
 						},
 					},
 				},
 			},
 		},
-	}
+	}, nil, nil)
 
 	t.Run("create", func(t *testing.T) {
 		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Once()
@@ -73,31 +70,30 @@ func TestStubBackupEnsureCoordinator(t *testing.T) {
 
 func TestStubBackupDeleteCoordinator(t *testing.T) {
 	client := &mocks.Client{}
-	c := &Controller{
-		client: client,
-		psmdb: &v1alpha1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: t.Name(),
-			},
-			Spec: v1alpha1.PerconaServerMongoDBSpec{
-				Backup: &v1alpha1.BackupSpec{
-					Coordinator: &v1alpha1.BackupCoordinatorSpec{
-						ResourcesSpec: &v1alpha1.ResourcesSpec{
-							Limits: &v1alpha1.ResourceSpecRequirements{
-								Cpu:     "1",
-								Memory:  "1G",
-								Storage: "1G",
-							},
-							Requests: &v1alpha1.ResourceSpecRequirements{
-								Cpu:    "1",
-								Memory: "1G",
-							},
+	c := New(client, &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: t.Name(),
+		},
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{
+				Coordinator: &v1alpha1.BackupCoordinatorSpec{
+					ResourcesSpec: &v1alpha1.ResourcesSpec{
+						Limits: &v1alpha1.ResourceSpecRequirements{
+							Cpu:     "1",
+							Memory:  "1G",
+							Storage: "1G",
+						},
+						Requests: &v1alpha1.ResourceSpecRequirements{
+							Cpu:    "1",
+							Memory: "1G",
 						},
 					},
 				},
 			},
 		},
-	}
+	}, nil, nil)
+
+	// test success
 	client.On("Delete", mock.AnythingOfType("*v1.Service")).Return(nil).Once()
 	client.On("Delete", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Once()
 	assert.NoError(t, c.DeleteCoordinator())
