@@ -14,9 +14,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-var mockError = errors.New("mock error")
+var mockUnexpectedError = errors.New("mock unexpected error")
+var mockAlreadyExistsError = k8serrors.NewAlreadyExists(schema.GroupResource{
+	Group:    "group",
+	Resource: "resource",
+}, "mock")
 
-func TestEnsureCoordinator(t *testing.T) {
+func TestStubBackupEnsureCoordinator(t *testing.T) {
 	client := &mocks.Client{}
 	c := &Controller{
 		client: client,
@@ -51,26 +55,22 @@ func TestEnsureCoordinator(t *testing.T) {
 
 		// test failures
 		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Once()
-		client.On("Create", mock.AnythingOfType("*v1.Service")).Return(mockError).Once()
+		client.On("Create", mock.AnythingOfType("*v1.Service")).Return(mockUnexpectedError).Once()
 		assert.Error(t, c.EnsureCoordinator())
-		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(mockError).Once()
+		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(mockUnexpectedError).Once()
 		assert.Error(t, c.EnsureCoordinator())
 	})
 
 	t.Run("update", func(t *testing.T) {
-		err := k8serrors.NewAlreadyExists(schema.GroupResource{
-			Group:    "group",
-			Resource: "resource",
-		}, t.Name())
-		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(err).Once()
-		client.On("Create", mock.AnythingOfType("*v1.Service")).Return(err).Once()
+		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(mockAlreadyExistsError).Once()
+		client.On("Create", mock.AnythingOfType("*v1.Service")).Return(mockAlreadyExistsError).Once()
 		client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Once()
 		client.On("Update", mock.AnythingOfType("*v1.Service")).Return(nil).Once()
 		assert.NoError(t, c.EnsureCoordinator())
 	})
 }
 
-func TestDeleteCoordinator(t *testing.T) {
+func TestStubBackupDeleteCoordinator(t *testing.T) {
 	client := &mocks.Client{}
 	c := &Controller{
 		client: client,
@@ -103,8 +103,8 @@ func TestDeleteCoordinator(t *testing.T) {
 
 	// test failures
 	client.On("Delete", mock.AnythingOfType("*v1.Service")).Return(nil).Once()
-	client.On("Delete", mock.AnythingOfType("*v1.StatefulSet")).Return(mockError).Once()
+	client.On("Delete", mock.AnythingOfType("*v1.StatefulSet")).Return(mockUnexpectedError).Once()
 	assert.Error(t, c.DeleteCoordinator())
-	client.On("Delete", mock.AnythingOfType("*v1.Service")).Return(mockError).Once()
+	client.On("Delete", mock.AnythingOfType("*v1.Service")).Return(mockUnexpectedError).Once()
 	assert.Error(t, c.DeleteCoordinator())
 }

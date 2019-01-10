@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHasS3Backups(t *testing.T) {
+func TestStubBackupHasS3Backups(t *testing.T) {
 	c := &Controller{
 		psmdb: &v1alpha1.PerconaServerMongoDB{
 			Spec: v1alpha1.PerconaServerMongoDBSpec{
@@ -27,7 +27,7 @@ func TestHasS3Backups(t *testing.T) {
 	assert.True(t, c.hasS3Backups())
 }
 
-func TestNewAgentContainer(t *testing.T) {
+func TestStubBackupNewAgentContainer(t *testing.T) {
 	c := &Controller{
 		psmdb: &v1alpha1.PerconaServerMongoDB{
 			Spec: v1alpha1.PerconaServerMongoDBSpec{
