@@ -120,9 +120,9 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		if spec.Backup.S3.Secret == "" {
 			spec.Backup.S3.Secret = backup.DefaultS3SecretName
 		}
-		for _, b := range spec.Backup.Tasks {
-			if b.DestinationType == "" {
-				b.DestinationType = backup.DefaultDestinationType
+		for _, bkpTask := range spec.Backup.Tasks {
+			if bkpTask.DestinationType == "" {
+				bkpTask.DestinationType = backup.DefaultDestinationType
 			}
 		}
 	}
