@@ -111,25 +111,6 @@ func TestHandlerHandle(t *testing.T) {
 	}
 
 	client := &mocks.Client{}
-	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil)
-	client.On("Create", mock.AnythingOfType("*v1.Service")).Return(nil)
-	client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
-	client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
-	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
-	client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
-	client.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil)
-	client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(errors.New("not found error")).Once()
-	client.On("List",
-		"test",
-		mock.AnythingOfType("*v1.PodList"),
-		mock.AnythingOfType("sdk.ListOption"),
-	).Return(nil)
-	client.On("List",
-		"test",
-		mock.AnythingOfType("*v1.ServiceList"),
-		mock.AnythingOfType("sdk.ListOption"),
-	).Return(nil)
-
 	h := &Handler{
 		client: client,
 		serverVersion: &v1alpha1.ServerVersion{
@@ -139,49 +120,76 @@ func TestHandlerHandle(t *testing.T) {
 		watchdogQuit:    make(chan bool),
 	}
 
-	// test Handler with no existing stateful sets, test watchdog is started
-	assert.NoError(t, h.Handle(context.TODO(), event))
-	assert.Nil(t, h.watchdog)
-	client.AssertExpectations(t)
+	// test Handler with no existing stateful sets
+	t.Run("new", func(t *testing.T) {
+		client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil)
+		client.On("Create", mock.AnythingOfType("*v1.Service")).Return(nil)
+		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
+		client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
+		client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
+		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
+		client.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil)
+		client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(errors.New("not found error")).Once()
+		client.On("List",
+			"test",
+			mock.AnythingOfType("*v1.PodList"),
+			mock.AnythingOfType("sdk.ListOption"),
+		).Return(nil)
+		client.On("List",
+			"test",
+			mock.AnythingOfType("*v1.ServiceList"),
+			mock.AnythingOfType("sdk.ListOption"),
+		).Return(nil)
+
+		assert.NoError(t, h.Handle(context.TODO(), event))
+		assert.Nil(t, h.watchdog)
+		client.AssertExpectations(t)
+	})
 
 	// test Handler with existing stateful set (mocked)
-	client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Run(func(args mock.Arguments) {
-		set := args.Get(0).(*appsv1.StatefulSet)
-		set.Spec = appsv1.StatefulSetSpec{
-			Replicas: &config.DefaultMongodSize,
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name: mongod.MongodContainerName,
+	t.Run("update", func(t *testing.T) {
+		client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Run(func(args mock.Arguments) {
+			set := args.Get(0).(*appsv1.StatefulSet)
+			set.Spec = appsv1.StatefulSetSpec{
+				Replicas: &config.DefaultMongodSize,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: mongod.MongodContainerName,
+							},
 						},
 					},
 				},
-			},
-		}
+			}
+		})
+		client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
+		assert.NoError(t, h.Handle(context.TODO(), event))
+		client.AssertExpectations(t)
 	})
-	client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
-	assert.NoError(t, h.Handle(context.TODO(), event))
-	client.AssertExpectations(t)
 
 	// test watchdog is started if 1+ replsets are initialized
-	psmdb.Status.Replsets = []*v1alpha1.ReplsetStatus{
-		{
-			Name:        t.Name(),
-			Initialized: true,
-		},
-	}
-	assert.NoError(t, h.Handle(context.TODO(), event))
-	assert.NotNil(t, h.watchdog)
+	t.Run("watchdog-start", func(t *testing.T) {
+		psmdb.Status.Replsets = []*v1alpha1.ReplsetStatus{
+			{
+				Name:        t.Name(),
+				Initialized: true,
+			},
+		}
+		assert.NoError(t, h.Handle(context.TODO(), event))
+		assert.NotNil(t, h.watchdog)
 
-	// check last call was a Create with a corev1.Service object:
-	calls := len(client.Calls)
-	lastCall := client.Calls[calls-1]
-	assert.Equal(t, "List", lastCall.Method)
-	assert.IsType(t, "", lastCall.Arguments.Get(0))
+		// check last call was a Create with a corev1.Service object:
+		calls := len(client.Calls)
+		lastCall := client.Calls[calls-1]
+		assert.Equal(t, "List", lastCall.Method)
+		assert.IsType(t, "", lastCall.Arguments.Get(0))
+	})
 
 	// test watchdog is stopped by a 'Deleted' SDK event
-	event.Deleted = true
-	assert.NoError(t, h.Handle(context.TODO(), event))
-	assert.Nil(t, h.watchdog)
+	t.Run("watchdog-stop", func(t *testing.T) {
+		event.Deleted = true
+		assert.NoError(t, h.Handle(context.TODO(), event))
+		assert.Nil(t, h.watchdog)
+	})
 }
