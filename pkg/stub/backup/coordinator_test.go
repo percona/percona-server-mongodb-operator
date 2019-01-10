@@ -59,14 +59,15 @@ func TestStubBackupEnsureCoordinator(t *testing.T) {
 		assert.Error(t, c.EnsureCoordinator())
 		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(mockUnexpectedError).Once()
 		assert.Error(t, c.EnsureCoordinator())
+		client.AssertExpectations(t)
 	})
 
 	t.Run("update", func(t *testing.T) {
 		client.On("Create", mock.AnythingOfType("*v1.StatefulSet")).Return(mockAlreadyExistsError).Once()
 		client.On("Create", mock.AnythingOfType("*v1.Service")).Return(mockAlreadyExistsError).Once()
 		client.On("Update", mock.AnythingOfType("*v1.StatefulSet")).Return(nil).Once()
-		client.On("Update", mock.AnythingOfType("*v1.Service")).Return(nil).Once()
 		assert.NoError(t, c.EnsureCoordinator())
+		client.AssertExpectations(t)
 	})
 }
 
