@@ -173,10 +173,9 @@ func (c *Controller) DeleteBackupTasks() error {
 
 	// delete tasks from CR status (in case they are not in the Spec)
 	for _, taskStatus := range c.psmdb.Status.Backups {
-		cronJob := newCronJob(c.psmdb, &v1alpha1.BackupTaskSpec{
+		err := c.Delete(&v1alpha1.BackupTaskSpec{
 			Name: taskStatus.Name,
 		})
-		err := c.client.Delete(cronJob)
 		if err != nil && !k8serrors.IsNotFound(err) {
 			logrus.Errorf("failed to delete disabled cronJob for backup: %s", taskStatus.Name)
 			return err

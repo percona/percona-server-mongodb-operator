@@ -66,7 +66,6 @@ func TestStubBackupNewAgentContainer(t *testing.T) {
 	c.psmdb.Spec.Backup.Tasks = []*v1alpha1.BackupTaskSpec{
 		{
 			Name:            t.Name(),
-			Enabled:         true,
 			DestinationType: v1alpha1.BackupDestinationS3,
 		},
 	}
