@@ -100,7 +100,7 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		spec.RunUID = config.DefaultRunUID
 	}
 
-	if spec.Backup != nil {
+	if spec.Backup != nil && spec.Backup.Enabled {
 		if spec.Backup.RestartOnFailure == nil {
 			spec.Backup.RestartOnFailure = &util.TrueVar
 		}
@@ -110,7 +110,40 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		if spec.Backup.Coordinator == nil {
 			spec.Backup.Coordinator = &v1alpha1.BackupCoordinatorSpec{}
 		}
+		if spec.Backup.S3 == nil {
+			spec.Backup.S3 = &v1alpha1.BackupS3Spec{}
+		}
+		if spec.Backup.S3.Secret == "" {
+			spec.Backup.S3.Secret = backup.DefaultS3SecretName
+		}
+		for _, bkpTask := range spec.Backup.Tasks {
+			if bkpTask.DestinationType == "" {
+				bkpTask.DestinationType = backup.DefaultDestinationType
+			}
+		}
 	}
+}
+
+// hasBackupsEnabled returns a boolean reflecting if there are any backups
+// enabled in the PSMDB spec
+func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
+	for _, backupTask := range m.Spec.Backup.Tasks {
+		if backupTask.Enabled && backupTask.Schedule != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// hasReplsetsInitialized returns a boolean reflecting if there are any replsets
+// initialized in the PSMDB status
+func (h *Handler) hasReplsetsInitialized(m *v1alpha1.PerconaServerMongoDB) bool {
+	for _, replset := range m.Status.Replsets {
+		if replset.Initialized {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) newStatefulSetContainers(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) []corev1.Container {
