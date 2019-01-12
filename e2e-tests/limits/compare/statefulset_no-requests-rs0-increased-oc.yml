@@ -2,12 +2,16 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 2
-  name: no-limits-rs0
+  labels:
+    app: percona-server-mongodb
+    percona-server-mongodb_cr: no-requests
+    replset: rs0
+  name: no-requests-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
     controller: true
     kind: PerconaServerMongoDB
-    name: no-limits
+    name: no-requests
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -15,14 +19,14 @@ spec:
   selector:
     matchLabels:
       app: percona-server-mongodb
-      percona-server-mongodb_cr: no-limits
+      percona-server-mongodb_cr: no-requests
       replset: rs0
-  serviceName: no-limits-rs0
+  serviceName: no-requests-rs0
   template:
     metadata:
       labels:
         app: percona-server-mongodb
-        percona-server-mongodb_cr: no-limits
+        percona-server-mongodb_cr: no-requests
         replset: rs0
     spec:
       affinity:
@@ -32,7 +36,7 @@ spec:
               labelSelector:
                 matchLabels:
                   app: percona-server-mongodb
-                  percona-server-mongodb_cr: no-limits
+                  percona-server-mongodb_cr: no-requests
                   replset: rs0
               topologyKey: kubernetes.io/hostname
             weight: 100
@@ -47,6 +51,7 @@ spec:
         - --slowms=100
         - --profile=1
         - --rateLimit=1
+        - --wiredTigerCacheSizeGB=0.25
         - --wiredTigerCollectionBlockCompressor=snappy
         - --wiredTigerJournalCompressor=snappy
         - --wiredTigerIndexPrefixCompression=true
@@ -58,7 +63,7 @@ spec:
         - wiredTigerConcurrentWriteTransactions=128
         env:
         - name: SERVICE_NAME
-          value: no-limits
+          value: no-requests
         - name: MONGODB_PORT
           value: "27017"
         - name: MONGODB_REPLSET
@@ -93,12 +98,11 @@ spec:
             port: 27017
           timeoutSeconds: 2
         resources:
-          requests:
+          limits:
             cpu: 600m
             memory: 1G
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -111,8 +115,7 @@ spec:
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
       - name: some-key
