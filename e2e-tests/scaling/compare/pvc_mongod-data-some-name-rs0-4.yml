@@ -4,9 +4,6 @@ metadata:
   annotations:
     pv.kubernetes.io/bind-completed: "yes"
     pv.kubernetes.io/bound-by-controller: "yes"
-    volume.beta.kubernetes.io/storage-provisioner: kubernetes.io/gce-pd
-  finalizers:
-  - kubernetes.io/pvc-protection
   labels:
     app: percona-server-mongodb
     percona-server-mongodb_cr: some-name
@@ -18,4 +15,3 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  storageClassName: standard
