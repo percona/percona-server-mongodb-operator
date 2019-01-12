@@ -54,11 +54,21 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 desc 'check if possible to create second cluster'
 cluster2="another-name-rs0"
 kubectl apply -f $test_dir/conf/$cluster2.yml
-sleep 2
-desc 'check if service and statefulset created'
-compare_kubectl service/$cluster2
-desc 'check if storageClass changed'
+desc 'check if all 3 Pods started'
+wait_for_running $cluster2 3
+desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster2
-kubectl delete -f $test_dir/conf/$cluster2.yml
+compare_kubectl service/$cluster2
+
+desc 'write data, read from all'
+run_mongo \
+    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+    "userAdmin:userAdmin123456@$cluster2.$namespace"
+run_mongo \
+    'use myApp\n db.test.insert({ x: 100500 })' \
+    "myApp:myPass@$cluster2.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace"
 
 destroy $namespace
