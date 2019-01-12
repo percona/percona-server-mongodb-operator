@@ -1,7 +1,11 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 2
+  generation: 1
+  labels:
+    app: percona-server-mongodb
+    percona-server-mongodb_cr: no-limits
+    replset: rs0
   name: no-limits-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
@@ -94,11 +98,10 @@ spec:
           timeoutSeconds: 2
         resources:
           requests:
-            cpu: 600m
-            memory: 1G
+            cpu: 300m
+            memory: 500M
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -111,8 +114,7 @@ spec:
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
       - name: some-key

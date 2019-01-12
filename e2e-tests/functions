@@ -50,6 +50,8 @@ wait_pod() {
         echo -n .
         let retry+=1
         if [ $retry -ge 60 ]; then
+            kubectl describe pod/$pod
+            kubectl logs $pod
             kubectl logs $(get_operator_pod)
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
@@ -68,6 +70,7 @@ deploy_operator() {
     kubectl apply \
         -f ${src_dir}/deploy/rbac.yaml \
         -f ${tmp_dir}/operator.yml
+    sleep 2
 
     wait_pod $(get_operator_pod)
 }
@@ -156,7 +159,7 @@ compare_mongo_user(){
     local user=$(echo $uri | cut -d : -f 1)
 
     run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
-        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK" \
+        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK" \
         | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
         | $sed -e '/"ok" : 1/,+4d' \
         > $tmp_dir/$user.json
@@ -183,10 +186,13 @@ destroy() {
 
     kubectl logs $(get_operator_pod) \
         | grep -v '"level":"info"' \
+        | grep -v 'the object has been modified' \
+        | grep -v 'get backup status: Job.batch' \
         | $sed -r 's/"ts":[0-9.]+//; s^limits-[0-9.]+/^^g' \
         | sort -u \
         | tee $tmp_dir/operator.log
 
+    #TODO: maybe will be enabled later
     #diff $test_dir/compare/operator.log $tmp_dir/operator.log
 
     if [ "$OPENSHIFT" == 1 ]; then
