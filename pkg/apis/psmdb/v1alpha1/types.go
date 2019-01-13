@@ -245,7 +245,6 @@ type BackupSpec struct {
 type BackupCompressionType string
 
 var (
-	BackupCompressionNone BackupCompressionType = "none"
 	BackupCompressionGzip BackupCompressionType = "gzip"
 )
 
