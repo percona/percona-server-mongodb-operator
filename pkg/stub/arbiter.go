@@ -127,7 +127,7 @@ func arbiterRightsizing(replset *v1alpha1.ReplsetSpec) {
 	}
 	if replset.Arbiter.Enabled && replset.Arbiter.Size > 0 {
 		if replset.Arbiter.Size >= replset.Size {
-			replset.Arbiter.Size = int32(math.Floor(float64(7) * 0.43))
+			replset.Arbiter.Size = int32(math.Floor(float64(replset.Size) * 0.43))
 		}
 	}
 }
