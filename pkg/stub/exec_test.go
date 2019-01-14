@@ -8,19 +8,18 @@ import (
 )
 
 func TestPrintCommandOutput(t *testing.T) {
-	var output bytes.Buffer
-	var stderr bytes.Buffer
-	var stdout bytes.Buffer
-
-	_, err := stdout.WriteString("test stdout")
+	var out bytes.Buffer
+	output := ExecCommandOutput{}
+	_, err := output.stdout.WriteString("test stdout")
 	assert.NoError(t, err)
-	printCommandOutput("test", t.Name(), &stdout, &stderr, &output)
-	assert.Regexp(t, "test stdout\n$", output.String())
-	assert.NotRegexp(t, "stderr\n$", output.String())
-	output.Reset()
 
-	_, err = stderr.WriteString("test stderr")
+	printCommandOutput("test", t.Name(), output, &out)
+	assert.Regexp(t, "test stdout\n$", out.String())
+	assert.NotRegexp(t, "stderr\n$", out.String())
+	out.Reset()
+
+	_, err = output.stderr.WriteString("test stderr")
 	assert.NoError(t, err)
-	printCommandOutput("test", t.Name(), &stdout, &stderr, &output)
-	assert.Regexp(t, "test stderr\n$", output.String())
+	printCommandOutput("test", t.Name(), output, &out)
+	assert.Regexp(t, "test stderr\n$", out.String())
 }

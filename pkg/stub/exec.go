@@ -3,6 +3,7 @@ package stub
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +21,12 @@ import (
 )
 
 var execCommandTimeout = 30 * time.Second
+var ErrExecCommandTimeout = errors.New("timeout executing command")
+
+type ExecCommandOutput struct {
+	stdout bytes.Buffer
+	stderr bytes.Buffer
+}
 
 // printOutput outputs stdout/stderr log buffers from commands
 func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
@@ -36,16 +43,16 @@ func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 }
 
 // printCommandOutput handles printing the stderr and stdout output of a remote command
-func printCommandOutput(cmd, pod string, stdOut, stdErr *bytes.Buffer, out io.Writer) error {
+func printCommandOutput(cmd, pod string, output ExecCommandOutput, out io.Writer) error {
 	logrus.SetOutput(out)
 	logrus.Infof("%s stdout:", cmd)
-	err := printOutputBuffer(cmd, pod, stdOut, out)
+	err := printOutputBuffer(cmd, pod, &output.stdout, out)
 	if err != nil {
 		return err
 	}
-	if stdErr.Len() > 0 {
+	if output.stderr.Len() > 0 {
 		logrus.Errorf("%s stderr:", cmd)
-		err = printOutputBuffer(cmd, pod, stdErr, out)
+		err = printOutputBuffer(cmd, pod, &output.stderr, out)
 		if err != nil {
 			return err
 		}
@@ -78,12 +85,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 		return fmt.Errorf("cannot find mongod port in container: %s", container.Name)
 	}
 
-	type Output struct {
-		stdout bytes.Buffer
-		stderr bytes.Buffer
-	}
-	outChan := make(chan Output)
-
+	outputChan := make(chan ExecCommandOutput)
 	go func() {
 		req := client.CoreV1().RESTClient().Post().
 			Resource("pods").
@@ -109,22 +111,22 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 			"command":   cmd[0],
 		}).Info("running command in container")
 
-		out := Output{}
+		output := ExecCommandOutput{}
 		err = exec.Stream(remotecommand.StreamOptions{
-			Stdout: &out.stdout,
-			Stderr: &out.stderr,
+			Stdout: &output.stdout,
+			Stderr: &output.stderr,
 		})
 		if err != nil {
 			logrus.Errorf("error running remote command %s: %v", cmd[0], err)
 		}
-		outChan <- out
+		outputChan <- output
 	}()
 
 	select {
 	case <-time.After(execCommandTimeout):
 		logrus.Errorf("timeout reach executing command on pod %s: %s", pod.Name, cmd[0])
-		return fmt.Errorf("timeout executing command")
-	case out := <-outChan:
-		return printCommandOutput(cmd[0], pod.Name, &out.stdout, &out.stderr, os.Stdout)
+		return ErrExecCommandTimeout
+	case output := <-outputChan:
+		return printCommandOutput(cmd[0], pod.Name, output, os.Stdout)
 	}
 }

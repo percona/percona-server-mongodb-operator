@@ -197,12 +197,16 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			// Ensure replset exists and has correct state, PVCs, etc
 			sets, err := h.ensureReplset(psmdb, podsList, replset, usersSecret)
 			if err != nil {
-				if err == ErrNoRunningMongodContainers {
+				switch err {
+				case ErrExecCommandTimeout:
+					continue
+				case ErrNoRunningMongodContainers:
 					logrus.Debugf("no running mongod containers for replset %s, skipping replset initiation", replset.Name)
 					continue
+				default:
+					logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
+					return err
 				}
-				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
-				return err
 			}
 			set, ok := sets["mongod"]
 			if !ok {

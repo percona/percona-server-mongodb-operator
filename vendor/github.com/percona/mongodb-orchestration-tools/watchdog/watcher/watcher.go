@@ -335,29 +335,31 @@ func (rw *Watcher) Run() {
 		case <-ticker.C:
 			session := rw.getReplsetSession()
 			if session == nil {
+				log.Errorf("Could not get session for replset: %s", rw.replset.Name)
 				continue
 			}
 
 			err := rw.state.Fetch(session, rsConfig.New(session))
 			if err != nil {
-				log.Errorf("Error fetching replset state: %s", err)
+				log.Errorf("Error fetching state for replset %s: %s", rw.replset.Name, err)
 				rw.reconnectReplsetSession()
 				continue
 			}
 
 			if rw.state.GetStatus() == nil {
+				log.Errorf("Could not get status for replset: %s", rw.replset.Name)
 				continue
 			}
 
 			err = rw.replsetConfigAdder(rw.getMissingReplsetMembers())
 			if err != nil {
-				log.Errorf("Error adding missing member(s): %s", err)
+				log.Errorf("Error adding member(s) to replset %s: %s", rw.replset.Name, err)
 				continue
 			}
 
 			err = rw.replsetConfigRemover(rw.getScaledDownMembers())
 			if err != nil {
-				log.Errorf("Error removing stale member(s): %s", err)
+				log.Errorf("Error removing stale/scaled-down member(s) from replset %s: %s", rw.replset.Name, err)
 				continue
 			}
 
