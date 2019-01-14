@@ -18,6 +18,13 @@ import (
 )
 
 func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
+	if replset.Expose == nil {
+		replset.Expose = &v1alpha1.Expose{}
+	}
+	if replset.Expose.Enabled && replset.Expose.ExposeType == "" {
+		replset.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	}
+
 	services := make([]corev1.Service, 0)
 
 	for _, pod := range podList.Items {
@@ -117,7 +124,7 @@ func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec,
 		},
 		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 	}
-	switch m.Spec.Expose.ExposeType {
+	switch replset.Expose.ExposeType {
 	case corev1.ServiceTypeNodePort:
 		svc.Spec.Type = corev1.ServiceTypeNodePort
 		svc.Spec.ExternalTrafficPolicy = "Local"

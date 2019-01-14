@@ -129,7 +129,7 @@ func TestHandlerHandle(t *testing.T) {
 		client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
 		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
 		client.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil)
-		client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(errors.New("not found error")).Once()
+		client.On("Get", mock.AnythingOfType("*v1.StatefulSet")).Return(errors.New("not found error"))
 		client.On("List",
 			"test",
 			mock.AnythingOfType("*v1.PodList"),

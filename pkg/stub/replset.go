@@ -29,7 +29,7 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 	addrs := make([]string, 0)
 	var hostname string
 
-	if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
+	if replset.Expose != nil && replset.Expose.Enabled {
 		for _, pod := range pods {
 			svc, err := getExtServices(m, pod.Name)
 			if err != nil {
@@ -104,7 +104,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 			"init",
 		}
 
-		if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
+		if replset.Expose != nil && replset.Expose.Enabled {
 			svc, err := getExtServices(m, pod.Name)
 			if err != nil {
 				return fmt.Errorf("failed to fetch service address: %v", err)
@@ -181,7 +181,7 @@ func (h *Handler) ensureReplsetStatefulSet(m *v1alpha1.PerconaServerMongoDB, rep
 }
 
 // ensureReplset ensures resources for a PSMDB replset exist
-func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (*appsv1.StatefulSet, error) {
+func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev1.PodList, replset *v1alpha1.ReplsetSpec, usersSecret *corev1.Secret) (map[string]*appsv1.StatefulSet, error) {
 	status := getReplsetStatus(m, replset)
 
 	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
@@ -189,14 +189,23 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		return nil, err
 	}
 
+	sets := make(map[string]*appsv1.StatefulSet, 2)
+
 	// Create the StatefulSet if it doesn't exist
 	set, err := h.ensureReplsetStatefulSet(m, replset, resources)
 	if err != nil {
 		return nil, err
 	}
+	sets["mongod"] = set
+
+	arbiter, err := h.ensureReplsetArbiter(m, replset, resources)
+	if err != nil {
+		return nil, err
+	}
+	sets["arbiter"] = arbiter
 
 	// Ensure replset has external service
-	if m.Spec.Expose != nil && m.Spec.Expose.Enabled {
+	if replset.Expose != nil && replset.Expose.Enabled {
 		_, err := h.ensureExtServices(m, replset, podList)
 		if err != nil {
 			return nil, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
@@ -234,7 +243,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	}
 
-	if !m.Spec.Expose.Enabled {
+	if replset.Expose == nil || !replset.Expose.Enabled {
 		// Create service for replset
 		service := newService(m, replset)
 		err = h.client.Create(service)
@@ -248,5 +257,5 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 		}
 	}
 
-	return set, nil
+	return sets, nil
 }

@@ -33,7 +33,7 @@ The minimum requirements are:
 1. Kubernetes v1.10+
 
 ## Build
-1. Install go1.10+ and 'make'
+1. Install go1.11+ and 'make'
 2. Run 'make' in git directory
 3. Find binaries in 'bin' directory
 

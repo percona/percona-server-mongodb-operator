@@ -7,7 +7,7 @@ cp /rootCA.crt /tmp/mongod-rootCA.crt
 chmod 600 /tmp/mongod.key /tmp/mongod.pem /tmp/mongod-rootCA.crt
 
 /usr/bin/mongod \
-	--bind_ip=0.0.0.0 \
+	--bind_ip=127.0.0.1 \
 	--replSet=${TEST_RS_NAME:-rs} \
 	--keyFile=/tmp/mongod.key \
 	--sslMode=preferSSL \

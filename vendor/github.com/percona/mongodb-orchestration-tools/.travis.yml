@@ -1,7 +1,6 @@
 dist: trusty
 language: go
 go:
-  - 1.10.x
   - 1.11.x
   - master
 matrix:
@@ -9,6 +8,7 @@ matrix:
     - go: master
 env:
   - PSMDB_VERSION=3.6
+  - PSMDB_VERSION=4.0
 services:
   - docker
 install:

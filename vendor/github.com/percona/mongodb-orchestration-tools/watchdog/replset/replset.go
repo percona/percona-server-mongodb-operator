@@ -46,8 +46,8 @@ func New(config *config.Config, name string) *Replset {
 
 func (r *Replset) getAddrs() []string {
 	addrs := []string{}
-	for _, member := range r.members {
-		addrs = append(addrs, member.Name())
+	for i := range r.members {
+		addrs = append(addrs, r.members[i].Name())
 	}
 	return addrs
 }
