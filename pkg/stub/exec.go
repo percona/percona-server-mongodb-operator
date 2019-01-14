@@ -23,7 +23,7 @@ import (
 var execCommandTimeout = 30 * time.Second
 var ErrExecCommandTimeout = errors.New("timeout executing command")
 
-type ExecCommandOutput struct {
+type execCommandOutput struct {
 	stdout bytes.Buffer
 	stderr bytes.Buffer
 }
@@ -43,7 +43,7 @@ func printOutputBuffer(cmd, pod string, r io.Reader, out io.Writer) error {
 }
 
 // printCommandOutput handles printing the stderr and stdout output of a remote command
-func printCommandOutput(cmd, pod string, output ExecCommandOutput, out io.Writer) error {
+func printCommandOutput(cmd, pod string, output execCommandOutput, out io.Writer) error {
 	logrus.SetOutput(out)
 	logrus.Infof("%s stdout:", cmd)
 	err := printOutputBuffer(cmd, pod, &output.stdout, out)
@@ -85,7 +85,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 		return fmt.Errorf("cannot find mongod port in container: %s", container.Name)
 	}
 
-	outputChan := make(chan ExecCommandOutput)
+	outputChan := make(chan execCommandOutput)
 	go func() {
 		req := client.CoreV1().RESTClient().Post().
 			Resource("pods").
@@ -111,7 +111,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 			"command":   cmd[0],
 		}).Info("running command in container")
 
-		output := ExecCommandOutput{}
+		output := execCommandOutput{}
 		err = exec.Stream(remotecommand.StreamOptions{
 			Stdout: &output.stdout,
 			Stderr: &output.stderr,

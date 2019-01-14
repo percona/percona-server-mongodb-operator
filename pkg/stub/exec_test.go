@@ -9,7 +9,7 @@ import (
 
 func TestPrintCommandOutput(t *testing.T) {
 	var out bytes.Buffer
-	output := ExecCommandOutput{}
+	output := execCommandOutput{}
 	_, err := output.stdout.WriteString("test stdout")
 	assert.NoError(t, err)
 
