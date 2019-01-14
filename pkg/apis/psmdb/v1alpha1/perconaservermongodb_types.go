@@ -242,7 +242,3 @@ type Expose struct {
 	Enabled    bool               `json:"enabled"`
 	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 }
-
-func init() {
-	SchemeBuilder.Register(&PerconaServerMongoDB{}, &PerconaServerMongoDBList{})
-}
