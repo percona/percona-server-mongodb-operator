@@ -202,8 +202,9 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 					continue
 				}
 				logrus.Errorf("failed to ensure replset %s: %v", replset.Name, err)
-				return err
+				continue
 			}
+
 			set, ok := sets["mongod"]
 			if !ok {
 				return fmt.Errorf("")
