@@ -242,6 +242,12 @@ type BackupSpec struct {
 	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
 }
 
+type BackupCompressionType string
+
+var (
+	BackupCompressionGzip BackupCompressionType = "gzip"
+)
+
 type BackupDestinationType string
 
 var (
@@ -253,6 +259,7 @@ type BackupTaskSpec struct {
 	Name            string                `json:"name,omitempty"`
 	Enabled         bool                  `json:"enabled"`
 	Schedule        string                `json:"schedule,omitempty"`
+	CompressionType BackupCompressionType `json:"compressionType,omitempty"`
 	DestinationType BackupDestinationType `json:"destinationType,omitempty"`
 }
 

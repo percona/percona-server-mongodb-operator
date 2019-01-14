@@ -121,6 +121,9 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 			spec.Backup.S3.Secret = backup.DefaultS3SecretName
 		}
 		for _, bkpTask := range spec.Backup.Tasks {
+			if bkpTask.CompressionType == "" {
+				bkpTask.CompressionType = backup.DefaultCompressionType
+			}
 			if bkpTask.DestinationType == "" {
 				bkpTask.DestinationType = backup.DefaultDestinationType
 			}

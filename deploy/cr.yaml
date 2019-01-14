@@ -61,7 +61,7 @@ spec:
     #  filter: '{}'
   backup:
     enabled: false
-    version: 0.2.0
+    version: 0.2.1
     restartOnFailure: true
     s3:
       secret: my-cluster-name-backup-s3
@@ -82,6 +82,8 @@ spec:
     - name: daily
       enabled: true
       schedule: "0 0 * * *"
+      compressionType: gzip
     - name: weekly
       enabled: false
       schedule: "0 0 * * 0"
+      compressionType: gzip

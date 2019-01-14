@@ -28,21 +28,26 @@ func newCronJob(m *v1alpha1.PerconaServerMongoDB, backup *v1alpha1.BackupTaskSpe
 }
 
 func (c *Controller) newBackupCronJobContainerArgs(backup *v1alpha1.BackupTaskSpec) []string {
-	backupName := c.psmdb.Name + "-" + backup.Name
-
-	var destinationType string
-	switch backup.DestinationType {
-	case v1alpha1.BackupDestinationFile:
-		destinationType = "file"
-	case v1alpha1.BackupDestinationS3:
-		destinationType = "aws"
-	}
-
-	return []string{
+	args := []string{
 		"run", "backup",
-		"--description=" + backupName,
-		"--destination-type=" + destinationType,
+		"--description=" + c.psmdb.Name + "-" + backup.Name,
 	}
+
+	switch backup.CompressionType {
+	case v1alpha1.BackupCompressionGzip:
+		args = append(args, "--compression-algorithm=gzip")
+	default:
+		args = append(args, "--compression-algorithm=none")
+	}
+
+	switch backup.DestinationType {
+	case v1alpha1.BackupDestinationS3:
+		args = append(args, "--destination-type=aws")
+	default:
+		args = append(args, "--destination-type=file")
+	}
+
+	return args
 }
 
 func (c *Controller) newBackupCronJobContainerEnv() []corev1.EnvVar {
