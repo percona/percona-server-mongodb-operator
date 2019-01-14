@@ -124,7 +124,7 @@ func execCommandInContainer(pod corev1.Pod, containerName string, cmd []string) 
 
 	select {
 	case <-time.After(execCommandTimeout):
-		logrus.Errorf("timeout reach executing command on pod %s: %s", pod.Name, cmd[0])
+		logrus.Errorf("timeout reached executing command in pod %s: %s", pod.Name, cmd[0])
 		return ErrExecCommandTimeout
 	case output := <-outputChan:
 		return printCommandOutput(cmd[0], pod.Name, output, os.Stdout)
