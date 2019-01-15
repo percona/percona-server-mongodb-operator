@@ -1,9 +1,9 @@
 package v1alpha1
 
 import (
+	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sversion "k8s.io/apimachinery/pkg/version"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -27,13 +27,6 @@ type PerconaServerMongoDBList struct {
 	Items           []PerconaServerMongoDB `json:"items"`
 }
 
-type Platform string
-
-const (
-	PlatformKubernetes Platform = "kubernetes"
-	PlatformOpenshift  Platform = "openshift"
-)
-
 type ClusterRole string
 
 const (
@@ -43,7 +36,7 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Platform        *Platform         `json:"platform,omitempty"`
+	Platform        *version.Platform `json:"platform,omitempty"`
 	Version         string            `json:"version,omitempty"`
 	RunUID          int64             `json:"runUid,omitempty"`
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
@@ -77,12 +70,6 @@ type ResourcesSpec struct {
 	Limits       *ResourceSpecRequirements `json:"limits,omitempty"`
 	Requests     *ResourceSpecRequirements `json:"requests,omitempty"`
 	StorageClass string                    `json:"storageClass,omitempty"`
-}
-
-// ServerVersion represents info about k8s / openshift server version
-type ServerVersion struct {
-	Platform Platform
-	Info     k8sversion.Info
 }
 
 type SecretsSpec struct {
@@ -231,11 +218,33 @@ type BackupCoordinatorSpec struct {
 	Debug          bool `json:"debug,omitempty"`
 }
 
+type BackupS3Spec struct {
+	Secret string `json:"secret,omitempty"`
+	Bucket string `json:"bucket,omitempty"`
+	Region string `json:"region,omitempty"`
+}
+
+type BackupDestinationType string
+
+var (
+	BackupDestinationS3   BackupDestinationType = "s3"
+	BackupDestinationFile BackupDestinationType = "file"
+)
+
+type BackupTaskSpec struct {
+	Name            string                `json:"name,omitempty"`
+	Enabled         bool                  `json:"enabled"`
+	Schedule        string                `json:"schedule,omitempty"`
+	DestinationType BackupDestinationType `json:"destinationType,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled          bool                   `json:"enabled"`
 	Version          string                 `json:"version,omitempty"`
 	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
 	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
+	S3               *BackupS3Spec          `json:"s3,omitempty"`
+	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
 }
 
 type Expose struct {

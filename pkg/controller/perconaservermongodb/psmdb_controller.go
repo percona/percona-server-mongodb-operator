@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,6 +45,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		serverVersion: sv,
+		reconcileIn:   time.Second * 5,
 	}, nil
 }
 
@@ -74,6 +76,7 @@ type ReconcilePerconaServerMongoDB struct {
 	scheme *runtime.Scheme
 
 	serverVersion *version.ServerVersion
+	reconcileIn   time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDB object and makes changes based on the state read
@@ -84,6 +87,10 @@ type ReconcilePerconaServerMongoDB struct {
 func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling PerconaServerMongoDB")
+
+	rr := reconcile.Result{
+		RequeueAfter: r.reconcileIn,
+	}
 
 	// Fetch the PerconaServerMongoDB instance
 	cr := &api.PerconaServerMongoDB{}
@@ -96,7 +103,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
+		return rr, err
+	}
+
+	err = cr.CheckNSetDefaults(r.serverVersion.Platform)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("wrong psmdb options: %v", err)
 	}
 
 	// // Define a new Pod object
