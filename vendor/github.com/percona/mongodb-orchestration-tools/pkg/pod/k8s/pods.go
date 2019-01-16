@@ -30,25 +30,6 @@ const (
 	EnvKubernetesPort = "KUBERNETES_SERVICE_PORT"
 )
 
-func NewPods(serviceName, namespace string) *Pods {
-	return &Pods{
-		namespace:    namespace,
-		serviceName:  serviceName,
-		pods:         make([]corev1.Pod, 0),
-		statefulsets: make([]appsv1.StatefulSet, 0),
-		services:     make([]corev1.Service, 0),
-	}
-}
-
-type Pods struct {
-	sync.Mutex
-	namespace    string
-	serviceName  string
-	pods         []corev1.Pod
-	statefulsets []appsv1.StatefulSet
-	services     []corev1.Service
-}
-
 func getPodReplsetName(pod *corev1.Pod) (string, error) {
 	for _, container := range pod.Spec.Containers {
 		for _, env := range container.Env {
@@ -58,6 +39,54 @@ func getPodReplsetName(pod *corev1.Pod) (string, error) {
 		}
 	}
 	return "", errors.New("could not find mongodb replset name")
+}
+
+// CustomResourceState represents the state of a single
+// Kubernetes CR for PSMDB
+type CustomResourceState struct {
+	Name         string
+	pods         []corev1.Pod
+	services     []corev1.Service
+	statefulsets []appsv1.StatefulSet
+}
+
+func (cr *CustomResourceState) getServiceFromPod(pod *corev1.Pod) *corev1.Service {
+	serviceName := pod.Name
+	for i, svc := range cr.services {
+		if svc.Name != serviceName {
+			continue
+		}
+		return &cr.services[i]
+	}
+	return nil
+}
+
+func (cr *CustomResourceState) getStatefulSetFromPod(pod *corev1.Pod) *appsv1.StatefulSet {
+	replsetName, err := getPodReplsetName(pod)
+	if err != nil {
+		return nil
+	}
+	setServiceName := cr.Name + "-" + replsetName
+	for i, statefulset := range cr.statefulsets {
+		if statefulset.Spec.ServiceName != setServiceName {
+			continue
+		}
+		return &cr.statefulsets[i]
+	}
+	return nil
+}
+
+func NewPods(namespace string) *Pods {
+	return &Pods{
+		namespace: namespace,
+		crs:       make(map[string]*CustomResourceState),
+	}
+}
+
+type Pods struct {
+	sync.Mutex
+	namespace string
+	crs       map[string]*CustomResourceState
 }
 
 func (p *Pods) Name() string {
@@ -73,68 +102,51 @@ func (p *Pods) URL() string {
 	return "tcp://" + host + ":" + port
 }
 
-func (p *Pods) Update(pods []corev1.Pod, statefulsets []appsv1.StatefulSet, services []corev1.Service) {
+// Delete deletes the state of a single PSMDB CR
+func (p *Pods) Delete(crState *CustomResourceState) {
 	p.Lock()
 	defer p.Unlock()
-	p.pods = pods
-	p.statefulsets = statefulsets
-	p.services = services
+	delete(p.crs, crState.Name)
 }
 
+// Update updates the state of a single PSMDB CR
+func (p *Pods) Update(crState *CustomResourceState) {
+	p.Lock()
+	defer p.Unlock()
+	p.crs[crState.Name] = crState
+}
+
+// Pods returns all available pod names
 func (p *Pods) Pods() ([]string, error) {
 	p.Lock()
 	defer p.Unlock()
 
 	pods := make([]string, 0)
-	for _, pod := range p.pods {
-		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
-			continue
+	for _, cr := range p.crs {
+		for _, pod := range cr.pods {
+			if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
+				continue
+			}
+			pods = append(pods, pod.Name)
 		}
-		pods = append(pods, pod.Name)
 	}
 	return pods, nil
 }
 
-func (p *Pods) getStatefulSetFromPod(pod *corev1.Pod) *appsv1.StatefulSet {
-	replsetName, err := getPodReplsetName(pod)
-	if err != nil {
-		return nil
-	}
-	setServiceName := p.serviceName + "-" + replsetName
-	for i, statefulset := range p.statefulsets {
-		if statefulset.Spec.ServiceName != setServiceName {
-			continue
-		}
-		return &p.statefulsets[i]
-	}
-	return nil
-}
-
-func (p *Pods) getServiceFromPod(pod *corev1.Pod) *corev1.Service {
-	serviceName := pod.Name
-	for i, svc := range p.services {
-		if svc.Name != serviceName {
-			continue
-		}
-		return &p.services[i]
-	}
-	return nil
-}
-
+// GetTasks returns tasks for a single pod by name
 func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 	p.Lock()
 	defer p.Unlock()
 
 	tasks := make([]pod.Task, 0)
-	for i := range p.pods {
-		pod := &p.pods[i]
-		if pod.Name != podName {
-			continue
+	for _, cr := range p.crs {
+		for i := range cr.pods {
+			pod := &cr.pods[i]
+			if pod.Name != podName {
+				continue
+			}
+			tasks = append(tasks, NewTask(p.namespace, cr, pod))
 		}
-		tasks = append(
-			tasks,
-			NewTask(pod, p.getStatefulSetFromPod(pod), p.getServiceFromPod(pod), p.serviceName, p.namespace),
-		)
 	}
 	return tasks, nil
 }
