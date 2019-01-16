@@ -61,12 +61,6 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 		return nil
 	}
 
-	// Setup watchdog 'k8s' pod source
-	// (https://github.com/percona/mongodb-orchestration-tools/blob/master/pkg/pod/pod.go#L51-L56)
-	if h.pods == nil {
-		h.pods = podk8s.NewPods(psmdb.Namespace)
-	}
-
 	// Skip if there are no initialized replsets
 	var doStart bool
 	for _, replset := range psmdb.Status.Replsets {
@@ -106,18 +100,31 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// apply Spec defaults
 		h.addSpecDefaults(psmdb)
 
+		// Setup watchdog 'k8s' pod source and CustomResourceState struct for CR
+		// (https://github.com/percona/mongodb-orchestration-tools/blob/master/pkg/pod/pod.go#L51-L56)
+		if h.pods == nil {
+			h.pods = podk8s.NewPods(psmdb.Namespace)
+		}
+		crState := &podk8s.CustomResourceState{
+			Name:         psmdb.Name,
+			Pods:         make([]corev1.Pod, 0),
+			Services:     make([]corev1.Service, 0),
+			Statefulsets: make([]appsv1.StatefulSet, 0),
+		}
+
 		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
 		// All secondary resources must have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
 			logrus.Infof("received deleted event for %s", psmdb.Name)
-			if h.watchdog != nil {
-				prometheus.Unregister(h.watchdogMetrics)
-				logrus.Debug("Unregistered watchdog Prometheus collector")
-
-				close(h.watchdogQuit)
-				h.watchdog = nil
-				logrus.Debug("Stopped watchdog")
-			}
+			h.pods.Delete(crState)
+			//if h.watchdog != nil {
+			//	prometheus.Unregister(h.watchdogMetrics)
+			//	logrus.Debug("Unregistered watchdog Prometheus collector")
+			//
+			//	close(h.watchdogQuit)
+			//	h.watchdog = nil
+			//	logrus.Debug("Stopped watchdog")
+			//}
 			return nil
 		}
 
@@ -177,12 +184,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
 		var hasRunningBackupAgents bool
-		crState := &podk8s.CustomResourceState{
-			Name:         psmdb.Name,
-			Pods:         make([]corev1.Pod, 0),
-			Services:     make([]corev1.Service, 0),
-			Statefulsets: make([]appsv1.StatefulSet, 0),
-		}
 		for i, replset := range psmdb.Spec.Replsets {
 			// multiple replica sets is not supported until sharding is
 			// added to the operator
