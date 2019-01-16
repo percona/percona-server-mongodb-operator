@@ -177,11 +177,11 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
 		var hasRunningBackupAgents bool
-		crState := podk8s.CustomResourceState{
+		crState := &podk8s.CustomResourceState{
 			Name:         psmdb.Name,
-			pods:         make([]corev1.Pod, 0),
-			services:     make([]corev1.Service, 0),
-			statefulsets: make([]appsv1.StatefulSet, 0),
+			Pods:         make([]corev1.Pod, 0),
+			Services:     make([]corev1.Service, 0),
+			Statefulsets: make([]appsv1.StatefulSet, 0),
 		}
 		for i, replset := range psmdb.Spec.Replsets {
 			// multiple replica sets is not supported until sharding is
@@ -197,7 +197,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to update psmdb status for replset %s: %v", replset.Name, err)
 				return err
 			}
-			crState.pods = append(crState.pods, podsList.Items...)
+			crState.Pods = append(crState.Pods, podsList.Items...)
 
 			// Ensure replset exists and has correct state, PVCs, etc
 			sets, err := h.ensureReplset(psmdb, podsList, replset, usersSecret)
@@ -214,13 +214,13 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			if !ok {
 				return fmt.Errorf("")
 			}
-			crState.statefulsets = append(crState.statefulsets, *set)
+			crState.Statefulsets = append(crState.Statefulsets, *set)
 
 			arbiter, ok := sets["arbiter"]
 			if !ok {
 				return fmt.Errorf("")
 			}
-			crState.statefulsets = append(crState.statefulsets, *arbiter)
+			crState.Statefulsets = append(crState.Statefulsets, *arbiter)
 
 			svc, err := h.extServicesList(psmdb, replset)
 			if err != nil {
@@ -229,7 +229,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 					return err
 				}
 			}
-			crState.services = append(crState.services, svc.Items...)
+			crState.Services = append(crState.Services, svc.Items...)
 
 			// Check if any pod has a backup agent container running (has not terminated)
 			for _, pod := range podsList.Items {

@@ -259,7 +259,7 @@
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "68a8bfce0a09c26b3f85b2658af68858d8a4d098"
+  revision = "93b4a250d9001b4b94a1cd90de4e8d0e91e3daa7"
 
 [[projects]]
   branch = "master"
@@ -713,6 +713,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "17e15cbd9a96bea8e5d9ad7762c03ca2714ab60eee4d3c93be9240e6eaf26dd6"
+  inputs-digest = "93da91acdee798383ccb05441bc591805215faf056f647776660e35dbdf460d6"
   solver-name = "gps-cdcl"
   solver-version = 1

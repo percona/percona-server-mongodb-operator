@@ -20,12 +20,12 @@ spec:
         exposeType: ClusterIP
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
-          storage: "3Gi"
+          cpu: "100m"
+          memory: "0.1G"
+          storage: "1Gi"
         requests:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "100m"
+          memory: "0.1G"
         #storageClass: aws-gp2
   mongod:
     net:
@@ -63,7 +63,7 @@ spec:
     #  format: BSON
     #  filter: '{}'
   backup:
-    enabled: false
+    enabled: true
     version: 0.2.1
     restartOnFailure: true
     s3:
@@ -80,11 +80,11 @@ spec:
           cpu: "100m"
           memory: "0.1G"
         #storageClass: aws-gp2
-      debug: false
+      debug: true
     tasks:
     - name: daily
       enabled: true
-      schedule: "0 0 * * *"
+      schedule: "*/1 * * * *"
       compressionType: gzip
     - name: weekly
       enabled: false
