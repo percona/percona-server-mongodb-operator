@@ -1,5 +1,5 @@
 hash: cd6d1b07ea34544d4f4049399e2022f85c0b6561ec057079a885bb1b27ccd7c9
-updated: 2018-12-12T21:29:27.046967+01:00
+updated: 2018-12-26T09:18:23.497399+02:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -29,7 +29,7 @@ imports:
 - name: github.com/golang/glog
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/golang/mock
-  version: 3b08ada96ed40e57fe7a70f2e4d5858e8dfd9af2
+  version: e698a2ea17fee71b248fc2bba82fc544c2017f93
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
@@ -71,7 +71,7 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 4724e9255275ce38f7179b2478abeae4e28c904f
+  version: 67670fe90761d7ff18ec1d640135e53b9198328f
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -94,7 +94,7 @@ imports:
 - name: github.com/stretchr/objx
   version: ef50b0de28773081167c97fc27cf29a0bf8b8c71
 - name: github.com/stretchr/testify
-  version: 5b93e2dc01fd8fbf32aa74a198b0ebe78f6f6b6f
+  version: 660f15d67dbb878de0d9d79894f728d691c91b91
   subpackages:
   - assert
   - mock
@@ -129,7 +129,7 @@ imports:
   - idna
   - lex/httplex
 - name: golang.org/x/sys
-  version: b05ddf57801d2239d6ab0ee35f9d981e0420f4ac
+  version: b4a75ba826a64a70990f11a225237acd6ef35c9f
   subpackages:
   - unix
   - windows

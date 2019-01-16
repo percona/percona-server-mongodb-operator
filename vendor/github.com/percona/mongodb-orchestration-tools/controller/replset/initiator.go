@@ -77,15 +77,15 @@ func (i *Initiator) initReplset(rsCnfMan rsConfig.Manager, out io.Writer) error 
 			log.WithFields(log.Fields{
 				"version": config.Version,
 			}).Info("Initiated replset with config:")
-			break
-		} else if isError(err, ErrMsgRsInitRequiresAuth) || isError(err, ErrMsgNotAuthorizedPrefix) {
-			return err
-		} else if !isError(err, ErrMsgDNSNotReady) {
-			log.WithFields(log.Fields{
-				"replset": i.config.Replset,
-				"error":   err,
-			}).Error("Error initiating replset! Retrying")
+			return nil
 		}
+		if isError(err, ErrMsgRsInitRequiresAuth) || isError(err, ErrMsgNotAuthorizedPrefix) || isError(err, ErrMsgDNSNotReady) {
+			return err
+		}
+		log.WithFields(log.Fields{
+			"replset": i.config.Replset,
+			"error":   err,
+		}).Error("Error initiating replset! Retrying")
 		time.Sleep(i.config.ReplsetInit.RetrySleep)
 		i.replInitTries += 1
 	}

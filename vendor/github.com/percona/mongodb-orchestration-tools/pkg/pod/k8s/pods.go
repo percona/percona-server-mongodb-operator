@@ -45,18 +45,18 @@ func getPodReplsetName(pod *corev1.Pod) (string, error) {
 // Kubernetes CR for PSMDB
 type CustomResourceState struct {
 	Name         string
-	pods         []corev1.Pod
-	services     []corev1.Service
-	statefulsets []appsv1.StatefulSet
+	Pods         []corev1.Pod
+	Services     []corev1.Service
+	Statefulsets []appsv1.StatefulSet
 }
 
 func (cr *CustomResourceState) getServiceFromPod(pod *corev1.Pod) *corev1.Service {
 	serviceName := pod.Name
-	for i, svc := range cr.services {
+	for i, svc := range cr.Services {
 		if svc.Name != serviceName {
 			continue
 		}
-		return &cr.services[i]
+		return &cr.Services[i]
 	}
 	return nil
 }
@@ -67,11 +67,11 @@ func (cr *CustomResourceState) getStatefulSetFromPod(pod *corev1.Pod) *appsv1.St
 		return nil
 	}
 	setServiceName := cr.Name + "-" + replsetName
-	for i, statefulset := range cr.statefulsets {
+	for i, statefulset := range cr.Statefulsets {
 		if statefulset.Spec.ServiceName != setServiceName {
 			continue
 		}
-		return &cr.statefulsets[i]
+		return &cr.Statefulsets[i]
 	}
 	return nil
 }
@@ -123,7 +123,7 @@ func (p *Pods) Pods() ([]string, error) {
 
 	pods := make([]string, 0)
 	for _, cr := range p.crs {
-		for _, pod := range cr.pods {
+		for _, pod := range cr.Pods {
 			if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
 				continue
 			}
@@ -140,8 +140,8 @@ func (p *Pods) GetTasks(podName string) ([]pod.Task, error) {
 
 	tasks := make([]pod.Task, 0)
 	for _, cr := range p.crs {
-		for i := range cr.pods {
-			pod := &cr.pods[i]
+		for i := range cr.Pods {
+			pod := &cr.Pods[i]
 			if pod.Name != podName {
 				continue
 			}
