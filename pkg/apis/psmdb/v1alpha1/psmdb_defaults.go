@@ -36,9 +36,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) err
 	if cr.Spec.Secrets == nil {
 		cr.Spec.Secrets = &SecretsSpec{}
 	}
-	if cr.Spec.Secrets.Key == "" {
-		cr.Spec.Secrets.Key = defaultKeySecretName
-	}
 	if cr.Spec.Secrets.Users == "" {
 		cr.Spec.Secrets.Users = defaultUsersSecretName
 	}

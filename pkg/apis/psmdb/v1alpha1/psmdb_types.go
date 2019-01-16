@@ -73,7 +73,6 @@ type ResourcesSpec struct {
 }
 
 type SecretsSpec struct {
-	Key   string `json:"key,omitempty"`
 	Users string `json:"users,omitempty"`
 }
 

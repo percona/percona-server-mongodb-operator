@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -16,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
@@ -111,31 +114,35 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("wrong psmdb options: %v", err)
 	}
 
-	// // Define a new Pod object
-	// pod := newPodForCR(instance)
+	// internalKey := secret.InternalKey(cr.Name+"-mongodb-key", cr.Namespace)
+	internalKey := &corev1.Secret{}
 
-	// // Set PerconaServerMongoDB instance as the owner and controller
-	// if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
-	// 	return reconcile.Result{}, err
-	// }
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-mongodb-key", Namespace: cr.Namespace}, internalKey)
+	if err != nil && errors.IsNotFound(err) {
+		reqLogger.Info("Creating a new internal mongo key", "Namespace", cr.Namespace, "Name", internalKey.Name)
 
-	// // Check if this Pod already exists
-	// found := &corev1.Pod{}
-	// err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
-	// if err != nil && errors.IsNotFound(err) {
-	// 	reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
-	// 	err = r.client.Create(context.TODO(), pod)
-	// 	if err != nil {
-	// 		return reconcile.Result{}, err
-	// 	}
+		internalKey.Data, err = secret.GenInternalKey()
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("internal mongodb key generation: %v", err)
+		}
 
-	// 	// Pod created successfully - don't requeue
-	// 	return reconcile.Result{}, nil
-	// } else if err != nil {
-	// 	return reconcile.Result{}, err
-	// }
+		err = r.client.Create(context.TODO(), internalKey)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("create internal mongodb key: %v", err)
+		}
+	} else if err != nil {
+		return reconcile.Result{}, fmt.Errorf("get internal mongodb key: %v", err)
+	}
 
-	// Pod already exists - don't requeue
-	// reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
-	return reconcile.Result{}, nil
+	secrets := &corev1.Secret{}
+	err = r.client.Get(
+		context.TODO(),
+		types.NamespacedName{Name: cr.Spec.Secrets.Users, Namespace: cr.Namespace},
+		secrets,
+	)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("get mongodb secrets: %v", err)
+	}
+
+	return rr, nil
 }
