@@ -61,8 +61,10 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 		return nil
 	}
 
+	// Setup watchdog 'k8s' pod source
+	// (https://github.com/percona/mongodb-orchestration-tools/blob/master/pkg/pod/pod.go#L51-L56)
 	if h.pods == nil {
-		h.pods = podk8s.NewPods(psmdb.Name, psmdb.Namespace)
+		h.pods = podk8s.NewPods(psmdb.Namespace)
 	}
 
 	// Skip if there are no initialized replsets
@@ -175,9 +177,12 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// Ensure all replica sets exist. When sharding is supported this
 		// loop will create the cluster shards and config server replset
 		var hasRunningBackupAgents bool
-		clusterPods := make([]corev1.Pod, 0)
-		clusterSets := make([]appsv1.StatefulSet, 0)
-		clusterServices := make([]corev1.Service, 0)
+		crState := podk8s.CustomResourceState{
+			Name:         psmdb.Name,
+			pods:         make([]corev1.Pod, 0),
+			services:     make([]corev1.Service, 0),
+			statefulsets: make([]appsv1.StatefulSet, 0),
+		}
 		for i, replset := range psmdb.Spec.Replsets {
 			// multiple replica sets is not supported until sharding is
 			// added to the operator
@@ -192,7 +197,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				logrus.Errorf("failed to update psmdb status for replset %s: %v", replset.Name, err)
 				return err
 			}
-			clusterPods = append(clusterPods, podsList.Items...)
+			crState.pods = append(crState.pods, podsList.Items...)
 
 			// Ensure replset exists and has correct state, PVCs, etc
 			sets, err := h.ensureReplset(psmdb, podsList, replset, usersSecret)
@@ -209,13 +214,13 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			if !ok {
 				return fmt.Errorf("")
 			}
-			clusterSets = append(clusterSets, *set)
+			crState.statefulsets = append(crState.statefulsets, *set)
 
 			arbiter, ok := sets["arbiter"]
 			if !ok {
 				return fmt.Errorf("")
 			}
-			clusterSets = append(clusterSets, *arbiter)
+			crState.statefulsets = append(crState.statefulsets, *arbiter)
 
 			svc, err := h.extServicesList(psmdb, replset)
 			if err != nil {
@@ -224,7 +229,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 					return err
 				}
 			}
-			clusterServices = append(clusterServices, svc.Items...)
+			crState.services = append(crState.services, svc.Items...)
 
 			// Check if any pod has a backup agent container running (has not terminated)
 			for _, pod := range podsList.Items {
@@ -261,8 +266,8 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 		}
 
-		// Update the pods+statefulsets list that is read by the watchdog
-		h.pods.Update(clusterPods, clusterSets, clusterServices)
+		// Update the PSMDB CR state that is read by the watchdog
+		h.pods.Update(crState)
 	}
 	return nil
 }

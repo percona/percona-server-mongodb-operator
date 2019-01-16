@@ -16,12 +16,11 @@ package k8s
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
-	"fmt"
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -51,20 +50,16 @@ func (ts TaskState) String() string {
 }
 
 type Task struct {
-	pod         *corev1.Pod
-	statefulset *appsv1.StatefulSet
-	service     *corev1.Service
-	serviceName string
-	namespace   string
+	namespace string
+	pod       *corev1.Pod
+	cr        *CustomResourceState
 }
 
-func NewTask(pod *corev1.Pod, statefulset *appsv1.StatefulSet, service *corev1.Service, serviceName, namespace string) *Task {
+func NewTask(namespace string, cr *CustomResourceState, pod *corev1.Pod) *Task {
 	return &Task{
-		pod:         pod,
-		statefulset: statefulset,
-		service:     service,
-		namespace:   namespace,
-		serviceName: serviceName,
+		namespace: namespace,
+		pod:       pod,
+		cr:        cr,
 	}
 }
 
@@ -93,10 +88,11 @@ func (t *Task) IsRunning() bool {
 }
 
 func (t *Task) IsUpdating() bool {
-	if t.statefulset == nil {
+	statefulset := t.cr.getStatefulSetFromPod(t.pod)
+	if statefulset == nil {
 		return false
 	}
-	status := t.statefulset.Status
+	status := statefulset.Status
 	if status.CurrentRevision != status.UpdateRevision {
 		return true
 	}
@@ -126,7 +122,8 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 }
 
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
-	if t.service != nil {
+	service := t.cr.getServiceFromPod(t.pod)
+	if service != nil {
 		addr, err := t.getServiceAddr()
 		if err != nil {
 			return nil, err
@@ -144,7 +141,7 @@ func (t *Task) GetMongoAddr() (*db.Addr, error) {
 				return nil, err
 			}
 			addr := &db.Addr{
-				Host: GetMongoHost(t.pod.Name, t.serviceName, replset, t.namespace),
+				Host: GetMongoHost(t.pod.Name, t.cr.Name, replset, t.namespace),
 				Port: int(port.HostPort),
 			}
 			if addr.Port == 0 {
@@ -162,10 +159,12 @@ func (t *Task) GetMongoReplsetName() (string, error) {
 
 func (t *Task) getServiceAddr() (*db.Addr, error) {
 	addr := &db.Addr{}
-	switch t.service.Spec.Type {
+	service := t.cr.getServiceFromPod(t.pod)
+
+	switch service.Spec.Type {
 	case corev1.ServiceTypeClusterIP:
-		addr.Host = t.service.Spec.ClusterIP
-		for _, p := range t.service.Spec.Ports {
+		addr.Host = service.Spec.ClusterIP
+		for _, p := range service.Spec.Ports {
 			if p.Name != mongodbPortName {
 				continue
 			}
@@ -174,8 +173,8 @@ func (t *Task) getServiceAddr() (*db.Addr, error) {
 		return addr, nil
 
 	case corev1.ServiceTypeLoadBalancer:
-		addr.Host = t.service.Spec.LoadBalancerIP
-		for _, p := range t.service.Spec.Ports {
+		addr.Host = service.Spec.LoadBalancerIP
+		for _, p := range service.Spec.Ports {
 			if p.Name != mongodbPortName {
 				continue
 			}
@@ -185,7 +184,7 @@ func (t *Task) getServiceAddr() (*db.Addr, error) {
 
 	case corev1.ServiceTypeNodePort:
 		addr.Host = t.pod.Status.HostIP
-		for _, p := range t.service.Spec.Ports {
+		for _, p := range service.Spec.Ports {
 			if p.Name != mongodbPortName {
 				continue
 			}
