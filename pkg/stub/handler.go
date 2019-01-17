@@ -112,19 +112,12 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			Statefulsets: make([]appsv1.StatefulSet, 0),
 		}
 
-		// Ignore the delete event since the garbage collector will clean up all secondary resources for the CR
-		// All secondary resources must have the CR set as their OwnerReference for this to be the case
+		// Delete CR if the user has removed it. Otherwise, ignore the delete event since the garbage
+		// collector will clean up all secondary resources for the CR. All secondary resources must
+		// have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
 			logrus.Infof("received deleted event for %s", psmdb.Name)
 			h.pods.Delete(crState)
-			//if h.watchdog != nil {
-			//	prometheus.Unregister(h.watchdogMetrics)
-			//	logrus.Debug("Unregistered watchdog Prometheus collector")
-			//
-			//	close(h.watchdogQuit)
-			//	h.watchdog = nil
-			//	logrus.Debug("Stopped watchdog")
-			//}
 			return nil
 		}
 
