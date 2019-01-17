@@ -1,0 +1,18 @@
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDB
+metadata:
+  name: local-balancer
+spec:
+  #platform: openshift
+  version: "3.6"
+  secrets:
+    users: some-users
+  replsets:
+  - name: rs0
+    size: 3
+    resources:
+      limits:
+        storage: "1Gi"
+    expose:
+      enabled: true
+      exposeType: LoadBalancer

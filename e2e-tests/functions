@@ -52,7 +52,9 @@ wait_pod() {
         if [ $retry -ge 60 ]; then
             kubectl describe pod/$pod
             kubectl logs $pod
-            kubectl logs $(get_operator_pod)
+            kubectl logs $(get_operator_pod) \
+                | grep -v 'Getting tasks for pod' \
+                | grep -v 'Getting pods from source'
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
         fi
@@ -116,6 +118,7 @@ compare_kubectl() {
     kubectl get -o yaml ${resource} \
         | egrep -v "namespace:|uid:|resourceVersion:|selfLink:|creationTimestamp:|image:|clusterIP:" \
         | egrep -v "^  storageClassName:|finalizers:|kubernetes.io/pvc-protection|volumeName:|storage-provisioner:" \
+        | egrep -v "healthCheckNodePort:|nodePort:" \
         | $sed -e '/^status:$/,+100500d' \
         | $sed -e '/NAMESPACE/,+1d' \
         > ${new_result}
@@ -126,18 +129,36 @@ run_mongo() {
     local command="$1"
     local uri="$2"
     local driver=${3:-mongodb+srv}
+    local suffix=${4:-.svc.cluster.local}
     local client_container=$(kubectl get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
     kubectl exec ${client_container} -- \
-        bash -c "printf '$command\n' | mongo $driver://$uri.svc.cluster.local/admin?ssl=false\&replicaSet=rs0"
+        bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0"
+}
+
+get_service_ip() {
+    local service=$1
+    while (kubectl get service/$service -o 'jsonpath={.spec.type}' 2>&1 || : ) | grep -q NotFound; do
+        sleep 1
+    done
+    if [ "$(kubectl get service/$service -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
+        kubectl get service/$service -o 'jsonpath={.spec.clusterIP}'
+        return
+    fi
+    until kubectl get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+        sleep 1
+    done
+    kubectl get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+    kubectl get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].host}'
 }
 
 compare_mongo_cmd() {
     local command="$1"
     local uri="$2"
     local postfix="$3"
+    local suffix="$4"
 
-    run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" \
+    run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
         | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set' \
         | sed -e 's/ObjectId(.*)//' \
         > $tmp_dir/${command}
