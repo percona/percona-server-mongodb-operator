@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+  labels:
+    app: percona-server-mongodb
+    cluster: local-balancer
+    replset: rs0
+    type: expose-externally
+  name: local-balancer-rs0-0
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1alpha1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: local-balancer
+spec:
+  externalTrafficPolicy: Local
+  ports:
+  - name: mongodb
+    port: 27017
+    protocol: TCP
+    targetPort: 27017
+  selector:
+    statefulset.kubernetes.io/pod-name: local-balancer-rs0-0
+  sessionAffinity: None
+  type: LoadBalancer
