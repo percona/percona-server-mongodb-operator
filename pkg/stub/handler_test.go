@@ -185,11 +185,4 @@ func TestHandlerHandle(t *testing.T) {
 		assert.Equal(t, "List", lastCall.Method)
 		assert.IsType(t, "", lastCall.Arguments.Get(0))
 	})
-
-	// test watchdog is stopped by a 'Deleted' SDK event
-	t.Run("watchdog-stop", func(t *testing.T) {
-		event.Deleted = true
-		assert.NoError(t, h.Handle(context.TODO(), event))
-		assert.Nil(t, h.watchdog)
-	})
 }
