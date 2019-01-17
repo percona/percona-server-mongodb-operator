@@ -2,6 +2,10 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
+  labels:
+    app: percona-server-mongodb
+    percona-server-mongodb_cr: another-name
+    replset: rs0
   name: another-name-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
@@ -75,11 +79,11 @@ spec:
             - mongodb-healthcheck
             - k8s
             - liveness
-          failureThreshold: 12
-          initialDelaySeconds: 60
-          periodSeconds: 10
+          failureThreshold: 5
+          initialDelaySeconds: 45
+          periodSeconds: 5
           successThreshold: 1
-          timeoutSeconds: 5
+          timeoutSeconds: 2
         name: mongod
         ports:
         - containerPort: 27017
@@ -102,7 +106,6 @@ spec:
             memory: 100M
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -115,8 +118,7 @@ spec:
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
       - name: some-key

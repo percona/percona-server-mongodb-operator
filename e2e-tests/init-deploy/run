@@ -47,9 +47,12 @@ kubectl delete pods --grace-period=0 --force $initial_primary
 wait_for_running $cluster 3
 changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$cluster.$namespace")
 [ "$initial_primary" != "$changed_primary" ]
-compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+run_mongo \
+    'use myApp\n db.test.insert({ x: 100501 })' \
+    "myApp:myPass@$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
 
 desc 'check if possible to create second cluster'
 cluster2="another-name-rs0"
@@ -65,10 +68,10 @@ run_mongo \
     'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
     "userAdmin:userAdmin123456@$cluster2.$namespace"
 run_mongo \
-    'use myApp\n db.test.insert({ x: 100500 })' \
+    'use myApp\n db.test.insert({ x: 100502 })' \
     "myApp:myPass@$cluster2.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
+compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
+compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
 
 destroy $namespace
