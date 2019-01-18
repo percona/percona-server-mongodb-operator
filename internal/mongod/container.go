@@ -302,10 +302,10 @@ func newContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpe
 					},
 				},
 			},
-			InitialDelaySeconds: int32(45),
-			TimeoutSeconds:      int32(2),
-			PeriodSeconds:       int32(5),
-			FailureThreshold:    int32(5),
+			InitialDelaySeconds: int32(60),
+			TimeoutSeconds:      int32(5),
+			PeriodSeconds:       int32(10),
+			FailureThreshold:    int32(12),
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
