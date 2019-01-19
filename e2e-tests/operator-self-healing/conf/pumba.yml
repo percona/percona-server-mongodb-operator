@@ -26,7 +26,7 @@ spec:
       containers:
         - name: pumba
           image: gaiaadm/pumba:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["/pumba", "--dry-run", "--interval", "2h", "pause", "--duration", "1h", "percona-server-mongodb-operator" ]
           resources:
             requests:
