@@ -131,6 +131,7 @@ func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec,
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
 		svc.Spec.ExternalTrafficPolicy = "Local"
+		svc.Annotations = map[string]string{"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp"}
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
@@ -159,7 +160,7 @@ func extServiseLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 		"app":     "percona-server-mongodb",
 		"type":    "expose-externally",
 		"replset": replset.Name,
-		"cluster": m.ClusterName,
+		"cluster": m.Name,
 	}
 }
 
@@ -170,6 +171,33 @@ type ServiceAddr struct {
 
 func (s ServiceAddr) String() string {
 	return s.Host + ":" + strconv.Itoa(s.Port)
+}
+
+func getIngressPoint(svc corev1.Service) string {
+	client := sdk.NewClient()
+	meta := serviceMeta(svc.Namespace, svc.Spec.Selector["statefulset.kubernetes.io/pod-name"])
+
+	for retry := 0; retry < 900; retry++ {
+		if err := client.Get(meta); err != nil {
+			logrus.Errorf("failed to fetch service: %v", err)
+			break
+		}
+		if len(meta.Status.LoadBalancer.Ingress) != 0 {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+	if len(meta.Status.LoadBalancer.Ingress) == 0 {
+		logrus.Errorf("Cannot detect ingress point for Service %s", meta.Name)
+		return meta.Spec.ClusterIP
+	}
+
+	host := meta.Status.LoadBalancer.Ingress[0].IP
+	if host == "" {
+		host = meta.Status.LoadBalancer.Ingress[0].Hostname
+	}
+	return host
 }
 
 func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
@@ -186,7 +214,7 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		addr.Host = svc.Spec.LoadBalancerIP
+		addr.Host = getIngressPoint(svc)
 		for _, p := range svc.Spec.Ports {
 			if p.Name != mongod.MongodPortName {
 				continue
