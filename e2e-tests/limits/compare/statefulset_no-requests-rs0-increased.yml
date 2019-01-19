@@ -75,11 +75,11 @@ spec:
             - mongodb-healthcheck
             - k8s
             - liveness
-          failureThreshold: 5
-          initialDelaySeconds: 45
-          periodSeconds: 5
+          failureThreshold: 12
+          initialDelaySeconds: 60
+          periodSeconds: 10
           successThreshold: 1
-          timeoutSeconds: 2
+          timeoutSeconds: 5
         name: mongod
         ports:
         - containerPort: 27017
