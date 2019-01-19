@@ -58,7 +58,7 @@ spec:
         - secretRef:
             name: some-users
             optional: false
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         livenessProbe:
           exec:
             command:
