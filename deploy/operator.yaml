@@ -31,4 +31,4 @@ spec:
             - name: RESYNC_PERIOD
               value: 5s
             - name: LOG_VERBOSE
-              value: "false"
+              value: "true"
