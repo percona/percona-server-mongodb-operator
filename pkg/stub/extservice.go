@@ -195,6 +195,33 @@ func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
 	}
 }
 
+func getIngressPoint(svc corev1.Service) string {
+	client := sdk.NewClient()
+	meta := serviceMeta(svc.Namespace, svc.Spec.Selector["statefulset.kubernetes.io/pod-name"])
+
+	for retry := 0; retry < 900; retry++ {
+		if err := client.Get(meta); err != nil {
+			logrus.Errorf("failed to fetch service: %v", err)
+			break
+		}
+		if len(meta.Status.LoadBalancer.Ingress) != 0 {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+	if len(meta.Status.LoadBalancer.Ingress) == 0 {
+		logrus.Errorf("Cannot detect ingress point for Service %s", meta.Name)
+		return meta.Spec.ClusterIP
+	}
+
+	host := meta.Status.LoadBalancer.Ingress[0].IP
+	if host == "" {
+		host = meta.Status.LoadBalancer.Ingress[0].Hostname
+	}
+	return host
+}
+
 func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
 	var addr ServiceAddr
 
@@ -209,7 +236,7 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		addr.Host = svc.Spec.LoadBalancerIP
+		addr.Host = getIngressPoint(svc)
 		for _, p := range svc.Spec.Ports {
 			if p.Name != mongod.MongodPortName {
 				continue

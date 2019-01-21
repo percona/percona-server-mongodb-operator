@@ -18,5 +18,5 @@ var (
 	DefaultWiredTigerCacheSizeRatio       = 0.5
 	DefaultInMemorySizeRatio              = 0.9
 	DefaultOperationProfilingMode         = v1alpha1.OperationProfilingModeSlowOp
-	DefaultImagePullPolicy                = corev1.PullIfNotPresent
+	DefaultImagePullPolicy                = corev1.PullAlways
 )
