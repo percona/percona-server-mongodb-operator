@@ -41,7 +41,7 @@ func Test_setExposeDefaulf(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			setExposeDefaulf(test.replset)
+			setExposeDefaults(test.replset)
 			assert.Equal(t, test.replset, test.expected)
 		})
 	}

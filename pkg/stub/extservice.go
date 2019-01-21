@@ -18,7 +18,7 @@ import (
 )
 
 func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
-	setExposeDefaulf(replset)
+	setExposeDefaults(replset)
 
 	services := make([]corev1.Service, 0)
 
@@ -121,7 +121,7 @@ func serviceMeta(namespace, podName string) *corev1.Service {
 
 func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podName string) *corev1.Service {
 	svc := serviceMeta(m.Namespace, podName)
-	svc.Labels = extServiseLabels(m, replset)
+	svc.Labels = extServiceLabels(m, replset)
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
@@ -159,14 +159,14 @@ func (h *Handler) extServicesList(m *v1alpha1.PerconaServerMongoDB, replset *v1a
 	}
 
 	if err := h.client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(extServiseLabels(m, replset)).String()})); err != nil {
+		LabelSelector: labels.SelectorFromSet(extServiceLabels(m, replset)).String()})); err != nil {
 		return nil, fmt.Errorf("couldn't fetch services: %v", err)
 	}
 
 	return svcs, nil
 }
 
-func extServiseLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
+func extServiceLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
 	return map[string]string{
 		"app":     "percona-server-mongodb",
 		"type":    "expose-externally",
@@ -184,7 +184,7 @@ func (s ServiceAddr) String() string {
 	return s.Host + ":" + strconv.Itoa(s.Port)
 }
 
-func setExposeDefaulf(replset *v1alpha1.ReplsetSpec) {
+func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
 	if replset.Expose == nil {
 		replset.Expose = &v1alpha1.Expose{
 			Enabled: false,
