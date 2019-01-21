@@ -72,9 +72,9 @@ func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.S
 				return nil, fmt.Errorf("failed to fetch service: %v", err)
 			}
 		}
+		return svcMeta, nil
 	}
-
-	return svcMeta, nil
+	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
 }
 
 func createExtService(cli sdk.Client, svc *corev1.Service) error {
