@@ -3,13 +3,15 @@ Custom Resource options
 
 The operator is configured via the spec section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. This file contains the following spec sections: 
 
-| Key | Value Type | Default | Description |
-|-----|------------|---------|-------------|
+| Key | Value Type | Default | Description                                      |
+|-----|------------|---------|--------------------------------------------------|
 |platform | string | kubernetes | Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set openshift on OpenShift 3.11+ |
 | version | string | 3.6.8      | The Dockerhub tag of [percona/percona-server-mongodb](https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/) to deploy |
-| secrets | subdoc |            | Operator secrets section  |
-|replsets | array  |            | Operator MongoDB Replica Set section |
+| secrets | subdoc |            | Operator secrets section                      |
+|replsets | array  |            | Operator MongoDB Replica Set section          |
 | mongod  | subdoc |            | Operator MongoDB Mongod configuration section |
+| backup  | subdoc |            | Percona Server for MongoDB backups section    |
+
 
 ### Secrets section
 
@@ -62,4 +64,28 @@ security.redactClientLogData|bool|false|Enables/disables [PSMDB Log Redaction](h
 |auditLog.destination|string| | Sets the ['auditLog.destination' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html)|
 |auditLog.format |string|BSON|Sets the ['auditLog.format' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html)|
 |auditLog.filter |string|{}  | Sets the ['auditLog.filter' option](https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html)|
+
+## backup section
+
+The ``backup`` section in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file contains the following configuration options for the regular Percona Server for MongoDB backups.
+
+| Key                            | Value Type | Default   | Description                                   |
+|--------------------------------|------------|-----------|-----------------------------------------------|
+|enabled                         | boolean    | `false`   | Enables or disables the backups functionality |
+|version                         | string     | `0.2.1`   |                                               |
+|restartOnFailure                | boolean    | `true`    |                                               |
+|s3.secret                       | string     | `my-cluster-name-backup-s3`| [Kubernetes imagePullSecret](https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets) for backups |
+|s3.bucket                       | string     |           | The [Amazon S3 bucket](https://docs.aws.amazon.com/en_us/AmazonS3/latest/dev/UsingBucket.html) name for backups                    |
+|s3.region                       | string     |`us-west-2`| The [AWS region](https://docs.aws.amazon.com/en_us/general/latest/gr/rande.html) to use |
+|coordinator.resources.limits.cpu| string     |`100m`     | Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
+|coordinator.resources.limits.memory | string |`0.2G`     | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
+|coordinator.resources.limits.storage| string |`1Gi`      | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
+
+|coordinator.requests.storage    | string     | `1Gi`     | The [Kubernetes Persistent Volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) size for the MongoDB Coordinator container                           |
+|coordinator.requests.storageClass | string   | `aws-gp2` | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB Coordinator container                      |
+|coordinator.debug               | string     | `false`   | Enables or disables debug mode for the MongoDB Coordinator operation     |
+|tasks.name                      | string     | `sat-night-backup` | The backup name    |
+|tasks.enabled                   | boolean    | `true`             | Enables or disables this exact backup |
+|tasks.schedule                  | string     | `0 0 * * 6`        | Scheduled time to make a backup, specified in the [crontab format](https://en.wikipedia.org/wiki/Cron)                                                        |
+|tasks.compressionType           | string     | `gzip`             | The compression format to store backups in |
 
