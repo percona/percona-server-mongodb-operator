@@ -16,7 +16,7 @@ import (
 func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	arbiterRightsizing(replset)
 
-	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"arbiter")
+	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
 	if err := h.client.Get(arbiter); err != nil {
 		lf := logrus.Fields{
 			"version": m.Spec.Version,

@@ -18,12 +18,7 @@ import (
 )
 
 func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
-	if replset.Expose == nil {
-		replset.Expose = &v1alpha1.Expose{}
-	}
-	if replset.Expose.Enabled && replset.Expose.ExposeType == "" {
-		replset.Expose.ExposeType = corev1.ServiceTypeClusterIP
-	}
+	setExposeDefaulf(replset)
 
 	services := make([]corev1.Service, 0)
 
@@ -170,6 +165,17 @@ type ServiceAddr struct {
 
 func (s ServiceAddr) String() string {
 	return s.Host + ":" + strconv.Itoa(s.Port)
+}
+
+func setExposeDefaulf(replset *v1alpha1.ReplsetSpec) {
+	if replset.Expose == nil {
+		replset.Expose = &v1alpha1.Expose{
+			Enabled: false,
+		}
+	}
+	if replset.Expose.Enabled && replset.Expose.ExposeType == "" {
+		replset.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	}
 }
 
 func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
