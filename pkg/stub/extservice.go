@@ -33,10 +33,12 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 			if errors.IsNotFound(err) {
 				logrus.Infof("pod %s of replset %s doesn't have attached service", pod.Name, replset.Name)
 				svc := extService(m, replset, pod.Name)
+
 				if err := createExtService(h.client, svc); err != nil {
 					return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
 				}
 				meta = svc
+
 			} else {
 				return nil, fmt.Errorf("failed to fetch service for replset %s: %v", replset.Name, err)
 			}
@@ -54,13 +56,24 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 }
 
 func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
+	var retries uint64 = 0
+
 	client := sdk.NewClient()
 	svcMeta := serviceMeta(m.Namespace, podName)
-	if err := client.Get(svcMeta); err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to fetch service: %v", err)
+
+	for retries <= 5 {
+		if err := client.Get(svcMeta); err != nil {
+			if errors.IsNotFound(err) {
+				retries += 1
+				time.Sleep(500 * time.Millisecond)
+				logrus.Infof("Service for %s not found. Retry", podName)
+				continue
+			} else {
+				return nil, fmt.Errorf("failed to fetch service: %v", err)
+			}
 		}
 	}
+
 	return svcMeta, nil
 }
 
@@ -81,8 +94,8 @@ func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 	for retries <= 5 {
 		if err := cli.Update(svc); err != nil {
 			if errors.IsConflict(err) {
-				time.Sleep(500 * time.Millisecond)
 				retries += 1
+				time.Sleep(500 * time.Millisecond)
 				continue
 			} else {
 				return fmt.Errorf("failed to update service: %v", err)
@@ -120,12 +133,16 @@ func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec,
 		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 	}
 	switch replset.Expose.ExposeType {
+
 	case corev1.ServiceTypeNodePort:
 		svc.Spec.Type = corev1.ServiceTypeNodePort
 		svc.Spec.ExternalTrafficPolicy = "Local"
+
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
 		svc.Spec.ExternalTrafficPolicy = "Local"
+		svc.Annotations = map[string]string{"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp"}
+
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
@@ -154,7 +171,7 @@ func extServiseLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 		"app":     "percona-server-mongodb",
 		"type":    "expose-externally",
 		"replset": replset.Name,
-		"cluster": m.ClusterName,
+		"cluster": m.Name,
 	}
 }
 
