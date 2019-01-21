@@ -19,3 +19,5 @@ docs:
         url: ./configure/users
       - title: "Operator options"
         url: ./configure/operator
+      - title: "Backups"
+        url: ./configure/backups
