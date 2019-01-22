@@ -111,9 +111,12 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 		if replset.Expose != nil && replset.Expose.Enabled {
 			svc, err := getExtServices(m, pod.Name)
 			if err != nil {
+				return fmt.Errorf("failed to fetch services: %v", err)
+			}
+			hostname, err := getServiceAddr(*svc, pod)
+			if err != nil {
 				return fmt.Errorf("failed to fetch service address: %v", err)
 			}
-			hostname := getServiceAddr(*svc, pod)
 			cmd = append(cmd, "--ip", hostname.Host, "--port", strconv.Itoa(hostname.Port))
 
 		}
