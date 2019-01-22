@@ -17,6 +17,7 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 	arbiterRightsizing(replset)
 
 	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
+
 	if err := h.client.Get(arbiter); err != nil {
 		lf := logrus.Fields{
 			"version": m.Spec.Version,
@@ -25,6 +26,7 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 			"memory":  replset.Limits.Memory,
 			"storage": replset.Limits.Storage,
 		}
+
 		if replset.StorageClass != "" {
 			lf["storageClass"] = replset.StorageClass
 		}
@@ -70,10 +72,10 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	ls["arbiter"] = "true"
 
-	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"arbiter")
+	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
 
 	arbiter.Spec = appsv1.StatefulSetSpec{
-		ServiceName: m.Name + "-" + replset.Name + "arbiter",
+		ServiceName: m.Name + "-" + replset.Name + "-arbiter",
 		Replicas:    &replset.Arbiter.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,

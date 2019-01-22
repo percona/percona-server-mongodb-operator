@@ -346,6 +346,5 @@ func NewBackupContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Repl
 }
 
 func NewArbiterContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
-	// TODO
 	return newContainer(m, replset, MongodArbiterContainerName, resources, runUID, newContainerVolumeMounts(m))
 }
