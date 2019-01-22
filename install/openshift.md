@@ -4,7 +4,7 @@ Install Percona server for MongoDB on OpenShift
 0. First of all, clone the percona-server-mongodb-operator repository:
 
    ```bash
-   git clone -b release-0.2.0 https://github.com/Percona-Lab/percona-server-mongodb-operator
+   git clone -b release-0.1.0 https://github.com/Percona-Lab/percona-server-mongodb-operator
    cd percona-server-mongodb-operator
    ```
    **Note:** *It is crucial to specify the right branch with `-b` option while cloning the code on this step. Please be careful.*
