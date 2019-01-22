@@ -195,35 +195,47 @@ func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
 	}
 }
 
-func getIngressPoint(svc corev1.Service) string {
-	client := sdk.NewClient()
-	meta := serviceMeta(svc.Namespace, svc.Spec.Selector["statefulset.kubernetes.io/pod-name"])
+func getIngressPoint(svc corev1.Service, pod corev1.Pod) (string, error) {
+	var retries uint64 = 0
 
-	for retry := 0; retry < 900; retry++ {
+	client := sdk.NewClient()
+
+	meta := serviceMeta(svc.Namespace, pod.Name)
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for _ := range ticker.C {
+
+		if retries >= 900 {
+			ticker.Stop()
+			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
+		}
+
 		if err := client.Get(meta); err != nil {
-			logrus.Errorf("failed to fetch service: %v", err)
-			break
+			ticker.Stop()
+			return "", fmt.Errorf("failed to fetch service: %v", err)
 		}
+
 		if len(meta.Status.LoadBalancer.Ingress) != 0 {
-			break
+			ticker.Stop()
 		}
-		time.Sleep(time.Second)
+		retries++
 	}
 
 	if len(meta.Status.LoadBalancer.Ingress) == 0 {
-		logrus.Errorf("Cannot detect ingress point for Service %s", meta.Name)
-		return meta.Spec.ClusterIP
+		return "", fmt.Errorf("cannot detect ingress point for Service %s", meta.Name)
 	}
 
 	host := meta.Status.LoadBalancer.Ingress[0].IP
 	if host == "" {
 		host = meta.Status.LoadBalancer.Ingress[0].Hostname
 	}
-	return host
+	return host, nil
 }
 
-func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
-	var addr ServiceAddr
+func getServiceAddr(svc corev1.Service, pod corev1.Pod) (*ServiceAddr, error) {
+	addr := &ServiceAddr{}
 
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeClusterIP:
@@ -236,7 +248,11 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		addr.Host = getIngressPoint(svc)
+		host, err := getIngressPoint(svc, pod)
+		if err != nil {
+			return nil, err
+		}
+		addr.Host = host
 		for _, p := range svc.Spec.Ports {
 			if p.Name != mongod.MongodPortName {
 				continue
@@ -253,5 +269,5 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
 			addr.Port = int(p.NodePort)
 		}
 	}
-	return addr
+	return addr, nil
 }

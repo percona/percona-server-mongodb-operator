@@ -36,8 +36,12 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 				logrus.Errorf("failed to fetch service address: %v", err)
 				continue
 			}
-			hostname = getServiceAddr(*svc, pod).String()
-			addrs = append(addrs, hostname)
+			hostname, err := getServiceAddr(*svc, pod)
+			if err != nil {
+				logrus.Errorf("failed to get service hostname: %v", err)
+				continue
+			}
+			addrs = append(addrs, hostname.String())
 		}
 	} else {
 		for _, pod := range pods {
