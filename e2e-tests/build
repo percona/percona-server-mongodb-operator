@@ -8,6 +8,9 @@ test_dir="$(dirname $0)"
 src_dir="$(realpath $test_dir/..)"
 
 build_operator() {
+    if [ "${RELEASE:-0}" = 0 ]; then
+        GO_LDFLAGS="-race"
+    fi
     repo=$(
         git config --get remote.origin.url \
             | sed -e 's^.*github.com[:/]^github.com/^; s/.git$//'
@@ -17,7 +20,7 @@ build_operator() {
     docker run --rm -v ${src_dir}:/go/src/${repo} golang sh -c "
         set -o errexit
         set -o xtrace
-        export GO_LDFLAGS='-w -s'
+        export GO_LDFLAGS='-w -s $GO_LDFLAGS'
         export GIT_COMMIT='$GIT_COMMIT'
         export GIT_BRANCH='$GIT_BRANCH'
 
