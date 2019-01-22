@@ -5,6 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
+	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
+	"github.com/percona/mongodb-orchestration-tools/watchdog"
+	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
+	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,13 +54,16 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:        mgr.GetScheme(),
 		serverVersion: sv,
 		reconcileIn:   time.Second * 5,
+
+		watchdogMetrics: wdMetrics.NewCollector(),
+		watchdogQuit:    make(chan bool, 1),
 	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("perconaservermongodb-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("psmdb-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -80,6 +88,11 @@ type ReconcilePerconaServerMongoDB struct {
 
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
+
+	pods            *podk8s.Pods
+	watchdog        *watchdog.Watchdog
+	watchdogMetrics *wdMetrics.Collector
+	watchdogQuit    chan bool
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDB object and makes changes based on the state read
@@ -144,5 +157,57 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("get mongodb secrets: %v", err)
 	}
 
+	// Setup watchdog 'k8s' pod source and CustomResourceState struct for CR
+	// (https://github.com/percona/mongodb-orchestration-tools/blob/master/pkg/pod/pod.go#L51-L56)
+	if r.pods == nil {
+		r.pods = podk8s.NewPods(cr.Namespace)
+	}
+	crState := &podk8s.CustomResourceState{
+		Name: cr.Name,
+	}
+
+	// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
+	r.ensureWatchdog(cr, secrets)
+
 	return rr, nil
+}
+
+// ensureWatchdog ensures the PSMDB watchdog has started. This process controls the replica set and sharding
+// state of a PSMDB cluster.
+//
+// See: https://github.com/percona/mongodb-orchestration-tools/tree/master/watchdog
+//
+func (r *ReconcilePerconaServerMongoDB) ensureWatchdog(psmdb *api.PerconaServerMongoDB, usersSecret *corev1.Secret) {
+	// Skip if watchdog is started
+	if r.watchdog != nil {
+		return
+	}
+
+	// Skip if there are no initialized replsets
+	var doStart bool
+	for _, replset := range psmdb.Status.Replsets {
+		if replset.Initialized {
+			doStart = true
+			break
+		}
+	}
+	if !doStart {
+		return
+	}
+
+	// Start the watchdog if it has not been started
+	r.watchdog = watchdog.New(&wdConfig.Config{
+		ServiceName:    psmdb.Name,
+		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+		APIPoll:        5 * time.Second,
+		ReplsetPoll:    5 * time.Second,
+		ReplsetTimeout: 3 * time.Second,
+	}, r.pods, r.watchdogMetrics, &r.watchdogQuit)
+	go r.watchdog.Run()
+
+	// register prometheus collector
+	// prometheus.MustRegister(h.watchdogMetrics)
+	// logrus.Debug("Registered watchdog Prometheus collector")
+
 }
