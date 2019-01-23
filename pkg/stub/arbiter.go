@@ -77,7 +77,6 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	ls["arbiter"] = "true"
 
-	logrus.Info("INSIDE ARBITER newArbiter BEFORE LABELS")
 	for k, v := range ls {
 		logrus.Info("LABEL KEY:", k, "LABEL VALUE:", v)
 	}
