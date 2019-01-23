@@ -10,7 +10,7 @@ The backup process is controlled by the [Backup Coordinator](https://github.com/
 
 ## Making scheduled backups
 
-Since backups are stored separately on the Amazon S3, a secret with S3 access key and key secret should be present on the Kubernetes cluster. These keys should be saved to the [deploy/backup-s3.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) file, which should be applied to make effect, for example with an `kubectl apply -f deploy/backup-s3.yaml` command (for Kubernetes).
+Since backups are stored separately on the Amazon S3, a secret with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` should be present on the Kubernetes cluster. These keys should be saved to the [deploy/backup-s3.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) file and applied with the appropriate command, e.g. `kubectl apply -f deploy/backup-s3.yaml` (for Kubernetes).
 
 Backups schedule is defined in the  ``backup`` section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-xtradb-cluster-operator/blob/master/deploy/cr.yaml) file. 
 This section contains three subsections:
@@ -20,11 +20,9 @@ This section contains three subsections:
 
 The options within these three subsections are explained in the [Operator Options](https://percona-lab.github.io/percona-xtradb-cluster-operator/configure/operator).
 
-
 ## Making on-demand backup
 
 To make on-demand backup, user should run [the PBM Control tool](https://github.com/percona/percona-backup-mongodb#pbm-control-pbmctl) inside of the coordinator container, supplying it with needed options, like in the following example:
-
 
    ```
    oc run -i --quiet --rm --tty pbmctl --image=percona/percona-backup-mongodb:pbmctl --restart=Never -- $* --server-address=my-cluster-name-backup-coordinator.myproject.svc.cluster.local:10001
