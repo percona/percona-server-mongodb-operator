@@ -205,11 +205,13 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	}
 	sets["mongod"] = set
 
-	arbiter, err := h.ensureReplsetArbiter(m, replset, resources)
-	if err != nil {
-		return nil, err
+	if replset.Arbiter != nil && replset.Arbiter.Enabled && replset.Arbiter.Size >= 1 {
+		arbiter, err := h.ensureReplsetArbiter(m, replset, resources)
+		if err != nil {
+			return nil, err
+		}
+		sets["arbiter"] = arbiter
 	}
-	sets["arbiter"] = arbiter
 
 	// Ensure replset has external service
 	if replset.Expose != nil && replset.Expose.Enabled {
