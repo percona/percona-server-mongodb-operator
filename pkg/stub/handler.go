@@ -263,11 +263,6 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		}
 
 		// Update the PSMDB CR state that is read by the watchdog
-		logrus.Info("STATEFULLSETS")
-		for _, set := range crState.Statefulsets {
-			logrus.Info("SET:", set)
-		}
-
 		h.pods.Update(crState)
 	}
 	return nil
