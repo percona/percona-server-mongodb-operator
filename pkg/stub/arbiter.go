@@ -14,8 +14,6 @@ import (
 )
 
 func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	logrus.Info("INSIDE ARBITER ensureReplsetArbiter")
-
 	arbiterRightsizing(replset)
 
 	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
@@ -52,8 +50,6 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 }
 
 func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, arbiter *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	logrus.Info("INSIDE ARBITER handleArbiterUpdate")
-
 	if replset.Arbiter != nil && arbiter.Spec.Replicas != nil && *arbiter.Spec.Replicas != replset.Arbiter.Size {
 		arbiterRightsizing(replset)
 		logrus.Infof("setting arbiters count to %d for replset: %s", replset.Arbiter.Size, replset.Name)
@@ -75,12 +71,6 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
-	ls["arbiter"] = "true"
-
-	logrus.Info("INSIDE ARBITER newArbiter BEFORE LABELS")
-	for k, v := range ls {
-		logrus.Info("LABEL KEY:", k, "LABEL VALUE:", v)
-	}
 
 	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
 
@@ -114,6 +104,9 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 					},
 				},
 			},
+		},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+			util.NewPersistentVolumeClaim(m, resources, mongod.MongodDataVolClaimName, replset.StorageClass),
 		},
 	}
 	util.AddOwnerRefToObject(arbiter, util.AsOwner(m))

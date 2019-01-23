@@ -206,12 +206,7 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	sets["mongod"] = set
 
 	// Create arbiter if it enabled in cr definitions
-	logrus.Info("BEFORE ARBITER INSTRUCTION")
-
 	if replset.Arbiter != nil && replset.Arbiter.Enabled && replset.Arbiter.Size >= 1 {
-
-		logrus.Info("INSIDE ARBITER INSTRUCTION")
-
 		arbiter, err := h.ensureReplsetArbiter(m, replset, resources)
 		if err != nil {
 			return nil, err
