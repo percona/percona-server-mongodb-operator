@@ -24,16 +24,20 @@ Each spec in its turn may contain some key-value pairs. The secrets one has only
 
 The replsets section controls the MongoDB Replica Set. 
 
-| Key | Value Type | Default | Description |
-|-----|------------|---------|-------------|
-|name | string     | rs0     | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/) |
-|size | int        | 3       | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
-|storageClass|string|        | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
-|resources.limits.cpu|string| |[Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
-|resources.limits.memory|string| | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
-|resources.limits.storage|string| | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
-|resources.requests.cpu |string|  | [Kubernetes CPU requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
-|resources.requests.memory|string| | [Kubernetes Memory requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container |
+| Key                     | Value Type | Default | Description                                                                         |
+|-------------------------|------------|---------|-------------------------------------------------------------------------------------|
+|name                     | string     | rs0     | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/) |
+|size                     | int        | 3       | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
+|storageClass             | string     |         | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
+|arbiter.enabled          | boolean    | false   | Enables or disables creation of arbiter nodes within the cluster         |
+|arbiter.size             | int        |         | The number of arbiter nodes          |
+|expose.enabled           | boolean    | false   |          |
+|expose.exposeType        | string     |ClusterIP|          |
+|resources.limits.cpu     | string     |         |[Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container|
+|resources.limits.memory  | string     |         | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container|
+|resources.limits.storage | string     |         | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
+|resources.requests.cpu   | string     |         | [Kubernetes CPU requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container|
+|resources.requests.memory| string     |         | [Kubernetes Memory requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container|
 
 ### Mongod Section
 
