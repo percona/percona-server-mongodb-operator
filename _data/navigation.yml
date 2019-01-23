@@ -21,3 +21,7 @@ docs:
         url: ./configure/users
       - title: "Operator options"
         url: ./configure/operator
+      - title: "Arbiter nodes"
+        url: ./configure/arbiter
+      - title: "Expose nodes"
+        url: ./configure/expose
