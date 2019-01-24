@@ -75,7 +75,7 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
 
 	arbiter.Spec = appsv1.StatefulSetSpec{
-		ServiceName: m.Name + "-" + replset.Name + "-arbiter",
+		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &replset.Arbiter.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
