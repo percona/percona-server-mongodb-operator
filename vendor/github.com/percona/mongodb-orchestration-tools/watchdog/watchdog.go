@@ -81,7 +81,7 @@ func (w *Watchdog) podMongodFetcher(podName string, wg *sync.WaitGroup) {
 	}
 
 	for _, task := range tasks {
-		if !task.IsTaskType(pod.TaskTypeMongod) && !task.IsTaskType(pod.TaskTypeMongodBackup) {
+		if !task.IsTaskType(pod.TaskTypeMongod) && !task.IsTaskType(pod.TaskTypeArbiter) && !task.IsTaskType(pod.TaskTypeMongodBackup) {
 			log.WithFields(log.Fields{
 				"task": task.Name(),
 			}).Debug("Skipping non-mongod task")
