@@ -2,6 +2,7 @@ Exposing cluster nodes with dedicated IP addresses
 ==============================================================
 
 When Kubernetes creates Pods, each Pod gets its own IP address in the internal virtual network of the cluster. But creating and destroying Pods is a dynamical process, so binding communication between Pods to specific IP addresses would cause problems when something changes over time (as a result of the cluster scaling, maintenance, etc.). 
+Because of this, you should connect to Percona Server for MongoDB via Kubernetes internal DNS names in URI (e.g. `mongodb+srv://userAdmin:userAdmin123456@<cluster-name>-rs0.<namespace>.svc.cluster.local/admin?replicaSet=rs0&ssl=false`). It is strictly recommended.
 
 To make nodes of the Replica Set accessible, Percona Server for MongoDB Operator can assigns a [Kubernetes Service](https://kubernetes.io/docs/concepts/services-networking/service/) to each Pod.
 
