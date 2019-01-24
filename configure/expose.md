@@ -11,7 +11,7 @@ This feature can be configured in the Replica Set section of the [deploy/cr.yaml
 
 * set 'expose.enabled' option to 'true' to allow exposing Pods via services,
 * set 'expose.exposeType' option specifying the IP address type to be used:
-  * `ClusterIP` - expose the Pod's service with an internal cluster IP address. This variant makes MongoDB node only reachable from within the Kubernetes cluster.
+  * `ClusterIP` - expose the Pod's service with an internal static IP address. This variant makes MongoDB Pod only reachable from within the Kubernetes cluster.
   * `NodePort` - expose the Pod's service on each Kubernetes node’s IP address at a static port. ClusterIP service, to which the node port will be routed, is automatically created in this variant. As an advantage, the service will be reachable from outside the cluster by node address and port number, but the address will be bound to a specific Kubernetes node.
   * `LoadBalancer` - expose the Pod's service externally using a cloud provider’s load balancer. Both ClusterIP and NodePort services are automatically created in this variant. 
   
