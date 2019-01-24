@@ -14,4 +14,6 @@ This feature can be configured in the Replica Set section of the [deploy/cr.yaml
   * `ClusterIP` - expose the Pod's service with an internal static IP address. This variant makes MongoDB Pod only reachable from within the Kubernetes cluster.
   * `NodePort` - expose the Pod's service on each Kubernetes node’s IP address at a static port. ClusterIP service, to which the node port will be routed, is automatically created in this variant. As an advantage, the service will be reachable from outside the cluster by node address and port number, but the address will be bound to a specific Kubernetes node.
   * `LoadBalancer` - expose the Pod's service externally using a cloud provider’s load balancer. Both ClusterIP and NodePort services are automatically created in this variant. 
-  
+
+If this feature enabled, URI looks like `mongodb://userAdmin:userAdmin123456@<ip1>:<port1>,<ip2>:<port2>,<ip3>:<port3>/admin?replicaSet=rs0&ssl=false`
+All IP adresses should be *directly* reachable by application.
