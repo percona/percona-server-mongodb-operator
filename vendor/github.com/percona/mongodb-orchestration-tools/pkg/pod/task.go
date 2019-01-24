@@ -38,6 +38,7 @@ type TaskState interface {
 
 type Task interface {
 	Name() string
+	Service() string
 	State() TaskState
 	HasState() bool
 	IsRunning() bool

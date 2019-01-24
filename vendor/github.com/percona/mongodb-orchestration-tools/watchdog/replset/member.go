@@ -23,26 +23,24 @@ import (
 )
 
 type Mongod struct {
-	Host        string
-	Port        int
-	Replset     string
-	ServiceName string
-	PodName     string
-	Task        pod.Task
+	Host    string
+	Port    int
+	Replset string
+	PodName string
+	Task    pod.Task
 }
 
-func NewMongod(task pod.Task, serviceName string, podName string) (*Mongod, error) {
+func NewMongod(task pod.Task, podName string) (*Mongod, error) {
 	addr, err := task.GetMongoAddr()
 	if err != nil {
 		return nil, err
 	}
 
 	mongod := &Mongod{
-		ServiceName: serviceName,
-		PodName:     podName,
-		Task:        task,
-		Host:        addr.Host,
-		Port:        addr.Port,
+		PodName: podName,
+		Task:    task,
+		Host:    addr.Host,
+		Port:    addr.Port,
 	}
 
 	mongod.Replset, err = task.GetMongoReplsetName()

@@ -233,7 +233,7 @@ func (s *State) AddConfigMembers(session *mgo.Session, configManager rsConfig.Ma
 	for _, mongod := range members {
 		member := rsConfig.NewMember(mongod.Name())
 		member.Tags = &rsConfig.ReplsetTags{
-			serviceTagName: mongod.ServiceName,
+			serviceTagName: mongod.Task.Service(),
 		}
 		if len(s.Config.Members) >= MaxMembers {
 			log.Errorf("Maximum replset member count reached, cannot add member")
@@ -250,7 +250,7 @@ func (s *State) AddConfigMembers(session *mgo.Session, configManager rsConfig.Ma
 			member.Priority = 0
 			member.Tags = &rsConfig.ReplsetTags{
 				"backup":       "true",
-				serviceTagName: mongod.ServiceName,
+				serviceTagName: mongod.Task.Service(),
 			}
 			member.Votes = 0
 		} else if mongod.Task.IsTaskType(pod.TaskTypeArbiter) {

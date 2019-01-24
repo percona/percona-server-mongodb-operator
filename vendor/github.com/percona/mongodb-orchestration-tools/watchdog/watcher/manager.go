@@ -25,78 +25,83 @@ import (
 
 type Manager interface {
 	Close()
-	Get(rsName string) *Watcher
-	HasWatcher(rsName string) bool
-	Stop(rsName string)
-	Watch(rs *replset.Replset)
+	Get(serviceName, rsName string) *Watcher
+	HasWatcher(serviceName, rsName string) bool
+	Stop(serviceName, rsName string)
+	Watch(serviceName string, rs *replset.Replset)
 }
 
 type WatcherManager struct {
 	sync.Mutex
 	config     *config.Config
-	stop       *chan bool
 	quitChans  map[string]chan bool
 	watchers   map[string]*Watcher
 	activePods *pod.Pods
 }
 
-func NewManager(config *config.Config, stop *chan bool, activePods *pod.Pods) *WatcherManager {
+func NewManager(config *config.Config, activePods *pod.Pods) *WatcherManager {
 	return &WatcherManager{
 		config:     config,
-		stop:       stop,
 		activePods: activePods,
 		quitChans:  make(map[string]chan bool),
 		watchers:   make(map[string]*Watcher),
 	}
 }
 
-func (wm *WatcherManager) HasWatcher(rsName string) bool {
+func (wm *WatcherManager) HasWatcher(serviceName, rsName string) bool {
+	return wm.Get(serviceName, rsName) != nil
+}
+
+func (wm *WatcherManager) Watch(serviceName string, rs *replset.Replset) {
+	if wm.HasWatcher(serviceName, rs.Name) {
+		return
+	}
+
+	log.WithFields(log.Fields{
+		"replset": rs.Name,
+		"service": serviceName,
+	}).Info("Starting replset watcher")
+
 	wm.Lock()
 	defer wm.Unlock()
 
-	if _, ok := wm.watchers[rsName]; ok {
-		return true
-	}
-	return false
+	quitChan := make(chan bool)
+	watcherName := serviceName + "-" + rs.Name
+	wm.quitChans[watcherName] = quitChan
+	wm.watchers[watcherName] = New(rs, wm.config, quitChan, wm.activePods)
+
+	go wm.watchers[watcherName].Run()
 }
 
-func (wm *WatcherManager) Watch(rs *replset.Replset) {
-	if !wm.HasWatcher(rs.Name) {
-		log.WithFields(log.Fields{
-			"replset": rs.Name,
-		}).Info("Starting replset watcher")
-
-		wm.Lock()
-
-		quitChan := make(chan bool)
-		wm.quitChans[rs.Name] = quitChan
-		wm.watchers[rs.Name] = New(rs, wm.config, quitChan, wm.activePods)
-		go wm.watchers[rs.Name].Run()
-
-		wm.Unlock()
-	}
-}
-
-func (wm *WatcherManager) Get(rsName string) *Watcher {
+func (wm *WatcherManager) Get(serviceName, rsName string) *Watcher {
 	wm.Lock()
 	defer wm.Unlock()
-	if _, ok := wm.watchers[rsName]; ok {
-		return wm.watchers[rsName]
-	}
-	return nil
+
+	return wm.watchers[serviceName+"-"+rsName]
 }
 
-func (wm *WatcherManager) Stop(rsName string) {
-	if wm.HasWatcher(rsName) {
-		wm.Lock()
-		defer wm.Unlock()
-		close(wm.quitChans[rsName])
-		delete(wm.quitChans, rsName)
+func (wm *WatcherManager) stopWatcher(name string) {
+	for watcherName := range wm.watchers {
+		if watcherName == name {
+			close(wm.quitChans[watcherName])
+			delete(wm.quitChans, watcherName)
+			delete(wm.watchers, watcherName)
+		}
 	}
+}
+
+func (wm *WatcherManager) Stop(serviceName, rsName string) {
+	wm.Lock()
+	defer wm.Unlock()
+
+	wm.stopWatcher(serviceName + "-" + rsName)
 }
 
 func (wm *WatcherManager) Close() {
-	for rsName := range wm.watchers {
-		wm.Stop(rsName)
+	wm.Lock()
+	defer wm.Unlock()
+
+	for watcherName := range wm.watchers {
+		wm.stopWatcher(watcherName)
 	}
 }

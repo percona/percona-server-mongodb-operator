@@ -38,7 +38,6 @@ var (
 type Config struct {
 	Username       string
 	Password       string
-	ServiceName    string
 	IgnorePods     []string
 	API            *api.Config
 	APIPoll        time.Duration

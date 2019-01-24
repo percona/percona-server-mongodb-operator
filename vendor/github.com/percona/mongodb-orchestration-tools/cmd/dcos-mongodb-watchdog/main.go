@@ -61,10 +61,6 @@ func main() {
 		API: &api.Config{},
 	}
 	app.Flag(
-		"service",
-		"DC/OS SDK service/framework name, this flag or env var "+pkg.EnvServiceName+" is required",
-	).Default(pkg.DefaultServiceName).Envar(pkg.EnvServiceName).StringVar(&cnf.ServiceName)
-	app.Flag(
 		"username",
 		"MongoDB clusterAdmin username, this flag or env var "+pkg.EnvMongoDBClusterAdminUser+" is required",
 	).Envar(pkg.EnvMongoDBClusterAdminUser).Required().StringVar(&cnf.Username)
@@ -127,10 +123,10 @@ func main() {
 	//	)
 	//}
 
-	apiClient := api.New(cnf.ServiceName, cnf.API)
+	apiClient := api.New(cnf.API)
 	wMetrics := metrics.NewCollector()
 	quit := make(chan bool)
-	watchdog := watchdog.New(cnf, apiClient, wMetrics, &quit)
+	watchdog := watchdog.New(cnf, apiClient, wMetrics, quit)
 	go watchdog.Run()
 
 	if metricsListen != "" {

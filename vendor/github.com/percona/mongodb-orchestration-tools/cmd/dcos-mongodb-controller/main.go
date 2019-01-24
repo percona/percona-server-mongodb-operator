@@ -182,7 +182,7 @@ func main() {
 			handleFailed(err)
 		}
 	case cmdUserUpdate.FullCommand():
-		uc, err := user.NewController(cnf, api.New(cnf.ServiceName, cnf.User.API))
+		uc, err := user.NewController(cnf, api.New(cnf.User.API))
 		if err != nil {
 			handleFailed(err)
 		}
@@ -193,7 +193,7 @@ func main() {
 			handleFailed(err)
 		}
 	case cmdUserRemove.FullCommand():
-		uc, err := user.NewController(cnf, api.New(cnf.ServiceName, cnf.User.API))
+		uc, err := user.NewController(cnf, api.New(cnf.User.API))
 		if err != nil {
 			handleFailed(err)
 		}
@@ -204,7 +204,7 @@ func main() {
 			handleFailed(err)
 		}
 	case cmdUserReloadSys.FullCommand():
-		uc, err := user.NewController(cnf, api.New(cnf.ServiceName, cnf.User.API))
+		uc, err := user.NewController(cnf, api.New(cnf.User.API))
 		if err != nil {
 			handleFailed(err)
 		}

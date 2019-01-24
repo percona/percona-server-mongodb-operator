@@ -63,6 +63,10 @@ func NewTask(namespace string, cr *CustomResourceState, pod *corev1.Pod) *Task {
 	}
 }
 
+func (t *Task) Service() string {
+	return t.cr.Name
+}
+
 func (t *Task) State() pod.TaskState {
 	return NewTaskState(t.pod.Status)
 }
