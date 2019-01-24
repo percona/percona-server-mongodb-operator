@@ -242,7 +242,6 @@
   version = "v0.0.7"
 
 [[projects]]
-  branch = "CLOUD-76-fix-duplicate-replset"
   name = "github.com/percona/mongodb-orchestration-tools"
   packages = [
     ".",
@@ -260,7 +259,7 @@
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "3f290d20c2478892d358764234749ad2610493de"
+  revision = "d4e5213e8d550642db71e37c7f4fd73abce2a750"
 
 [[projects]]
   branch = "master"
@@ -714,6 +713,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "855fa5651d728fd34ca84eaf665c2edbe74467e042b1cf400a935d1bf9cb6cdd"
+  inputs-digest = "efa3b018b9677e25605d52952f2ee9e153b0ffffa50287d2a245b151ccfa20f7"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -77,13 +77,7 @@ func (wm *WatcherManager) Get(serviceName, rsName string) *Watcher {
 	wm.Lock()
 	defer wm.Unlock()
 
-	for watcherName, watcher := range wm.watchers {
-		if watcherName == serviceName+"-"+rsName {
-			return watcher
-		}
-	}
-
-	return nil
+	return wm.watchers[serviceName+"-"+rsName]
 }
 
 func (wm *WatcherManager) stopWatcher(name string) {
@@ -99,6 +93,7 @@ func (wm *WatcherManager) stopWatcher(name string) {
 func (wm *WatcherManager) Stop(serviceName, rsName string) {
 	wm.Lock()
 	defer wm.Unlock()
+
 	wm.stopWatcher(serviceName + "-" + rsName)
 }
 
