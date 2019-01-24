@@ -35,19 +35,19 @@ type Watchdog struct {
 	podSource      pod.Source
 	metrics        *metrics.Collector
 	watcherManager watcher.Manager
-	quit           *chan bool
+	quit           chan bool
 	activePods     *pod.Pods
 	running        bool
 }
 
-func New(config *config.Config, podSource pod.Source, metricCollector *metrics.Collector, quit *chan bool) *Watchdog {
+func New(config *config.Config, podSource pod.Source, metricCollector *metrics.Collector, quit chan bool) *Watchdog {
 	activePods := pod.NewPods()
 	return &Watchdog{
 		config:         config,
 		podSource:      podSource,
 		metrics:        metricCollector,
 		quit:           quit,
-		watcherManager: watcher.NewManager(config, quit, activePods),
+		watcherManager: watcher.NewManager(config, activePods),
 		activePods:     activePods,
 	}
 }
@@ -88,7 +88,7 @@ func (w *Watchdog) podMongodFetcher(podName string, wg *sync.WaitGroup) {
 			continue
 		}
 
-		mongod, err := replset.NewMongod(task, w.config.ServiceName, podName)
+		mongod, err := replset.NewMongod(task, podName)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"task":  task.Name(),
@@ -98,13 +98,19 @@ func (w *Watchdog) podMongodFetcher(podName string, wg *sync.WaitGroup) {
 		}
 
 		// ensure the replset has a watcher started
-		if !w.watcherManager.HasWatcher(mongod.Replset) {
+		serviceName := mongod.Task.Service()
+		if !w.watcherManager.HasWatcher(serviceName, mongod.Replset) {
 			rs := replset.New(w.config, mongod.Replset)
-			w.watcherManager.Watch(rs)
+			w.watcherManager.Watch(serviceName, rs)
 		}
 
 		// send the update to the watcher for the given replset
-		w.watcherManager.Get(mongod.Replset).UpdateMongod(mongod)
+		watcher := w.watcherManager.Get(serviceName, mongod.Replset)
+		if watcher == nil {
+			log.Errorf("Cannot find replset watcher for service %s, replset %s", serviceName, mongod.Replset)
+			continue
+		}
+		watcher.UpdateMongod(mongod)
 	}
 }
 
@@ -160,12 +166,18 @@ func (w *Watchdog) fetchPods() {
 	log.Debug("Completed all pod fetchers")
 }
 
+func (w *Watchdog) StopWatcher(serviceName, rsName string) {
+	if w.watcherManager == nil {
+		return
+	}
+	w.watcherManager.Stop(serviceName, rsName)
+}
+
 func (w *Watchdog) Run() {
 	w.setRunning(true)
 
 	log.WithFields(log.Fields{
 		"version": tools.Version,
-		"service": w.config.ServiceName,
 		"go":      runtime.Version(),
 		"source":  w.podSource.Name(),
 	}).Info("Starting watchdog")
@@ -177,11 +189,11 @@ func (w *Watchdog) Run() {
 		select {
 		case <-ticker.C:
 			w.fetchPods()
-		case <-*w.quit:
+		case <-w.quit:
 			log.Info("Stopping watchers")
 			ticker.Stop()
-			w.watcherManager.Close()
 			w.setRunning(false)
+			w.watcherManager.Close()
 			return
 		}
 	}

@@ -34,7 +34,8 @@ required = [
 
 [[override]]
   name = "github.com/percona/mongodb-orchestration-tools"
-  revision = "93b4a250d9001b4b94a1cd90de4e8d0e91e3daa7"
+  #revision = "93b4a250d9001b4b94a1cd90de4e8d0e91e3daa7"
+  branch = "CLOUD-76-fix-duplicate-replset"
 
 [[override]]
   branch = "master"

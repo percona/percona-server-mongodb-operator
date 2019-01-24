@@ -41,7 +41,7 @@ func (c *SDKClient) GetTasks(podName string) ([]pod.Task, error) {
 		return tasks, err
 	}
 	for _, taskData := range tasksData {
-		tasks = append(tasks, dcos.NewTask(taskData, c.ServiceName, podName))
+		tasks = append(tasks, dcos.NewTask(taskData, podName))
 	}
 	return tasks, nil
 }

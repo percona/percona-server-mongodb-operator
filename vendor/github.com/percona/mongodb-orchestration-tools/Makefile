@@ -16,6 +16,7 @@ ifneq ($(GIT_BRANCH), master)
 	MONGOD_DOCKERHUB_TAG=$(VERSION)-mongod_$(GIT_BRANCH)
 endif
 
+GOARCH?=amd64
 GO_VERSION?=1.11
 GO_VERSION_MAJ_MIN=$(shell echo $(GO_VERSION) | cut -d. -f1-2)
 GO_LDFLAGS?=-s -w
@@ -50,19 +51,19 @@ vendor: $(GOPATH)/bin/glide glide.yaml glide.lock
 	$(GOPATH)/bin/glide install --strip-vendor
 
 bin/mongodb-healthcheck: vendor cmd/mongodb-healthcheck/main.go healthcheck/*.go internal/*.go internal/*/*.go internal/*/*/*.go pkg/*.go
-	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=386 go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/mongodb-healthcheck cmd/mongodb-healthcheck/main.go
+	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=$(GOARCH) go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/mongodb-healthcheck cmd/mongodb-healthcheck/main.go
 
 bin/mongodb-executor: vendor cmd/mongodb-executor/main.go executor/*.go executor/*/*.go internal/*.go internal/*/*.go internal/*/*/*.go pkg/*.go
-	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=386 go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/mongodb-executor cmd/mongodb-executor/main.go
+	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=$(GOARCH) go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/mongodb-executor cmd/mongodb-executor/main.go
 
 bin/dcos-mongodb-controller: vendor cmd/dcos-mongodb-controller/main.go controller/*.go controller/*/*.go controller/*/*/*.go internal/*.go internal/*/*.go internal/*/*/*.go pkg/*.go
-	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=386 go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/dcos-mongodb-controller cmd/dcos-mongodb-controller/main.go
+	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=$(GOARCH) go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/dcos-mongodb-controller cmd/dcos-mongodb-controller/main.go
 
 bin/dcos-mongodb-watchdog: vendor cmd/dcos-mongodb-watchdog/main.go watchdog/*.go watchdog/*/*.go internal/*.go internal/*/*.go internal/*/*/*.go pkg/*.go pkg/*/*.go
-	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=386 go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/dcos-mongodb-watchdog cmd/dcos-mongodb-watchdog/main.go
+	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=$(GOARCH) go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/dcos-mongodb-watchdog cmd/dcos-mongodb-watchdog/main.go
 
 bin/k8s-mongodb-initiator: vendor cmd/k8s-mongodb-initiator/main.go controller/*.go controller/replset/initiator*.go internal/*.go internal/*/*.go internal/*/*/*.go pkg/*.go pkg/*/*.go pkg/pod/k8s/*.go
-	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=386 go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/k8s-mongodb-initiator cmd/k8s-mongodb-initiator/main.go
+	CGO_ENABLED=0 GOCACHE=$(GOCACHE) GOOS=$(PLATFORM) GOARCH=$(GOARCH) go build -ldflags=$(GO_LDFLAGS_FULL) -o bin/k8s-mongodb-initiator cmd/k8s-mongodb-initiator/main.go
 
 test: vendor
 	GOCACHE=$(GOCACHE) ENABLE_MONGODB_TESTS=$(ENABLE_MONGODB_TESTS) go test -v $(TEST_GO_EXTRA) $(GO_TEST_PATH)

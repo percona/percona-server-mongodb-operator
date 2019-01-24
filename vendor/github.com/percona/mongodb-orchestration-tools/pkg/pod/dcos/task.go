@@ -16,6 +16,7 @@ package dcos
 
 import (
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 
@@ -44,9 +45,8 @@ func (s TaskState) String() string {
 }
 
 type Task struct {
-	frameworkName string
-	podName       string
-	data          *TaskData
+	podName string
+	data    *TaskData
 }
 
 type TaskData struct {
@@ -77,11 +77,10 @@ type TaskStatus struct {
 	State *TaskState `json:"state"`
 }
 
-func NewTask(data *TaskData, frameworkName, podName string) *Task {
+func NewTask(data *TaskData, podName string) *Task {
 	return &Task{
-		data:          data,
-		frameworkName: frameworkName,
-		podName:       podName,
+		data:    data,
+		podName: podName,
 	}
 }
 
@@ -98,6 +97,10 @@ func (task *Task) getEnvVar(variableName string) (string, error) {
 
 func (task *Task) Name() string {
 	return task.data.Info.Name
+}
+
+func (task *Task) Service() string {
+	return os.Getenv(pkg.EnvServiceName)
 }
 
 func (task *Task) HasState() bool {
@@ -134,7 +137,7 @@ func (task *Task) IsTaskType(taskType pod.TaskType) bool {
 
 func (task *Task) GetMongoAddr() (*db.Addr, error) {
 	addr := &db.Addr{
-		Host: task.data.Info.Name + "." + task.frameworkName + "." + AutoIPDNSSuffix,
+		Host: task.data.Info.Name + "." + task.Service() + "." + AutoIPDNSSuffix,
 	}
 	portStr, err := task.getEnvVar(pkg.EnvMongoDBPort)
 	if err != nil {

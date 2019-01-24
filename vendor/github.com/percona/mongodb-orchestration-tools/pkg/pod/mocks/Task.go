@@ -124,6 +124,20 @@ func (_m *Task) Name() string {
 	return r0
 }
 
+// Service provides a mock function with given fields:
+func (_m *Task) Service() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // State provides a mock function with given fields:
 func (_m *Task) State() pod.TaskState {
 	ret := _m.Called()

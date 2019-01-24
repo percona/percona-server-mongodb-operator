@@ -75,13 +75,12 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 
 	// Start the watchdog if it has not been started
 	h.watchdog = watchdog.New(&wdConfig.Config{
-		ServiceName:    psmdb.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 3 * time.Second,
-	}, h.pods, h.watchdogMetrics, &h.watchdogQuit)
+	}, h.pods, h.watchdogMetrics, h.watchdogQuit)
 	go h.watchdog.Run()
 
 	// register prometheus collector
@@ -117,6 +116,12 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		// have the CR set as their OwnerReference for this to be the case
 		if event.Deleted {
 			logrus.Infof("received deleted event for %s", psmdb.Name)
+
+			for _, rsSpec := range psmdb.Spec.Replsets {
+				logrus.Debugf("stopping watchdog watchers for psmdb CR %s, replset %s", psmdb.Name, rsSpec.Name)
+				h.watchdog.StopWatcher(psmdb.Name, rsSpec.Name)
+			}
+
 			h.pods.Delete(crState)
 			return nil
 		}
