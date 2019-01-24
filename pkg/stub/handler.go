@@ -211,15 +211,17 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 			set, ok := sets["mongod"]
 			if !ok {
-				return fmt.Errorf("")
+				return fmt.Errorf("no mongod statefullsets has found")
 			}
 			crState.Statefulsets = append(crState.Statefulsets, *set)
 
-			arbiter, ok := sets["arbiter"]
-			if !ok {
-				return fmt.Errorf("")
+			if replset.Arbiter != nil && replset.Arbiter.Enabled && replset.Arbiter.Size >= 1 {
+				arbiter, ok := sets["arbiter"]
+				if !ok {
+					return fmt.Errorf("no arbiter statefullsets has found")
+				}
+				crState.Statefulsets = append(crState.Statefulsets, *arbiter)
 			}
-			crState.Statefulsets = append(crState.Statefulsets, *arbiter)
 
 			svc, err := h.extServicesList(psmdb, replset)
 			if err != nil {
