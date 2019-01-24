@@ -36,8 +36,12 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 				logrus.Errorf("failed to fetch service address: %v", err)
 				continue
 			}
-			hostname = getServiceAddr(*svc, pod).String()
-			addrs = append(addrs, hostname)
+			hostname, err := getServiceAddr(*svc, pod)
+			if err != nil {
+				logrus.Errorf("failed to get service hostname: %v", err)
+				continue
+			}
+			addrs = append(addrs, hostname.String())
 		}
 	} else {
 		for _, pod := range pods {
@@ -107,9 +111,12 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 		if replset.Expose != nil && replset.Expose.Enabled {
 			svc, err := getExtServices(m, pod.Name)
 			if err != nil {
+				return fmt.Errorf("failed to fetch services: %v", err)
+			}
+			hostname, err := getServiceAddr(*svc, pod)
+			if err != nil {
 				return fmt.Errorf("failed to fetch service address: %v", err)
 			}
-			hostname := getServiceAddr(*svc, pod)
 			cmd = append(cmd, "--ip", hostname.Host, "--port", strconv.Itoa(hostname.Port))
 
 		}
@@ -198,11 +205,14 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 	}
 	sets["mongod"] = set
 
-	arbiter, err := h.ensureReplsetArbiter(m, replset, resources)
-	if err != nil {
-		return nil, err
+	// Create arbiter if it enabled in cr definitions
+	if replset.Arbiter != nil && replset.Arbiter.Enabled && replset.Arbiter.Size >= 1 {
+		arbiter, err := h.ensureReplsetArbiter(m, replset, resources)
+		if err != nil {
+			return nil, err
+		}
+		sets["arbiter"] = arbiter
 	}
-	sets["arbiter"] = arbiter
 
 	// Ensure replset has external service
 	if replset.Expose != nil && replset.Expose.Enabled {

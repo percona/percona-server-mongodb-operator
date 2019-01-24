@@ -16,8 +16,10 @@ import (
 func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	arbiterRightsizing(replset)
 
-	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"arbiter")
+	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
+
 	if err := h.client.Get(arbiter); err != nil {
+
 		lf := logrus.Fields{
 			"version": m.Spec.Version,
 			"size":    replset.Size,
@@ -25,6 +27,7 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 			"memory":  replset.Limits.Memory,
 			"storage": replset.Limits.Storage,
 		}
+
 		if replset.StorageClass != "" {
 			lf["storageClass"] = replset.StorageClass
 		}
@@ -47,7 +50,7 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 }
 
 func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, arbiter *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	if arbiter.Spec.Replicas != nil && *arbiter.Spec.Replicas != replset.Arbiter.Size {
+	if replset.Arbiter != nil && arbiter.Spec.Replicas != nil && *arbiter.Spec.Replicas != replset.Arbiter.Size {
 		arbiterRightsizing(replset)
 		logrus.Infof("setting arbiters count to %d for replset: %s", replset.Arbiter.Size, replset.Name)
 		arbiter.Spec.Replicas = &replset.Arbiter.Size
@@ -68,12 +71,11 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
-	ls["arbiter"] = "true"
 
-	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"arbiter")
+	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
 
 	arbiter.Spec = appsv1.StatefulSetSpec{
-		ServiceName: m.Name + "-" + replset.Name + "arbiter",
+		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &replset.Arbiter.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -102,6 +104,9 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 					},
 				},
 			},
+		},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+			util.NewPersistentVolumeClaim(m, resources, mongod.MongodDataVolClaimName, replset.StorageClass),
 		},
 	}
 	util.AddOwnerRefToObject(arbiter, util.AsOwner(m))

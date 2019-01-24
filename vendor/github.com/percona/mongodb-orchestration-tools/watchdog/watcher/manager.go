@@ -70,7 +70,7 @@ func (wm *WatcherManager) Watch(rs *replset.Replset) {
 
 		quitChan := make(chan bool)
 		wm.quitChans[rs.Name] = quitChan
-		wm.watchers[rs.Name] = New(rs, wm.config, &quitChan, wm.activePods)
+		wm.watchers[rs.Name] = New(rs, wm.config, quitChan, wm.activePods)
 		go wm.watchers[rs.Name].Run()
 
 		wm.Unlock()

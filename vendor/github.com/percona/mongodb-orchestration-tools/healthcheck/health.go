@@ -25,6 +25,7 @@ import (
 var OkMemberStates = []status.MemberState{
 	status.MemberStatePrimary,
 	status.MemberStateSecondary,
+	status.MemberStateArbiter,
 	status.MemberStateRecovering,
 	status.MemberStateStartup2,
 }
@@ -52,16 +53,16 @@ func isStateOk(memberState *status.MemberState, okMemberStates []status.MemberSt
 func HealthCheck(session *mgo.Session, okMemberStates []status.MemberState) (State, *status.MemberState, error) {
 	rsStatus, err := status.New(session)
 	if err != nil {
-		return StateFailed, nil, fmt.Errorf("Error getting replica set status: %s", err)
+		return StateFailed, nil, fmt.Errorf("error getting replica set status: %s", err)
 	}
 
 	state := getSelfMemberState(rsStatus)
 	if state == nil {
-		return StateFailed, state, fmt.Errorf("Found no member state for self in replica set status")
+		return StateFailed, state, fmt.Errorf("found no member state for self in replica set status")
 	}
 	if isStateOk(state, okMemberStates) {
 		return StateOk, state, nil
 	}
 
-	return StateFailed, state, fmt.Errorf("Member has unhealthy replication state: %s", state)
+	return StateFailed, state, fmt.Errorf("member has unhealthy replication state: %s", state)
 }

@@ -18,12 +18,7 @@ import (
 )
 
 func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
-	if replset.Expose == nil {
-		replset.Expose = &v1alpha1.Expose{}
-	}
-	if replset.Expose.Enabled && replset.Expose.ExposeType == "" {
-		replset.Expose.ExposeType = corev1.ServiceTypeClusterIP
-	}
+	setExposeDefaults(replset)
 
 	services := make([]corev1.Service, 0)
 
@@ -38,10 +33,12 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 			if errors.IsNotFound(err) {
 				logrus.Infof("pod %s of replset %s doesn't have attached service", pod.Name, replset.Name)
 				svc := extService(m, replset, pod.Name)
+
 				if err := createExtService(h.client, svc); err != nil {
 					return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
 				}
 				meta = svc
+
 			} else {
 				return nil, fmt.Errorf("failed to fetch service for replset %s: %v", replset.Name, err)
 			}
@@ -59,14 +56,24 @@ func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v
 }
 
 func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
+	var retries uint64 = 0
+
 	client := sdk.NewClient()
 	svcMeta := serviceMeta(m.Namespace, podName)
-	if err := client.Get(svcMeta); err != nil {
-		if !errors.IsNotFound(err) {
+
+	for retries <= 5 {
+		if err := client.Get(svcMeta); err != nil {
+			if errors.IsNotFound(err) {
+				retries += 1
+				time.Sleep(500 * time.Millisecond)
+				logrus.Infof("Service for %s not found. Retry", podName)
+				continue
+			}
 			return nil, fmt.Errorf("failed to fetch service: %v", err)
 		}
+		return svcMeta, nil
 	}
-	return svcMeta, nil
+	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
 }
 
 func createExtService(cli sdk.Client, svc *corev1.Service) error {
@@ -86,8 +93,8 @@ func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 	for retries <= 5 {
 		if err := cli.Update(svc); err != nil {
 			if errors.IsConflict(err) {
-				time.Sleep(500 * time.Millisecond)
 				retries += 1
+				time.Sleep(500 * time.Millisecond)
 				continue
 			} else {
 				return fmt.Errorf("failed to update service: %v", err)
@@ -113,7 +120,7 @@ func serviceMeta(namespace, podName string) *corev1.Service {
 
 func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podName string) *corev1.Service {
 	svc := serviceMeta(m.Namespace, podName)
-	svc.Labels = extServiseLabels(m, replset)
+	svc.Labels = extServiceLabels(m, replset)
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
@@ -125,13 +132,16 @@ func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec,
 		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 	}
 	switch replset.Expose.ExposeType {
+
 	case corev1.ServiceTypeNodePort:
 		svc.Spec.Type = corev1.ServiceTypeNodePort
 		svc.Spec.ExternalTrafficPolicy = "Local"
+
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
 		svc.Spec.ExternalTrafficPolicy = "Local"
 		svc.Annotations = map[string]string{"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp"}
+
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
@@ -148,14 +158,14 @@ func (h *Handler) extServicesList(m *v1alpha1.PerconaServerMongoDB, replset *v1a
 	}
 
 	if err := h.client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(extServiseLabels(m, replset)).String()})); err != nil {
+		LabelSelector: labels.SelectorFromSet(extServiceLabels(m, replset)).String()})); err != nil {
 		return nil, fmt.Errorf("couldn't fetch services: %v", err)
 	}
 
 	return svcs, nil
 }
 
-func extServiseLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
+func extServiceLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
 	return map[string]string{
 		"app":     "percona-server-mongodb",
 		"type":    "expose-externally",
@@ -173,35 +183,62 @@ func (s ServiceAddr) String() string {
 	return s.Host + ":" + strconv.Itoa(s.Port)
 }
 
-func getIngressPoint(svc corev1.Service) string {
-	client := sdk.NewClient()
-	meta := serviceMeta(svc.Namespace, svc.Spec.Selector["statefulset.kubernetes.io/pod-name"])
+func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
+	if replset.Expose == nil {
+		replset.Expose = &v1alpha1.Expose{
+			Enabled: false,
+		}
+	}
+	if replset.Expose.Enabled && replset.Expose.ExposeType == "" {
+		replset.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	}
+}
 
-	for retry := 0; retry < 900; retry++ {
+func getIngressPoint(svc corev1.Service, pod corev1.Pod) (string, error) {
+	var retries uint64 = 0
+
+	client := sdk.NewClient()
+
+	meta := serviceMeta(svc.Namespace, pod.Name)
+
+	ticker := time.NewTicker(1 * time.Second)
+
+	for range ticker.C {
+
+		if retries >= 900 {
+			ticker.Stop()
+			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
+		}
+
 		if err := client.Get(meta); err != nil {
-			logrus.Errorf("failed to fetch service: %v", err)
-			break
+			ticker.Stop()
+			return "", fmt.Errorf("failed to fetch service: %v", err)
 		}
+
 		if len(meta.Status.LoadBalancer.Ingress) != 0 {
-			break
+			ticker.Stop()
 		}
-		time.Sleep(time.Second)
+		retries++
 	}
 
 	if len(meta.Status.LoadBalancer.Ingress) == 0 {
-		logrus.Errorf("Cannot detect ingress point for Service %s", meta.Name)
-		return meta.Spec.ClusterIP
+		return "", fmt.Errorf("cannot detect ingress point for Service %s", meta.Name)
 	}
 
-	host := meta.Status.LoadBalancer.Ingress[0].IP
-	if host == "" {
-		host = meta.Status.LoadBalancer.Ingress[0].Hostname
+	ip := meta.Status.LoadBalancer.Ingress[0].IP
+	hostname := meta.Status.LoadBalancer.Ingress[0].Hostname
+
+	if ip == "" && hostname == "" {
+		return "", fmt.Errorf("cannot fetch any hostname from ingress for Service %s", meta.Name)
 	}
-	return host
+	if ip != "" {
+		return ip, nil
+	}
+	return hostname, nil
 }
 
-func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
-	var addr ServiceAddr
+func getServiceAddr(svc corev1.Service, pod corev1.Pod) (*ServiceAddr, error) {
+	addr := &ServiceAddr{}
 
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeClusterIP:
@@ -214,7 +251,11 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		addr.Host = getIngressPoint(svc)
+		host, err := getIngressPoint(svc, pod)
+		if err != nil {
+			return nil, err
+		}
+		addr.Host = host
 		for _, p := range svc.Spec.Ports {
 			if p.Name != mongod.MongodPortName {
 				continue
@@ -231,5 +272,5 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) ServiceAddr {
 			addr.Port = int(p.NodePort)
 		}
 	}
-	return addr
+	return addr, nil
 }
