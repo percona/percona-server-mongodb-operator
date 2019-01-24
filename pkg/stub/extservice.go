@@ -68,9 +68,8 @@ func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.S
 				time.Sleep(500 * time.Millisecond)
 				logrus.Infof("Service for %s not found. Retry", podName)
 				continue
-			} else {
-				return nil, fmt.Errorf("failed to fetch service: %v", err)
 			}
+			return nil, fmt.Errorf("failed to fetch service: %v", err)
 		}
 		return svcMeta, nil
 	}
@@ -203,7 +202,6 @@ func getIngressPoint(svc corev1.Service, pod corev1.Pod) (string, error) {
 	meta := serviceMeta(svc.Namespace, pod.Name)
 
 	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
 
 	for range ticker.C {
 
@@ -227,11 +225,16 @@ func getIngressPoint(svc corev1.Service, pod corev1.Pod) (string, error) {
 		return "", fmt.Errorf("cannot detect ingress point for Service %s", meta.Name)
 	}
 
-	host := meta.Status.LoadBalancer.Ingress[0].IP
-	if host == "" {
-		host = meta.Status.LoadBalancer.Ingress[0].Hostname
+	ip := meta.Status.LoadBalancer.Ingress[0].IP
+	hostname := meta.Status.LoadBalancer.Ingress[0].Hostname
+
+	if ip == "" && hostname == "" {
+		return "", fmt.Errorf("cannot fetch any hostname from ingress for Service %s", meta.Name)
 	}
-	return host, nil
+	if ip != "" {
+		return ip, nil
+	}
+	return hostname, nil
 }
 
 func getServiceAddr(svc corev1.Service, pod corev1.Pod) (*ServiceAddr, error) {
