@@ -85,7 +85,7 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 				Labels: ls,
 			},
 			Spec: corev1.PodSpec{
-				//Affinity:      mongod.NewPodAffinity(ls),
+				Affinity:      mongod.NewPodAffinity(ls),
 				RestartPolicy: corev1.RestartPolicyAlways,
 				Containers:    h.newArbiterContainers(m, replset, resources, runUID),
 				SecurityContext: &corev1.PodSecurityContext{
