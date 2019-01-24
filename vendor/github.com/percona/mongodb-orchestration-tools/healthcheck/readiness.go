@@ -24,7 +24,7 @@ import (
 func ReadinessCheck(session pmgo.SessionManager) (State, error) {
 	err := session.Ping()
 	if err != nil {
-		return StateFailed, fmt.Errorf("Failed to get successful ping: %s", err)
+		return StateFailed, fmt.Errorf("failed to get successful ping: %s", err)
 	}
 	return StateOk, nil
 }
