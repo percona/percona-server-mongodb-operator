@@ -8,6 +8,7 @@ spec:
       containers:
       - name: backup-restorer
         image: percona/percona-server-mongodb-operator:backup-pbmctl
+        imagePullPolicy: Always
         command: ["/backup-restorer.sh"]
         env:
         - name: BACKUP_NAME
@@ -26,5 +27,10 @@ spec:
             secretKeyRef:
               name: my-cluster-name-backup-s3
               key: AWS_SECRET_ACCESS_KEY
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
       restartPolicy: Never
   backoffLimit: 4
