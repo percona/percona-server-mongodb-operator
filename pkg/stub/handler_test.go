@@ -9,6 +9,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -118,6 +119,7 @@ func TestHandlerHandle(t *testing.T) {
 		},
 		watchdogMetrics: wdMetrics.NewCollector(),
 		watchdogQuit:    make(chan bool),
+		watchdog:        make(map[string]*watchdog.Watchdog),
 	}
 
 	// test Handler with no existing stateful sets
@@ -142,7 +144,7 @@ func TestHandlerHandle(t *testing.T) {
 		).Return(nil)
 
 		assert.NoError(t, h.Handle(context.TODO(), event))
-		assert.Nil(t, h.watchdog)
+		assert.Equal(t, map[string]*watchdog.Watchdog{}, h.watchdog)
 		client.AssertExpectations(t)
 	})
 
