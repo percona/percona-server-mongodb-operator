@@ -39,7 +39,7 @@ if [ ! -z $OPLOG_FILE ]; then
   aws s3 ls s3://${BUCKET_NAME}/${OPLOG_FILE} >/dev/null
   if [ $? -gt 0 ]; then
     echo "# Found no oplog at s3://${BUCKET_NAME}/${OPLOG_FILE}, skipping oplog restore"
-    exit 1
+    exit 0
   fi
   set -e
 
