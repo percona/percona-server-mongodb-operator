@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-cluster-name-backup-restorer
+spec:
+  template:
+    spec:
+      containers:
+      - name: backup-restorer
+        image: percona/percona-server-mongodb-operator:backup-pbmctl
+        command: ["/backup-restorer.sh"]
+        env:
+        - name: BACKUP_NAME
+          value: 2019-01-25T13:40:11Z_rs0 
+        - name: BUCKET
+          value: S3-BACKUP-BUCKET-NAME-HERE
+        - name: MONGODB_DSN
+          value: mongodb+srv://BACKUP-USER-HERE:BACKUP-PASSWORD-HERE@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: my-cluster-name-backup-s3
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: my-cluster-name-backup-s3
+              key: AWS_SECRET_ACCESS_KEY
+      restartPolicy: Never
+  backoffLimit: 4
