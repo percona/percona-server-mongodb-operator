@@ -2,9 +2,10 @@
 
 set -e
 
-BUCKET=percona-mongodb-backup-test-s3-psmdbo
-BACKUP_NAME=2019-01-25T13:40:11Z_rs0
-MONGODB_DSN=mongodb://127.0.0.1:27017/admin
+BUCKET=$1
+BACKUP_NAME=$2
+MONGODB_DSN=$3
+
 DUMP_FILE=${BACKUP_NAME}.dump.gz
 OPLOG_FILE=${BACKUP_NAME}.oplog.gz
 
@@ -29,21 +30,18 @@ echo "# Restoring database backup ${DUMP_FILE} to: ${MONGODB_DSN}"
 cat ${DUMP_FILE} | mongorestore $GZIP_FLAG --archive --drop --stopOnError --uri=$MONGODB_DSN
 
 # download and apply the oplog file, if it exists.
-# this requires an empty dump dir containing the oplog.bson only w/--oplogReplay
 if [ ! -z $OPLOG_FILE ]; then
   set +e
   aws s3 ls s3://${BUCKET}/${OPLOG_FILE} >/dev/null
-  [ $? = 1 ] && echo "# Found no oplog at s3://${BUCKET}/${OPLOG_FILE}, skipping oplog restore" && exit 1
+  [ $? -gt 0 ] && echo "# Found no oplog at s3://${BUCKET}/${OPLOG_FILE}, skipping oplog restore" && exit 1
   set -e
 
   echo "# Fetching database oplog s3://${BUCKET}}/${OPLOG_FILE}"
-
   OPLOG_DIR=$(mktemp -d)
   cd $OPLOG_DIR
   aws s3 cp s3://${BUCKET}/${OPLOG_FILE} oplog.bson
 
   echo "# Restoring database oplog ${OPLOG_FILE} to: ${MONGODB_DSN}"
-
   mongorestore $GZIP_FLAG --dir=. --oplogReplay --stopOnError --uri=$MONGODB_DSN 
   rm -rf $OPLOG_DIR
 fi
