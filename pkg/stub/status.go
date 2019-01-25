@@ -33,6 +33,11 @@ func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha
 	members := make([]*v1alpha1.ReplsetMemberStatus, 0)
 	for _, pod := range pods {
 		dialInfo := getReplsetDialInfo(m, replset, []corev1.Pod{pod}, usersSecret)
+		if len(dialInfo.Addrs) == 0 {
+			logrus.Debugf("No dialInfo.Addrs for pod %s, replset %s", pod.Name, replset.Name)
+			continue
+		}
+
 		dialInfo.Direct = true
 		session, err := mgo.DialWithInfo(dialInfo)
 		if err != nil {
