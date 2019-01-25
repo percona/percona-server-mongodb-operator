@@ -11,3 +11,4 @@ $dir/scaling/run
 $dir/self-healing/run
 $dir/operator-self-healing/run
 $dir/service-per-pod/run
+$dir/arbiter/run
