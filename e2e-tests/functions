@@ -121,6 +121,7 @@ compare_kubectl() {
         | egrep -v "healthCheckNodePort:|nodePort:" \
         | $sed -e '/^status:$/,+100500d' \
         | $sed -e '/NAMESPACE/,+1d' \
+        | $sed -e '/PBM_AGENT_SERVER_ADDRESS/,+1d' \
         > ${new_result}
     diff -u ${expected_result} ${new_result}
 }
@@ -138,6 +139,10 @@ run_mongo() {
 
 get_service_ip() {
     local service=$1
+    if [ "$(kubectl get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
+        echo -n $service.${service/-rs0*/}-rs0.$namespace
+        return
+    fi
     while (kubectl get service/$service -o 'jsonpath={.spec.type}' 2>&1 || : ) | grep -q NotFound; do
         sleep 1
     done
@@ -160,19 +165,32 @@ compare_mongo_cmd() {
 
     run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
         | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set' \
-        | sed -e 's/ObjectId(.*)//' \
+        | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
         > $tmp_dir/${command}
     diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+}
+
+get_mongo_primary_endpoint() {
+    local uri="$1"
+
+    run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
+        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK" \
+        | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
+        | grep ":27017$"
 }
 
 get_mongo_primary() {
     local uri="$1"
 
-    run_mongo \
-        'db.isMaster().me' \
-        "$uri" \
-        | grep ".svc.cluster.local:27017$" \
-        | cut -d . -f 1
+    endpoint=$(get_mongo_primary_endpoint $uri)
+    if [[ "$endpoint" =~ ".local" ]]; then
+        echo $endpoint \
+            | cut -d . -f 1
+    else
+        kubectl get service -o wide \
+            | grep " ${endpoint/:*/} " \
+            | awk '{print$1}'
+    fi
 }
 
 compare_mongo_user(){
