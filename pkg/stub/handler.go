@@ -33,7 +33,7 @@ type Handler struct {
 	client          sdk.Client
 	serverVersion   *v1alpha1.ServerVersion
 	pods            *podk8s.Pods
-	watchdog        *watchdog.Watchdog
+	watchdog        map[string]*watchdog.Watchdog
 	watchdogMetrics *wdMetrics.Collector
 	watchdogQuit    chan bool
 	startedAt       time.Time
@@ -47,6 +47,7 @@ func NewHandler(client sdk.Client) opSdk.Handler {
 		startedAt:       time.Now(),
 		watchdogMetrics: wdMetrics.NewCollector(),
 		watchdogQuit:    make(chan bool, 1),
+		watchdog:        make(map[string]*watchdog.Watchdog),
 	}
 }
 
@@ -57,7 +58,7 @@ func NewHandler(client sdk.Client) opSdk.Handler {
 //
 func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecret *corev1.Secret) error {
 	// Skip if watchdog is started
-	if h.watchdog != nil {
+	if _, ok := h.watchdog[psmdb.Name]; ok {
 		return nil
 	}
 
@@ -74,19 +75,20 @@ func (h *Handler) ensureWatchdog(psmdb *v1alpha1.PerconaServerMongoDB, usersSecr
 	}
 
 	// Start the watchdog if it has not been started
-	h.watchdog = watchdog.New(&wdConfig.Config{
+	h.watchdog[psmdb.Name] = watchdog.New(&wdConfig.Config{
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 3 * time.Second,
 	}, h.pods, h.watchdogMetrics, h.watchdogQuit)
-	go h.watchdog.Run()
+	go h.watchdog[psmdb.Name].Run()
 
-	// register prometheus collector
-	prometheus.MustRegister(h.watchdogMetrics)
-	logrus.Debug("Registered watchdog Prometheus collector")
-
+	if len(h.watchdog) == 1 {
+		// register prometheus collector
+		prometheus.MustRegister(h.watchdogMetrics)
+		logrus.Debug("Registered watchdog Prometheus collector")
+	}
 	return nil
 }
 
@@ -119,10 +121,13 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 			for _, rsSpec := range psmdb.Spec.Replsets {
 				logrus.Debugf("stopping watchdog watchers for psmdb CR %s, replset %s", psmdb.Name, rsSpec.Name)
-				h.watchdog.StopWatcher(psmdb.Name, rsSpec.Name)
+				h.watchdog[psmdb.Name].StopWatcher(psmdb.Name, rsSpec.Name)
 			}
 
 			h.pods.Delete(crState)
+
+			delete(h.watchdog, psmdb.Name)
+
 			return nil
 		}
 
