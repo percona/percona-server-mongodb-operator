@@ -8,6 +8,7 @@ spec:
       containers:
       - name: backup-restorer
         image: percona/percona-server-mongodb-operator:backup-pbmctl
+        imagePullPolicy: Always
         command: ["/backup-restorer.sh"]
         env:
         - name: BACKUP_NAME
