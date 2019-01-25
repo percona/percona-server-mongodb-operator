@@ -26,6 +26,33 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
+  digest = "1:826eed447848b78d14e56fdc5504ed14eaaa5143ee9758ee4df88d76eb99bc75"
+  name = "github.com/alecthomas/kingpin"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "947dcec5ba9c011838740e680966fd7087a71d0d"
+  version = "v2.2.6"
+
+[[projects]]
+  branch = "master"
+  digest = "1:f3793f8a708522400cef1dba23385e901aede5519f68971fd69938ef330b07a1"
+  name = "github.com/alecthomas/template"
+  packages = [
+    ".",
+    "parse",
+  ]
+  pruneopts = "NT"
+  revision = "a0175ee3bccc567396460bf5acd36800cb10c49c"
+
+[[projects]]
+  branch = "master"
+  digest = "1:fdd419e104ec26bb5bd63cc62637c640453ed2929a7453f3afadbd9a0223da66"
+  name = "github.com/alecthomas/units"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
+
+[[projects]]
   branch = "master"
   digest = "1:c819830f4f5ef85874a90ac3cbcc96cd322c715f5c96fbe4722eacd3dafbaa07"
   name = "github.com/beorn7/perks"
@@ -40,6 +67,17 @@
   pruneopts = "NT"
   revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
   version = "v1.1.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:72b674cb4faedad73fdb82e7a4d04f40bd2c06b8e75de601f5e6ac4526bb2cb0"
+  name = "github.com/docker/spdystream"
+  packages = [
+    ".",
+    "spdy",
+  ]
+  pruneopts = "NT"
+  revision = "6480d4af844c189cf5dd913db24ddd339d3a4f85"
 
 [[projects]]
   digest = "1:e6f888d4be8ec0f05c50e2aba83da4948b58045dee54d03be81fa74ea673302c"
@@ -224,6 +262,34 @@
   version = "v1.1.5"
 
 [[projects]]
+  digest = "1:05b6cc8603ca203244fc77d72978ab3346add31e8dca886b66599d8ff9cbe5af"
+  name = "github.com/klauspost/compress"
+  packages = [
+    "flate",
+    "gzip",
+    "zlib",
+  ]
+  pruneopts = "NT"
+  revision = "30be6041bed523c18e269a700ebd9c2ea9328574"
+  version = "v1.4.1"
+
+[[projects]]
+  digest = "1:486e8431071ab1edb434ddeb78410ab1a92a3d8f8a9d7c6a3d1743fd92485959"
+  name = "github.com/klauspost/cpuid"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "e7e905edc00ea8827e58662220139109efea09db"
+  version = "v1.2.0"
+
+[[projects]]
+  digest = "1:4059c14e87a2de3a434430340521b5feece186c1469eff0834c29a63870de3ed"
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242"
+  version = "v1.0.1"
+
+[[projects]]
   branch = "master"
   digest = "1:7d9fcac7f1228470c4ea0ee31cdfb662a758c44df691e39b3e76c11d3e12ba8f"
   name = "github.com/mailru/easyjson"
@@ -290,6 +356,29 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:f492b773e6db16d24d0a036aa9558072fc6598b377af1c17af7c38bc184d1990"
+  name = "github.com/percona/mongodb-orchestration-tools"
+  packages = [
+    ".",
+    "internal/db",
+    "internal/dcos",
+    "internal/dcos/api",
+    "pkg",
+    "pkg/db",
+    "pkg/pod",
+    "pkg/pod/dcos",
+    "pkg/pod/k8s",
+    "watchdog",
+    "watchdog/config",
+    "watchdog/metrics",
+    "watchdog/replset",
+    "watchdog/watcher",
+  ]
+  pruneopts = "NT"
+  revision = "d4e5213e8d550642db71e37c7f4fd73abce2a750"
+
+[[projects]]
+  branch = "master"
   digest = "1:bf2ac97824a7221eb16b096aecc1c390d4c8a4e49524386aaa2e2dd215cbfb31"
   name = "github.com/petar/GoLLRB"
   packages = ["llrb"]
@@ -350,12 +439,51 @@
   revision = "b1a0a9a36d7453ba0f62578b99712f3a6c5f82d1"
 
 [[projects]]
+  digest = "1:1f84287a4ca2c8f729d8155ba4c45915f5854ebbd214e406070779753da68422"
+  name = "github.com/sirupsen/logrus"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "e1e72e9de974bd926e5c56f83753fba2df402ce5"
+  version = "v1.3.0"
+
+[[projects]]
   digest = "1:9d8420bbf131d1618bde6530af37c3799340d3762cc47210c1d9532a4c3a2779"
   name = "github.com/spf13/pflag"
   packages = ["."]
   pruneopts = "NT"
   revision = "298182f68c66c05229eb03ac171abe6e309ee79a"
   version = "v1.0.3"
+
+[[projects]]
+  digest = "1:3c6a707aed0dc09fe8b8ba6476b6b48c0356d1c8004257b5a98ec92fb615f6da"
+  name = "github.com/timvaillancourt/go-mongodb-replset"
+  packages = [
+    "config",
+    "status",
+  ]
+  pruneopts = "NT"
+  revision = "173aaa3b66aff9a03babec116e1f5a2570b8e4be"
+  version = "0.2.0"
+
+[[projects]]
+  digest = "1:af354641f23332b1a8d5d361d11b5a9171589e412a67d499633706c611acc064"
+  name = "github.com/valyala/bytebufferpool"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "e746df99fe4a3986f4d4f79e13c1e0117ce9c2f7"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:6bbc2501a704c4dbe04d87b7f361a8a21e7408b1b1a97f6d0b6383130802da7c"
+  name = "github.com/valyala/fasthttp"
+  packages = [
+    ".",
+    "fasthttputil",
+    "stackless",
+  ]
+  pruneopts = "NT"
+  revision = "e5f51c11919d4f66400334047b897ef0a94c6f3c"
+  version = "v20180529"
 
 [[projects]]
   digest = "1:22f696cee54865fb8e9ff91df7b633f6b8f22037a8015253c6b6a71ca82219c7"
@@ -516,6 +644,20 @@
   version = "v0.9.1"
 
 [[projects]]
+  branch = "v2"
+  digest = "1:a925e210fd2dffddd71e9ad515d73199c662ee935f963f80e1b019734570ea1e"
+  name = "gopkg.in/mgo.v2"
+  packages = [
+    ".",
+    "bson",
+    "internal/json",
+    "internal/sasl",
+    "internal/scram",
+  ]
+  pruneopts = "NT"
+  revision = "9856a29383ce1c59f308dd1cf0363a79b5bef6b5"
+
+[[projects]]
   digest = "1:18108594151654e9e696b27b181b953f9a90b16bf14d253dd1b397b025a1487f"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
@@ -593,11 +735,14 @@
     "pkg/util/diff",
     "pkg/util/errors",
     "pkg/util/framer",
+    "pkg/util/httpstream",
+    "pkg/util/httpstream/spdy",
     "pkg/util/intstr",
     "pkg/util/json",
     "pkg/util/mergepatch",
     "pkg/util/naming",
     "pkg/util/net",
+    "pkg/util/remotecommand",
     "pkg/util/runtime",
     "pkg/util/sets",
     "pkg/util/strategicpatch",
@@ -609,6 +754,7 @@
     "pkg/version",
     "pkg/watch",
     "third_party/forked/golang/json",
+    "third_party/forked/golang/netutil",
     "third_party/forked/golang/reflect",
   ]
   pruneopts = "NT"
@@ -675,15 +821,19 @@
     "tools/pager",
     "tools/record",
     "tools/reference",
+    "tools/remotecommand",
     "transport",
+    "transport/spdy",
     "util/buffer",
     "util/cert",
     "util/connrotation",
+    "util/exec",
     "util/flowcontrol",
     "util/homedir",
     "util/integer",
     "util/jsonpath",
     "util/retry",
+    "util/workqueue",
   ]
   pruneopts = "NT"
   revision = "d082d5923d3cc0bfbb066ee5fbdea3d0ca79acf8"
@@ -769,15 +919,25 @@
     "pkg/client",
     "pkg/client/apiutil",
     "pkg/client/config",
+    "pkg/controller",
+    "pkg/event",
+    "pkg/handler",
+    "pkg/internal/controller",
+    "pkg/internal/controller/metrics",
     "pkg/internal/recorder",
     "pkg/leaderelection",
     "pkg/manager",
     "pkg/metrics",
     "pkg/patch",
+    "pkg/predicate",
+    "pkg/reconcile",
     "pkg/recorder",
     "pkg/runtime/inject",
     "pkg/runtime/log",
+    "pkg/runtime/scheme",
     "pkg/runtime/signals",
+    "pkg/source",
+    "pkg/source/internal",
     "pkg/webhook/admission",
     "pkg/webhook/admission/types",
     "pkg/webhook/types",
@@ -794,8 +954,25 @@
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/ready",
     "github.com/operator-framework/operator-sdk/version",
+    "github.com/percona/mongodb-orchestration-tools/pkg",
+    "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s",
+    "github.com/percona/mongodb-orchestration-tools/watchdog",
+    "github.com/percona/mongodb-orchestration-tools/watchdog/config",
+    "github.com/percona/mongodb-orchestration-tools/watchdog/metrics",
+    "k8s.io/api/core/v1",
+    "k8s.io/apimachinery/pkg/api/errors",
+    "k8s.io/apimachinery/pkg/apis/meta/v1",
+    "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime",
+    "k8s.io/apimachinery/pkg/runtime/schema",
+    "k8s.io/apimachinery/pkg/types",
+    "k8s.io/apimachinery/pkg/version",
+    "k8s.io/client-go/kubernetes/scheme",
+    "k8s.io/client-go/kubernetes/typed/core/v1",
     "k8s.io/client-go/plugin/pkg/client/auth/gcp",
+    "k8s.io/client-go/rest",
+    "k8s.io/client-go/tools/clientcmd",
+    "k8s.io/client-go/tools/remotecommand",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/conversion-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
@@ -804,10 +981,16 @@
     "k8s.io/code-generator/cmd/lister-gen",
     "k8s.io/code-generator/cmd/openapi-gen",
     "k8s.io/gengo/args",
+    "sigs.k8s.io/controller-runtime/pkg/client",
     "sigs.k8s.io/controller-runtime/pkg/client/config",
+    "sigs.k8s.io/controller-runtime/pkg/controller",
+    "sigs.k8s.io/controller-runtime/pkg/handler",
     "sigs.k8s.io/controller-runtime/pkg/manager",
+    "sigs.k8s.io/controller-runtime/pkg/reconcile",
     "sigs.k8s.io/controller-runtime/pkg/runtime/log",
+    "sigs.k8s.io/controller-runtime/pkg/runtime/scheme",
     "sigs.k8s.io/controller-runtime/pkg/runtime/signals",
+    "sigs.k8s.io/controller-runtime/pkg/source",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

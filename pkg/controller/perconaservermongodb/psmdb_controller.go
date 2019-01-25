@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/labels"
+
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/percona/mongodb-orchestration-tools/watchdog"
@@ -166,6 +168,34 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		Name: cr.Name,
 	}
 
+	for i, replset := range cr.Spec.Replsets {
+		// multiple replica sets is not supported until sharding is
+		// added to the operator
+		if i > 0 {
+			reqLogger.Error(nil, "multiple replica sets is not yet supported, skipping replset %s", replset.Name)
+			continue
+		}
+
+		pods := &corev1.PodList{}
+		err := r.client.List(context.TODO(),
+			&client.ListOptions{
+				Namespace: cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(
+					map[string]string{
+						"app":                       "percona-server-mongodb",
+						"percona-server-mongodb_cr": cr.Name,
+						"replset":                   replset.Name,
+					}),
+			},
+			pods,
+		)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("get pods list for replset %s: %v", replset.Name, err)
+		}
+
+		crState.Pods = append(crState.Pods, pods.Items...)
+
+	}
 	// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
 	r.ensureWatchdog(cr, secrets)
 
@@ -197,13 +227,12 @@ func (r *ReconcilePerconaServerMongoDB) ensureWatchdog(psmdb *api.PerconaServerM
 
 	// Start the watchdog if it has not been started
 	r.watchdog = watchdog.New(&wdConfig.Config{
-		ServiceName:    psmdb.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 3 * time.Second,
-	}, r.pods, r.watchdogMetrics, &r.watchdogQuit)
+	}, r.pods, r.watchdogMetrics, r.watchdogQuit)
 	go r.watchdog.Run()
 
 	// register prometheus collector
