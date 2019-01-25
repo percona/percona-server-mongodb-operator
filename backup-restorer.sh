@@ -22,8 +22,9 @@ echo "# Fetching database backup: s3://${BUCKET}/${DUMP_FILE}"
 aws s3 cp s3://${BUCKET}/${DUMP_FILE} ${DUMP_FILE}
 
 # setup mongorestore gzip flag, if required
-echo ${DUMP_FILE} | grep -qP "\.gz(\s+)?$"
-[ $? = 0 ] && GZIP_FLAG="--gzip"
+if [[ $DUMP_FILE =~ .gz$ ]]; then
+  GZIP_FLAG="--gzip"
+fi
 
 # restore dump file
 echo "# Restoring database backup ${DUMP_FILE} to: ${MONGODB_DSN}"
@@ -33,7 +34,10 @@ cat ${DUMP_FILE} | mongorestore $GZIP_FLAG --archive --drop --stopOnError --uri=
 if [ ! -z $OPLOG_FILE ]; then
   set +e
   aws s3 ls s3://${BUCKET}/${OPLOG_FILE} >/dev/null
-  [ $? -gt 0 ] && echo "# Found no oplog at s3://${BUCKET}/${OPLOG_FILE}, skipping oplog restore" && exit 1
+  if [ $? -gt 0 ]; then
+    echo "# Found no oplog at s3://${BUCKET}/${OPLOG_FILE}, skipping oplog restore"
+    exit 1
+  fi
   set -e
 
   echo "# Fetching database oplog s3://${BUCKET}}/${OPLOG_FILE}"
