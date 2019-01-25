@@ -15,4 +15,4 @@ Also, current PSMDB on Kubernetes implementation is subject to the following res
 
    **Note:** *Kubernetes redeploys pods to another machine with a different IP address in case of failure, and [DNS SRV connection](https://docs.mongodb.com/manual/reference/connection-string/#connections-dns-seedlist) saves you from updating URI with this new IP address on all mongo clients.*
 
-2. Percona Server for MongoDB backups and sharding are not yet supported.
+2. Percona Server for MongoDB sharding is not yet supported.
