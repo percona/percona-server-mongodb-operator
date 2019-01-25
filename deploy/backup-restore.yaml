@@ -12,7 +12,7 @@ spec:
         env:
         - name: BACKUP_NAME
           value: 2019-01-25T13:40:11Z_rs0 
-        - name: BUCKET
+        - name: BUCKET_NAME
           value: S3-BACKUP-BUCKET-NAME-HERE
         - name: MONGODB_DSN
           value: mongodb+srv://BACKUP-USER-HERE:BACKUP-PASSWORD-HERE@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false
