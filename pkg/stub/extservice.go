@@ -61,11 +61,11 @@ func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.S
 	client := sdk.NewClient()
 	svcMeta := serviceMeta(m.Namespace, podName)
 
-	for retries <= 5 {
+	for retries <= 60 {
 		if err := client.Get(svcMeta); err != nil {
 			if errors.IsNotFound(err) {
 				retries += 1
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1 * time.Second)
 				logrus.Infof("Service for %s not found. Retry", podName)
 				continue
 			}
@@ -94,7 +94,7 @@ func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 		if err := cli.Update(svc); err != nil {
 			if errors.IsConflict(err) {
 				retries += 1
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1 * time.Second)
 				continue
 			} else {
 				return fmt.Errorf("failed to update service: %v", err)
