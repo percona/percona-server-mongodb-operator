@@ -1,0 +1,75 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+create_namespace $namespace
+deploy_operator
+
+desc 'create first PSMDB cluster'
+cluster="some-name-rs0"
+kubectl apply \
+    -f $test_dir/conf/$cluster.yml \
+    -f $conf_dir/backup-secrets.yml \
+    -f $conf_dir/secrets.yml \
+    -f $conf_dir/client.yml
+desc 'check if all 3 Pods started'
+wait_for_running $cluster 3
+
+
+desc 'write data, read from all'
+run_mongo \
+    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+    "userAdmin:userAdmin123456@$cluster.$namespace"
+run_mongo \
+    'use myApp\n db.test.insert({ x: 100500 })' \
+    "myApp:myPass@$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+
+desc 'add backups schedule, wait for the first backup'
+kubectl apply \
+    -f $test_dir/conf/$cluster-2.yml
+wait_pod ${cluster%%-rs0}-backup-coordinator-0
+wait_cron ${cluster%%-rs0}-backup-every-min
+compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min
+sleep 65
+wait_backup $(kubectl get job | grep ${cluster%%-rs0}-backup-every-min | awk '{print$1}' | tail -1)
+kubectl get pods \
+    | grep ${cluster%%-rs0}-backup-every-min \
+    | awk '{print$1}' \
+    | xargs -n1 kubectl logs \
+    | grep 'Backup completed'
+
+backup_name=$(get_backup_name $cluster 3 | sort | head -1)
+aws s3 ls s3://psmdb-operator-testing/${backup_name}
+aws s3 cp s3://psmdb-operator-testing/${backup_name} $tmp_dir/${backup_name}
+
+desc 'check if service and statefulset created with expected config'
+compare_kubectl statefulset/$cluster
+compare_kubectl statefulset/${cluster%%-rs0}-backup-coordinator
+compare_kubectl service/${cluster%%-rs0}-backup-coordinator
+
+run_mongo \
+    'use myApp\n db.test.insert({ x: 100501 })' \
+    "myApp:myPass@$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
+
+cat $conf_dir/backup-restore.yml \
+    | sed -e "s/value: BACKUP_NAME/value: ${backup_name/.dump.gz/}/" \
+    | sed -e "s/value: $cluster/value: $cluster.$namespace.svc.cluster.local/" \
+    | kubectl apply -f -
+
+wait_backup backup-restorer
+
+compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+
+destroy $namespace

@@ -53,6 +53,54 @@ wait_pod() {
             kubectl describe pod/$pod
             kubectl logs $pod
             kubectl logs $(get_operator_pod) \
+                | grep -v 'level=info' \
+                | grep -v 'level=debug' \
+                | grep -v 'Getting tasks for pod' \
+                | grep -v 'Getting pods from source'
+            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+            exit 1
+        fi
+    done
+    set -o xtrace
+}
+
+wait_cron() {
+    local backup=$1
+
+    set +o xtrace
+    retry=0
+    echo -n $backup
+    until kubectl get cronjob/$backup -o jsonpath='{.status.lastScheduleTime}' 2>/dev/null | grep 'T'; do
+        sleep 1
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 360 ]; then
+            kubectl logs $(get_operator_pod) \
+                | grep -v 'level=info' \
+                | grep -v 'level=debug' \
+                | grep -v 'Getting tasks for pod' \
+                | grep -v 'Getting pods from source'
+            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+            exit 1
+        fi
+    done
+    set -o xtrace
+}
+
+wait_backup() {
+    local backup=$1
+
+    set +o xtrace
+    retry=0
+    echo -n $backup
+    until kubectl get job.batch/$backup -o jsonpath='{.status.completionTime}' 2>/dev/null | grep 'T'; do
+        sleep 1
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 60 ]; then
+            kubectl logs $(get_operator_pod) \
+                | grep -v 'level=info' \
+                | grep -v 'level=debug' \
                 | grep -v 'Getting tasks for pod' \
                 | grep -v 'Getting pods from source'
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
@@ -97,7 +145,11 @@ wait_for_delete() {
         echo -n .
         let retry+=1
         if [ $retry -ge 60 ]; then
-            kubectl logs $(get_operator_pod)
+            kubectl logs $(get_operator_pod) \
+                | grep -v 'level=info' \
+                | grep -v 'level=debug' \
+                | grep -v 'Getting tasks for pod' \
+                | grep -v 'Getting pods from source'
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
         fi
@@ -193,7 +245,7 @@ get_mongo_primary() {
     fi
 }
 
-compare_mongo_user(){
+compare_mongo_user() {
     local uri="$1"
     local user=$(echo $uri | cut -d : -f 1)
 
@@ -224,7 +276,10 @@ destroy() {
     local namespace="$1"
 
     kubectl logs $(get_operator_pod) \
-        | grep -v '"level":"info"' \
+        | grep -v 'level=info' \
+        | grep -v 'level=debug' \
+        | grep -v 'Getting tasks for pod' \
+        | grep -v 'Getting pods from source' \
         | grep -v 'the object has been modified' \
         | grep -v 'get backup status: Job.batch' \
         | $sed -r 's/"ts":[0-9.]+//; s^limits-[0-9.]+/^^g' \
@@ -249,4 +304,15 @@ desc() {
     printf "$msg"
     printf "\n-----------------------------------------------------------------------------------\n\n"
     set -o xtrace
+}
+
+get_backup_name() {
+    local name="$1"
+    let last_pod="$2-1" || :
+
+    for i in $(seq 0 $last_pod); do
+        kubectl logs ${name}-${i} -c backup-agent \
+            | grep db_backup_name \
+            | $sed -re 's/.*db_backup_name:["\]+([^"\]+).*/\1/'
+    done
 }
