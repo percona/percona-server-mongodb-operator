@@ -27,11 +27,7 @@ var coordinatorLabels = map[string]string{
 	"backup-coordinator": "true",
 }
 
-func (c *Controller) coordinatorAddress() string {
-	return c.coordinatorStatefulSetName() + "." + c.psmdb.Namespace + ".svc.cluster.local"
-}
-
-func (c *Controller) coordinatorStatefulSetName() string {
+func (c *Controller) coordinatorServiceName() string {
 	return c.psmdb.Name + "-backup-coordinator"
 }
 
@@ -118,11 +114,11 @@ func (c *Controller) newCoordinatorStatefulSet() (*appsv1.StatefulSet, error) {
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.coordinatorStatefulSetName(),
+			Name:      c.coordinatorServiceName(),
 			Namespace: c.psmdb.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: c.psmdb.Name,
+			ServiceName: c.coordinatorServiceName(),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -148,7 +144,7 @@ func (c *Controller) newCoordinatorService() *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.psmdb.Name + "-backup-coordinator",
+			Name:      c.coordinatorServiceName(),
 			Namespace: c.psmdb.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -177,7 +173,7 @@ func (c *Controller) DeleteCoordinator() error {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.psmdb.Name + "-backup-coordinator",
+			Name:      c.coordinatorServiceName(),
 			Namespace: c.psmdb.Namespace,
 		},
 	}
