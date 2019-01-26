@@ -1,0 +1,183 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 2
+  labels:
+    app: percona-server-mongodb
+    percona-server-mongodb_cr: some-name
+    replset: rs0
+  name: some-name-rs0
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1alpha1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: percona-server-mongodb
+      percona-server-mongodb_cr: some-name
+      replset: rs0
+  serviceName: some-name-rs0
+  template:
+    metadata:
+      labels:
+        app: percona-server-mongodb
+        percona-server-mongodb_cr: some-name
+        replset: rs0
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: percona-server-mongodb
+                  percona-server-mongodb_cr: some-name
+                  replset: rs0
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - args:
+        - --bind_ip_all
+        - --auth
+        - --dbpath=/data/db
+        - --port=27017
+        - --replSet=rs0
+        - --storageEngine=wiredTiger
+        - --slowms=100
+        - --profile=1
+        - --rateLimit=1
+        - --wiredTigerCacheSizeGB=0.25
+        - --wiredTigerCollectionBlockCompressor=snappy
+        - --wiredTigerJournalCompressor=snappy
+        - --wiredTigerIndexPrefixCompression=true
+        - --setParameter
+        - ttlMonitorSleepSecs=60
+        - --setParameter
+        - wiredTigerConcurrentReadTransactions=128
+        - --setParameter
+        - wiredTigerConcurrentWriteTransactions=128
+        env:
+        - name: SERVICE_NAME
+          value: some-name
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_REPLSET
+          value: rs0
+        envFrom:
+        - secretRef:
+            name: some-users
+            optional: false
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - mongodb-healthcheck
+            - k8s
+            - liveness
+          failureThreshold: 12
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: mongod
+        ports:
+        - containerPort: 27017
+          name: mongodb
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 8
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          tcpSocket:
+            port: 27017
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1G
+          requests:
+            cpu: 100m
+            memory: 100M
+        securityContext:
+          runAsNonRoot: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: some-key
+          readOnly: true
+        workingDir: /data/db
+      - env:
+        - name: PBM_AGENT_MONGODB_PORT
+          value: "27017"
+        - name: PBM_AGENT_MONGODB_RECONNECT_DELAY
+          value: "15"
+        - name: PBM_AGENT_MONGODB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_BACKUP_USER
+              name: some-users
+              optional: false
+        - name: PBM_AGENT_MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_BACKUP_PASSWORD
+              name: some-users
+              optional: false
+        - name: PBM_AGENT_BACKUP_DIR
+          value: psmdb-operator-testing
+        - name: AWS_REGION
+          value: eu-central-1
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCESS_KEY_ID
+              name: s3-secret
+              optional: false
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: s3-secret
+              optional: false
+        imagePullPolicy: Always
+        name: backup-agent
+        resources: {}
+        securityContext:
+          runAsNonRoot: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: some-key
+        secret:
+          defaultMode: 48
+          optional: false
+          secretName: some-key
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: mongod-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+    status:
+      phase: Pending

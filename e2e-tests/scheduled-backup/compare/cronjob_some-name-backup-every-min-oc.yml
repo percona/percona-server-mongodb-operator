@@ -1,0 +1,46 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: some-name-backup-every-min
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1alpha1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        app: percona-server-mongodb
+        percona-server-mongodb_cr: some-name
+    spec:
+      template:
+        metadata:
+        spec:
+          containers:
+          - args:
+            - run
+            - backup
+            - --description=some-name-every-min
+            - --compression-algorithm=gzip
+            - --destination-type=aws
+            env:
+            - name: PBMCTL_SERVER_ADDRESS
+              value: some-name-backup-coordinator:10001
+            imagePullPolicy: Always
+            name: backup-pmbctl
+            resources: {}
+            securityContext:
+              runAsNonRoot: true
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          restartPolicy: OnFailure
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+  schedule: '* * * * *'
+  successfulJobsHistoryLimit: 3
+  suspend: false
