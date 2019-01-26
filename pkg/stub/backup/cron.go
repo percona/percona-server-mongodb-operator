@@ -54,7 +54,7 @@ func (c *Controller) newBackupCronJobContainerEnv() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "PBMCTL_SERVER_ADDRESS",
-			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorAPIPort)),
+			Value: c.coordinatorServiceName() + ":" + strconv.Itoa(int(coordinatorAPIPort)),
 		},
 	}
 }

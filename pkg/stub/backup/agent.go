@@ -29,7 +29,7 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 	args := []corev1.EnvVar{
 		{
 			Name:  "PBM_AGENT_SERVER_ADDRESS",
-			Value: c.coordinatorAddress() + ":" + strconv.Itoa(int(coordinatorRPCPort)),
+			Value: c.coordinatorServiceName() + ":" + strconv.Itoa(int(coordinatorRPCPort)),
 		},
 		{
 			Name:  "PBM_AGENT_MONGODB_PORT",
