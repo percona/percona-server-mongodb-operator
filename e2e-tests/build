@@ -10,13 +10,13 @@ src_dir="$(realpath $test_dir/..)"
 build_operator() {
     if [ "${RELEASE:-0}" = 0 ]; then
         GO_LDFLAGS="-race"
+        $sed -i -e 's^return "percona/percona-server-mongodb-operator:"^return "perconalab/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
+        $sed -i -e "s/master/$GIT_BRANCH/" ${src_dir}/version/version.go
     fi
     repo=$(
         git config --get remote.origin.url \
             | sed -e 's^.*github.com[:/]^github.com/^; s/.git$//'
     )
-    $sed -i -e 's^return "percona/percona-server-mongodb-operator:"^return "perconalab/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
-    $sed -i -e "s/master/$GIT_BRANCH/" ${src_dir}/version/version.go
     docker run --rm -v ${src_dir}:/go/src/${repo} golang sh -c "
         set -o errexit
         set -o xtrace
@@ -27,8 +27,10 @@ build_operator() {
         cd /go/src/${repo}
         bash -x tmp/build/build.sh
     "
-    $sed -i -e 's^return "perconalab/percona-server-mongodb-operator:"^return "percona/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
-    $sed -i -e "s/$GIT_BRANCH/master/" ${src_dir}/version/version.go
+    if [ "${RELEASE:-0}" = 0 ]; then
+        $sed -i -e 's^return "perconalab/percona-server-mongodb-operator:"^return "percona/percona-server-mongodb-operator:"^' ${src_dir}/internal/mongod/container.go
+        $sed -i -e "s/$GIT_BRANCH/master/" ${src_dir}/version/version.go
+    fi
     export IMAGE
     pushd ${src_dir}
         bash -x ${src_dir}/tmp/build/docker_build.sh
