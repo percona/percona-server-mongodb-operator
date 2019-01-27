@@ -21,6 +21,8 @@ docs:
         url: ./configure/users
       - title: "Operator options"
         url: ./configure/operator
+      - title: "Backups"
+        url: ./configure/backups
       - title: "Arbiter nodes"
         url: ./configure/arbiter
       - title: "Expose nodes"
