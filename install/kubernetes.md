@@ -8,14 +8,39 @@ Install Percona server for MongoDB on Kubernetes
    cd percona-server-mongodb-operator
    ```
 
-1. The next thing to do is to add the `psmdb` namespace to Kubernetes, not forgetting to set the correspondent context for further steps:
+   **Note:** *It is crucial to specify the right branch with `-b` option while cloning the code on this step. Please be careful.*
+
+1. Now Custom Resource Definition for PSMDB should be created from the `deploy/crd.yaml` file. Custom Resource Definition extends the standard set of resources which Kubernetes “knows” about with the new items (in our case ones which are the core of the operator).
+
+   ```bash
+   $ kubectl apply -f deploy/crd.yaml
+   ```
+
+   This step should be done only once; it does not need to be repeated with the next Operator deployments, etc.
+
+
+2. The next thing to do is to add the `psmdb` namespace to Kubernetes, not forgetting to set the correspondent context for further steps:
 
    ```bash
    $ kubectl create namespace psmdb
    $ kubectl config set-context $(kubectl config current-context) --namespace=psmdb
    ```
 
-2. Now that’s time to add the MongoDB Users secrets to Kubernetes. They should be placed in the data section of the `deploy/mongodb-users.yaml` file as base64-encoded logins and passwords for the user accounts (see [Kubernetes documentation](https://kubernetes.io/docs/concepts/configuration/secret/) for details).
+3. Now RBAC (role-based access control) for PSMDB should be set up from the `deploy/rbac.yaml` file. Briefly speaking, role-based access is based on specifically defined roles and actions corresponding to them, allowed to be done on specific Kubernetes resources (details about users and roles can be found in [Kubernetes documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings)).
+
+   ```bash
+   $ kubectl apply -f deploy/rbac.yaml
+   ```
+
+   **Note:** *Setting RBAC requires your user to have cluster-admin role privileges. For example, those using Google Kubernetes Engine can grant user needed privileges with the following command:* `$ kubectl create clusterrolebinding cluster-admin-binding1 --clusterrole=cluster-admin --user=<myname@example.org>`
+
+   Finally it’s time to start the operator within Kubernetes:
+
+   ```bash
+   $ kubectl apply -f deploy/operator.yaml
+   ```
+
+4. Now that’s time to add the MongoDB Users secrets to Kubernetes. They should be placed in the data section of the `deploy/mongodb-users.yaml` file as base64-encoded logins and passwords for the user accounts (see [Kubernetes documentation](https://kubernetes.io/docs/concepts/configuration/secret/) for details).
 
    **Note:** *the following command can be used to get base64-encoded password from a plain text string:* `$ echo -n 'plain-text-password' | base64`
 
@@ -26,20 +51,6 @@ Install Percona server for MongoDB on Kubernetes
    ```
 
    More details about secrets can be found in a [separate section](../configure/users).
-
-3. Now RBAC (role-based access control) and Custom Resource Definition for PSMDB should be created from the following two files: `deploy/rbac.yaml` and `deploy/crd.yaml`. Briefly speaking, role-based access is based on specifically defined roles and actions corresponding to them, allowed to be done on specific Kubernetes resources (details about users and roles can be found in [Kubernetes documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings)). Custom Resource Definition extends the standard set of resources which Kubernetes “knows” about with the new items (in our case ones which are the core of the operator).
-
-   ```bash
-   $ kubectl apply -f deploy/crd.yaml -f deploy/rbac.yaml
-   ```
-
-   **Note:** *This step requires your user to have cluster-admin role privileges. For example, those using Google Kubernetes Engine can grant user needed privileges with the following command:* `$ kubectl create clusterrolebinding cluster-admin-binding1 --clusterrole=cluster-admin --user=<myname@example.org>`
-
-4. Finally it’s time to start the operator within Kubernetes:
-
-   ```bash
-   $ kubectl apply -f deploy/operator.yaml
-   ```
 
 5. After the operator is started, Percona Server for MongoDB cluster can be created at any time with the following command:
 

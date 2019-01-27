@@ -5,7 +5,7 @@ docs:
         url: ./
       - title: "How it works?"
         url: ./architecture
-  - title: Installation
+  - title: Deployment
     children:
       - title: "Requirements"
         url: ./install
@@ -13,6 +13,8 @@ docs:
         url: ./install/kubernetes
       - title: "Install on OpenShift"
         url: ./install/openshift
+      - title: "Scale Up/Down"
+        url: ./install/scaling
   - title: Configuration
     children:
       - title: "Users"
@@ -21,3 +23,7 @@ docs:
         url: ./configure/operator
       - title: "Backups"
         url: ./configure/backups
+      - title: "Arbiter nodes"
+        url: ./configure/arbiter
+      - title: "Expose nodes"
+        url: ./configure/expose
