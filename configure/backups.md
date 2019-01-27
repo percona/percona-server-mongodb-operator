@@ -25,7 +25,7 @@ The options within these three subsections are explained in the [Operator Option
 To make on-demand backup, user should run [the PBM Control tool](https://github.com/percona/percona-backup-mongodb#pbm-control-pbmctl) inside of the coordinator container, supplying it with needed options, like in the following example:
 
    ```
-   oc run -i --quiet --rm --tty pbmctl --image=percona/percona-backup-mongodb:pbmctl --restart=Never -- $* --server-address=my-cluster-name-backup-coordinator.myproject.svc.cluster.local:10001
+    run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.2.1-backup-pbmctl --restart=Never -- --server-address=my-cluster-name-backup-coordinator:10001 run backup --destination-type=aws --compression-algorithm=gzip --description=my-backup
    ```
 
 ## Restore the cluster from a previously saved backup
