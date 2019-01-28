@@ -30,7 +30,7 @@ To make on-demand backup, user should run [the PBM Control tool](https://github.
 
 ## Restore the cluster from a previously saved backup
 
-Previously saved backups can be restored with a special *backup restorer job*, configured with the [deploy/backup-restorer.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-restore.yaml) file. Following keys in this file should be edited before the job can be run:
+Previously saved backups can be restored with a special *backup restore job*, configured with the [deploy/backup-restore.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-restore.yaml) file. Following keys in this file should be edited before the job can be run:
 
 * `secretKeyRef.name` for the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` is the name of the Kubernetes secret with S3 credentials, and it should be the same as the `s3.secret` key value in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) backup section
 * `BUCKET_NAME` is the S3 bucket name, and it should be same as the `s3.bucket` key value in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) backup section
