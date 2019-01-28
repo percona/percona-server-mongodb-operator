@@ -34,7 +34,7 @@ Previously saved backups can be restored with a special *backup restore job*, co
 
 * `secretKeyRef.name` for the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` is the name of the Kubernetes secret with S3 credentials, and it should be the same as the `s3.secret` key value in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) backup section
 * `BUCKET_NAME` is the S3 bucket name, and it should be same as the `s3.bucket` key value in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) backup section
-* `BACKUP_NAME` is the unique name of the particular backup to be restored withoud `.dump.gz` ending (the list of available backups can be seen in the S3 browser)
+* `BACKUP_NAME` is the unique name (without the`.dump.gz` suffix) of the particular backup to be restored (the list of available backups can be seen in the S3 browser)
 * `MONGODB_DSN` is a connect string starting with `mongodb+srv://BACKUP-USER-HERE:BACKUP-PASSWORD-HERE...`, where `BACKUP-USER-HERE` and `BACKUP-PASSWORD-HERE` parts should be changed to the proper username and password of the backup user, same as ones in [deploy/mongodb-users.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/mongodb-users.yaml) secret file.
     
 
