@@ -1,9 +1,11 @@
 package v1alpha1
 
 import (
-	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sversion "k8s.io/apimachinery/pkg/version"
+
+	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -44,7 +46,6 @@ type PerconaServerMongoDBSpec struct {
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
 	Backup          *BackupSpec       `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-	Expose          *Expose           `json:"expose,omitempty"`
 }
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
@@ -53,23 +54,24 @@ type PerconaServerMongoDBStatus struct {
 }
 
 type ReplsetSpec struct {
-	*ResourcesSpec `json:"resources,omitempty"`
-	Name           string      `json:"name"`
-	Size           int32       `json:"size"`
-	StorageClass   string      `json:"storageClass,omitempty"`
-	ClusterRole    ClusterRole `json:"clusterRole,omitempty"`
+	Resources    *ResourcesSpec `json:"resources,omitempty"`
+	Name         string         `json:"name"`
+	Size         int32          `json:"size"`
+	StorageClass string         `json:"storageClass,omitempty"`
+	ClusterRole  ClusterRole    `json:"clusterRole,omitempty"`
+	Arbiter      *Arbiter       `json:"arbiter,omitempty"`
+	Expose       *Expose        `json:"expose,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
-	Cpu     string `json:"cpu,omitempty"`
-	Memory  string `json:"memory,omitempty"`
-	Storage string `json:"storage,omitempty"`
+	CPU    string `json:"cpu,omitempty"`
+	Memory string `json:"memory,omitempty"`
 }
 
 type ResourcesSpec struct {
-	Limits       *ResourceSpecRequirements `json:"limits,omitempty"`
-	Requests     *ResourceSpecRequirements `json:"requests,omitempty"`
-	StorageClass string                    `json:"storageClass,omitempty"`
+	Limits   *ResourceSpecRequirements `json:"limits,omitempty"`
+	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
+	Storage  string                    `json:"storage,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -246,7 +248,26 @@ type BackupSpec struct {
 	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
 }
 
+type Arbiter struct {
+	Enabled bool  `json:"enabled"`
+	Size    int32 `json:"size"`
+}
+
 type Expose struct {
 	Enabled    bool               `json:"enabled"`
 	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
+}
+
+type Platform string
+
+const (
+	PlatformUndef      Platform = ""
+	PlatformKubernetes          = "kubernetes"
+	PlatformOpenshift           = "openshift"
+)
+
+// ServerVersion represents info about k8s / openshift server version
+type ServerVersion struct {
+	Platform Platform
+	Info     k8sversion.Info
 }

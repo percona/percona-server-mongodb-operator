@@ -54,12 +54,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) err
 	if cr.Spec.Mongod.Storage.Engine == "" {
 		cr.Spec.Mongod.Storage.Engine = defaultStorageEngine
 	}
-	if cr.Spec.Expose == nil {
-		cr.Spec.Expose = &Expose{}
-	}
-	if cr.Spec.Expose.Enabled && cr.Spec.Expose.ExposeType == "" {
-		cr.Spec.Expose.ExposeType = corev1.ServiceTypeClusterIP
-	}
 
 	switch cr.Spec.Mongod.Storage.Engine {
 	case StorageEngineInMemory:

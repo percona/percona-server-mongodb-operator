@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/labels"
-
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/percona/mongodb-orchestration-tools/watchdog"
@@ -14,6 +12,7 @@ import (
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -129,8 +128,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("wrong psmdb options: %v", err)
 	}
 
-	// internalKey := secret.InternalKey(cr.Name+"-mongodb-key", cr.Namespace)
-	internalKey := &corev1.Secret{}
+	internalKey := secret.InternalKeyMeta(cr.Name+"-intrnl-mongodb-key", cr.Namespace)
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-mongodb-key", Namespace: cr.Namespace}, internalKey)
 	if err != nil && errors.IsNotFound(err) {
@@ -194,7 +192,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		crState.Pods = append(crState.Pods, pods.Items...)
-
 	}
 	// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
 	r.ensureWatchdog(cr, secrets)
