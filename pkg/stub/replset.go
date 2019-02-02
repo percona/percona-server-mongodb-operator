@@ -31,7 +31,7 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 
 	if replset.Expose != nil && replset.Expose.Enabled {
 		for _, pod := range pods {
-			svc, err := getExtServices(m, pod.Name)
+			svc, err := getSvc(m, pod.Name)
 			if err != nil {
 				logrus.Errorf("failed to fetch service address: %v", err)
 				continue
@@ -109,7 +109,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 		}
 
 		if replset.Expose != nil && replset.Expose.Enabled {
-			svc, err := getExtServices(m, pod.Name)
+			svc, err := getSvc(m, pod.Name)
 			if err != nil {
 				return fmt.Errorf("failed to fetch services: %v", err)
 			}
@@ -212,14 +212,6 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			return nil, err
 		}
 		sets["arbiter"] = arbiter
-	}
-
-	// Ensure replset has external service
-	if replset.Expose != nil && replset.Expose.Enabled {
-		_, err := h.ensureExtServices(m, replset, podList)
-		if err != nil {
-			return nil, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
-		}
 	}
 
 	// Initiate the replset if it hasn't already been initiated + there are pods +

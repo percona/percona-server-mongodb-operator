@@ -203,6 +203,22 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 			crState.Pods = append(crState.Pods, podsList.Items...)
 
+			// Ensure replset has external service
+			if replset.Expose != nil && replset.Expose.Enabled {
+				if err := h.createSvcs(psmdb, replset); err != nil {
+					return fmt.Errorf("failed to create services of replset %s: %v", replset.Name, err)
+				}
+
+				svcs, err := h.svcList(psmdb, replset, false)
+				if err != nil {
+					return fmt.Errorf("failed to fetch services of replset %s: %v", replset.Name, err)
+				}
+
+				if err := h.bindSvcs(svcs, podsList); err != nil {
+					return fmt.Errorf("failed to bind pods to services of replset %s: %v", replset.Name, err)
+				}
+			}
+
 			// Ensure replset exists and has correct state, PVCs, etc
 			sets, err := h.ensureReplset(psmdb, podsList, replset, usersSecret)
 			if err != nil {
@@ -228,13 +244,12 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 				crState.Statefulsets = append(crState.Statefulsets, *arbiter)
 			}
 
-			svc, err := h.extServicesList(psmdb, replset)
+			svc, err := h.svcList(psmdb, replset, true)
 			if err != nil {
-				if !errors.IsAlreadyExists(err) {
-					logrus.Errorf("failed to fetch services for replset %s: %v", replset.Name, err)
-					return err
-				}
+				logrus.Errorf("failed to fetch services for replset %s: %v", replset.Name, err)
+				return err
 			}
+
 			crState.Services = append(crState.Services, svc.Items...)
 
 			// Check if any pod has a backup agent container running (has not terminated)
