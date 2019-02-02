@@ -14,52 +14,55 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"strconv"
+	"strings"
 	"time"
 )
 
-func (h *Handler) ensureExtServices(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
-	setExposeDefaults(replset)
+func (h *Handler) createSvcs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) error {
+	svcsAmount := svcAmount(replset)
 
-	services := make([]corev1.Service, 0)
+	for s := 0; s < int(svcsAmount); s++ {
+		svc := svc(m, replset)
 
-	for _, pod := range podList.Items {
-		logrus.Infof("Checking that pod %s of replset %s has attached service", pod.Name, replset.Name)
+		logrus.Debugf("Service %s meta: %v", svc.Name, svc)
 
-		meta := serviceMeta(m.Namespace, pod.Name)
-
-		logrus.Debugf("Service meta: %v", meta)
-
-		if err := h.client.Get(meta); err != nil {
-			if errors.IsNotFound(err) {
-				logrus.Infof("pod %s of replset %s doesn't have attached service", pod.Name, replset.Name)
-				svc := extService(m, replset, pod.Name)
-
-				if err := createExtService(h.client, svc); err != nil {
-					return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
-				}
-				meta = svc
-
-			} else {
-				return nil, fmt.Errorf("failed to fetch service for replset %s: %v", replset.Name, err)
+		if err := h.client.Create(svc); err != nil {
+			if !errors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to create %s service for replset %s: %v", replset.Name, svc.Name, err)
 			}
 		}
-
-		logrus.Infof("service %s for pod %s of repleset %s has been found", meta.Name, pod.Name, replset.Name)
-
-		if err := updateExtService(h.client, meta); err != nil {
-			return nil, fmt.Errorf("failed to update external service for replset %s: %v", replset.Name, err)
-		}
-		services = append(services, *meta)
 	}
-
-	return services, nil
+	return nil
 }
 
-func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
+func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error {
+	for _, svc := range svcs.Items {
+		for _, pod := range pods.Items {
+			if strings.Contains(svc.Name, pod.Name) {
+				if err := h.attachSvc(&svc, &pod); err != nil {
+					return fmt.Errorf("failed to bind pod %s to service %s: %v", pod.Name, svc.Name, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
+	svc.Spec.Selector = map[string]string{"statefulset.kubernetes.io/pod-name": pod.Name}
+	svc.Labels["attached"] = "true"
+
+	if err := h.updateSvc(svc); err != nil {
+		return fmt.Errorf("failed to attach pod %s to service %s: %v", pod.Name, svc.Name, err)
+	}
+	return nil
+}
+
+func getSvc(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
 	var retries uint64 = 0
 
 	client := sdk.NewClient()
-	svcMeta := serviceMeta(m.Namespace, podName)
+	svcMeta := svcMeta(m.Namespace, podName)
 
 	for retries <= 5 {
 		if err := client.Get(svcMeta); err != nil {
@@ -76,22 +79,11 @@ func getExtServices(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.S
 	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
 }
 
-func createExtService(cli sdk.Client, svc *corev1.Service) error {
-	logrus.Infof("Creating service %s", svc.Name)
-	if err := cli.Create(svc); err != nil {
-		if !errors.IsAlreadyExists(err) {
-			return err
-		}
-		logrus.Infof("Service %s already exist. Skipping", svc.Name)
-	}
-	return nil
-}
-
-func updateExtService(cli sdk.Client, svc *corev1.Service) error {
+func (h *Handler) updateSvc(svc *corev1.Service) error {
 	var retries uint64 = 0
 
 	for retries <= 5 {
-		if err := cli.Update(svc); err != nil {
+		if err := h.client.Update(svc); err != nil {
 			if errors.IsConflict(err) {
 				retries += 1
 				time.Sleep(500 * time.Millisecond)
@@ -105,22 +97,43 @@ func updateExtService(cli sdk.Client, svc *corev1.Service) error {
 	return fmt.Errorf("failed to update service %s, retries limit reached", svc.Name)
 }
 
-func serviceMeta(namespace, podName string) *corev1.Service {
+func svcMeta(namespace, name string) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
+			Name:      name,
 			Namespace: namespace,
 		},
 	}
 }
 
-func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podName string) *corev1.Service {
-	svc := serviceMeta(m.Namespace, podName)
-	svc.Labels = extServiceLabels(m, replset)
+func (h *Handler) svcList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, attached bool) (*corev1.ServiceList, error) {
+	svcs := &corev1.ServiceList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+	}
+
+	lbls := svcLabels(m, replset)
+	if attached {
+		lbls["attached"] = "true"
+	}
+
+	if err := h.client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{
+		LabelSelector: labels.SelectorFromSet(lbls).String()})); err != nil {
+		return nil, fmt.Errorf("couldn't fetch services: %v", err)
+	}
+
+	return svcs, nil
+}
+
+func svc(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
+	svc := svcMeta(m.Namespace, m.Name+"-"+replset.Name)
+	svc.Labels = svcLabels(m, replset)
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
@@ -129,8 +142,8 @@ func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec,
 				TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 			},
 		},
-		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 	}
+
 	switch replset.Expose.ExposeType {
 
 	case corev1.ServiceTypeNodePort:
@@ -145,30 +158,15 @@ func extService(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec,
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
+
 	util.AddOwnerRefToObject(svc, util.AsOwner(m))
+
 	return svc
 }
 
-func (h *Handler) extServicesList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*corev1.ServiceList, error) {
-	svcs := &corev1.ServiceList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-	}
-
-	if err := h.client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(extServiceLabels(m, replset)).String()})); err != nil {
-		return nil, fmt.Errorf("couldn't fetch services: %v", err)
-	}
-
-	return svcs, nil
-}
-
-func extServiceLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
+func svcLabels(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) map[string]string {
 	return map[string]string{
 		"app":     "percona-server-mongodb",
-		"type":    "expose-externally",
 		"replset": replset.Name,
 		"cluster": m.Name,
 	}
@@ -199,7 +197,7 @@ func getIngressPoint(svc corev1.Service, pod corev1.Pod) (string, error) {
 
 	client := sdk.NewClient()
 
-	meta := serviceMeta(svc.Namespace, pod.Name)
+	meta := svcMeta(svc.Namespace, pod.Name)
 
 	ticker := time.NewTicker(1 * time.Second)
 
@@ -273,4 +271,13 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) (*ServiceAddr, error) {
 		}
 	}
 	return addr, nil
+}
+
+func svcAmount(replset *v1alpha1.ReplsetSpec) int {
+	svcsAmount := replset.Size
+
+	if replset.Arbiter != nil && replset.Arbiter.Enabled {
+		svcsAmount = svcsAmount + replset.Arbiter.Size
+	}
+	return int(svcsAmount)
 }
