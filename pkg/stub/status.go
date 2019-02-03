@@ -9,7 +9,7 @@ import (
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 	"github.com/sirupsen/logrus"
-	mgo "gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -85,6 +85,19 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	status := getReplsetStatus(data, replset)
 	if !reflect.DeepEqual(podNames, status.Pods) {
 		status.Pods = podNames
+	}
+
+	if replset.Expose != nil && replset.Expose.Enabled {
+		svcs, err := h.svcList(m, replset, true)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch services for replset %s: %v", replset.Name, err)
+		}
+
+		if len(svcs.Items) == 0 {
+			podsList.Items = []corev1.Pod{}
+			return podsList, nil
+		}
+		bindableSvcs(svcs, podsList)
 	}
 
 	// Update mongodb replset member status list
