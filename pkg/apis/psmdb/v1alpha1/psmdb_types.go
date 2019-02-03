@@ -3,7 +3,9 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sversion "k8s.io/apimachinery/pkg/version"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
@@ -50,7 +52,7 @@ type PerconaServerMongoDBSpec struct {
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	Replsets []*ReplsetStatus `json:"replsets,omitempty"`
+	Replsets map[string]*ReplsetStatus `json:"replsets,omitempty"`
 }
 
 type ReplsetSpec struct {
@@ -270,4 +272,22 @@ const (
 type ServerVersion struct {
 	Platform Platform
 	Info     k8sversion.Info
+}
+
+// OwnerRef returns OwnerReference to object
+func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerReference, error) {
+	gvk, err := apiutil.GVKForObject(cr, scheme)
+	if err != nil {
+		return metav1.OwnerReference{}, err
+	}
+
+	trueVar := true
+
+	return metav1.OwnerReference{
+		APIVersion: gvk.GroupVersion().String(),
+		Kind:       gvk.Kind,
+		Name:       cr.GetName(),
+		UID:        cr.GetUID(),
+		Controller: &trueVar,
+	}, nil
 }

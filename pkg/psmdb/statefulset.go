@@ -1,11 +1,14 @@
 package psmdb
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
 // NewStatefulSet returns a StatefulSet object configured for a name
@@ -24,7 +27,7 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 
 var secretFileMode int32 = 0060
 
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[string]string, size int32, ikeyName string, sv *api.ServerVersion) appsv1.StatefulSetSpec {
+func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[string]string, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -35,7 +38,10 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[
 
 	// !!! =============
 	// TODO Error handling
-	resources, _ := CreateResources(replset.Resources)
+	resources, err := CreateResources(replset.Resources)
+	if err != nil {
+		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
+	}
 
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name, // ls
@@ -70,7 +76,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[
 				},
 			},
 		},
-	}
+	}, nil
 }
 
 // podAffinity returns an Affinity configuration that aims to

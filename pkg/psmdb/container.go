@@ -12,15 +12,6 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
-const (
-	gigaByte                 int64   = 1024 * 1024 * 1024
-	minWiredTigerCacheSizeGB float64 = 0.25
-
-	mongodDataVolClaimName = "mongod-data"
-	mongodContainerDataDir = "/data/db"
-	mongodSecretsDir       = "/etc/mongodb-secrets"
-)
-
 func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64, ikeyName string) corev1.Container {
 	fvar := false
 	tvar := true
@@ -32,7 +23,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		Args:            containerArgs(m, replset, resources),
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "mongodb",
+				Name:          mongodPortName,
 				HostPort:      m.Spec.Mongod.Net.HostPort,
 				ContainerPort: m.Spec.Mongod.Net.Port,
 			},

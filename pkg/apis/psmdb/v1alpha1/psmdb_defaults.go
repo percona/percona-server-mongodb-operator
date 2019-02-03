@@ -99,9 +99,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) err
 		}
 	} else {
 		for _, replset := range cr.Spec.Replsets {
-			if replset.Size == 0 {
-				replset.Size = defaultMongodSize
-			}
+			replset.SetDefauts()
 		}
 	}
 	if cr.Spec.RunUID == 0 && platform != version.PlatformOpenshift {
@@ -133,4 +131,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) err
 	}
 
 	return nil
+}
+
+// SetDefauts set defaults options for the replset
+func (rs *ReplsetSpec) SetDefauts() {
+	if rs.Size == 0 {
+		rs.Size = defaultMongodSize
+	}
+	if rs.Expose != nil && rs.Expose.Enabled && rs.Expose.ExposeType == "" {
+		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	}
 }
