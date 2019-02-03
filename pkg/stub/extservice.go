@@ -22,7 +22,7 @@ func (h *Handler) createSvcs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 	svcsAmount := svcAmount(replset)
 
 	for s := 0; s < int(svcsAmount); s++ {
-		svc := svc(m, replset)
+		svc := svc(m, replset, m.Name+"-"+replset.Name+"-"+fmt.Sprint(s))
 
 		logrus.Debugf("Service %s meta: %v", svc.Name, svc)
 
@@ -31,6 +31,7 @@ func (h *Handler) createSvcs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 				return fmt.Errorf("failed to create %s service for replset %s: %v", replset.Name, svc.Name, err)
 			}
 			logrus.Infof("Service %s already exist, skipping", svc.Name)
+			continue
 		}
 		logrus.Infof("Service %s for replset %s created", svc.Name, replset.Name)
 	}
@@ -54,6 +55,16 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 		}
 	}
 	return nil
+}
+
+func bindableSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) {
+	for _, svc := range svcs.Items {
+		for i, pod := range pods.Items {
+			if !strings.Contains(svc.Name, pod.Name) {
+				pods.Items = append(pods.Items[:i], pods.Items[i+1:]...)
+			}
+		}
+	}
 }
 
 func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
@@ -141,8 +152,8 @@ func (h *Handler) svcList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 	return svcs, nil
 }
 
-func svc(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) *corev1.Service {
-	svc := svcMeta(m.Namespace, m.Name+"-"+replset.Name)
+func svc(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, name string) *corev1.Service {
+	svc := svcMeta(m.Namespace, name)
 	svc.Labels = svcLabels(m, replset)
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
