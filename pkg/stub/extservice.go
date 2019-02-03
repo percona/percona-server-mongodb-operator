@@ -30,14 +30,22 @@ func (h *Handler) createSvcs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 			if !errors.IsAlreadyExists(err) {
 				return fmt.Errorf("failed to create %s service for replset %s: %v", replset.Name, svc.Name, err)
 			}
+			logrus.Infof("Service %s already exist, skipping", svc.Name)
 		}
+		logrus.Infof("Service %s for replset %s created", svc.Name, replset.Name)
 	}
 	return nil
 }
 
 func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error {
 	for _, svc := range svcs.Items {
+
+		logrus.Infof("Trying to bind pod to service %s", svc.Name)
+
 		for _, pod := range pods.Items {
+
+			logrus.Debugf("Checking pod %s", pod.Name)
+
 			if strings.Contains(svc.Name, pod.Name) {
 				if err := h.attachSvc(&svc, &pod); err != nil {
 					return fmt.Errorf("failed to bind pod %s to service %s: %v", pod.Name, svc.Name, err)
@@ -49,6 +57,8 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 }
 
 func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
+	logrus.Infof("Trying to attach pod %s to service %s", pod.Name, svc.Name)
+
 	svc.Spec.Selector = map[string]string{"statefulset.kubernetes.io/pod-name": pod.Name}
 	svc.Labels["attached"] = "true"
 
