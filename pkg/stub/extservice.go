@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -39,18 +38,33 @@ func (h *Handler) createSvcs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 }
 
 func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error {
+	if len(pods.Items) == 0 {
+		logrus.Infof("There are no pods to bind to services")
+		return nil
+	}
+
 	for _, svc := range svcs.Items {
-
-		logrus.Infof("Trying to bind pod to service %s", svc.Name)
-
 		for _, pod := range pods.Items {
+			logrus.Infof("Trying to attach pod %s to service %s", pod.Name, svc.Name)
 
-			logrus.Debugf("Checking pod %s", pod.Name)
+			sv, sok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]
+			pv, pok := pod.Labels["attached-to"]
 
-			if strings.Contains(svc.Name, pod.Name) {
+			if sok && pok && sv == pv {
+				logrus.Infof("Service %s already attached to pod %s", svc.Name, pod.Name)
+				break
+			}
+			if !sok && pok {
+				logrus.Infof("Can't attach pod %s to service %s. Pod already attached to service %s", pod.Name, svc.Name, pv)
+				continue
+			}
+			if !sok && !pok {
 				if err := h.attachSvc(&svc, &pod); err != nil {
 					return fmt.Errorf("failed to bind pod %s to service %s: %v", pod.Name, svc.Name, err)
 				}
+
+				logrus.Infof("Service %s successfully attached to pod %s", svc.Name, pod.Name)
+				break
 			}
 		}
 	}
@@ -58,13 +72,19 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 }
 
 func bindableSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) {
+	attachePods := make([]corev1.Pod, 0)
+
 	for _, svc := range svcs.Items {
-		for i, pod := range pods.Items {
-			if !strings.Contains(svc.Name, pod.Name) {
-				pods.Items = append(pods.Items[:i], pods.Items[i+1:]...)
+		selector, ok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]
+		if ok {
+			for _, pod := range pods.Items {
+				if pod.Name == selector {
+					attachePods = append(attachePods, pod)
+				}
 			}
 		}
 	}
+	pods.Items = attachePods
 }
 
 func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
@@ -76,28 +96,42 @@ func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
 	if err := h.updateSvc(svc); err != nil {
 		return fmt.Errorf("failed to attach pod %s to service %s: %v", pod.Name, svc.Name, err)
 	}
+
+	pod.Labels["attached-to"] = svc.Name
+	if err := h.updatePod(pod); err != nil {
+		return fmt.Errorf("failed to attach service %s to pod %s: %v", svc.Name, pod.Name, err)
+	}
+
 	return nil
 }
 
-func getSvc(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
-	var retries uint64 = 0
-
+func getSvcAttachedToPod(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podName string) (*corev1.Service, error) {
 	client := sdk.NewClient()
-	svcMeta := svcMeta(m.Namespace, podName)
 
-	for retries <= 5 {
-		if err := client.Get(svcMeta); err != nil {
-			if errors.IsNotFound(err) {
-				retries += 1
-				time.Sleep(500 * time.Millisecond)
-				logrus.Infof("Service for %s not found. Retry", podName)
-				continue
-			}
-			return nil, fmt.Errorf("failed to fetch service: %v", err)
-		}
-		return svcMeta, nil
+	svcs := &corev1.ServiceList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
 	}
-	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
+
+	lbls := svcLabels(m, replset)
+	lbls["attached"] = "true"
+
+	err := client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{LabelSelector: labels.SelectorFromSet(lbls).String()}))
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch services: %v", err)
+	}
+
+	for _, svc := range svcs.Items {
+		if svc.Spec.Selector == nil {
+			continue
+		}
+		if sel, ok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]; ok && sel == podName {
+			return &svc, nil
+		}
+	}
+	return nil, fmt.Errorf("failed to fetch service")
 }
 
 func (h *Handler) updateSvc(svc *corev1.Service) error {
@@ -116,6 +150,24 @@ func (h *Handler) updateSvc(svc *corev1.Service) error {
 		return nil
 	}
 	return fmt.Errorf("failed to update service %s, retries limit reached", svc.Name)
+}
+
+func (h *Handler) updatePod(pod *corev1.Pod) error {
+	var retries uint64 = 0
+
+	for retries <= 5 {
+		if err := h.client.Update(pod); err != nil {
+			if errors.IsConflict(err) {
+				retries += 1
+				time.Sleep(500 * time.Millisecond)
+				continue
+			} else {
+				return fmt.Errorf("failed to update pod: %v", err)
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update pod %s, retries limit reached", pod.Name)
 }
 
 func svcMeta(namespace, name string) *corev1.Service {
@@ -213,51 +265,13 @@ func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
 	}
 }
 
-func getIngressPoint(svc corev1.Service, pod corev1.Pod) (string, error) {
-	var retries uint64 = 0
-
-	client := sdk.NewClient()
-
-	meta := svcMeta(svc.Namespace, pod.Name)
-
-	ticker := time.NewTicker(1 * time.Second)
-
-	for range ticker.C {
-
-		if retries >= 900 {
-			ticker.Stop()
-			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
-		}
-
-		if err := client.Get(meta); err != nil {
-			ticker.Stop()
-			return "", fmt.Errorf("failed to fetch service: %v", err)
-		}
-
-		if len(meta.Status.LoadBalancer.Ingress) != 0 {
-			ticker.Stop()
-		}
-		retries++
-	}
-
-	if len(meta.Status.LoadBalancer.Ingress) == 0 {
-		return "", fmt.Errorf("cannot detect ingress point for Service %s", meta.Name)
-	}
-
-	ip := meta.Status.LoadBalancer.Ingress[0].IP
-	hostname := meta.Status.LoadBalancer.Ingress[0].Hostname
-
-	if ip == "" && hostname == "" {
-		return "", fmt.Errorf("cannot fetch any hostname from ingress for Service %s", meta.Name)
-	}
-	if ip != "" {
-		return ip, nil
-	}
-	return hostname, nil
-}
-
-func getServiceAddr(svc corev1.Service, pod corev1.Pod) (*ServiceAddr, error) {
+func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pod corev1.Pod) (*ServiceAddr, error) {
 	addr := &ServiceAddr{}
+
+	svc, err := getSvcAttachedToPod(m, replset, pod.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get service address: %v", err)
+	}
 
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeClusterIP:
@@ -270,7 +284,7 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) (*ServiceAddr, error) {
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		host, err := getIngressPoint(svc, pod)
+		host, err := getIngressPoint(m, replset, pod)
 		if err != nil {
 			return nil, err
 		}
@@ -292,6 +306,43 @@ func getServiceAddr(svc corev1.Service, pod corev1.Pod) (*ServiceAddr, error) {
 		}
 	}
 	return addr, nil
+}
+
+func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pod corev1.Pod) (string, error) {
+	var svc corev1.Service
+	var retries uint64 = 0
+
+	ticker := time.NewTicker(1 * time.Second)
+
+	for range ticker.C {
+
+		if retries >= 900 {
+			ticker.Stop()
+			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
+		}
+
+		svc, err := getSvcAttachedToPod(m, replset, pod.Name)
+		if err != nil {
+			ticker.Stop()
+			return "", fmt.Errorf("failed to fetch service: %v", err)
+		}
+
+		if len(svc.Status.LoadBalancer.Ingress) != 0 {
+			ticker.Stop()
+		}
+		retries++
+	}
+
+	ip := svc.Status.LoadBalancer.Ingress[0].IP
+	hostname := svc.Status.LoadBalancer.Ingress[0].Hostname
+
+	if ip == "" && hostname == "" {
+		return "", fmt.Errorf("cannot fetch any hostname from ingress for service %s", svc.Name)
+	}
+	if ip != "" {
+		return ip, nil
+	}
+	return hostname, nil
 }
 
 func svcAmount(replset *v1alpha1.ReplsetSpec) int {

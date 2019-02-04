@@ -203,17 +203,21 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			}
 			crState.Pods = append(crState.Pods, podsList.Items...)
 
-			// Ensure replset has external service
+			// Ensure replset has external services
 			if replset.Expose != nil && replset.Expose.Enabled {
+
+				logrus.Infof("Creating services for replset %s", replset.Name)
 				if err := h.createSvcs(psmdb, replset); err != nil {
 					return fmt.Errorf("failed to create services of replset %s: %v", replset.Name, err)
 				}
 
+				logrus.Infof("Receiving services list for replset %s", replset.Name)
 				svcs, err := h.svcList(psmdb, replset, false)
 				if err != nil {
 					return fmt.Errorf("failed to fetch services of replset %s: %v", replset.Name, err)
 				}
 
+				logrus.Infof("Trying to bind pods to services for replset %s", replset.Name)
 				if err := h.bindSvcs(svcs, podsList); err != nil {
 					return fmt.Errorf("failed to bind pods to services of replset %s: %v", replset.Name, err)
 				}
