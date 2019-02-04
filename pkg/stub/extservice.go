@@ -334,6 +334,7 @@ func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 
 		if len(svc.Status.LoadBalancer.Ingress) != 0 {
 			ticker.Stop()
+			break
 		}
 		retries++
 
