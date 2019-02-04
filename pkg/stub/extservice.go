@@ -106,8 +106,9 @@ func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
 }
 
 func getSvcAttachedToPod(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podName string) (*corev1.Service, error) {
-	client := sdk.NewClient()
+	logrus.Infof("Fetching service that attached to pod %s", podName)
 
+	client := sdk.NewClient()
 	svcs := &corev1.ServiceList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -266,6 +267,8 @@ func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
 }
 
 func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pod corev1.Pod) (*ServiceAddr, error) {
+	logrus.Info("Fetching service address for pod %s", pod.Name)
+
 	addr := &ServiceAddr{}
 
 	svc, err := getSvcAttachedToPod(m, replset, pod.Name)
@@ -309,6 +312,8 @@ func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetS
 }
 
 func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pod corev1.Pod) (string, error) {
+	logrus.Infof("Fetching ingress point for pod %s", pod.Name)
+
 	var svc corev1.Service
 	var retries uint64 = 0
 
@@ -331,6 +336,8 @@ func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 			ticker.Stop()
 		}
 		retries++
+
+		logrus.Infof("Waiting for %s service ingress", svc.Name)
 	}
 
 	ip := svc.Status.LoadBalancer.Ingress[0].IP
