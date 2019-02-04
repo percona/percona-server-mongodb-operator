@@ -267,7 +267,7 @@ func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
 }
 
 func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pod corev1.Pod) (*ServiceAddr, error) {
-	logrus.Info("Fetching service address for pod %s", pod.Name)
+	logrus.Infof("Fetching service address for pod %s", pod.Name)
 
 	addr := &ServiceAddr{}
 
