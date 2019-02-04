@@ -55,7 +55,7 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 				break
 			}
 			if !sok && pok {
-				logrus.Infof("Can't attach pod to service %s. Pod already attached to service %s", svc.Name, pok)
+				logrus.Infof("Can't attach pod to service %s. Pod already attached to service %s", svc.Name, pv)
 				continue
 			}
 			if !sok && !pok {
