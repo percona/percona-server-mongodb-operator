@@ -270,7 +270,7 @@ func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetS
 
 	svc, err := getSvcAttachedToPod(m, replset, pod.Name)
 	if err != nil {
-
+		return nil, fmt.Errorf("failed to get service address: %v", err)
 	}
 
 	switch svc.Spec.Type {
