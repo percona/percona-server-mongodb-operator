@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -69,13 +68,19 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 }
 
 func bindableSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) {
+	attachePods := make([]corev1.Pod, 0)
+
 	for _, svc := range svcs.Items {
-		for i, pod := range pods.Items {
-			if !strings.Contains(svc.Name, pod.Name) {
-				pods.Items = append(pods.Items[:i], pods.Items[i+1:]...)
+		selector, ok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]
+		if ok {
+			for _, pod := range pods.Items {
+				if pod.Name == selector {
+					attachePods = append(attachePods, pod)
+				}
 			}
 		}
 	}
+	pods.Items = attachePods
 }
 
 func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
