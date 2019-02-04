@@ -47,14 +47,18 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 			logrus.Infof("Trying to attach pod %s to service %s", pod.Name, svc.Name)
 			logrus.Infof("Checking if service %s has selector", svc.Name)
 
-			v, ok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]
-			if ok {
-				logrus.Infof("Service %s already attached to pod %s and has %s value in selector", svc.Name, pod.Name, v)
+			sv, sok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]
+			pv, pok := pod.Labels["attached-to"]
+
+			if sok && pok && sv == pv {
+				logrus.Infof("Service %s already attached to pod %s", svc.Name, pod.Name)
 				break
-
-			} else {
-				logrus.Infof("Service %s doesn't have selector. Trying to attach this service to pod %s", svc.Name, pod.Name)
-
+			}
+			if !sok && pok {
+				logrus.Infof("Can't attach pod to service %s. Pod already attached to service %s", svc.Name, pok)
+				continue
+			}
+			if !sok && !pok {
 				if err := h.attachSvc(&svc, &pod); err != nil {
 					return fmt.Errorf("failed to bind pod %s to service %s: %v", pod.Name, svc.Name, err)
 				}
@@ -92,6 +96,12 @@ func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
 	if err := h.updateSvc(svc); err != nil {
 		return fmt.Errorf("failed to attach pod %s to service %s: %v", pod.Name, svc.Name, err)
 	}
+
+	pod.Labels["attached-to"] = svc.Name
+	if err := h.updatePod(pod); err != nil {
+		return fmt.Errorf("failed to attach service %s to pod %s: %v", svc.Name, pod.Name, err)
+	}
+
 	return nil
 }
 
@@ -132,6 +142,24 @@ func (h *Handler) updateSvc(svc *corev1.Service) error {
 		return nil
 	}
 	return fmt.Errorf("failed to update service %s, retries limit reached", svc.Name)
+}
+
+func (h *Handler) updatePod(pod *corev1.Pod) error {
+	var retries uint64 = 0
+
+	for retries <= 5 {
+		if err := h.client.Update(pod); err != nil {
+			if errors.IsConflict(err) {
+				retries += 1
+				time.Sleep(500 * time.Millisecond)
+				continue
+			} else {
+				return fmt.Errorf("failed to update pod: %v", err)
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update pod %s, retries limit reached", pod.Name)
 }
 
 func svcMeta(namespace, name string) *corev1.Service {
