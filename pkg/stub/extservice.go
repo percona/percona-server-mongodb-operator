@@ -50,11 +50,16 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 			if ok {
 				logrus.Infof("Service %s already attached to pod %s and has %s value in selector", svc.Name, pod.Name, v)
 				break
+
 			} else {
-				logrus.Infof("Service %s doesn't have selector")
+				logrus.Infof("Service %s doesn't have selector. Trying to attach this service to pod %s", svc.Name, pod.Name)
+
 				if err := h.attachSvc(&svc, &pod); err != nil {
 					return fmt.Errorf("failed to bind pod %s to service %s: %v", pod.Name, svc.Name, err)
 				}
+
+				logrus.Infof("Service %s successfully attached to pod %s", svc.Name, pod.Name)
+				break
 			}
 		}
 	}
