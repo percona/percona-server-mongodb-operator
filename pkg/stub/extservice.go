@@ -40,14 +40,8 @@ func (h *Handler) createSvcs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 
 func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error {
 	for _, svc := range svcs.Items {
-
-		logrus.Infof("Trying to bind pod to service %s", svc.Name)
-
 		for _, pod := range pods.Items {
-
-			logrus.Debugf("Checking pod %s", pod.Name)
-
-			if strings.Contains(svc.Name, pod.Name) {
+			if _, ok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]; !ok {
 				if err := h.attachSvc(&svc, &pod); err != nil {
 					return fmt.Errorf("failed to bind pod %s to service %s: %v", pod.Name, svc.Name, err)
 				}
