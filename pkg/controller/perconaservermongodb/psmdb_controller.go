@@ -147,7 +147,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("set owner ref for InternalKey %s: %v", internalKey.Name, err)
 	}
 
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-mongodb-key", Namespace: cr.Namespace}, internalKey)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-intrnl-mongodb-key", Namespace: cr.Namespace}, internalKey)
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Creating a new internal mongo key", "Namespace", cr.Namespace, "Name", internalKey.Name)
 
@@ -255,7 +255,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			}
 		}
 
-		var rstatus *api.ReplsetStatus
+		var rstatus api.ReplsetStatus
 		if rstatus, ok := cr.Status.Replsets[replset.Name]; !ok {
 			rstatus = &api.ReplsetStatus{}
 			cr.Status.Replsets[replset.Name] = rstatus
@@ -276,7 +276,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			if err == nil {
 				rstatus.Initialized = true
 			} else {
-				log.Info("Failed to init replset %s: %v", replset.Name, err)
+				log.WithValues("replset", replset.Name).Error(err, "Failed to init replset")
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -28,6 +29,7 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 var secretFileMode int32 = 0060
 
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[string]string, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
+
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -36,11 +38,13 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[
 
 	fvar := false
 
-	// !!! =============
-	// TODO Error handling
 	resources, err := CreateResources(replset.Resources)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
+	}
+	ssize, err := resource.ParseQuantity(replset.Resources.Storage)
+	if err != nil {
+		return appsv1.StatefulSetSpec{}, fmt.Errorf("wrong volume size value %q: %v", replset.Resources.Storage, err)
 	}
 
 	return appsv1.StatefulSetSpec{
@@ -76,7 +80,38 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[
 				},
 			},
 		},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+			PersistentVolumeClaim(m, ssize, mongodDataVolClaimName, replset.StorageClass),
+		},
 	}, nil
+}
+
+// PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
+func PersistentVolumeClaim(m *api.PerconaServerMongoDB, size resource.Quantity, claimName, storageClass string) corev1.PersistentVolumeClaim {
+	vc := corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PersistentVolumeClaim",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      claimName,
+			Namespace: m.Namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: size,
+				},
+			},
+		},
+	}
+	if storageClass != "" {
+		vc.Spec.StorageClassName = &storageClass
+	}
+	return vc
 }
 
 // podAffinity returns an Affinity configuration that aims to

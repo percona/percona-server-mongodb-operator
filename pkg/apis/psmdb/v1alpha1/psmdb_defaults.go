@@ -130,6 +130,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) err
 		}
 	}
 
+	cr.Status.Replsets = make(map[string]*ReplsetStatus)
+
 	return nil
 }
 
