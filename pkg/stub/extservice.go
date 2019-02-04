@@ -42,7 +42,7 @@ func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error
 	for _, svc := range svcs.Items {
 		logrus.Infof("Trying to attach pod to service %s", svc.Name)
 
-		logrus.Debugf("Amount of pods %s", len(pods.Items))
+		logrus.Debugf("Amount of pods %d", len(pods.Items))
 
 		for _, pod := range pods.Items {
 			logrus.Infof("Trying to attach pod %s to service %s", pod.Name, svc.Name)
