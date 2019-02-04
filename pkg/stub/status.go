@@ -94,7 +94,6 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 		}
 
 		if len(svcs.Items) == 0 {
-			podsList.Items = []corev1.Pod{}
 			return podsList, nil
 		}
 		bindableSvcs(svcs, podsList)

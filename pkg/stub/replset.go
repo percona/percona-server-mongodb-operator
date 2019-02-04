@@ -31,12 +31,7 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 
 	if replset.Expose != nil && replset.Expose.Enabled {
 		for _, pod := range pods {
-			svc, err := getSvc(m, pod.Name)
-			if err != nil {
-				logrus.Errorf("failed to fetch service address: %v", err)
-				continue
-			}
-			hostname, err := getServiceAddr(*svc, pod)
+			hostname, err := getServiceAddr(m, replset, pod)
 			if err != nil {
 				logrus.Errorf("failed to get service hostname: %v", err)
 				continue
@@ -109,11 +104,7 @@ func (h *Handler) handleReplsetInit(m *v1alpha1.PerconaServerMongoDB, replset *v
 		}
 
 		if replset.Expose != nil && replset.Expose.Enabled {
-			svc, err := getSvc(m, pod.Name)
-			if err != nil {
-				return fmt.Errorf("failed to fetch services: %v", err)
-			}
-			hostname, err := getServiceAddr(*svc, pod)
+			hostname, err := getServiceAddr(m, replset, pod)
 			if err != nil {
 				return fmt.Errorf("failed to fetch service address: %v", err)
 			}
