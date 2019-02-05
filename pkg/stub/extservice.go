@@ -207,51 +207,42 @@ func getSvcAddr(m *v1alpha1.PerconaServerMongoDB, pod corev1.Pod) (*ServiceAddr,
 func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, pod corev1.Pod) (string, error) {
 	logrus.Infof("Fetching ingress point for pod %s", pod.Name)
 
-	var svc corev1.Service
 	var retries uint64 = 0
 
+	var ip string
+	var hostname string
+
 	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
 	for range ticker.C {
+		retries++
 
 		if retries >= 1000 {
-			ticker.Stop()
 			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
 		}
 
 		svc, err := getSvc(m, pod.Name)
 		if err != nil {
-			ticker.Stop()
 			return "", fmt.Errorf("failed to fetch service: %v", err)
 		}
 		logrus.Debugf("Service %s:", svc)
-		logrus.Debugf("Service %s ingress length:", svc.Name, len(svc.Status.LoadBalancer.Ingress))
-
-		for _, ing := range svc.Status.LoadBalancer.Ingress {
-			logrus.Debugf("Service %s ingress:", ing)
-		}
+		logrus.Debugf("Service %s ingress length: %d", svc.Name, len(svc.Status.LoadBalancer.Ingress))
 
 		if len(svc.Status.LoadBalancer.Ingress) != 0 {
-			ticker.Stop()
-			break
+			ip = svc.Status.LoadBalancer.Ingress[0].IP
+			hostname = svc.Status.LoadBalancer.Ingress[0].Hostname
 		}
-		retries++
+
+		if ip != "" {
+			return ip, nil
+		}
+
+		if hostname != "" {
+			return hostname, nil
+		}
 
 		logrus.Infof("Waiting for %s service ingress", svc.Name)
 	}
-
-	if len(svc.Status.LoadBalancer.Ingress) == 0 {
-		return "", fmt.Errorf("can't fetch ingress address for service %s", svc.Name)
-	}
-
-	ip := svc.Status.LoadBalancer.Ingress[0].IP
-	hostname := svc.Status.LoadBalancer.Ingress[0].Hostname
-
-	if ip == "" && hostname == "" {
-		return "", fmt.Errorf("can't fetch any hostname from ingress for service %s", svc.Name)
-	}
-	if ip != "" {
-		return ip, nil
-	}
-	return hostname, nil
+	return "", fmt.Errorf("can't get service %s ingress, retry limit reached", pod.Name)
 }
