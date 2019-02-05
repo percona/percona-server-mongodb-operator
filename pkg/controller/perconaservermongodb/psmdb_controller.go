@@ -234,17 +234,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			if err != nil {
 				return reconcile.Result{}, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
 			}
-			// crState.Statefulsets = append(crState.Statefulsets, sfs)
+			crState.Statefulsets = append(crState.Statefulsets, *sfs)
 		} else if err != nil {
 			return reconcile.Result{}, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
 		}
 
 		// Create Service
 		if replset.Expose != nil && replset.Expose.Enabled {
-			_, err := r.ensureExternalServices(cr, replset, pods)
+			srvs, err := r.ensureExternalServices(cr, replset, pods)
 			if err != nil {
 				return reconcile.Result{}, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
 			}
+			crState.Services = append(crState.Services, srvs...)
 		} else {
 			service := psmdb.Service(cr, replset)
 
@@ -257,6 +258,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			if err != nil && !errors.IsAlreadyExists(err) {
 				return reconcile.Result{}, fmt.Errorf("failed to create service for replset %s: %v", replset.Name, err)
 			}
+
+			crState.Services = append(crState.Services, *service)
 		}
 
 		var rstatus api.ReplsetStatus
@@ -286,6 +289,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 	// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
 	r.ensureWatchdog(cr, secrets)
+
+	r.pods.Update(crState)
 
 	return rr, nil
 }
