@@ -226,6 +226,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				"replset":                   replset.Name,
 			}
 			sfs.Spec, err = psmdb.StatefulSpec(cr, replset, ls, replset.Size, internalKey.Name, r.serverVersion)
+			if err != nil {
+				return reconcile.Result{}, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
+			}
 
 			err = r.client.Create(context.TODO(), sfs)
 			if err != nil {
