@@ -1,0 +1,57 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+check_cr_config() {
+    local cluster="$1"
+
+    # apply cr config
+    kubectl apply \
+        -f $test_dir/conf/$cluster.yml
+
+    # check if at least 1 Pod started
+    wait_for_running $cluster 3
+
+    # check if statefulset created with expected config
+    compare_kubectl statefulset/$cluster
+    compare_kubectl service/$cluster-0
+
+    # check read and write
+    run_mongo \
+        'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+        "userAdmin:userAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)" \
+        "mongodb" ":27017"
+    run_mongo \
+        'use myApp\n db.test.insert({ x: 100500 })' \
+        "myApp:myPass@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)" \
+        "mongodb" ":27017"
+    compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
+    compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
+    compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
+
+    # delete cluster
+    kubectl delete \
+        -f $test_dir/conf/$cluster.yml
+}
+
+main() {
+    create_namespace $namespace
+    deploy_operator
+    kubectl apply \
+        -f $conf_dir/client.yml \
+        -f $conf_dir/secrets.yml
+
+    desc 'check ClusterIP'
+    check_cr_config "cluster-ip-rs0"
+
+    desc 'check LoadBalancer'
+    #check_cr_config "local-balancer-rs0"
+
+    destroy $namespace
+}
+
+main

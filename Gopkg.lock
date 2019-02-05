@@ -375,7 +375,7 @@
     "watchdog/watcher",
   ]
   pruneopts = "NT"
-  revision = "d4e5213e8d550642db71e37c7f4fd73abce2a750"
+  revision = "286a3b113309e9fdbed7afa18cb9466ccd63b195"
 
 [[projects]]
   branch = "master"
@@ -959,13 +959,16 @@
     "github.com/percona/mongodb-orchestration-tools/watchdog",
     "github.com/percona/mongodb-orchestration-tools/watchdog/config",
     "github.com/percona/mongodb-orchestration-tools/watchdog/metrics",
+    "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
+    "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/types",
+    "k8s.io/apimachinery/pkg/util/intstr",
     "k8s.io/apimachinery/pkg/version",
     "k8s.io/client-go/kubernetes/scheme",
     "k8s.io/client-go/kubernetes/typed/core/v1",
@@ -982,6 +985,7 @@
     "k8s.io/code-generator/cmd/openapi-gen",
     "k8s.io/gengo/args",
     "sigs.k8s.io/controller-runtime/pkg/client",
+    "sigs.k8s.io/controller-runtime/pkg/client/apiutil",
     "sigs.k8s.io/controller-runtime/pkg/client/config",
     "sigs.k8s.io/controller-runtime/pkg/controller",
     "sigs.k8s.io/controller-runtime/pkg/handler",

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: another-name-rs0
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1alpha1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: another-name
+spec:
+  ports:
+  - name: mongodb
+    port: 27017
+    protocol: TCP
+    targetPort: 27017
+  selector:
+    app: percona-server-mongodb
+    percona-server-mongodb_cr: another-name
+    replset: rs0
+  sessionAffinity: None
+  type: ClusterIP

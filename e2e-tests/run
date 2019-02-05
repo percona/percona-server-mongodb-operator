@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -o xtrace
+set -o errexit
+
+dir=$(realpath $(dirname $0))
+
+$dir/init-deploy/run
+$dir/limits/run
+$dir/scaling/run
+$dir/self-healing/run
+$dir/operator-self-healing/run
+$dir/service-per-pod/run
+$dir/arbiter/run

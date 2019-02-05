@@ -1,0 +1,13 @@
+FROM golang:1.11-stretch
+
+RUN apt-get update && apt-get install -y git make upx-ucl
+
+ARG UID
+
+WORKDIR /go/src/github.com/Percona-Lab/percona-server-mongodb-operator
+COPY . .
+RUN mkdir /.cache && chown -R $UID /.cache /go
+
+USER $UID
+RUN make vendor
+CMD make test && make

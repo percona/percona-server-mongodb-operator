@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: psmdb-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: psmdb-client
+  template:
+    metadata:
+      labels:
+        name: psmdb-client
+    spec:
+      containers:
+        - name: psmdb-client
+          image: percona/percona-server-mongodb:3.6
+          imagePullPolicy: Always
+          command:
+          - sleep
+          args:
+          - "100500"

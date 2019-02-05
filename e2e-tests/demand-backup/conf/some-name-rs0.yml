@@ -1,0 +1,81 @@
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  #platform: openshift
+  version: "3.6"
+  imagePullPolicy: Always
+  secrets:
+    key: some-key
+    users: some-users
+  replsets:
+  - name: rs0
+    size: 3
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "1G"
+        storage: "1Gi"
+      requests:
+        cpu: "100m"
+        memory: "0.1G"
+  mongod:
+    net:
+      port: 27017
+      hostPort: 0
+    security:
+      redactClientLogData: false
+    setParameter:
+      ttlMonitorSleepSecs: 60
+      wiredTigerConcurrentReadTransactions: 128
+      wiredTigerConcurrentWriteTransactions: 128
+    storage:
+      engine: wiredTiger
+      inMemory:
+        engineConfig:
+          inMemorySizeRatio: 0.9
+      mmapv1:
+        nsSize: 16
+        smallfiles: false
+      wiredTiger:
+        engineConfig:
+          cacheSizeRatio: 0.5
+          directoryForIndexes: false
+          journalCompressor: snappy
+        collectionConfig:
+          blockCompressor: snappy
+        indexConfig:
+          prefixCompression: true
+    operationProfiling:
+      mode: slowOp
+      slowOpThresholdMs: 100
+      rateLimit: 1
+    #auditLog:
+    #  destination: file
+    #  format: BSON
+    #  filter: '{}'
+  backup:
+    enabled: true
+    version: 0.2.1
+    restartOnFailure: true
+    s3:
+      secret: s3-secret
+      bucket: psmdb-operator-testing
+      region: eu-central-1
+    coordinator:
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "0.2G"
+          storage: "1Gi"
+        requests:
+          cpu: "100m"
+          memory: "0.1G"
+        #storageClass: aws-gp2
+      debug: false
+    tasks:
+    - name: weekly
+      enabled: true
+      schedule: "0 0 * * 0"
+      compressionType: gzip
