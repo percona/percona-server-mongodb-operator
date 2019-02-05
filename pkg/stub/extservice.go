@@ -67,42 +67,6 @@ func getSvc(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, 
 	return svc, nil
 }
 
-func (h *Handler) updateSvc(svc *corev1.Service) error {
-	var retries uint64 = 0
-
-	for retries <= 5 {
-		if err := h.client.Update(svc); err != nil {
-			if errors.IsConflict(err) {
-				retries += 1
-				time.Sleep(500 * time.Millisecond)
-				continue
-			} else {
-				return fmt.Errorf("failed to update service: %v", err)
-			}
-		}
-		return nil
-	}
-	return fmt.Errorf("failed to update service %s, retries limit reached", svc.Name)
-}
-
-func (h *Handler) updatePod(pod *corev1.Pod) error {
-	var retries uint64 = 0
-
-	for retries <= 5 {
-		if err := h.client.Update(pod); err != nil {
-			if errors.IsConflict(err) {
-				retries += 1
-				time.Sleep(500 * time.Millisecond)
-				continue
-			} else {
-				return fmt.Errorf("failed to update pod: %v", err)
-			}
-		}
-		return nil
-	}
-	return fmt.Errorf("failed to update pod %s, retries limit reached", pod.Name)
-}
-
 func svcMeta(namespace, name string) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
