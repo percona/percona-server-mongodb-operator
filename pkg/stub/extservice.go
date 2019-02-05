@@ -18,121 +18,53 @@ import (
 )
 
 func (h *Handler) createSvcs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) error {
-	svcsAmount := svcAmount(replset)
+	setExposeDefaults(replset)
 
-	for s := 0; s < int(svcsAmount); s++ {
-		svc := svc(m, replset, m.Name+"-"+replset.Name+"-"+fmt.Sprint(s))
+	for r := 0; r < int(replset.Size); r++ {
+		replica := svc(m, replset, m.Name+"-"+replset.Name+"-"+fmt.Sprint(r))
+		replica.Spec.Selector = map[string]string{"statefulset.kubernetes.io/pod-name": m.Name + "-" + replset.Name + "-" + fmt.Sprint(r)}
 
-		logrus.Debugf("Service %s meta: %v", svc.Name, svc)
-
-		if err := h.client.Create(svc); err != nil {
+		if err := h.client.Create(replica); err != nil {
 			if !errors.IsAlreadyExists(err) {
-				return fmt.Errorf("failed to create %s service for replset %s: %v", replset.Name, svc.Name, err)
+				return fmt.Errorf("failed to create %s service for replset %s: %v", replset.Name, replica.Name, err)
 			}
-			logrus.Infof("Service %s already exist, skipping", svc.Name)
+			logrus.Infof("Service %s already exist, skipping", replica.Name)
 			continue
 		}
-		logrus.Infof("Service %s for replset %s created", svc.Name, replset.Name)
-	}
-	return nil
-}
-
-func (h *Handler) bindSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) error {
-	if len(pods.Items) == 0 {
-		logrus.Infof("There are no pods to bind to services")
-		return nil
+		logrus.Infof("Service %s for replset %s created", replica.Name, replset.Name)
 	}
 
-	for _, svc := range svcs.Items {
-		for _, pod := range pods.Items {
-			logrus.Infof("Trying to attach pod %s to service %s", pod.Name, svc.Name)
+	if replset.Arbiter != nil && replset.Arbiter.Enabled {
+		for r := 0; r < int(replset.Arbiter.Size); r++ {
+			replica := svc(m, replset, m.Name+"-"+replset.Name+"-arbiter-"+fmt.Sprint(r))
+			replica.Spec.Selector = map[string]string{"statefulset.kubernetes.io/pod-name": m.Name + "-" + replset.Name + "-arbiter-" + fmt.Sprint(r)}
 
-			sv, sok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]
-			pv, pok := pod.Labels["attached-to"]
-
-			if sok && pok && sv == pv {
-				logrus.Infof("Service %s already attached to pod %s", svc.Name, pod.Name)
-				break
-			}
-			if !sok && pok {
-				logrus.Infof("Can't attach pod %s to service %s. Pod already attached to service %s", pod.Name, svc.Name, pv)
+			if err := h.client.Create(replica); err != nil {
+				if !errors.IsAlreadyExists(err) {
+					return fmt.Errorf("failed to create %s service for replset arbiter %s: %v", replset.Name, replica.Name, err)
+				}
+				logrus.Infof("Service %s already exist, skipping", replica.Name)
 				continue
 			}
-			if !sok && !pok {
-				if err := h.attachSvc(&svc, &pod); err != nil {
-					return fmt.Errorf("failed to bind pod %s to service %s: %v", pod.Name, svc.Name, err)
-				}
-
-				logrus.Infof("Service %s successfully attached to pod %s", svc.Name, pod.Name)
-				break
-			}
+			logrus.Infof("Service %s for replset arbiter %s created", replica.Name, replset.Name)
 		}
 	}
 	return nil
 }
 
-func bindableSvcs(svcs *corev1.ServiceList, pods *corev1.PodList) {
-	attachePods := make([]corev1.Pod, 0)
-
-	for _, svc := range svcs.Items {
-		selector, ok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]
-		if ok {
-			for _, pod := range pods.Items {
-				if pod.Name == selector {
-					attachePods = append(attachePods, pod)
-				}
-			}
-		}
-	}
-	pods.Items = attachePods
-}
-
-func (h *Handler) attachSvc(svc *corev1.Service, pod *corev1.Pod) error {
-	logrus.Infof("Trying to attach pod %s to service %s", pod.Name, svc.Name)
-
-	svc.Spec.Selector = map[string]string{"statefulset.kubernetes.io/pod-name": pod.Name}
-	svc.Labels["attached"] = "true"
-
-	if err := h.updateSvc(svc); err != nil {
-		return fmt.Errorf("failed to attach pod %s to service %s: %v", pod.Name, svc.Name, err)
-	}
-
-	pod.Labels["attached-to"] = svc.Name
-	if err := h.updatePod(pod); err != nil {
-		return fmt.Errorf("failed to attach service %s to pod %s: %v", svc.Name, pod.Name, err)
-	}
-
-	return nil
-}
-
-func getSvcAttachedToPod(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, podName string) (*corev1.Service, error) {
+func getSvc(m *v1alpha1.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
 	logrus.Infof("Fetching service that attached to pod %s", podName)
 
 	client := sdk.NewClient()
-	svcs := &corev1.ServiceList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-	}
+	svc := svcMeta(m.Namespace, podName)
 
-	lbls := svcLabels(m, replset)
-	lbls["attached"] = "true"
-
-	err := client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{LabelSelector: labels.SelectorFromSet(lbls).String()}))
-	if err != nil {
-		return nil, fmt.Errorf("couldn't fetch services: %v", err)
-	}
-
-	for _, svc := range svcs.Items {
-		if svc.Spec.Selector == nil {
-			continue
+	if err := client.Get(svc); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, fmt.Errorf("service %s not found: %v", podName, err)
 		}
-		if sel, ok := svc.Spec.Selector["statefulset.kubernetes.io/pod-name"]; ok && sel == podName {
-			return &svc, nil
-		}
+		return nil, fmt.Errorf("failed to fetch service %s: %v", podName, err)
 	}
-	return nil, fmt.Errorf("failed to fetch service")
+	return svc, nil
 }
 
 func (h *Handler) updateSvc(svc *corev1.Service) error {
@@ -184,7 +116,7 @@ func svcMeta(namespace, name string) *corev1.Service {
 	}
 }
 
-func (h *Handler) svcList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, attached bool) (*corev1.ServiceList, error) {
+func (h *Handler) svcList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec) (*corev1.ServiceList, error) {
 	svcs := &corev1.ServiceList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -193,9 +125,6 @@ func (h *Handler) svcList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 	}
 
 	lbls := svcLabels(m, replset)
-	if attached {
-		lbls["attached"] = "true"
-	}
 
 	if err := h.client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(lbls).String()})); err != nil {
@@ -266,12 +195,12 @@ func setExposeDefaults(replset *v1alpha1.ReplsetSpec) {
 	}
 }
 
-func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pod corev1.Pod) (*ServiceAddr, error) {
+func getSvcAddr(m *v1alpha1.PerconaServerMongoDB, pod corev1.Pod) (*ServiceAddr, error) {
 	logrus.Infof("Fetching service address for pod %s", pod.Name)
 
 	addr := &ServiceAddr{}
 
-	svc, err := getSvcAttachedToPod(m, replset, pod.Name)
+	svc, err := getSvc(m, pod.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service address: %v", err)
 	}
@@ -287,7 +216,7 @@ func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetS
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		host, err := getIngressPoint(m, replset, pod)
+		host, err := getIngressPoint(m, pod)
 		if err != nil {
 			return nil, err
 		}
@@ -311,7 +240,7 @@ func getServiceAddr(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetS
 	return addr, nil
 }
 
-func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pod corev1.Pod) (string, error) {
+func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, pod corev1.Pod) (string, error) {
 	logrus.Infof("Fetching ingress point for pod %s", pod.Name)
 
 	var svc corev1.Service
@@ -326,7 +255,7 @@ func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
 		}
 
-		svc, err := getSvcAttachedToPod(m, replset, pod.Name)
+		svc, err := getSvc(m, pod.Name)
 		if err != nil {
 			ticker.Stop()
 			return "", fmt.Errorf("failed to fetch service: %v", err)
@@ -351,13 +280,4 @@ func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 		return ip, nil
 	}
 	return hostname, nil
-}
-
-func svcAmount(replset *v1alpha1.ReplsetSpec) int {
-	svcsAmount := replset.Size
-
-	if replset.Arbiter != nil && replset.Arbiter.Enabled {
-		svcsAmount = svcsAmount + replset.Arbiter.Size
-	}
-	return int(svcsAmount)
 }

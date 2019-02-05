@@ -88,7 +88,7 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 	}
 
 	if replset.Expose != nil && replset.Expose.Enabled {
-		svcs, err := h.svcList(m, replset, true)
+		svcs, err := h.svcList(m, replset)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch services for replset %s: %v", replset.Name, err)
 		}
@@ -96,7 +96,6 @@ func (h *Handler) updateStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alph
 		if len(svcs.Items) == 0 {
 			return podsList, nil
 		}
-		bindableSvcs(svcs, podsList)
 	}
 
 	// Update mongodb replset member status list
