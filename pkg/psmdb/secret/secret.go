@@ -2,6 +2,7 @@ package secret
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -41,5 +42,10 @@ func GenInternalKey() (map[string][]byte, error) {
 func generateKey1024() ([]byte, error) {
 	b := make([]byte, 768)
 	_, err := rand.Read(b)
-	return b, err
+	if err != nil {
+		return nil, err
+	}
+	buf := make([]byte, base64.StdEncoding.EncodedLen(len(b)))
+	base64.StdEncoding.Encode(buf, b)
+	return buf, nil
 }

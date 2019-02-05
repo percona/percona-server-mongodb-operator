@@ -21,11 +21,13 @@ rules:
   - persistentvolumeclaims
   - secrets
   verbs:
-  - "create"
-  - "update"
-  - "delete"
-  - "get"
-  - "list"
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - apps
   resources:
@@ -33,19 +35,25 @@ rules:
   - replicasets
   - statefulsets
   verbs:
-  - "create"
-  - "update"
-  - "delete"
-  - "get"
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - batch
   resources:
   - cronjobs
   verbs:
-  - "create"
-  - "update"
-  - "delete"
-  - "get"
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 
 ---
 
