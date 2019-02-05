@@ -224,6 +224,12 @@ func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, pod corev1.Pod) (string, 
 			ticker.Stop()
 			return "", fmt.Errorf("failed to fetch service: %v", err)
 		}
+		logrus.Debugf("Service %s:", svc)
+		logrus.Debugf("Service %s ingress length:", svc.Name, len(svc.Status.LoadBalancer.Ingress))
+
+		for _, ing := range svc.Status.LoadBalancer.Ingress {
+			logrus.Debugf("Service %s ingress:", ing)
+		}
 
 		if len(svc.Status.LoadBalancer.Ingress) != 0 {
 			ticker.Stop()
