@@ -250,7 +250,7 @@ func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, pod corev1.Pod) (string, 
 
 	for range ticker.C {
 
-		if retries >= 900 {
+		if retries >= 1000 {
 			ticker.Stop()
 			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
 		}
@@ -270,11 +270,15 @@ func getIngressPoint(m *v1alpha1.PerconaServerMongoDB, pod corev1.Pod) (string, 
 		logrus.Infof("Waiting for %s service ingress", svc.Name)
 	}
 
+	if len(svc.Status.LoadBalancer.Ingress) == 0 {
+		return "", fmt.Errorf("can't fetch ingress address for service %s", svc.Name)
+	}
+
 	ip := svc.Status.LoadBalancer.Ingress[0].IP
 	hostname := svc.Status.LoadBalancer.Ingress[0].Hostname
 
 	if ip == "" && hostname == "" {
-		return "", fmt.Errorf("cannot fetch any hostname from ingress for service %s", svc.Name)
+		return "", fmt.Errorf("can't fetch any hostname from ingress for service %s", svc.Name)
 	}
 	if ip != "" {
 		return ip, nil
