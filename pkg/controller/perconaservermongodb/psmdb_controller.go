@@ -14,6 +14,7 @@ import (
 	"github.com/percona/mongodb-orchestration-tools/watchdog"
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
+	"gopkg.in/mgo.v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -262,13 +263,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			crState.Services = append(crState.Services, *service)
 		}
 
-		var rstatus api.ReplsetStatus
-		if rstatus, ok := cr.Status.Replsets[replset.Name]; !ok {
-			rstatus = &api.ReplsetStatus{}
-			cr.Status.Replsets[replset.Name] = rstatus
-		}
+		// var rstatus api.ReplsetStatus
+		// if rstatus, ok := cr.Status.Replsets[replset.Name]; !ok {
+		// 	rstatus = &api.ReplsetStatus{}
+		// 	cr.Status.Replsets[replset.Name] = rstatus
+		// }
 
-		if !rstatus.Initialized {
+		if !r.rsetInitialized(cr, replset, *pods, secrets) {
 			// try making a replica set connection to the pods to
 			// check if the replset was already initialized
 			// session, err := mgo.DialWithInfo(getReplsetDialInfo(m, replset, podList.Items, usersSecret))
@@ -280,11 +281,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			// }
 
 			err = r.handleReplsetInit(cr, replset, pods.Items)
-			if err == nil {
-				rstatus.Initialized = true
-			} else {
-				log.WithValues("replset", replset.Name).Error(err, "Failed to init replset")
-			}
+			// if err == nil {
+			// 	rstatus.Initialized = true
+			// } else {
+			// 	log.WithValues("replset", replset.Name).Error(err, "Failed to init replset")
+			// }
 		}
 	}
 	// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
@@ -293,6 +294,56 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	r.pods.Update(crState)
 
 	return rr, nil
+}
+func (r *ReconcilePerconaServerMongoDB) rsetInitialized(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) bool {
+	session, err := mgo.DialWithInfo(r.getReplsetDialInfo(cr, replset, pods.Items, usersSecret))
+	if err != nil {
+		// log.Info("Cannot connect to mongodb replset %s to check initialization: %v", replset.Name, err)
+		return false
+	}
+
+	session.Close()
+	return true
+}
+
+// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
+func (r *ReconcilePerconaServerMongoDB) getReplsetDialInfo(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
+	return &mgo.DialInfo{
+		Addrs:          r.getReplsetAddrs(m, replset, pods),
+		ReplicaSetName: replset.Name,
+		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
+		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
+		Timeout:        3 * time.Second,
+		FailFast:       true,
+	}
+}
+
+// getReplsetAddrs returns a slice of replset host:port addresses
+func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) []string {
+	addrs := make([]string, 0)
+	var hostname string
+
+	if replset.Expose != nil && replset.Expose.Enabled {
+		for _, pod := range pods {
+			svc, err := r.getExtServices(m, pod.Name)
+			if err != nil {
+				log.Error(err, "failed to fetch service address")
+				continue
+			}
+			hostname, err := psmdb.GetServiceAddr(*svc, pod, r.client)
+			if err != nil {
+				log.Error(err, "failed to get service hostname")
+				continue
+			}
+			addrs = append(addrs, hostname.String())
+		}
+	} else {
+		for _, pod := range pods {
+			hostname = podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
+			addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
+		}
+	}
+	return addrs
 }
 
 // ensureWatchdog ensures the PSMDB watchdog has started. This process controls the replica set and sharding

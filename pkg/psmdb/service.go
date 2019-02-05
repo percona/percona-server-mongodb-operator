@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -94,6 +95,10 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 type ServiceAddr struct {
 	Host string
 	Port int
+}
+
+func (s ServiceAddr) String() string {
+	return s.Host + ":" + strconv.Itoa(s.Port)
 }
 
 func GetServiceAddr(svc corev1.Service, pod corev1.Pod, cl client.Client) (*ServiceAddr, error) {
