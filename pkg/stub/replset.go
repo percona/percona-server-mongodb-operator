@@ -25,7 +25,7 @@ var (
 )
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
-func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) []string {
+func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 	var hostname string
 
@@ -33,9 +33,11 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 		for _, pod := range pods {
 			hostname, err := getSvcAddr(m, pod)
 			if err != nil {
-				logrus.Errorf("failed to get service hostname: %v", err)
-				continue
+				return nil, fmt.Errorf("failed to get service hostname: %v", err)
 			}
+
+			logrus.Debugf("hostname for pod %s: %s", pod.Name, hostname)
+
 			addrs = append(addrs, hostname.String())
 		}
 	} else {
@@ -44,19 +46,23 @@ func GetReplsetAddrs(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replset
 			addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
 		}
 	}
-	return addrs
+	return addrs, nil
 }
 
 // getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
-func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
+func getReplsetDialInfo(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) (*mgo.DialInfo, error) {
+	addrs, err := GetReplsetAddrs(m, replset, pods)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dialinfo: %v", err)
+	}
 	return &mgo.DialInfo{
-		Addrs:          GetReplsetAddrs(m, replset, pods),
+		Addrs:          addrs,
 		ReplicaSetName: replset.Name,
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 		Timeout:        MongoDBTimeout,
 		FailFast:       true,
-	}
+	}, nil
 }
 
 // isReplsetInitialized returns a boolean reflecting if the replica set has been initiated
@@ -65,9 +71,15 @@ func isReplsetInitialized(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 		return true
 	}
 
+	dialInfo, err := getReplsetDialInfo(m, replset, podList.Items, usersSecret)
+	if err != nil {
+		logrus.Debugf("Cannot get dialInfo for replset %s to check initialization: %v", replset.Name, err)
+		return false
+	}
+
 	// try making a replica set connection to the pods to
 	// check if the replset was already initialized
-	session, err := mgo.DialWithInfo(getReplsetDialInfo(m, replset, podList.Items, usersSecret))
+	session, err := mgo.DialWithInfo(dialInfo)
 	if err != nil {
 		logrus.Debugf("Cannot connect to mongodb replset %s to check initialization: %v", replset.Name, err)
 		return false

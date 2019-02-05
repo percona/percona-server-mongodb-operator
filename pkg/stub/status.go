@@ -32,7 +32,11 @@ func getReplsetStatus(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Replse
 func getReplsetMemberStatuses(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) []*v1alpha1.ReplsetMemberStatus {
 	members := make([]*v1alpha1.ReplsetMemberStatus, 0)
 	for _, pod := range pods {
-		dialInfo := getReplsetDialInfo(m, replset, []corev1.Pod{pod}, usersSecret)
+		dialInfo, err := getReplsetDialInfo(m, replset, []corev1.Pod{pod}, usersSecret)
+		if err != nil {
+			logrus.Debugf("Can't get dialInfo for pod %s, replset %s", pod.Name, replset.Name)
+			continue
+		}
 		if len(dialInfo.Addrs) == 0 {
 			logrus.Debugf("No dialInfo.Addrs for pod %s, replset %s", pod.Name, replset.Name)
 			continue

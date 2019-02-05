@@ -18,7 +18,7 @@ import (
 )
 
 func TestGetReplsetDialInfo(t *testing.T) {
-	di := getReplsetDialInfo(
+	di, err := getReplsetDialInfo(
 		&v1alpha1.PerconaServerMongoDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      t.Name(),
@@ -49,6 +49,7 @@ func TestGetReplsetDialInfo(t *testing.T) {
 			},
 		},
 	)
+	assert.NoError(t, err)
 	assert.NotNil(t, di)
 	assert.Equal(t, config.DefaultReplsetName, di.ReplicaSetName)
 	assert.Len(t, di.Addrs, 1)
