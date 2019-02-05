@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -346,7 +347,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			continue
 		}
 
-		log.Info("Initiating replset %s on running pod: %s", replset.Name, pod.Name)
+		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
 
 		cmd := []string{
 			"k8s-mongodb-initiator",
@@ -365,7 +366,14 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			cmd = append(cmd, "--ip", hostname.Host, "--port", strconv.Itoa(hostname.Port))
 
 		}
-		return r.clientcmd.Exec(&pod, "mongod", cmd, nil, nil, nil, false)
+
+		var errb bytes.Buffer
+		err := r.clientcmd.Exec(&pod, "mongod", cmd, nil, nil, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec: %v /  %s", err, errb.String())
+		}
+
+		return nil
 	}
 	return ErrNoRunningMongodContainers
 }
