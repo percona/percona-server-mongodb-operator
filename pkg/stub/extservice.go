@@ -87,12 +87,22 @@ func (h *Handler) svcList(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Re
 			APIVersion: "v1",
 		},
 	}
-
 	lbls := svcLabels(m, replset)
 
 	if err := h.client.List(m.Namespace, svcs, opSdk.WithListOptions(&metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(lbls).String()})); err != nil {
 		return nil, fmt.Errorf("couldn't fetch services: %v", err)
+	}
+
+	if replset.Expose != nil && replset.Expose.Enabled && replset.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+		ingressSvcs := make([]corev1.Service, len(svcs.Items))
+
+		for _, svc := range svcs.Items {
+			if len(svc.Status.LoadBalancer.Ingress) > 0 {
+				ingressSvcs = append(ingressSvcs, svc)
+			}
+		}
+		svcs.Items = ingressSvcs
 	}
 
 	return svcs, nil
