@@ -17,11 +17,10 @@ package k8s
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
+	"strings"
 )
 
 const (
@@ -177,7 +176,12 @@ func (t *Task) getServiceAddr() (*db.Addr, error) {
 		return addr, nil
 
 	case corev1.ServiceTypeLoadBalancer:
-		addr.Host = service.Spec.LoadBalancerIP
+		host, err := getIngressPoint(*service)
+		if err != nil {
+			return nil, fmt.Errorf("can't get service %s address: %v", service.Name, err)
+		}
+		addr.Host = host
+
 		for _, p := range service.Spec.Ports {
 			if p.Name != mongodbPortName {
 				continue
@@ -197,4 +201,22 @@ func (t *Task) getServiceAddr() (*db.Addr, error) {
 	}
 
 	return nil, fmt.Errorf("could not find mongodb service address")
+}
+
+func getIngressPoint(service corev1.Service) (string, error) {
+	if service.Status.LoadBalancer.Ingress == nil || len(service.Status.LoadBalancer.Ingress) == 0 {
+		return "", fmt.Errorf("can't get service %s ingress", service.Name)
+	}
+	ip := service.Status.LoadBalancer.Ingress[0].IP
+	hostname := service.Status.LoadBalancer.Ingress[0].Hostname
+
+	if ip != "" {
+		return ip, nil
+	}
+
+	if hostname != "" {
+		return hostname, nil
+	}
+
+	return "", fmt.Errorf("can't get service %s ingress", service.Name)
 }
