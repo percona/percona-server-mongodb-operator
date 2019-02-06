@@ -44,10 +44,11 @@ func getPodReplsetName(pod *corev1.Pod) (string, error) {
 // CustomResourceState represents the state of a single
 // Kubernetes CR for PSMDB
 type CustomResourceState struct {
-	Name         string
-	Pods         []corev1.Pod
-	Services     []corev1.Service
-	Statefulsets []appsv1.StatefulSet
+	Name           string
+	Pods           []corev1.Pod
+	Services       []corev1.Service
+	ServicesExpose bool
+	Statefulsets   []appsv1.StatefulSet
 }
 
 func (cr *CustomResourceState) getServiceFromPod(pod *corev1.Pod) *corev1.Service {

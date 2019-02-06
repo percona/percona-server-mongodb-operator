@@ -125,13 +125,16 @@ func (t *Task) IsTaskType(taskType pod.TaskType) bool {
 }
 
 func (t *Task) GetMongoAddr() (*db.Addr, error) {
-	service := t.cr.getServiceFromPod(t.pod)
-	if service != nil {
-		addr, err := t.getServiceAddr()
-		if err != nil {
-			return nil, err
+	if t.cr.ServicesExpose {
+		service := t.cr.getServiceFromPod(t.pod)
+		if service != nil {
+			addr, err := t.getServiceAddr()
+			if err != nil {
+				return nil, err
+			}
+			return addr, nil
 		}
-		return addr, nil
+		return nil, errors.New("service not ready yet")
 	}
 
 	for _, container := range t.pod.Spec.Containers {
