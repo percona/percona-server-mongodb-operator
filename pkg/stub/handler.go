@@ -206,6 +206,8 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 			// Ensure replset has external services
 			if replset.Expose != nil && replset.Expose.Enabled {
 
+				crState.ServicesExpose = true
+
 				logrus.Infof("Creating services for replset %s", replset.Name)
 				if err := h.createSvcs(psmdb, replset); err != nil {
 					return fmt.Errorf("failed to create services of replset %s: %v", replset.Name, err)
