@@ -263,11 +263,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			crState.Services = append(crState.Services, *service)
 		}
 
-		// var rstatus api.ReplsetStatus
-		// if rstatus, ok := cr.Status.Replsets[replset.Name]; !ok {
-		// 	rstatus = &api.ReplsetStatus{}
-		// 	cr.Status.Replsets[replset.Name] = rstatus
-		// }
+		var rstatus *api.ReplsetStatus
+		rstatus, ok := cr.Status.Replsets[replset.Name]
+		if !ok || rstatus == nil {
+			rstatus = &api.ReplsetStatus{Name: replset.Name}
+			cr.Status.Replsets[replset.Name] = rstatus
+		}
 
 		if !r.rsetInitialized(cr, replset, *pods, secrets) {
 			// try making a replica set connection to the pods to
@@ -281,12 +282,17 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			// }
 
 			err = r.handleReplsetInit(cr, replset, pods.Items)
-			// if err == nil {
-			// 	rstatus.Initialized = true
-			// } else {
-			// 	log.WithValues("replset", replset.Name).Error(err, "Failed to init replset")
-			// }
+			if err == nil {
+				rstatus.Initialized = true
+			} else {
+				log.WithValues("replset", replset.Name).Error(err, "Failed to init replset")
+			}
 		}
+	}
+
+	err = r.client.Update(context.TODO(), cr)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("update psmdb status: %v", err)
 	}
 	// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
 	r.ensureWatchdog(cr, secrets)
