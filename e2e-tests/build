@@ -10,7 +10,7 @@ src_dir="$(realpath $test_dir/..)"
 build_operator() {
     if [ "${RELEASE:-0}" = 0 ]; then
         GO_LDFLAGS="-race"
-        $sed -i -e 's^return "percona/percona-server-mongodb-operator:"^return "perconalab/percona-server-mongodb-operator:"^' ${src_dir}/pkg/psmdb/container.go
+        $sed -i -e 's^"percona/percona-server-mongodb-operator:"^"perconalab/percona-server-mongodb-operator:"^' ${src_dir}/pkg/psmdb/container.go
         $sed -i -e "s/master/$GIT_BRANCH/" ${src_dir}/version/version.go
     fi
     repo=$(
@@ -25,22 +25,29 @@ build_operator() {
         export GIT_BRANCH='$GIT_BRANCH'
 
         cd /go/src/${repo}
-        bash -x tmp/build/build.sh
+        mkdir -p build/_output/bin
+        GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+            -ldflags '-w -s -X main.GitCommit=${GIT_COMMIT} -X main.GitBranch=${GIT_BRANCH}' \
+            -o build/_output/bin/percona-server-mongodb-operator \
+            cmd/manager/main.go
     "
     if [ "${RELEASE:-0}" = 0 ]; then
-        $sed -i -e 's^return "perconalab/percona-server-mongodb-operator:"^return "percona/percona-server-mongodb-operator:"^' ${src_dir}/pkg/psmdb/container.go
+        $sed -i -e 's^"perconalab/percona-server-mongodb-operator:"^"percona/percona-server-mongodb-operator:"^' ${src_dir}/pkg/psmdb/container.go
         $sed -i -e "s/$GIT_BRANCH/master/" ${src_dir}/version/version.go
     fi
     export IMAGE
     pushd ${src_dir}
-        bash -x ${src_dir}/tmp/build/docker_build.sh
+        docker build \
+            --squash \
+            --no-cache \
+            -t "${IMAGE}" -f build/Dockerfile .
     popd
     docker push ${IMAGE}
 }
 
 build_mongod36() {
     pushd ${src_dir}
-        docker build --no-cache --squash -t ${IMAGE_MONGOD36} -f tmp/build/Dockerfile.mongod36 .
+        docker build --no-cache --squash -t ${IMAGE_MONGOD36} -f build/Dockerfile.mongod36 .
     popd
     docker push ${IMAGE_MONGOD36}
 }
