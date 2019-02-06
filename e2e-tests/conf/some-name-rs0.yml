@@ -16,10 +16,10 @@ spec:
       limits:
         cpu: "500m"
         memory: "0.5G"
+      storage: "1Gi"
       requests:
         cpu: "100m"
         memory: "0.1G"
-      storage: "1Gi"
   mongod:
     net:
       port: 27017

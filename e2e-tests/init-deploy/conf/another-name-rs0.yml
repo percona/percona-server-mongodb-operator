@@ -12,15 +12,14 @@ spec:
   replsets:
   - name: rs0
     size: 3
-    # storageClass: local-storage
     resources:
       limits:
         cpu: "500m"
         memory: "0.5G"
+      storage: "1Gi"
       requests:
         cpu: "100m"
         memory: "0.1G"
-      storage: "1Gi"
   mongod:
     net:
       port: 27017
