@@ -49,7 +49,7 @@ main() {
     check_cr_config "cluster-ip-rs0"
 
     desc 'check LoadBalancer'
-    #check_cr_config "local-balancer-rs0"
+    check_cr_config "local-balancer-rs0"
 
     destroy $namespace
 }

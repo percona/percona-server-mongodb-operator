@@ -7,7 +7,6 @@ metadata:
     app: percona-server-mongodb
     cluster: local-balancer
     replset: rs0
-    type: expose-externally
   name: local-balancer-rs0-0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
