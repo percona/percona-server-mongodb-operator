@@ -129,8 +129,7 @@ func svc(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, name s
 
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
-		svc.Spec.ExternalTrafficPolicy = "Local"
-		svc.Annotations = map[string]string{"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp"}
+		svc.Spec.ExternalTrafficPolicy = "Cluster"
 
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
