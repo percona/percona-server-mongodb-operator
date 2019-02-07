@@ -1,7 +1,7 @@
 #!/bin/bash
 
 GIT_COMMIT=$(git rev-parse HEAD)
-GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g')}
+GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_MONGOD36=${IMAGE_MONGOD36:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}-mongod3.6"}
 tmp_dir=$(mktemp -d)
@@ -206,7 +206,7 @@ get_service_ip() {
         sleep 1
     done
     kubectl get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
-    kubectl get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].host}'
+    kubectl get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
 }
 
 compare_mongo_cmd() {
@@ -216,7 +216,7 @@ compare_mongo_cmd() {
     local suffix="$4"
 
     run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set' \
+        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:' \
         | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
         > $tmp_dir/${command}
     diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
@@ -226,7 +226,7 @@ get_mongo_primary_endpoint() {
     local uri="$1"
 
     run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
-        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK" \
+        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:" \
         | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
         | grep ":27017$"
 }
@@ -250,7 +250,7 @@ compare_mongo_user() {
     local user=$(echo $uri | cut -d : -f 1)
 
     run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
-        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK" \
+        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:" \
         | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
         | $sed -e '/"ok" : 1/,+4d' \
         > $tmp_dir/$user.json
