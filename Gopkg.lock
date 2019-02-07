@@ -356,7 +356,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f492b773e6db16d24d0a036aa9558072fc6598b377af1c17af7c38bc184d1990"
+  digest = "1:bd4f485629225e90731e8ad6164ebd5cd16ad7f36be0d0bc9f241f57f4ee661e"
   name = "github.com/percona/mongodb-orchestration-tools"
   packages = [
     ".",
@@ -375,7 +375,7 @@
     "watchdog/watcher",
   ]
   pruneopts = "NT"
-  revision = "286a3b113309e9fdbed7afa18cb9466ccd63b195"
+  revision = "398fe3f8568f58b8d353575d08d346bc33c7f130"
 
 [[projects]]
   branch = "master"
@@ -959,6 +959,7 @@
     "github.com/percona/mongodb-orchestration-tools/watchdog",
     "github.com/percona/mongodb-orchestration-tools/watchdog/config",
     "github.com/percona/mongodb-orchestration-tools/watchdog/metrics",
+    "gopkg.in/mgo.v2",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",

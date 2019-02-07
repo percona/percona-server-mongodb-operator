@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/clientcmd"
-
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/percona/mongodb-orchestration-tools/watchdog"
@@ -29,6 +27,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/clientcmd"
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/secret"
@@ -71,6 +70,8 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		watchdogMetrics: wdMetrics.NewCollector(),
 		watchdogQuit:    make(chan bool, 1),
 
+		watchdog: make(map[string]*watchdog.Watchdog),
+
 		clientcmd: cli,
 	}, nil
 }
@@ -106,7 +107,7 @@ type ReconcilePerconaServerMongoDB struct {
 	reconcileIn   time.Duration
 
 	pods            *podk8s.Pods
-	watchdog        *watchdog.Watchdog
+	watchdog        map[string]*watchdog.Watchdog
 	watchdogMetrics *wdMetrics.Collector
 	watchdogQuit    chan bool
 }
@@ -359,7 +360,7 @@ func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMong
 //
 func (r *ReconcilePerconaServerMongoDB) ensureWatchdog(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret) {
 	// Skip if watchdog is started
-	if r.watchdog != nil {
+	if _, ok := r.watchdog[cr.Name]; ok {
 		return
 	}
 
@@ -376,14 +377,14 @@ func (r *ReconcilePerconaServerMongoDB) ensureWatchdog(cr *api.PerconaServerMong
 	}
 
 	// Start the watchdog if it has not been started
-	r.watchdog = watchdog.New(&wdConfig.Config{
+	r.watchdog[cr.Name] = watchdog.New(&wdConfig.Config{
 		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
 		APIPoll:        5 * time.Second,
 		ReplsetPoll:    5 * time.Second,
 		ReplsetTimeout: 3 * time.Second,
 	}, r.pods, r.watchdogMetrics, r.watchdogQuit)
-	go r.watchdog.Run()
+	go r.watchdog[cr.Name].Run()
 
 	// register prometheus collector
 	// prometheus.MustRegister(h.watchdogMetrics)
