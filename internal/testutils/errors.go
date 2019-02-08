@@ -10,7 +10,7 @@ import (
 var (
 	MockUnexpectedError    = errors.New("mock unexpected error")
 	MockAlreadyExistsError = k8serrors.NewAlreadyExists(schema.GroupResource{
-		Group:    "group",
-		Resource: "resource",
+		Group:    "alreadyExists",
+		Resource: "alreadyExists",
 	}, "mock")
 )
