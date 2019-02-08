@@ -271,9 +271,10 @@ type BackupTaskSpec struct {
 }
 
 type BackupTaskStatus struct {
-	Name    string `json:"name,omitempty"`
-	Enabled bool   `json:"enabled"`
-	CronJob string `json:"cronJob,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Enabled     bool   `json:"enabled"`
+	CronJob     string `json:"cronJob,omitempty"`
+	StorageName string `json:"storageName,omitempty"`
 }
 
 type Arbiter struct {
