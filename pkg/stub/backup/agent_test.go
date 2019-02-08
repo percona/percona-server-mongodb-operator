@@ -6,8 +6,10 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
+	pbmStorage "github.com/percona/percona-backup-mongodb/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -83,21 +85,14 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 	assert.NotNil(t, secret)
 	assert.Equal(t, t.Name()+"-backup-agent-config", secret.Name)
 
-	assert.Equal(t, `storages:
-  test:
-    type: s3
-    s3:
-      region: us-west-2
-      endpointUrl: https://minio.local/minio
-      bucket: my-s3-bucket-name
-      credentials:
-        access-key-id: test-aws-access-key
-        secret-access-key: test-aws-secret-access-key
-        vault:
-          server: ""
-          secret: ""
-          token: ""
-    filesystem:
-      path: ""
-`, secret.StringData[agentConfigFileName])
+	storages := &pbmStorage.Storages{}
+	err = yaml.Unmarshal([]byte(secret.StringData[agentConfigFileName]), storages)
+	assert.NoError(t, err)
+	assert.NotNil(t, storages.Storages["test"])
+	testStorage := storages.Storages["test"]
+	assert.Equal(t, "us-west-2", testStorage.S3.Region)
+	assert.Equal(t, "https://minio.local/minio", testStorage.S3.EndpointURL)
+	assert.Equal(t, "my-s3-bucket-name", testStorage.S3.Bucket)
+	assert.Equal(t, "test-aws-access-key", testStorage.S3.Credentials.AccessKeyID)
+	assert.Equal(t, "test-aws-secret-access-key", storages.Storages["test"].S3.Credentials.SecretAccessKey)
 }
