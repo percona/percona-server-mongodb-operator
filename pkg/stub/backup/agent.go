@@ -11,6 +11,7 @@ import (
 	pbmStorage "github.com/percona/percona-backup-mongodb/storage"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // AgentContainerName is the name of the backup agent container
@@ -98,9 +99,10 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 		return nil, err
 	}
 
-	return util.NewSecret(c.psmdb, c.agentConfigSecretName(), map[string]string{
+	secret := util.NewSecret(c.psmdb, c.agentConfigSecretName(), map[string]string{
 		agentConfigFileName: string(storagesYaml),
-	}), nil
+	})
+	return secret, c.client.Create(secret)
 }
 
 func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Container {
@@ -125,12 +127,12 @@ func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Con
 
 func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
 	storagesSecret, err := c.newAgentStoragesConfig()
-	if err != nil {
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return nil, err
 	}
 	return []corev1.Volume{
 		{
-			Name: storagesSecret.Name,
+			Name: c.agentConfigSecretName(),
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: storagesSecret.Name,

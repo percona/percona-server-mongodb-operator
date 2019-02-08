@@ -79,6 +79,7 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 			awsSecretAccessKeySecretKey: []byte("test-aws-secret-access-key"),
 		}
 	})
+	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil)
 
 	secret, err := c.newAgentStoragesConfig()
 	assert.NoError(t, err)
@@ -96,4 +97,7 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 	assert.Equal(t, "my-s3-bucket-name", testStorage.S3.Bucket)
 	assert.Equal(t, "test-aws-access-key", testStorage.S3.Credentials.AccessKeyID)
 	assert.Equal(t, "test-aws-secret-access-key", testStorage.S3.Credentials.SecretAccessKey)
+
+	_, err = c.newAgentStoragesConfig()
+	assert.NoError(t, err)
 }
