@@ -81,13 +81,13 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 	})
 	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil)
 
-	secret, err := c.newAgentStoragesConfig()
+	secret, err := c.newAgentStoragesConfigSecret()
 	assert.NoError(t, err)
 	assert.NotNil(t, secret)
 	assert.Equal(t, t.Name()+"-backup-agent-config", secret.Name)
 
 	storages := &pbmStorage.Storages{}
-	err = yaml.Unmarshal([]byte(secret.StringData[agentConfigFileName]), storages)
+	err = yaml.Unmarshal([]byte(secret.StringData[agentStoragesConfigFile]), storages)
 	assert.NoError(t, err)
 	assert.NotNil(t, storages.Storages["test"])
 

@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"errors"
 	"strconv"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
@@ -9,6 +8,7 @@ import (
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	pbmStorage "github.com/percona/percona-backup-mongodb/storage"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,12 +19,12 @@ const AgentContainerName = "backup-agent"
 
 const (
 	agentConfigDir              = "/etc/percona-backup-mongodb"
-	agentConfigFileName         = "agent.yml"
+	agentStoragesConfigFile     = "storages.yml"
 	awsAccessKeySecretKey       = "AWS_ACCESS_KEY_ID"
 	awsSecretAccessKeySecretKey = "AWS_SECRET_ACCESS_KEY"
 )
 
-func (c *Controller) agentConfigSecretName() string {
+func (c *Controller) agentStoragesConfigSecretName() string {
 	return c.psmdb.Name + "-backup-agent-config"
 }
 
@@ -36,7 +36,7 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 		},
 		{
 			Name:  "PBM_AGENT_STORAGES_CONFIG",
-			Value: agentConfigDir + "/" + agentConfigFileName,
+			Value: agentConfigDir + "/" + agentStoragesConfigFile,
 		},
 		{
 			Name:  "PBM_AGENT_MONGODB_PORT",
@@ -63,17 +63,16 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 	}
 }
 
-func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
-	storages := map[string]pbmStorage.Storage{}
-
+func (c *Controller) newAgentStoragesConfigSecret() (*corev1.Secret, error) {
+	storages := make(map[string]pbmStorage.Storage)
 	for storageName, storageSpec := range c.psmdb.Spec.Backup.Storages {
 		switch storageSpec.Type {
 		case v1alpha1.BackupStorageS3:
 			s3secret, err := util.GetSecret(c.psmdb, c.client, storageSpec.S3.CredentialsSecret)
 			if err != nil {
-				return nil, err
+				logrus.Errorf("error getting s3 credentials secret name %s: %v", storageName, err)
+				continue
 			}
-
 			storages[storageName] = pbmStorage.Storage{
 				Type: "s3",
 				S3: pbmStorage.S3{
@@ -87,9 +86,9 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 				},
 			}
 		case v1alpha1.BackupStorageFilesystem:
-			return nil, errors.New("filesystem backup storage not supported yet")
+			logrus.Errorf("filesystem backup storage not supported yet, skipping storage name: %s", storageName)
 		default:
-			return nil, errors.New("unsupported backup storage type")
+			logrus.Errorf("unsupported backup storage type: %s", storageName)
 		}
 	}
 
@@ -99,9 +98,8 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	return util.NewSecret(c.psmdb, c.agentConfigSecretName(), map[string]string{
-		agentConfigFileName: string(storagesYaml),
+	return util.NewSecret(c.psmdb, c.agentStoragesConfigSecretName(), map[string]string{
+		agentStoragesConfigFile: string(storagesYaml),
 	}), nil
 }
 
@@ -117,7 +115,7 @@ func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Con
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      c.agentConfigSecretName(),
+				Name:      c.agentStoragesConfigSecretName(),
 				MountPath: agentConfigDir,
 				ReadOnly:  true,
 			},
@@ -126,7 +124,7 @@ func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Con
 }
 
 func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
-	storagesSecret, err := c.newAgentStoragesConfig()
+	storagesSecret, err := c.newAgentStoragesConfigSecret()
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +136,10 @@ func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
 
 	return []corev1.Volume{
 		{
-			Name: c.agentConfigSecretName(),
+			Name: c.agentStoragesConfigSecretName(),
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: c.agentConfigSecretName(),
+					SecretName: c.agentStoragesConfigSecretName(),
 					Optional:   &util.FalseVar,
 				},
 			},
