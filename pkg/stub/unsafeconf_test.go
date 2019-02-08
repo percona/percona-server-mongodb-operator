@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_setSafeDefault(t *testing.T) {
@@ -42,6 +43,10 @@ func Test_setSafeDefault(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			setSafeDefault(test.replset)
+			assert.Equal(t, test.replset.Size, test.expected.Size)
+			if test.replset.Arbiter != nil {
+				assert.Equal(t, test.replset.Arbiter.Size, test.expected.Arbiter.Size)
+			}
 		})
 	}
 }
