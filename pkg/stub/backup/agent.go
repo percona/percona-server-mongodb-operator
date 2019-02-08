@@ -99,10 +99,9 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 		return nil, err
 	}
 
-	secret := util.NewSecret(c.psmdb, c.agentConfigSecretName(), map[string]string{
+	return util.NewSecret(c.psmdb, c.agentConfigSecretName(), map[string]string{
 		agentConfigFileName: string(storagesYaml),
-	})
-	return secret, c.client.Create(secret)
+	}), nil
 }
 
 func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Container {
@@ -127,6 +126,10 @@ func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Con
 
 func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
 	storagesSecret, err := c.newAgentStoragesConfig()
+	if err != nil {
+		return nil, err
+	}
+	err = c.client.Create(storagesSecret)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return nil, err
 	}
