@@ -84,6 +84,8 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 					},
 				},
 			}
+		case v1alpha1.BackupStorageFilesystem:
+			return nil, errors.New("filesystem storage not supported yet")
 		default:
 			return nil, errors.New("unsupported backup storage type")
 		}
