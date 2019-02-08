@@ -110,18 +110,9 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		if spec.Backup.Coordinator == nil {
 			spec.Backup.Coordinator = &v1alpha1.BackupCoordinatorSpec{}
 		}
-		if spec.Backup.S3 == nil {
-			spec.Backup.S3 = &v1alpha1.BackupS3Spec{}
-		}
-		if spec.Backup.S3.Secret == "" {
-			spec.Backup.S3.Secret = backup.DefaultS3SecretName
-		}
 		for _, bkpTask := range spec.Backup.Tasks {
 			if bkpTask.CompressionType == "" {
 				bkpTask.CompressionType = backup.DefaultCompressionType
-			}
-			if bkpTask.DestinationType == "" {
-				bkpTask.DestinationType = backup.DefaultDestinationType
 			}
 		}
 	}
@@ -164,6 +155,26 @@ func (h *Handler) newStatefulSetContainers(m *v1alpha1.PerconaServerMongoDB, rep
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	h.addSpecDefaults(m)
 
+	volumes := []corev1.Volume{
+		{
+			Name: m.Spec.Secrets.Key,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &secretFileMode,
+					SecretName:  m.Spec.Secrets.Key,
+					Optional:    &util.FalseVar,
+				},
+			},
+		},
+	}
+	if h.hasBackupsEnabled(m) {
+		agentVolumes, err := h.backups.NewAgentVolumes()
+		if err != nil {
+			return nil, err
+		}
+		volumes = append(volumes, agentVolumes...)
+	}
+
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
@@ -184,18 +195,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: runUID,
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: m.Spec.Secrets.Key,
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								DefaultMode: &secretFileMode,
-								SecretName:  m.Spec.Secrets.Key,
-								Optional:    &util.FalseVar,
-							},
-						},
-					},
-				},
+				Volumes: volumes,
 			},
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{

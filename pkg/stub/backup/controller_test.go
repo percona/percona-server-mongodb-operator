@@ -34,10 +34,9 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 		c.client = client
 
 		c.psmdb.Spec.Backup.Tasks = append(c.psmdb.Spec.Backup.Tasks, &v1alpha1.BackupTaskSpec{
-			Name:            t.Name(),
-			Enabled:         true,
-			Schedule:        "* * * * *",
-			DestinationType: v1alpha1.BackupDestinationS3,
+			Name:     t.Name(),
+			Enabled:  true,
+			Schedule: "* * * * *",
 		})
 
 		// test success

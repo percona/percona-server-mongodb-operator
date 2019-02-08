@@ -21,11 +21,19 @@ const (
 	agentConfigFileName = "agent.yml"
 )
 
+func (c *Controller) agentConfigSecretName() string {
+	return c.psmdb.Name + "-backup-agent-config"
+}
+
 func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "PBM_AGENT_SERVER_ADDRESS",
 			Value: c.coordinatorServiceName() + ":" + strconv.Itoa(int(coordinatorRPCPort)),
+		},
+		{
+			Name:  "PBM_AGENT_STORAGES_CONFIG",
+			Value: agentConfigDir + "/" + agentConfigFileName,
 		},
 		{
 			Name:  "PBM_AGENT_MONGODB_PORT",
@@ -52,7 +60,7 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 	}
 }
 
-func (c *Controller) newAgentConfig() (*corev1.Secret, error) {
+func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 	storages := pbmStorage.Storages{
 		Storages: map[string]pbmStorage.Storage{},
 	}
@@ -86,7 +94,7 @@ func (c *Controller) newAgentConfig() (*corev1.Secret, error) {
 		return nil, err
 	}
 
-	return util.NewSecret(c.psmdb, c.psmdb.Name+"-backup-agent-config", map[string]string{
+	return util.NewSecret(c.psmdb, c.agentConfigSecretName(), map[string]string{
 		agentConfigFileName: string(storagesYaml),
 	}), nil
 }
@@ -101,5 +109,30 @@ func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Con
 			RunAsNonRoot: &util.TrueVar,
 			RunAsUser:    util.GetContainerRunUID(c.psmdb, c.serverVersion),
 		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      c.agentConfigSecretName(),
+				MountPath: agentConfigDir,
+				ReadOnly:  true,
+			},
+		},
 	}
+}
+
+func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
+	storagesSecret, err := c.newAgentStoragesConfig()
+	if err != nil {
+		return nil, err
+	}
+	return []corev1.Volume{
+		{
+			Name: storagesSecret.Name,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: storagesSecret.Name,
+					Optional:   &util.FalseVar,
+				},
+			},
+		},
+	}, nil
 }

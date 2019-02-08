@@ -62,6 +62,14 @@ func TestNewStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: &v1alpha1.BackupSpec{
+				Tasks: []*v1alpha1.BackupTaskSpec{
+					{
+						Name:    "test",
+						Enabled: true,
+					},
+				},
+			},
 			Secrets: &v1alpha1.SecretsSpec{
 				Key: config.DefaultKeySecretName,
 			},

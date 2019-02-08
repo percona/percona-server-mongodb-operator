@@ -31,6 +31,7 @@ func (c *Controller) newBackupCronJobContainerArgs(backup *v1alpha1.BackupTaskSp
 	args := []string{
 		"run", "backup",
 		"--description=" + c.psmdb.Name + "-" + backup.Name,
+		"--storage=" + backup.StorageName,
 	}
 
 	switch backup.CompressionType {
