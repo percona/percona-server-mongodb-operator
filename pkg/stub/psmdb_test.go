@@ -192,9 +192,11 @@ func TestNewStatefulSet(t *testing.T) {
 	bkpEnabledSet, err := h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
 	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Volumes, 2)
-	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Containers, 2)
-	assert.Equal(t, backup.AgentContainerName, bkpEnabledSet.Spec.Template.Spec.Containers[1].Name)
+	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Containers, 2, "backup agent container was not added")
+	assert.Equal(t, backup.AgentContainerName, bkpEnabledSet.Spec.Template.Spec.Containers[1].Name, "backup agent container was not added")
 
 	_, err = h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
+
+	client.AssertExpectations(t)
 }
