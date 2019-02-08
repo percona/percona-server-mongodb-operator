@@ -6,6 +6,7 @@ spec:
   #platform: openshift
   version: "3.6.8"
   imagePullPolicy: Always
+  allowUnsafeConfigurations: false
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
@@ -82,11 +83,11 @@ spec:
         #storageClass: aws-gp2
       debug: false
     tasks:
-    - name: daily
-      enabled: true
-      schedule: "0 0 * * *"
-      compressionType: gzip
-    - name: weekly
-      enabled: false
-      schedule: "0 0 * * 0"
-      compressionType: gzip
+      - name: daily
+        enabled: true
+        schedule: "0 0 * * *"
+        compressionType: gzip
+      - name: weekly
+        enabled: false
+        schedule: "0 0 * * 0"
+        compressionType: gzip
