@@ -161,6 +161,7 @@ func TestNewStatefulSet(t *testing.T) {
 
 	// test enabling of backups enables config-file secret volume
 	psmdb.Spec.Backup = &v1alpha1.BackupSpec{
+		Enabled: true,
 		Storages: map[string]v1alpha1.BackupStorageSpec{
 			"test": v1alpha1.BackupStorageSpec{
 				Type: v1alpha1.BackupStorageS3,
@@ -191,6 +192,8 @@ func TestNewStatefulSet(t *testing.T) {
 	bkpEnabledSet, err := h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
 	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Volumes, 2)
+	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Containers, 2)
+	assert.Equal(t, backup.AgentContainerName, bkpEnabledSet.Spec.Template.Spec.Containers[1].Name)
 
 	_, err = h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)

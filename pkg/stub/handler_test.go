@@ -24,7 +24,8 @@ func TestHasBackupsEnabled(t *testing.T) {
 	psmdb := &v1alpha1.PerconaServerMongoDB{
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
 			Backup: &v1alpha1.BackupSpec{
-				Tasks: []*v1alpha1.BackupTaskSpec{},
+				Enabled: true,
+				Tasks:   []*v1alpha1.BackupTaskSpec{},
 			},
 		},
 	}

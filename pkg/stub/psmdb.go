@@ -121,7 +121,7 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 // hasBackupsEnabled returns a boolean reflecting if there are any backups
 // enabled in the PSMDB spec
 func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
-	if m.Spec.Backup != nil {
+	if m.Spec.Backup != nil && m.Spec.Backup.Enabled {
 		for _, backupTask := range m.Spec.Backup.Tasks {
 			if backupTask.Enabled && backupTask.Schedule != "" {
 				return true
