@@ -75,8 +75,8 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 		secret := args.Get(0).(*corev1.Secret)
 		assert.Equal(t, "test-s3-credentials", secret.Name)
 		secret.Data = map[string][]byte{
-			"AWS_ACCESS_KEY_ID":     []byte("test-aws-access-key"),
-			"AWS_SECRET_ACCESS_KEY": []byte("test-aws-secret-access-key"),
+			awsAccessKeySecretKey:       []byte("test-aws-access-key"),
+			awsSecretAccessKeySecretKey: []byte("test-aws-secret-access-key"),
 		}
 	})
 

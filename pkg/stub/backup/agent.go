@@ -17,8 +17,10 @@ import (
 const AgentContainerName = "backup-agent"
 
 const (
-	agentConfigDir      = "/etc/percona-backup-mongodb"
-	agentConfigFileName = "agent.yml"
+	agentConfigDir              = "/etc/percona-backup-mongodb"
+	agentConfigFileName         = "agent.yml"
+	awsAccessKeySecretKey       = "AWS_ACCESS_KEY_ID"
+	awsSecretAccessKeySecretKey = "AWS_SECRET_ACCESS_KEY"
 )
 
 func (c *Controller) agentConfigSecretName() string {
@@ -77,8 +79,8 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 					Region:      storageSpec.S3.Region,
 					EndpointURL: storageSpec.S3.EndpointURL,
 					Credentials: pbmStorage.Credentials{
-						AccessKeyID:     string(s3secret.Data["AWS_ACCESS_KEY_ID"]),
-						SecretAccessKey: string(s3secret.Data["AWS_SECRET_ACCESS_KEY"]),
+						AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
+						SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
 					},
 				},
 			}
