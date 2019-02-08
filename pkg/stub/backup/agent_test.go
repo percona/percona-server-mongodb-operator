@@ -89,10 +89,11 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 	err = yaml.Unmarshal([]byte(secret.StringData[agentConfigFileName]), storages)
 	assert.NoError(t, err)
 	assert.NotNil(t, storages.Storages["test"])
+
 	testStorage := storages.Storages["test"]
 	assert.Equal(t, "us-west-2", testStorage.S3.Region)
 	assert.Equal(t, "https://minio.local/minio", testStorage.S3.EndpointURL)
 	assert.Equal(t, "my-s3-bucket-name", testStorage.S3.Bucket)
 	assert.Equal(t, "test-aws-access-key", testStorage.S3.Credentials.AccessKeyID)
-	assert.Equal(t, "test-aws-secret-access-key", storages.Storages["test"].S3.Credentials.SecretAccessKey)
+	assert.Equal(t, "test-aws-secret-access-key", testStorage.S3.Credentials.SecretAccessKey)
 }
