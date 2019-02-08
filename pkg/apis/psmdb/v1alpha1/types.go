@@ -228,19 +228,32 @@ type BackupCoordinatorSpec struct {
 	Debug          bool `json:"debug,omitempty"`
 }
 
-type BackupS3Spec struct {
-	Secret string `json:"secret,omitempty"`
-	Bucket string `json:"bucket,omitempty"`
-	Region string `json:"region,omitempty"`
+type BackupStorageS3Spec struct {
+	Bucket            string `json:"bucket"`
+	Region            string `json:"region"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	EndpointURL       string `json:"endpointUrl"`
+}
+
+type BackupStorageType string
+
+const (
+	BackupStorageFilesystem BackupStorageType = "filesystem"
+	BackupStorageS3         BackupStorageType = "s3"
+)
+
+type BackupStorageSpec struct {
+	Type BackupStorageType   `json:"type"`
+	S3   BackupStorageS3Spec `json:"s3,omitempty"`
 }
 
 type BackupSpec struct {
-	Enabled          bool                   `json:"enabled"`
-	Version          string                 `json:"version,omitempty"`
-	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
-	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
-	S3               *BackupS3Spec          `json:"s3,omitempty"`
-	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
+	Enabled          bool                         `json:"enabled"`
+	Version          string                       `json:"version,omitempty"`
+	RestartOnFailure *bool                        `json:"restartOnFailure,omitempty"`
+	Coordinator      *BackupCoordinatorSpec       `json:"coordinator,omitempty"`
+	Storages         map[string]BackupStorageSpec `json:"storages,omitempty"`
+	Tasks            []*BackupTaskSpec            `json:"tasks,omitempty"`
 }
 
 type BackupCompressionType string
@@ -249,19 +262,12 @@ var (
 	BackupCompressionGzip BackupCompressionType = "gzip"
 )
 
-type BackupDestinationType string
-
-var (
-	BackupDestinationS3   BackupDestinationType = "s3"
-	BackupDestinationFile BackupDestinationType = "file"
-)
-
 type BackupTaskSpec struct {
 	Name            string                `json:"name,omitempty"`
 	Enabled         bool                  `json:"enabled"`
 	Schedule        string                `json:"schedule,omitempty"`
+	StorageName     string                `json:"storageName,omitempty"`
 	CompressionType BackupCompressionType `json:"compressionType,omitempty"`
-	DestinationType BackupDestinationType `json:"destinationType,omitempty"`
 }
 
 type BackupTaskStatus struct {

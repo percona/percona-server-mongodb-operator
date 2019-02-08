@@ -66,10 +66,6 @@ spec:
     enabled: false
     version: 0.2.1
     restartOnFailure: true
-    s3:
-      secret: my-cluster-name-backup-s3
-      bucket: S3-BACKUP-BUCKET-NAME-HERE
-      region: us-west-2
     coordinator:
       resources:
         limits:
@@ -81,12 +77,27 @@ spec:
           memory: "0.1G"
         #storageClass: aws-gp2
       debug: false
+    storages:
+      s3-us-west:
+        type: s3
+        s3:
+          bucket: S3-BACKUP-BUCKET-NAME-HERE
+          region: us-west-2
+          credentialsSecret: my-cluster-name-backup-s3
+      #minio:
+      #  type: s3
+      #  s3:
+      #    bucket: S3-BACKUP-BUCKET-NAME-HERE
+      #    credentialsSecret: my-cluster-name-backup-s3
+      #    endpointUrl: https://minio.example.com/minio/
     tasks:
     - name: daily
       enabled: true
       schedule: "0 0 * * *"
+      storageName: s3-us-west
       compressionType: gzip
     - name: weekly
       enabled: false
       schedule: "0 0 * * 0"
+      storageName: s3-us-west
       compressionType: gzip
