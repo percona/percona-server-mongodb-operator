@@ -61,9 +61,7 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 }
 
 func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
-	storages := pbmStorage.Storages{
-		Storages: map[string]pbmStorage.Storage{},
-	}
+	storages := map[string]pbmStorage.Storage{}
 
 	for storageName, storageSpec := range c.psmdb.Spec.Backup.Storages {
 		switch storageSpec.Type {
@@ -72,7 +70,7 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 			if err != nil {
 				return nil, err
 			}
-			storages.Storages[storageName] = pbmStorage.Storage{
+			storages[storageName] = pbmStorage.Storage{
 				Type: "s3",
 				S3: pbmStorage.S3{
 					Bucket:      storageSpec.S3.Bucket,
@@ -89,7 +87,9 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 		}
 	}
 
-	storagesYaml, err := yaml.Marshal(storages)
+	storagesYaml, err := yaml.Marshal(&pbmStorage.Storages{
+		Storages: storages,
+	})
 	if err != nil {
 		return nil, err
 	}
