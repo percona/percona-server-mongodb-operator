@@ -87,9 +87,9 @@ spec:
       #minio:
       #  type: s3
       #  s3:
-      #    bucket: S3-BACKUP-BUCKET-NAME-HERE
-      #    credentialsSecret: my-cluster-name-backup-s3
-      #    endpointUrl: https://minio.example.com/minio/
+      #    bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+      #    credentialsSecret: my-cluster-name-backup-minio
+      #    endpointUrl: http://minio.example.local:9000/minio/
     tasks:
     - name: daily
       enabled: true

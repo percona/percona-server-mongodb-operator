@@ -73,6 +73,7 @@ func (c *Controller) newAgentStoragesConfig() (*corev1.Secret, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			storages[storageName] = pbmStorage.Storage{
 				Type: "s3",
 				S3: pbmStorage.S3{
@@ -129,16 +130,18 @@ func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	err = c.client.Create(storagesSecret)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return nil, err
 	}
+
 	return []corev1.Volume{
 		{
 			Name: c.agentConfigSecretName(),
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: storagesSecret.Name,
+					SecretName: c.agentConfigSecretName(),
 					Optional:   &util.FalseVar,
 				},
 			},
