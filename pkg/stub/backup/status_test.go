@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/testutils"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/testutil"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
@@ -43,9 +43,9 @@ func TestStubBackupUpdateStatus(t *testing.T) {
 
 	// test failures
 	client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil).Once()
-	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutils.MockUnexpectedError).Once()
+	client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutil.UnexpectedError).Once()
 	assert.Error(t, c.updateStatus(c.psmdb.Spec.Backup.Tasks[0]))
-	client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutils.MockUnexpectedError).Once()
+	client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutil.UnexpectedError).Once()
 	assert.Error(t, c.updateStatus(c.psmdb.Spec.Backup.Tasks[0]))
 	client.AssertExpectations(t)
 }

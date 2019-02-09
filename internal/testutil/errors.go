@@ -1,4 +1,4 @@
-package testutils
+package testutil
 
 import (
 	"errors"
@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	MockUnexpectedError    = errors.New("mock unexpected error")
-	MockAlreadyExistsError = k8serrors.NewAlreadyExists(schema.GroupResource{
+	UnexpectedError    = errors.New("mock unexpected error")
+	AlreadyExistsError = k8serrors.NewAlreadyExists(schema.GroupResource{
 		Group:    "alreadyExists",
 		Resource: "alreadyExists",
 	}, "mock")

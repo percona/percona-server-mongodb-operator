@@ -5,7 +5,7 @@ import (
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/testutils"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/testutil"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
@@ -187,7 +187,7 @@ func TestNewStatefulSet(t *testing.T) {
 		assert.Equal(t, "test-s3", secret.Name)
 	})
 	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil).Once()
-	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(testutils.MockAlreadyExistsError).Once()
+	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(testutil.AlreadyExistsError).Once()
 
 	bkpEnabledSet, err := h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
