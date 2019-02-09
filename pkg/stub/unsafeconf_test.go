@@ -14,15 +14,15 @@ func Test_setSafeDefault(t *testing.T) {
 	}
 
 	tests := map[string]args{
-		"Bigger": {
+		"pair number": {
 			&v1alpha1.ReplsetSpec{
 				Size: 4,
 			},
 			&v1alpha1.ReplsetSpec{
-				Size: 3,
+				Size: 5,
 			},
 		},
-		"Bigger with Arbiter": {
+		"pair number with arbiter": {
 			&v1alpha1.ReplsetSpec{
 				Size: 4,
 				Arbiter: &v1alpha1.Arbiter{
@@ -31,7 +31,7 @@ func Test_setSafeDefault(t *testing.T) {
 				},
 			},
 			&v1alpha1.ReplsetSpec{
-				Size: 2,
+				Size: 4,
 				Arbiter: &v1alpha1.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -44,8 +44,8 @@ func Test_setSafeDefault(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			setSafeDefault(test.replset)
 			assert.Equal(t, test.replset.Size, test.expected.Size)
-			if test.replset.Arbiter != nil {
-				assert.Equal(t, test.replset.Arbiter.Size, test.expected.Arbiter.Size)
+			if test.replset.Arbiter.Enabled {
+				assert.Equal(t, test.expected.Arbiter.Size, test.replset.Arbiter.Size)
 			}
 		})
 	}
