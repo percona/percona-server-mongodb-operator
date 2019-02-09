@@ -187,7 +187,6 @@ func TestNewStatefulSet(t *testing.T) {
 		assert.Equal(t, "test-s3", secret.Name)
 	})
 	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil).Once()
-	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(testutil.AlreadyExistsError).Once()
 
 	bkpEnabledSet, err := h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
@@ -195,6 +194,7 @@ func TestNewStatefulSet(t *testing.T) {
 	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Containers, 2, "backup agent container was not added")
 	assert.Equal(t, backup.AgentContainerName, bkpEnabledSet.Spec.Template.Spec.Containers[1].Name, "backup agent container was not added")
 
+	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(testutil.AlreadyExistsError).Once()
 	_, err = h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
 
