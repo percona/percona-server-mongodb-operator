@@ -355,8 +355,8 @@
     "assert",
     "mock"
   ]
-  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
-  version = "v1.2.2"
+  revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
+  version = "v1.3.0"
 
 [[projects]]
   name = "github.com/timvaillancourt/go-mongodb-replset"
@@ -728,6 +728,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "75dfaab5356ca77d206d7c99ebd6d525818c08714ba80e3155c0f07608784a74"
+  inputs-digest = "d25d8ce6bf64364f561116d48c9c82c95bf69d1760da46a5815481ddbd9551f8"
   solver-name = "gps-cdcl"
   solver-version = 1
