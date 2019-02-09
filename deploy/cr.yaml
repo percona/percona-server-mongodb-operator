@@ -91,12 +91,12 @@ spec:
       #    credentialsSecret: my-cluster-name-backup-minio
       #    endpointUrl: http://minio.example.local:9000/minio/
     tasks:
-    - name: daily
+    - name: daily-s3-us-west
       enabled: true
       schedule: "0 0 * * *"
       storageName: s3-us-west
       compressionType: gzip
-    - name: weekly
+    - name: weekly-s3-us-west
       enabled: false
       schedule: "0 0 * * 0"
       storageName: s3-us-west
