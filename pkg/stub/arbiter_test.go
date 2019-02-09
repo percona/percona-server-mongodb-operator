@@ -33,13 +33,13 @@ func Test_arbiterRightsizing(t *testing.T) {
 				Enabled: true,
 				Size:    3,
 			},
-		}, 1},
+		}, 3},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			arbiterRightsizing(test.replset)
-			assert.Equal(t, test.replset.Arbiter.Size, test.arbiterSize)
+			arbiterDefaults(test.replset)
+			assert.Equal(t, test.arbiterSize, test.replset.Arbiter.Size)
 		})
 	}
 }
