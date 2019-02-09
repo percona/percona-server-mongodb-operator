@@ -83,7 +83,7 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 	secret, err := c.newAgentStoragesConfigSecret()
 	assert.NoError(t, err)
 	assert.NotNil(t, secret)
-	assert.Equal(t, t.Name()+"-backup-agent-config", secret.Name)
+	assert.Equal(t, c.agentStoragesConfigSecretName(), secret.Name)
 
 	storages := &pbmStorage.Storages{}
 	err = yaml.Unmarshal([]byte(secret.StringData[agentStoragesConfigFile]), storages)

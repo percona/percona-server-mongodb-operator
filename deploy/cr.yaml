@@ -64,7 +64,7 @@ spec:
     #  filter: '{}'
   backup:
     enabled: false
-    version: 0.2.1
+    version: 0.3.0
     restartOnFailure: true
     coordinator:
       resources:
@@ -82,8 +82,8 @@ spec:
         type: s3
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
-          region: us-west-2
           credentialsSecret: my-cluster-name-backup-s3
+          region: us-west-2
       #minio:
       #  type: s3
       #  s3:
