@@ -194,16 +194,17 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			continue
 		}
 
+		lables := map[string]string{
+			"app":                       "percona-server-mongodb",
+			"percona-server-mongodb_cr": cr.Name,
+			"replset":                   replset.Name,
+		}
+
 		pods := &corev1.PodList{}
 		err := r.client.List(context.TODO(),
 			&client.ListOptions{
-				Namespace: cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(
-					map[string]string{
-						"app":                       "percona-server-mongodb",
-						"percona-server-mongodb_cr": cr.Name,
-						"replset":                   replset.Name,
-					}),
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(lables),
 			},
 			pods,
 		)
@@ -219,27 +220,32 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, fmt.Errorf("set owner ref for StatefulSet %s: %v", sfs.Name, err)
 		}
 
-		err = r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
-
-		if err != nil && errors.IsNotFound(err) {
-			ls := map[string]string{
-				"app":                       "percona-server-mongodb",
-				"percona-server-mongodb_cr": cr.Name,
-				"replset":                   replset.Name,
-			}
-			sfs.Spec, err = psmdb.StatefulSpec(cr, replset, ls, replset.Size, internalKey.Name, r.serverVersion)
-			if err != nil {
-				return reconcile.Result{}, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
-			}
-
-			err = r.client.Create(context.TODO(), sfs)
-			if err != nil {
-				return reconcile.Result{}, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
-			}
-			crState.Statefulsets = append(crState.Statefulsets, *sfs)
-		} else if err != nil {
+		errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
+		if errGet != nil && !errors.IsNotFound(errGet) {
 			return reconcile.Result{}, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
 		}
+
+		sfsSpec, err := psmdb.StatefulSpec(cr, replset, lables, replset.Size, internalKey.Name, r.serverVersion)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
+		}
+
+		if errors.IsNotFound(errGet) {
+			sfs.Spec = sfsSpec
+			err = r.client.Create(context.TODO(), sfs)
+			if err != nil && !errors.IsAlreadyExists(err) {
+				return reconcile.Result{}, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
+			}
+		} else {
+			sfs.Spec.Replicas = &replset.Size
+			sfs.Spec.Template.Spec.Containers = sfsSpec.Template.Spec.Containers
+			err = r.client.Update(context.TODO(), sfs)
+			if err != nil {
+				return reconcile.Result{}, fmt.Errorf("update StatefulSet %s: %v", sfs.Name, err)
+			}
+		}
+
+		crState.Statefulsets = append(crState.Statefulsets, *sfs)
 
 		// Create Service
 		if replset.Expose != nil && replset.Expose.Enabled {
@@ -272,16 +278,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		if !r.rsetInitialized(cr, replset, *pods, secrets) {
-			// try making a replica set connection to the pods to
-			// check if the replset was already initialized
-			// session, err := mgo.DialWithInfo(getReplsetDialInfo(m, replset, podList.Items, usersSecret))
-			// if err != nil {
-			// 	log.Info("Cannot connect to mongodb replset %s to check initialization: %v", replset.Name, err)
-			// } else {
-			// 	session.Close()
-			// 	rstatus.Initialized = true
-			// }
-
 			err = r.handleReplsetInit(cr, replset, pods.Items)
 			if err == nil {
 				rstatus.Initialized = true
