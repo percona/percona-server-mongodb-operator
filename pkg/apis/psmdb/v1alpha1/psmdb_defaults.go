@@ -17,7 +17,7 @@ var (
 	defaultWiredTigerCacheSizeRatio       = 0.5
 	defaultInMemorySizeRatio              = 0.9
 	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
-	defaultImagePullPolicy                = corev1.PullIfNotPresent
+	defaultImagePullPolicy                = corev1.PullAlways
 
 	defaultBackupDestinationType = BackupDestinationS3
 	defaultBackupVersion         = "0.2.0"

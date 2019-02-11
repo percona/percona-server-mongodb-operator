@@ -83,8 +83,7 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 		svc.Spec.ExternalTrafficPolicy = "Local"
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
-		svc.Spec.ExternalTrafficPolicy = "Local"
-		svc.Annotations = map[string]string{"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp"}
+		svc.Spec.ExternalTrafficPolicy = "Cluster"
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}

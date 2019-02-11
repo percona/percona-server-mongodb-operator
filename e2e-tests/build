@@ -52,5 +52,8 @@ build_mongod36() {
     docker push ${IMAGE_MONGOD36}
 }
 
+until docker ps;
+    do sleep 1;
+done
 build_operator
 build_mongod36

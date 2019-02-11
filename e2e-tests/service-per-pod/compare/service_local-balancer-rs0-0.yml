@@ -1,13 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
   labels:
     app: percona-server-mongodb
     cluster: local-balancer
     replset: rs0
-    type: expose-externally
   name: local-balancer-rs0-0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
@@ -15,7 +12,7 @@ metadata:
     kind: PerconaServerMongoDB
     name: local-balancer
 spec:
-  externalTrafficPolicy: Local
+  externalTrafficPolicy: Cluster
   ports:
   - name: mongodb
     port: 27017
