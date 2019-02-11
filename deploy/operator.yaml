@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:CLOUD-100-LoadBalancer-doesnt-work
+          image: percona/percona-server-mongodb-operator:master
           ports:
           - containerPort: 60000
             name: metrics
