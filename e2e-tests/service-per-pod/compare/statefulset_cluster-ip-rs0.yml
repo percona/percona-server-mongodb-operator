@@ -93,7 +93,7 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: percona-server-mongodb-key
+          name: cluster-ip-intrnl-mongodb-key
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -103,11 +103,11 @@ spec:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: percona-server-mongodb-key
+      - name: cluster-ip-intrnl-mongodb-key
         secret:
           defaultMode: 48
           optional: false
-          secretName: percona-server-mongodb-key
+          secretName: cluster-ip-intrnl-mongodb-key
   updateStrategy:
     rollingUpdate:
       partition: 0

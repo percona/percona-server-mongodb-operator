@@ -108,7 +108,7 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: some-key
+          name: no-limits-intrnl-mongodb-key
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -117,11 +117,11 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: some-key
+      - name: no-limits-intrnl-mongodb-key
         secret:
           defaultMode: 48
           optional: false
-          secretName: some-key
+          secretName: no-limits-intrnl-mongodb-key
   updateStrategy:
     rollingUpdate:
       partition: 0
