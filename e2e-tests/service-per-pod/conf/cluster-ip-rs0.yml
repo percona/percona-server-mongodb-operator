@@ -11,8 +11,7 @@ spec:
   - name: rs0
     size: 3
     resources:
-      limits:
-        storage: "1Gi"
+      storage: "1Gi"
     expose:
       enabled: true
       exposeType: ClusterIP

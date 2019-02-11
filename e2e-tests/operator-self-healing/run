@@ -49,7 +49,7 @@ pause_pod() {
     wait_pod $pod
 
     # check scale down
-    wait_for_delete pvc/mongod-data-$cluster-3
+    wait_for_delete pod/$cluster-3
 }
 
 netem_pod() {
@@ -95,7 +95,7 @@ main() {
     desc 'check if operator works fine: scale down from 4 to 3'
     sed -e 's/size: 4/size: 3/' $conf_dir/$cluster.yml \
         | kubectl apply -f-
-    wait_for_delete pvc/mongod-data-$cluster-3
+    wait_for_delete pod/$cluster-3
 
     desc 'stop operator'
     pumba_pod stop

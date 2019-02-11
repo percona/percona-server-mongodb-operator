@@ -51,8 +51,4 @@ desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-3
 wait_for_delete pod/$cluster-4
 
-desc 'check if PVC deleted'
-wait_for_delete pvc/mongod-data-$cluster-3
-wait_for_delete pvc/mongod-data-$cluster-4
-
 destroy $namespace

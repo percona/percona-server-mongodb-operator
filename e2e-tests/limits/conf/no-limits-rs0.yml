@@ -13,8 +13,7 @@ spec:
   - name: rs0
     size: 3
     resources:
-      limits:
-        storage: "1Gi"
+      storage: "1Gi"
       requests:
         cpu: "300m"
         memory: "0.5G"

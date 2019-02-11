@@ -44,7 +44,7 @@ no_storage() {
     sleep 20
 
     kubectl logs $(get_operator_pod) \
-        | grep "replset rs0 does not have required-value 'resources.limits.storage' set"
+        | grep "wrong volume size value"
 
     # delete cluster
     kubectl delete \

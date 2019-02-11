@@ -13,10 +13,10 @@ spec:
   - name: rs0
     size: 3
     resources:
+      storage: "1Gi"
       limits:
         cpu: "300m"
         memory: "0.5G"
-        storage: "1Gi"
   mongod:
     net:
       port: 27017
