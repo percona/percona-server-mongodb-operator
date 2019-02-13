@@ -120,14 +120,20 @@ func (c *Controller) NewAgentContainer(replset *v1alpha1.ReplsetSpec) corev1.Con
 }
 
 func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
-	storagesSecret, err := c.newAgentStoragesConfigSecret()
+	secret, err := c.newAgentStoragesConfigSecret()
 	if err != nil {
+		logrus.Errorf("failed to generate backup agent config file: %v", err)
 		return nil, err
 	}
 
-	err = c.client.Create(storagesSecret)
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		return nil, err
+	err = c.client.Create(secret)
+	if err != nil {
+		if !k8serrors.IsAlreadyExists(err) {
+			logrus.Errorf("failed to create backup agent config file secret %s: %v", secret.Name, err)
+			return nil, err
+		}
+	} else {
+		logrus.Infof("created backup agent config file secret: %s", secret.Name)
 	}
 
 	return []corev1.Volume{
