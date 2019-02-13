@@ -66,6 +66,7 @@ spec:
   backup:
     enabled: false
     version: 0.3.0
+    debug: false
     restartOnFailure: true
     coordinator:
       resources:
@@ -77,7 +78,6 @@ spec:
           cpu: "100m"
           memory: "0.1G"
         #storageClass: aws-gp2
-      debug: false
     storages:
       s3-us-west:
         type: s3

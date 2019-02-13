@@ -43,6 +43,10 @@ func (c *Controller) newAgentContainerArgs() []corev1.EnvVar {
 			Value: strconv.Itoa(int(c.psmdb.Spec.Mongod.Net.Port)),
 		},
 		{
+			Name:  "PBM_AGENT_DEBUG",
+			Value: strconv.FormatBool(c.psmdb.Spec.Backup.Debug),
+		},
+		{
 			Name: "PBM_AGENT_MONGODB_USERNAME",
 			ValueFrom: util.EnvVarSourceFromSecret(
 				c.psmdb.Spec.Secrets.Users,

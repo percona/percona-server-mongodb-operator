@@ -45,7 +45,7 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 					},
 					{
 						Name:  "PBM_COORDINATOR_DEBUG",
-						Value: strconv.FormatBool(c.psmdb.Spec.Backup.Coordinator.Debug),
+						Value: strconv.FormatBool(c.psmdb.Spec.Backup.Debug),
 					},
 					{
 						Name:  "PBM_COORDINATOR_API_PORT",

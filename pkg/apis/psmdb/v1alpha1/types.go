@@ -226,7 +226,6 @@ type MongodSpecOperationProfiling struct {
 
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec `json:"resources,omitempty"`
-	Debug          bool `json:"debug,omitempty"`
 }
 
 type BackupStorageS3Spec struct {
@@ -251,6 +250,7 @@ type BackupStorageSpec struct {
 type BackupSpec struct {
 	Enabled          bool                         `json:"enabled"`
 	Version          string                       `json:"version,omitempty"`
+	Debug            bool                         `json:"debug,omitempty"`
 	RestartOnFailure *bool                        `json:"restartOnFailure,omitempty"`
 	Coordinator      *BackupCoordinatorSpec       `json:"coordinator,omitempty"`
 	Storages         map[string]BackupStorageSpec `json:"storages,omitempty"`
