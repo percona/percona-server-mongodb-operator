@@ -16,6 +16,7 @@ check_cr_config() {
     # check if at least 1 Pod started
     wait_pod $cluster-arbiter-0
     wait_for_running $cluster 2
+    sleep 10
 
     # check if statefulset created with expected config
     compare_kubectl statefulset/$cluster-arbiter
