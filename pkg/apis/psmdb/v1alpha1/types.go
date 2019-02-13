@@ -230,9 +230,9 @@ type BackupCoordinatorSpec struct {
 
 type BackupStorageS3Spec struct {
 	Bucket            string `json:"bucket"`
-	Region            string `json:"region"`
 	CredentialsSecret string `json:"credentialsSecret"`
-	EndpointURL       string `json:"endpointUrl"`
+	Region            string `json:"region,omitempty"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
 type BackupStorageType string
@@ -264,7 +264,7 @@ var (
 )
 
 type BackupTaskSpec struct {
-	Name            string                `json:"name,omitempty"`
+	Name            string                `json:"name"`
 	Enabled         bool                  `json:"enabled"`
 	Schedule        string                `json:"schedule,omitempty"`
 	StorageName     string                `json:"storageName,omitempty"`
@@ -272,7 +272,7 @@ type BackupTaskSpec struct {
 }
 
 type BackupTaskStatus struct {
-	Name        string `json:"name,omitempty"`
+	Name        string `json:"name"`
 	Enabled     bool   `json:"enabled"`
 	CronJob     string `json:"cronJob,omitempty"`
 	StorageName string `json:"storageName,omitempty"`
