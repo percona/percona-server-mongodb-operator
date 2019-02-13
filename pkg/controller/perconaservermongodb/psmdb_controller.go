@@ -139,7 +139,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
-	err = cr.CheckNSetDefaults(r.serverVersion.Platform)
+	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("wrong psmdb options: %v", err)
 	}

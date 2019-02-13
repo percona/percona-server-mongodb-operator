@@ -43,6 +43,7 @@ type PerconaServerMongoDBSpec struct {
 	Platform        *version.Platform `json:"platform,omitempty"`
 	Version         string            `json:"version,omitempty"`
 	RunUID          int64             `json:"runUid,omitempty"`
+	UnsafeConf      bool              `json:"allowUnsafeConfigurations"`
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
@@ -61,7 +62,7 @@ type ReplsetSpec struct {
 	Size         int32          `json:"size"`
 	StorageClass string         `json:"storageClass,omitempty"`
 	ClusterRole  ClusterRole    `json:"clusterRole,omitempty"`
-	Arbiter      *Arbiter       `json:"arbiter,omitempty"`
+	Arbiter      Arbiter        `json:"arbiter,omitempty"`
 	Expose       *Expose        `json:"expose,omitempty"`
 }
 

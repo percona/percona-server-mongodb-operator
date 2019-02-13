@@ -656,11 +656,7 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		*out = new(ResourcesSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Arbiter != nil {
-		in, out := &in.Arbiter, &out.Arbiter
-		*out = new(Arbiter)
-		**out = **in
-	}
+	out.Arbiter = in.Arbiter
 	if in.Expose != nil {
 		in, out := &in.Expose, &out.Expose
 		*out = new(Expose)

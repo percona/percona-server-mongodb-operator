@@ -1,8 +1,10 @@
 package v1alpha1
 
 import (
-	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
 var (
@@ -26,7 +28,7 @@ var (
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
-func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) error {
+func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
 	if cr.Spec.Version == "" {
 		cr.Spec.Version = defaultVersion
 	}
@@ -99,7 +101,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) err
 		}
 	} else {
 		for _, replset := range cr.Spec.Replsets {
-			replset.SetDefauts()
+			replset.SetDefauts(cr.Spec.UnsafeConf, log)
 		}
 	}
 	if cr.Spec.RunUID == 0 && platform != version.PlatformOpenshift {
@@ -135,12 +137,45 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform) err
 	return nil
 }
 
-// SetDefauts set defaults options for the replset
-func (rs *ReplsetSpec) SetDefauts() {
-	if rs.Size == 0 {
-		rs.Size = defaultMongodSize
-	}
+// SetDefauts set default options for the replset
+func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) {
 	if rs.Expose != nil && rs.Expose.Enabled && rs.Expose.ExposeType == "" {
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
+
+	if !unsafe {
+		rs.setSafeDefauts(log)
+	}
+}
+
+func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
+	loginfo := func(msg string, args ...interface{}) {
+		log.Info(msg, args...)
+		log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
+	}
+
+	// Replset size can't be 0 or 1.
+	// But 2 + the Arbiter is possible.
+	if rs.Size < 2 {
+		loginfo("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize)
+		rs.Size = defaultMongodSize
+	}
+
+	if rs.Arbiter.Enabled {
+		if rs.Arbiter.Size != 1 {
+			loginfo("Arbiter size will be changed from %d to 1 due to safe config", rs.Arbiter.Size)
+			rs.Arbiter.Size = 1
+		}
+		if rs.Size%2 != 0 {
+			loginfo("Arbiter will be switched off. There is no need in arbiter with odd replset size (%d)", rs.Size)
+			rs.Arbiter.Enabled = false
+			rs.Arbiter.Size = 0
+		}
+	} else {
+		if rs.Size%2 == 0 {
+			loginfo("Replset size will be increased from %d to %d", rs.Size, rs.Size+1)
+			rs.Size++
+		}
+	}
+
 }
