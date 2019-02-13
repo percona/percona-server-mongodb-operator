@@ -70,7 +70,7 @@ netem_pod() {
 
     # check if Pod started
     wait_pod $pod
-    sleep 10
+    sleep 60
 
     # check scale up
     wait_for_running $cluster 4
