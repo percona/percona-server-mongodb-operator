@@ -10,11 +10,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"math"
 )
 
 func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	arbiterRightsizing(replset)
+	arbiterDefaults(replset)
 
 	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
 
@@ -51,7 +50,7 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 
 func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, arbiter *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
 	if replset.Arbiter != nil && arbiter.Spec.Replicas != nil && *arbiter.Spec.Replicas != replset.Arbiter.Size {
-		arbiterRightsizing(replset)
+		arbiterDefaults(replset)
 		logrus.Infof("setting arbiters count to %d for replset: %s", replset.Arbiter.Size, replset.Name)
 		arbiter.Spec.Replicas = &replset.Arbiter.Size
 	}
@@ -120,7 +119,7 @@ func (h *Handler) newArbiterContainers(m *v1alpha1.PerconaServerMongoDB, replset
 	return containers
 }
 
-func arbiterRightsizing(replset *v1alpha1.ReplsetSpec) {
+func arbiterDefaults(replset *v1alpha1.ReplsetSpec) {
 	if replset.Arbiter == nil {
 		replset.Arbiter = &v1alpha1.Arbiter{
 			Enabled: false,
@@ -129,10 +128,5 @@ func arbiterRightsizing(replset *v1alpha1.ReplsetSpec) {
 	}
 	if replset.Arbiter.Enabled && replset.Arbiter.Size == 0 {
 		replset.Arbiter.Size = 1
-	}
-	if replset.Arbiter.Enabled && replset.Arbiter.Size > 0 {
-		if replset.Arbiter.Size >= replset.Size {
-			replset.Arbiter.Size = int32(math.Floor(float64(replset.Size) * 0.43))
-		}
 	}
 }

@@ -94,6 +94,11 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 			if replset.Size == 0 {
 				replset.Size = config.DefaultMongodSize
 			}
+
+			if !spec.UnsafeConf {
+				setSafeDefault(replset)
+			}
+
 		}
 	}
 	if spec.RunUID == 0 && util.GetPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {

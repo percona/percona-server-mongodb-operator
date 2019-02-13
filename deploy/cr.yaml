@@ -6,6 +6,7 @@ spec:
   #platform: openshift
   version: "3.6.8"
   imagePullPolicy: Always
+  allowUnsafeConfigurations: false
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
@@ -91,13 +92,13 @@ spec:
       #    credentialsSecret: my-cluster-name-backup-minio
       #    endpointUrl: http://minio.example.local:9000/minio/
     tasks:
-    - name: daily-s3-us-west
-      enabled: true
-      schedule: "0 0 * * *"
-      storageName: s3-us-west
-      compressionType: gzip
-    - name: weekly-s3-us-west
-      enabled: false
-      schedule: "0 0 * * 0"
-      storageName: s3-us-west
-      compressionType: gzip
+      - name: daily-s3-us-west
+        enabled: true
+        schedule: "0 0 * * *"
+        storageName: s3-us-west
+        compressionType: gzip
+      - name: weekly-s3-us-west
+        enabled: false
+        schedule: "0 0 * * 0"
+        storageName: s3-us-west
+        compressionType: gzip
