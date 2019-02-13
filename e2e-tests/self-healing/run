@@ -9,7 +9,7 @@ cluster="some-name-rs0"
 
 
 setup_cluster() {
-    # create first PSMDB cluster
+    # create cluster
     kubectl apply \
         -f $conf_dir/secrets.yml \
         -f $conf_dir/$cluster.yml \
@@ -19,7 +19,7 @@ setup_cluster() {
     # check if all 3 Pods started
     wait_for_running $cluster 3
 
-    # write data, read from all
+    desc 'check data consistency: write data, read from all'
     run_mongo \
         'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
         "userAdmin:userAdmin123456@$cluster.$namespace"
@@ -41,6 +41,7 @@ pumba_pod() {
 
     # check if all 3 Pods started
     wait_for_running $cluster 3
+    sleep 10
 
     desc 'check data consistency for chaosed Pod'
     compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
@@ -64,6 +65,7 @@ pause_pod() {
 
     # check if all 3 Pods started
     wait_for_running $cluster 3
+    sleep 10
 
     desc 'check data consistency for chaosed Pod'
     compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
@@ -83,16 +85,33 @@ netem_pod() {
         "myApp:myPass@$cluster.$namespace"
 
     # wait for unpause
-    wait $pid
+    wait $pid || :
 
     # check if all 3 Pods started
     wait_for_running $cluster 3
-    sleep 2
+    sleep 10
 
     desc 'check data consistency for chaosed Pod'
     compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-3rd"
 }
 
+recreate() {
+    # delete cluster
+    kubectl delete \
+        -f $conf_dir/$cluster.yml
+    wait_for_delete pod/$cluster-2
+    wait_for_delete pod/$cluster-1
+    wait_for_delete pod/$cluster-0
+
+    # recreate cluster
+    kubectl apply \
+        -f $conf_dir/$cluster.yml \
+
+    wait_for_running $cluster 3
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+}
 
 main() {
     create_namespace $namespace
@@ -101,19 +120,22 @@ main() {
     desc 'start cluster'
     setup_cluster
 
-    desc 'kill some-name-rs0-0 pod'
+    desc 'recreate cluster'
+    recreate
+
+    desc 'kill node-0 pod'
     pumba_pod kill "$cluster-0"
 
-    desc 'rm some-name-rs0-0 pod'
+    desc 'rm node-0 pod'
     pumba_pod rm "$cluster-0"
 
-    desc 'stop some-name-rs0-0 pod'
+    desc 'stop node-0 pod'
     pumba_pod stop "$cluster-0"
 
-    desc 'pause some-name-rs0-0 pod'
+    desc 'pause node-0 pod'
     pause_pod "$cluster-0"
 
-    desc 'emulate bad network'
+    desc 'emulate bad network node-0 pod'
     netem_pod "$cluster-0"
 
     destroy $namespace
