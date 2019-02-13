@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
 func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64, ikeyName string) corev1.Container {
@@ -18,7 +17,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 
 	return corev1.Container{
 		Name:            name,
-		Image:           "percona/percona-server-mongodb-operator:" + version.Version + "-mongod" + m.Spec.Version,
+		Image:           m.Spec.Image,
 		ImagePullPolicy: m.Spec.ImagePullPolicy,
 		Args:            containerArgs(m, replset, resources),
 		Ports: []corev1.ContainerPort{
@@ -56,7 +55,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 				},
 			},
 		},
-		WorkingDir: mongodContainerDataDir,
+		WorkingDir: MongodContainerDataDir,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
@@ -90,10 +89,6 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      mongodDataVolClaimName,
-				MountPath: mongodContainerDataDir,
-			},
-			{
 				Name:      ikeyName,
 				MountPath: mongodSecretsDir,
 				ReadOnly:  true,
@@ -108,7 +103,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
-		"--dbpath=" + mongodContainerDataDir,
+		"--dbpath=" + MongodContainerDataDir,
 		"--port=" + strconv.Itoa(int(mSpec.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mSpec.Storage.Engine),
@@ -233,9 +228,9 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		)
 		switch mSpec.AuditLog.Format {
 		case api.AuditLogFormatBSON:
-			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.bson")
+			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
 		default:
-			args = append(args, "--auditPath="+mongodContainerDataDir+"/auditLog.json")
+			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
 		}
 	}
 

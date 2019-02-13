@@ -13,6 +13,7 @@ import (
 	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
 	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
 	"gopkg.in/mgo.v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -194,7 +195,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			continue
 		}
 
-		lables := map[string]string{
+		matchLables := map[string]string{
 			"app":                       "percona-server-mongodb",
 			"percona-server-mongodb_cr": cr.Name,
 			"replset":                   replset.Name,
@@ -204,7 +205,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err := r.client.List(context.TODO(),
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(lables),
+				LabelSelector: labels.SelectorFromSet(matchLables),
 			},
 			pods,
 		)
@@ -214,38 +215,21 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		crState.Pods = append(crState.Pods, pods.Items...)
 
-		sfs := psmdb.NewStatefulSet(cr.Name+"-"+replset.Name, cr.Namespace)
-		err = setControllerReference(cr, sfs, r.scheme)
+		sfs, err := r.reconcileStatefulSet(false, cr, replset, matchLables, internalKey.Name)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("set owner ref for StatefulSet %s: %v", sfs.Name, err)
-		}
-
-		errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
-		if errGet != nil && !errors.IsNotFound(errGet) {
-			return reconcile.Result{}, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
-		}
-
-		sfsSpec, err := psmdb.StatefulSpec(cr, replset, lables, replset.Size, internalKey.Name, r.serverVersion)
-		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
-		}
-
-		if errors.IsNotFound(errGet) {
-			sfs.Spec = sfsSpec
-			err = r.client.Create(context.TODO(), sfs)
-			if err != nil && !errors.IsAlreadyExists(err) {
-				return reconcile.Result{}, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
-			}
-		} else {
-			sfs.Spec.Replicas = &replset.Size
-			sfs.Spec.Template.Spec.Containers = sfsSpec.Template.Spec.Containers
-			err = r.client.Update(context.TODO(), sfs)
-			if err != nil {
-				return reconcile.Result{}, fmt.Errorf("update StatefulSet %s: %v", sfs.Name, err)
-			}
+			return reconcile.Result{}, fmt.Errorf("reconcile StatefulSet %s: %v", sfs.Name, err)
 		}
 
 		crState.Statefulsets = append(crState.Statefulsets, *sfs)
+
+		if replset.Arbiter.Enabled {
+			arbiterSfs, err := r.reconcileStatefulSet(true, cr, replset, matchLables, internalKey.Name)
+			if err != nil {
+				return reconcile.Result{}, fmt.Errorf("reconcile Arbiter StatefulSet %s: %v", sfs.Name, err)
+			}
+
+			crState.Statefulsets = append(crState.Statefulsets, *arbiterSfs)
+		}
 
 		// Create Service
 		if replset.Expose != nil && replset.Expose.Enabled {
@@ -298,6 +282,71 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	return rr, nil
 }
+
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLables map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
+	sfsName := cr.Name + "-" + replset.Name
+	size := replset.Size
+	containerName := "mongod"
+	if arbiter {
+		sfsName += "-arbiter"
+		containerName += "-arbiter"
+		size = replset.Arbiter.Size
+	}
+
+	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
+	err := setControllerReference(cr, sfs, r.scheme)
+	if err != nil {
+		return nil, fmt.Errorf("set owner ref for StatefulSet %s: %v", sfs.Name, err)
+	}
+
+	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
+	if errGet != nil && !errors.IsNotFound(errGet) {
+		return nil, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
+	}
+
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLables, size, internalKeyName, r.serverVersion)
+	if err != nil {
+		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
+	}
+
+	if !arbiter {
+		pvc, err := psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset)
+		if err != nil {
+			return nil, fmt.Errorf("pvc create: %v", err)
+		}
+		sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
+			pvc,
+		}
+
+		if len(sfsSpec.Template.Spec.Containers) > 0 {
+			sfsSpec.Template.Spec.Containers[0].VolumeMounts = append(
+				sfsSpec.Template.Spec.Containers[0].VolumeMounts,
+				corev1.VolumeMount{
+					Name:      psmdb.MongodDataVolClaimName,
+					MountPath: psmdb.MongodContainerDataDir,
+				},
+			)
+		}
+	}
+
+	if errors.IsNotFound(errGet) {
+		sfs.Spec = sfsSpec
+		err = r.client.Create(context.TODO(), sfs)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return nil, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
+		}
+	} else {
+		sfs.Spec.Replicas = &size
+		sfs.Spec.Template.Spec.Containers = sfsSpec.Template.Spec.Containers
+		err = r.client.Update(context.TODO(), sfs)
+		if err != nil {
+			return nil, fmt.Errorf("update StatefulSet %s: %v", sfs.Name, err)
+		}
+	}
+
+	return sfs, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) rsetInitialized(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) bool {
 	session, err := mgo.DialWithInfo(r.getReplsetDialInfo(cr, replset, pods.Items, usersSecret))
 	if err != nil {

@@ -41,7 +41,7 @@ const (
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
 	Platform        *version.Platform `json:"platform,omitempty"`
-	Version         string            `json:"version,omitempty"`
+	Image           string            `json:"image,omitempty"`
 	RunUID          int64             `json:"runUid,omitempty"`
 	UnsafeConf      bool              `json:"allowUnsafeConfigurations"`
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`

@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"fmt"
+
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 
@@ -8,7 +10,6 @@ import (
 )
 
 var (
-	defaultVersion                        = "3.6"
 	defaultRunUID                   int64 = 1001
 	defaultKeySecretName                  = "percona-server-mongodb-key"
 	defaultUsersSecretName                = "percona-server-mongodb-users"
@@ -29,8 +30,8 @@ var (
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
 func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
-	if cr.Spec.Version == "" {
-		cr.Spec.Version = defaultVersion
+	if cr.Spec.Image == "" {
+		return fmt.Errorf("Required value for spec.image")
 	}
 	if cr.Spec.ImagePullPolicy == "" {
 		cr.Spec.ImagePullPolicy = defaultImagePullPolicy

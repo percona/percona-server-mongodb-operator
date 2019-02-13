@@ -1,11 +1,14 @@
 package psmdb
 
 const (
-	gigaByte                 int64   = 1024 * 1024 * 1024
+	gigaByte                 int64   = 1 << 30
 	minWiredTigerCacheSizeGB float64 = 0.25
 
-	mongodDataVolClaimName = "mongod-data"
-	mongodContainerDataDir = "/data/db"
-	mongodSecretsDir       = "/etc/mongodb-secrets"
-	mongodPortName         = "mongodb"
+	// MongodDataVolClaimName is a PVC Claim name
+	MongodDataVolClaimName = "mongod-data"
+	// MongodContainerDataDir is a mondo data path in container
+	MongodContainerDataDir = "/data/db"
+
+	mongodSecretsDir = "/etc/mongodb-secrets"
+	mongodPortName   = "mongodb"
 )

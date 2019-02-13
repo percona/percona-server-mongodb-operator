@@ -28,8 +28,7 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 
 var secretFileMode int32 = 0060
 
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[string]string, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
-
+func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -42,13 +41,9 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
 	}
-	ssize, err := resource.ParseQuantity(replset.Resources.Storage)
-	if err != nil {
-		return appsv1.StatefulSetSpec{}, fmt.Errorf("wrong volume size value %q: %v", replset.Resources.Storage, err)
-	}
 
 	return appsv1.StatefulSetSpec{
-		ServiceName: m.Name + "-" + replset.Name, // ls
+		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -61,7 +56,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[
 				Affinity:      podAffinity(ls),
 				RestartPolicy: corev1.RestartPolicyAlways,
 				Containers: []corev1.Container{
-					container(m, replset, "mongod", resources, fsgroup, ikeyName),
+					container(m, replset, containerName, resources, fsgroup, ikeyName),
 				},
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: fsgroup,
@@ -80,22 +75,24 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, ls map[
 				},
 			},
 		},
-		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			PersistentVolumeClaim(m, ssize, mongodDataVolClaimName, replset.StorageClass),
-		},
 	}, nil
 }
 
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
-func PersistentVolumeClaim(m *api.PerconaServerMongoDB, size resource.Quantity, claimName, storageClass string) corev1.PersistentVolumeClaim {
+func PersistentVolumeClaim(name, namespace string, replset *api.ReplsetSpec) (corev1.PersistentVolumeClaim, error) {
+	size, err := resource.ParseQuantity(replset.Resources.Storage)
+	if err != nil {
+		return corev1.PersistentVolumeClaim{}, fmt.Errorf("wrong volume size value %q: %v", replset.Resources.Storage, err)
+	}
+
 	vc := corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      claimName,
-			Namespace: m.Namespace,
+			Name:      name,
+			Namespace: namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -108,10 +105,11 @@ func PersistentVolumeClaim(m *api.PerconaServerMongoDB, size resource.Quantity, 
 			},
 		},
 	}
-	if storageClass != "" {
-		vc.Spec.StorageClassName = &storageClass
+	if replset.StorageClass != "" {
+		vc.Spec.StorageClassName = &replset.StorageClass
 	}
-	return vc
+
+	return vc, nil
 }
 
 // podAffinity returns an Affinity configuration that aims to

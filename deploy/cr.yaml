@@ -4,7 +4,7 @@ metadata:
   name: my-cluster-name
 spec:
   #platform: openshift
-  version: "3.6.8"
+  image: percona/percona-server-mongodb-operator:0.0.1-mongod3.6
   imagePullPolicy: Always
   expose:
     enabled: false
@@ -15,6 +15,9 @@ spec:
   replsets:
   - name: rs0
     size: 3
+    arbiter:
+      enabled: false
+      size: 1
     resources:
       limits:
         cpu: "300m"
