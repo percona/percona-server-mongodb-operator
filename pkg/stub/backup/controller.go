@@ -21,7 +21,7 @@ var DefaultCompressionType = v1alpha1.BackupCompressionGzip
 const DefaultS3SecretName = "percona-server-mongodb-backup-s3"
 
 // DefaultVersion is the default version of the percona/percona-backup-mongodb project
-const DefaultVersion = "0.2.1"
+const DefaultVersion = "0.3.0"
 
 const backupImagePrefix = "percona/percona-server-mongodb-operator"
 

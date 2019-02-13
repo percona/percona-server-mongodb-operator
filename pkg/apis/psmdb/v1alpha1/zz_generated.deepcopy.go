@@ -32,6 +32,11 @@ func (in *BackupCoordinatorSpec) DeepCopyInto(out *BackupCoordinatorSpec) {
 		*out = new(ResourcesSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.EnableClientsLogging != nil {
+		in, out := &in.EnableClientsLogging, &out.EnableClientsLogging
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 

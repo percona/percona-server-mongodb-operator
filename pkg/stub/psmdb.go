@@ -115,6 +115,9 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		if spec.Backup.Coordinator == nil {
 			spec.Backup.Coordinator = &v1alpha1.BackupCoordinatorSpec{}
 		}
+		if spec.Backup.Coordinator.EnableClientsLogging == nil {
+			spec.Backup.Coordinator.EnableClientsLogging = backup.DefaultEnableClientsLogging
+		}
 		for _, bkpTask := range spec.Backup.Tasks {
 			if bkpTask.CompressionType == "" {
 				bkpTask.CompressionType = backup.DefaultCompressionType
