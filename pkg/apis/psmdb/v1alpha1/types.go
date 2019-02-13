@@ -226,7 +226,7 @@ type MongodSpecOperationProfiling struct {
 
 type BackupCoordinatorSpec struct {
 	*ResourcesSpec       `json:"resources,omitempty"`
-	EnableClientsLogging *bool `json:"enableClientsLogging"`
+	EnableClientsLogging *bool `json:"enableClientsLogging,omitempty"`
 }
 
 type BackupStorageS3Spec struct {
