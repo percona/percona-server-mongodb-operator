@@ -92,9 +92,7 @@ func (c *Controller) newAgentStoragesConfigSecret() (*corev1.Secret, error) {
 		}
 	}
 
-	storagesYaml, err := yaml.Marshal(&pbmStorage.Storages{
-		Storages: storages,
-	})
+	storagesYaml, err := yaml.Marshal(storages)
 	if err != nil {
 		return nil, err
 	}

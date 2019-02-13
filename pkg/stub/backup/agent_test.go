@@ -85,12 +85,12 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 	assert.NotNil(t, secret)
 	assert.Equal(t, c.agentStoragesConfigSecretName(), secret.Name)
 
-	storages := &pbmStorage.Storages{}
+	storages := make(map[string]pbmStorage.Storage)
 	err = yaml.Unmarshal([]byte(secret.StringData[agentStoragesConfigFile]), storages)
 	assert.NoError(t, err)
-	assert.NotNil(t, storages.Storages["test"])
+	assert.NotNil(t, storages["test"])
 
-	testStorage := storages.Storages["test"]
+	testStorage := storages["test"]
 	assert.Equal(t, "us-west-2", testStorage.S3.Region)
 	assert.Equal(t, "https://minio.local/minio", testStorage.S3.EndpointURL)
 	assert.Equal(t, "my-s3-bucket-name", testStorage.S3.Bucket)
