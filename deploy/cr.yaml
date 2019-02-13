@@ -65,8 +65,8 @@ spec:
     #  filter: '{}'
   backup:
     enabled: false
-    version: 0.3.0
     debug: false
+    version: 0.3.0
     restartOnFailure: true
     coordinator:
       enableClientsLogging: true
