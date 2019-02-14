@@ -217,7 +217,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		sfs, err := r.reconcileStatefulSet(false, cr, replset, matchLables, internalKey.Name)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("reconcile StatefulSet %s: %v", sfs.Name, err)
+			return reconcile.Result{}, fmt.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 		}
 
 		crState.Statefulsets = append(crState.Statefulsets, *sfs)
@@ -225,7 +225,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		if replset.Arbiter.Enabled {
 			arbiterSfs, err := r.reconcileStatefulSet(true, cr, replset, matchLables, internalKey.Name)
 			if err != nil {
-				return reconcile.Result{}, fmt.Errorf("reconcile Arbiter StatefulSet %s: %v", sfs.Name, err)
+				return reconcile.Result{}, fmt.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 			}
 
 			crState.Statefulsets = append(crState.Statefulsets, *arbiterSfs)
