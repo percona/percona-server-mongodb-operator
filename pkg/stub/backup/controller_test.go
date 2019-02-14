@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/testutil"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
@@ -51,10 +52,10 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 		assert.NoError(t, c.EnsureBackupTasks())
 
 		// test failure
-		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(mockUnexpectedError).Once()
+		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutil.UnexpectedError).Once()
 		assert.Error(t, c.EnsureBackupTasks())
 		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil).Once()
-		client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(mockUnexpectedError).Once()
+		client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutil.UnexpectedError).Once()
 		assert.Error(t, c.EnsureBackupTasks())
 
 		client.AssertExpectations(t)
@@ -65,7 +66,7 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 		c.client = client
 
 		// test update
-		client.On("Create", mock.AnythingOfType("*v1beta1.CronJob")).Return(mockAlreadyExistsError).Once()
+		client.On("Create", mock.AnythingOfType("*v1beta1.CronJob")).Return(testutil.AlreadyExistsError).Once()
 		client.On("Get", mock.AnythingOfType("*v1beta1.CronJob")).Run(func(args mock.Arguments) {
 			cronJob := args.Get(0).(*batchv1b.CronJob)
 			cronJob.Spec = batchv1b.CronJobSpec{
@@ -113,7 +114,7 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 		assert.NoError(t, c.EnsureBackupTasks())
 
 		// test failure of delete
-		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(mockUnexpectedError)
+		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(testutil.UnexpectedError)
 		assert.Error(t, c.EnsureBackupTasks())
 
 		client.AssertExpectations(t)
@@ -154,9 +155,9 @@ func TestStubBackupDeleteBackupTasks(t *testing.T) {
 
 		// test failures
 		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(nil).Once()
-		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(mockUnexpectedError).Once()
+		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutil.UnexpectedError).Once()
 		assert.Error(t, c.DeleteBackupTasks())
-		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(mockUnexpectedError).Once()
+		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(testutil.UnexpectedError).Once()
 		assert.Error(t, c.DeleteBackupTasks())
 
 		client.AssertExpectations(t)
@@ -185,18 +186,18 @@ func TestStubBackupDeleteBackupTasks(t *testing.T) {
 		c.client = client
 		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(nil)
 		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(nil)
-		client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(mockUnexpectedError)
+		client.On("Update", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutil.UnexpectedError)
 		assert.Error(t, c.DeleteBackupTasks())
 
 		client = &mocks.Client{}
 		c.client = client
 		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(nil).Once()
-		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(mockUnexpectedError).Once()
+		client.On("Get", mock.AnythingOfType("*v1alpha1.PerconaServerMongoDB")).Return(testutil.UnexpectedError).Once()
 		assert.Error(t, c.DeleteBackupTasks())
 
 		client = &mocks.Client{}
 		c.client = client
-		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(mockUnexpectedError).Once()
+		client.On("Delete", mock.AnythingOfType("*v1beta1.CronJob")).Return(testutil.UnexpectedError).Once()
 		assert.Error(t, c.DeleteBackupTasks())
 
 		client.AssertExpectations(t)
