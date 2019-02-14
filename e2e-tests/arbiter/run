@@ -16,11 +16,12 @@ check_cr_config() {
     # check if at least 1 Pod started
     wait_pod $cluster-arbiter-0
     wait_for_running $cluster 2
+    sleep 30
 
     # check if statefulset created with expected config
     compare_kubectl statefulset/$cluster-arbiter
     arbiter_ip=$(get_service_ip $cluster-arbiter-0)
-    run_mongo "rs.conf()" "clusterAdmin:clusterAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)" "mongodb" \
+    run_mongo "rs.conf()" "clusterAdmin:clusterAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)" "mongodb" ":27017" \
         | grep '"host" :' \
         | grep "$arbiter_ip"
 
