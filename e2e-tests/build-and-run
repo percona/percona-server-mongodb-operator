@@ -15,7 +15,7 @@ kubectl apply -f $src_dir/deploy/mongodb-users.yaml
 
 platform=(kubernetes openshift)
 cat $src_dir/deploy/cr.yaml \
-    | $sed 's/version: .*/version: "3.6"/' \
+    | $sed -e "s^image:.*^image: $IMAGE_MONGOD36^" \
     | $sed "s/#platform: .*/platform: ${platform[${OPENSHIFT:-0}]}/" \
     | kubectl apply -f -
 

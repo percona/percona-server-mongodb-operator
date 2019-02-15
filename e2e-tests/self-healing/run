@@ -12,9 +12,10 @@ setup_cluster() {
     # create cluster
     kubectl apply \
         -f $conf_dir/secrets.yml \
-        -f $conf_dir/$cluster.yml \
         -f $conf_dir/pumba.yml \
         -f $conf_dir/client.yml
+
+    apply_cluster $conf_dir/$cluster.yml
 
     # check if all 3 Pods started
     wait_for_running $cluster 3
@@ -104,8 +105,7 @@ recreate() {
     wait_for_delete pod/$cluster-0
 
     # recreate cluster
-    kubectl apply \
-        -f $conf_dir/$cluster.yml \
+    apply_cluster $conf_dir/$cluster.yml
 
     wait_for_running $cluster 3
     compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"

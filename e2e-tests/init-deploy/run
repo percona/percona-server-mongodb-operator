@@ -13,8 +13,9 @@ desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl apply \
     -f $conf_dir/secrets.yml \
-    -f $conf_dir/$cluster.yml \
     -f $conf_dir/client.yml
+
+apply_cluster $conf_dir/$cluster.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
@@ -57,7 +58,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
 
 desc 'check if possible to create second cluster'
 cluster2="another-name-rs0"
-kubectl apply -f $test_dir/conf/$cluster2.yml
+apply_cluster $test_dir/conf/$cluster2.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster2 3
 desc 'check if service and statefulset created with expected config'

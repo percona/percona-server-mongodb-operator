@@ -10,8 +10,7 @@ check_cr_config() {
     local cluster="$1"
 
     # apply cr config
-    kubectl apply \
-        -f $test_dir/conf/$cluster.yml
+    apply_cluster $test_dir/conf/$cluster.yml
 
     # check if at least 1 Pod started
     wait_for_running $cluster 3

@@ -4,7 +4,7 @@ metadata:
   name: local-balancer
 spec:
   #platform: openshift
-  version: "3.6"
+  image:
   secrets:
     users: some-users
   replsets:

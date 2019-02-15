@@ -316,3 +316,9 @@ get_backup_name() {
             | $sed -re 's/.*db_backup_name:["\]+([^"\]+).*/\1/'
     done
 }
+
+apply_cluster() {
+    local file=$1
+
+    sed -e "s^image:.*^image: $IMAGE_MONGOD36^" "$file" | kubectl apply -f -
+}

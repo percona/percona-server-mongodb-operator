@@ -4,7 +4,7 @@ metadata:
   name: no-limits
 spec:
   #platform: openshift
-  version: "3.6"
+  image:
   imagePullPolicy: Always
   secrets:
     key: some-key
