@@ -657,11 +657,7 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		(*in).DeepCopyInto(*out)
 	}
 	out.Arbiter = in.Arbiter
-	if in.Expose != nil {
-		in, out := &in.Expose, &out.Expose
-		*out = new(Expose)
-		**out = **in
-	}
+	out.Expose = in.Expose
 	return
 }
 

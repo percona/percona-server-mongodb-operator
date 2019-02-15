@@ -63,7 +63,7 @@ type ReplsetSpec struct {
 	StorageClass string         `json:"storageClass,omitempty"`
 	ClusterRole  ClusterRole    `json:"clusterRole,omitempty"`
 	Arbiter      Arbiter        `json:"arbiter,omitempty"`
-	Expose       *Expose        `json:"expose,omitempty"`
+	Expose       Expose         `json:"expose,omitempty"`
 }
 
 type ResourceSpecRequirements struct {

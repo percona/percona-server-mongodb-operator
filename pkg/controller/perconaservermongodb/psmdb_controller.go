@@ -232,7 +232,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		// Create Service
-		if replset.Expose != nil && replset.Expose.Enabled {
+		if replset.Expose.Enabled {
+			crState.ServicesExpose = true
 			srvs, err := r.ensureExternalServices(cr, replset, pods)
 			if err != nil {
 				return reconcile.Result{}, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
@@ -375,7 +376,7 @@ func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMong
 	addrs := make([]string, 0)
 	var hostname string
 
-	if replset.Expose != nil && replset.Expose.Enabled {
+	if replset.Expose.Enabled {
 		for _, pod := range pods {
 			svc, err := r.getExtServices(m, pod.Name)
 			if err != nil {
@@ -465,7 +466,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			"init",
 		}
 
-		if replset.Expose != nil && replset.Expose.Enabled {
+		if replset.Expose.Enabled {
 			svc, err := r.getExtServices(m, pod.Name)
 			if err != nil {
 				return fmt.Errorf("failed to fetch services: %v", err)

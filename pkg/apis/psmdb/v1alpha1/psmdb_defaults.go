@@ -140,7 +140,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 // SetDefauts set default options for the replset
 func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) {
-	if rs.Expose != nil && rs.Expose.Enabled && rs.Expose.ExposeType == "" {
+	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
 

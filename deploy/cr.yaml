@@ -6,17 +6,17 @@ spec:
   #platform: openshift
   image: perconalab/percona-server-mongodb-operator:master-mongod3.6
   imagePullPolicy: Always
-  expose:
-    enabled: false
-    exposeType: ClusterIP
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
   replsets:
   - name: rs0
-    size: 3
+    size: 2
+    expose:
+      enabled: true
+      exposeType: LoadBalancer
     arbiter:
-      enabled: false
+      enabled: true
       size: 1
     resources:
       limits:
