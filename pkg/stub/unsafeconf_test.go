@@ -14,7 +14,7 @@ func Test_setSafeDefault(t *testing.T) {
 	}
 
 	tests := map[string]args{
-		"pair number": {
+		"even number": {
 			&v1alpha1.ReplsetSpec{
 				Size: 4,
 			},
@@ -22,7 +22,127 @@ func Test_setSafeDefault(t *testing.T) {
 				Size: 5,
 			},
 		},
-		"pair number with arbiter": {
+		"even number2": {
+			&v1alpha1.ReplsetSpec{
+				Size: 2,
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+			},
+		},
+		"0 w/o arbiter ": {
+			&v1alpha1.ReplsetSpec{
+				Size: 0,
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+			},
+		},
+		"0 with arbiter": {
+			&v1alpha1.ReplsetSpec{
+				Size: 0,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    1,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: false,
+					Size:    0,
+				},
+			},
+		},
+		"1 w/o arbiter ": {
+			&v1alpha1.ReplsetSpec{
+				Size: 1,
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+			},
+		},
+		"1 with arbiter": {
+			&v1alpha1.ReplsetSpec{
+				Size: 1,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    1,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: false,
+					Size:    0,
+				},
+			},
+		},
+		"odd with arbiter": {
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    1,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: false,
+					Size:    0,
+				},
+			},
+		},
+		"odd with two arbiters": {
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    2,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: false,
+					Size:    0,
+				},
+			},
+		},
+		"odd with three arbiters": {
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    3,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 3,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: false,
+					Size:    0,
+				},
+			},
+		},
+		"even with arbiter": {
+			&v1alpha1.ReplsetSpec{
+				Size: 2,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    1,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 2,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    1,
+				},
+			},
+		},
+		"even4 with arbiter": {
 			&v1alpha1.ReplsetSpec{
 				Size: 4,
 				Arbiter: &v1alpha1.Arbiter{
@@ -38,13 +158,45 @@ func Test_setSafeDefault(t *testing.T) {
 				},
 			},
 		},
+		"even with two arbiters": {
+			&v1alpha1.ReplsetSpec{
+				Size: 2,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    2,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 2,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    1,
+				},
+			},
+		},
+		"even with three arbiters": {
+			&v1alpha1.ReplsetSpec{
+				Size: 2,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    3,
+				},
+			},
+			&v1alpha1.ReplsetSpec{
+				Size: 2,
+				Arbiter: &v1alpha1.Arbiter{
+					Enabled: true,
+					Size:    1,
+				},
+			},
+		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			setSafeDefault(test.replset)
 			assert.Equal(t, test.replset.Size, test.expected.Size)
-			if test.replset.Arbiter.Enabled {
+			if test.replset.Arbiter != nil && test.replset.Arbiter.Enabled {
 				assert.Equal(t, test.expected.Arbiter.Size, test.replset.Arbiter.Size)
 			}
 		})

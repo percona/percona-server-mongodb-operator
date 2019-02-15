@@ -91,14 +91,9 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		}
 	} else {
 		for _, replset := range spec.Replsets {
-			if replset.Size == 0 {
-				replset.Size = config.DefaultMongodSize
-			}
-
 			if !spec.UnsafeConf {
 				setSafeDefault(replset)
 			}
-
 		}
 	}
 	if spec.RunUID == 0 && util.GetPlatform(m, h.serverVersion) != v1alpha1.PlatformOpenshift {
@@ -189,8 +184,6 @@ func (h *Handler) newStatefulSetVolumes(m *v1alpha1.PerconaServerMongoDB) ([]cor
 
 // newStatefulSet returns a PSMDB stateful set
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	h.addSpecDefaults(m)
-
 	volumes, err := h.newStatefulSetVolumes(m)
 	if err != nil {
 		return nil, err

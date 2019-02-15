@@ -2,6 +2,7 @@ package stub
 
 import (
 	"fmt"
+
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/mongod"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -13,8 +14,6 @@ import (
 )
 
 func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	arbiterDefaults(replset)
-
 	arbiter := util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter")
 
 	if err := h.client.Get(arbiter); err != nil {
@@ -49,8 +48,7 @@ func (h *Handler) ensureReplsetArbiter(m *v1alpha1.PerconaServerMongoDB, replset
 }
 
 func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, arbiter *appsv1.StatefulSet, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	if replset.Arbiter != nil && arbiter.Spec.Replicas != nil && *arbiter.Spec.Replicas != replset.Arbiter.Size {
-		arbiterDefaults(replset)
+	if arbiter.Spec.Replicas == nil || *arbiter.Spec.Replicas != replset.Arbiter.Size {
 		logrus.Infof("setting arbiters count to %d for replset: %s", replset.Arbiter.Size, replset.Name)
 		arbiter.Spec.Replicas = &replset.Arbiter.Size
 	}
@@ -65,8 +63,6 @@ func (h *Handler) handleArbiterUpdate(m *v1alpha1.PerconaServerMongoDB, arbiter 
 }
 
 func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	h.addSpecDefaults(m)
-
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
@@ -117,16 +113,4 @@ func (h *Handler) newArbiterContainers(m *v1alpha1.PerconaServerMongoDB, replset
 		mongod.NewArbiterContainer(m, replset, resources, runUID),
 	}
 	return containers
-}
-
-func arbiterDefaults(replset *v1alpha1.ReplsetSpec) {
-	if replset.Arbiter == nil {
-		replset.Arbiter = &v1alpha1.Arbiter{
-			Enabled: false,
-			Size:    0,
-		}
-	}
-	if replset.Arbiter.Enabled && replset.Arbiter.Size == 0 {
-		replset.Arbiter.Size = 1
-	}
 }

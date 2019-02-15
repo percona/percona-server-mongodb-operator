@@ -2,17 +2,77 @@ dist: trusty
 language: go
 go:
   - 1.11.x
-  - master
+sudo: required
+services:
+- docker
+addons:
+  apt:
+    packages:
+    - realpath
+cache:
+  directories:
+  - $HOME/google-cloud-sdk
+env:
+  global:
+  - CLOUDSDK_CORE_DISABLE_PROMPTS=1
+  - VERSION=$TRAVIS_PULL_REQUEST_BRANCH
+  - CLUSTER_NAME=travis-psmdb-${TRAVIS_COMMIT:0:7}-$RANDOM
+before_install:
+- echo '{"experimental":true}' | sudo tee /etc/docker/daemon.json
+- sudo service docker restart
+- echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+- if [ ! -d $HOME/google-cloud-sdk/bin ]; then
+      rm -rf $HOME/google-cloud-sdk;
+      curl https://sdk.cloud.google.com | bash;
+  fi
+- source $HOME/google-cloud-sdk/path.bash.inc
+- gcloud components update kubectl
+- gcloud version
+- openssl aes-256-cbc -K $encrypted_1109b9af4527_key -iv $encrypted_1109b9af4527_iv
+  -in client-secret.json.enc -out client-secret.json -d
+- gcloud auth activate-service-account --key-file client-secret.json
+- gcloud config set project $GCP_PROJECT
+- curl -s https://storage.googleapis.com/kubernetes-helm/helm-v2.12.1-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
+- curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz
+    | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
 matrix:
-  allow_failures:
-    - go: master
-before_script:
-  - curl --retry 6 --retry-delay 20 -sLo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.0.7/operator-sdk-v0.0.7-x86_64-linux-gnu
-  - chmod +x operator-sdk
-script:
-  - ./operator-sdk generate k8s
-  - make test-cover
+  include:
+  - name: "Unit"
+    script:
+    - curl --retry 6 --retry-delay 20 -sLo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.0.7/operator-sdk-v0.0.7-x86_64-linux-gnu
+    - chmod +x operator-sdk
+    - ./operator-sdk generate k8s
+    - make test-cover
+    - bash <(curl -s https://codecov.io/bash)
+  - name: "E2E Basic"
+    script:
+    - ./e2e-tests/build
+    - gcloud container clusters create --zone us-central1-a $CLUSTER_NAME
+      --cluster-version 1.11 --machine-type n1-standard-4 --preemptible --num-nodes=3
+    - kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin
+      --user travis-ci@$GCP_PROJECT.iam.gserviceaccount.com
+    - ./e2e-tests/init-deploy/run
+    - ./e2e-tests/limits/run
+    - ./e2e-tests/scaling/run
+  - name: "Advanced features"
+    script:
+    - ./e2e-tests/build
+    - gcloud container clusters create --zone us-central1-a $CLUSTER_NAME
+      --cluster-version 1.11 --machine-type n1-standard-4 --preemptible --num-nodes=3
+    - kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin
+      --user travis-ci@$GCP_PROJECT.iam.gserviceaccount.com
+    - ./e2e-tests/arbiter/run
+    - ./e2e-tests/service-per-pod/run
+  - name: "Self-Healing"
+    script:
+    - ./e2e-tests/build
+    - gcloud container clusters create --zone us-central1-a $CLUSTER_NAME
+      --cluster-version 1.11 --machine-type n1-standard-4 --preemptible --num-nodes=3
+    - kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin
+      --user travis-ci@$GCP_PROJECT.iam.gserviceaccount.com
+    - ./e2e-tests/self-healing/run
+    - ./e2e-tests/operator-self-healing/run
 after_success:
-  - bash <(curl -s https://codecov.io/bash)
-after_script:
-  - make clean
+- gcloud container clusters delete --zone us-central1-a $CLUSTER_NAME
+after_failure:
+- gcloud container clusters delete --zone us-central1-a $CLUSTER_NAME
