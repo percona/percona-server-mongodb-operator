@@ -62,6 +62,7 @@ func TestNewStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			RunUID: config.DefaultRunUID,
 			Secrets: &v1alpha1.SecretsSpec{
 				Key: config.DefaultKeySecretName,
 			},
