@@ -17,7 +17,7 @@ import (
 func TestStubBackupNewAgentContainer(t *testing.T) {
 	c := New(nil, &v1alpha1.PerconaServerMongoDB{
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{},
+			Backup: v1alpha1.BackupSpec{},
 			Mongod: &v1alpha1.MongodSpec{
 				Net: &v1alpha1.MongodSpecNet{
 					Port: int32(0),
@@ -65,7 +65,7 @@ func TestNewAgentStoragesConfig(t *testing.T) {
 			Name: t.Name(),
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Storages: storagesSpec,
 			},
 		},

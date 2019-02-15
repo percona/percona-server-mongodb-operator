@@ -161,7 +161,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		}
 
 		// Ensure the backup coordinator is started
-		if psmdb.Spec.Backup != nil && psmdb.Spec.Backup.Enabled {
+		if psmdb.Spec.Backup.Enabled {
 			h.backups = backup.New(h.client, psmdb, h.serverVersion, usersSecret)
 			err = h.backups.EnsureCoordinator()
 			if err != nil {
@@ -266,7 +266,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// If backups are disabled, remove backup task/cronJobs and the backup coordinator
 		// if there are no running backup agents in replica sets
-		if (psmdb.Spec.Backup == nil || !psmdb.Spec.Backup.Enabled) && h.backups != nil {
+		if !psmdb.Spec.Backup.Enabled && h.backups != nil {
 			err = h.backups.DeleteBackupTasks()
 			if err != nil {
 				logrus.Errorf("failed to remove backup cronJobs: %v", err)

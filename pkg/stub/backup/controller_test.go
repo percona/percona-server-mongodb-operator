@@ -21,7 +21,7 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 			Name: t.Name(),
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Tasks: []*v1alpha1.BackupTaskSpec{},
 			},
 		},
@@ -126,7 +126,7 @@ func TestStubBackupDeleteBackupTasks(t *testing.T) {
 			Name: t.Name(),
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Tasks: []*v1alpha1.BackupTaskSpec{},
 			},
 		},

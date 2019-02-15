@@ -47,7 +47,7 @@ type PerconaServerMongoDBSpec struct {
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
-	Backup          *BackupSpec       `json:"backup,omitempty"`
+	Backup          BackupSpec        `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 }
 

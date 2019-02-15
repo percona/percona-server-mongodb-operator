@@ -161,7 +161,7 @@ func TestNewStatefulSet(t *testing.T) {
 	assert.Nil(t, osSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 
 	// test enabling of backups enables config-file secret volume
-	psmdb.Spec.Backup = &v1alpha1.BackupSpec{
+	psmdb.Spec.Backup = v1alpha1.BackupSpec{
 		Enabled: true,
 		Storages: map[string]v1alpha1.BackupStorageSpec{
 			"test": v1alpha1.BackupStorageSpec{
