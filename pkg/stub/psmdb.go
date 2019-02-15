@@ -126,7 +126,7 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
 	if m.Spec.Backup.Enabled {
 		for _, backupTask := range m.Spec.Backup.Tasks {
-			if backupTask.Enabled && backupTask.Schedule != "" {
+			if backupTask != nil && backupTask.Enabled && backupTask.Schedule != "" {
 				return true
 			}
 		}
