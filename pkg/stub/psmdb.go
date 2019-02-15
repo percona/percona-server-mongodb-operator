@@ -157,7 +157,7 @@ func (h *Handler) newStatefulSetContainers(m *v1alpha1.PerconaServerMongoDB, rep
 }
 
 // newStatefulSetVolumes returns a slice of volumes PSMDB stateful set
-func (h *Handler) newStatefulSetVolumes(m *v1alpha1.PerconaServerMongoDB) ([]corev1.Volume, error) {
+func (h *Handler) newStatefulSetVolumes(m *v1alpha1.PerconaServerMongoDB) []corev1.Volume {
 	volumes := []corev1.Volume{
 		{
 			Name: m.Spec.Secrets.Key,
@@ -173,22 +173,16 @@ func (h *Handler) newStatefulSetVolumes(m *v1alpha1.PerconaServerMongoDB) ([]cor
 
 	if h.hasBackupsEnabled(m) {
 		agentVolumes, err := h.backups.NewAgentVolumes()
-		if err != nil {
-			return nil, err
+		if err == nil {
+			volumes = append(volumes, agentVolumes...)
 		}
-		volumes = append(volumes, agentVolumes...)
 	}
 
-	return volumes, nil
+	return volumes
 }
 
 // newStatefulSet returns a PSMDB stateful set
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
-	volumes, err := h.newStatefulSetVolumes(m)
-	if err != nil {
-		return nil, err
-	}
-
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
@@ -209,7 +203,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: runUID,
 				},
-				Volumes: volumes,
+				Volumes: h.newStatefulSetVolumes(m),
 			},
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{

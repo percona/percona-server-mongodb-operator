@@ -136,11 +136,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	}
 
 	// Ensure the stateful set volumes are the same as the spec
-	volumes, err := h.newStatefulSetVolumes(m)
-	if err != nil {
-		return nil, err
-	}
-	set.Spec.Template.Spec.Volumes = volumes
+	set.Spec.Template.Spec.Volumes = h.newStatefulSetVolumes(m)
 
 	// Ensure the stateful set containers are the same as the spec
 	set.Spec.Template.Spec.Containers = h.newStatefulSetContainers(m, replset, resources)
@@ -148,7 +144,7 @@ func (h *Handler) handleStatefulSetUpdate(m *v1alpha1.PerconaServerMongoDB, set 
 	// TODO: only send an update if something changed. reflect.DeepEqual
 	// considers two struct to be different always if they contain pointers.
 	// For now we send an update every loop like the PXC operator
-	err = h.client.Update(set)
+	err := h.client.Update(set)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update stateful set for replset %s: %v", replset.Name, err)
 	}
