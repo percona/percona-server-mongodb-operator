@@ -3,37 +3,21 @@ package backup
 import (
 	"testing"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 
+	pbmStorage "github.com/percona/percona-backup-mongodb/storage"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"gopkg.in/yaml.v2"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func TestStubBackupHasS3Backups(t *testing.T) {
-	c := New(nil, &v1alpha1.PerconaServerMongoDB{
-		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
-				Tasks: []*v1alpha1.BackupTaskSpec{},
-			},
-		},
-	}, nil, nil)
-
-	assert.False(t, c.hasS3Backups())
-
-	c.psmdb.Spec.Backup.Tasks = append(c.psmdb.Spec.Backup.Tasks, &v1alpha1.BackupTaskSpec{
-		Name:            t.Name(),
-		DestinationType: v1alpha1.BackupDestinationS3,
-	})
-	assert.True(t, c.hasS3Backups())
-}
 
 func TestStubBackupNewAgentContainer(t *testing.T) {
 	c := New(nil, &v1alpha1.PerconaServerMongoDB{
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
-				S3: &v1alpha1.BackupS3Spec{
-					Secret: "s3-secret",
-				},
-			},
+			Backup: v1alpha1.BackupSpec{},
 			Mongod: &v1alpha1.MongodSpec{
 				Net: &v1alpha1.MongodSpecNet{
 					Port: int32(0),
@@ -59,17 +43,59 @@ func TestStubBackupNewAgentContainer(t *testing.T) {
 	assert.NotNil(t, container)
 	assert.Equal(t, backupImagePrefix+":0.0.0-backup-agent", container.Image)
 
-	// test container env without s3 backups enabled
-	assert.Len(t, container.Env, 5)
+	assert.Len(t, container.Env, 6)
+}
 
-	// test container emv with s3 backups enabled, this adds +4 env vars
-	c.psmdb.Spec.Backup.Tasks = []*v1alpha1.BackupTaskSpec{
-		{
-			Name:            t.Name(),
-			DestinationType: v1alpha1.BackupDestinationS3,
+func TestNewAgentStoragesConfig(t *testing.T) {
+	storagesSpec := map[string]v1alpha1.BackupStorageSpec{
+		"test": v1alpha1.BackupStorageSpec{
+			Type: v1alpha1.BackupStorageS3,
+			S3: v1alpha1.BackupStorageS3Spec{
+				Bucket:            "my-s3-bucket-name",
+				Region:            "us-west-2",
+				CredentialsSecret: "test-s3-credentials",
+				EndpointURL:       "https://minio.local/minio",
+			},
 		},
 	}
-	container = c.NewAgentContainer(replset)
-	assert.NotNil(t, container)
-	assert.Len(t, container.Env, 9)
+
+	client := &mocks.Client{}
+	c := New(client, &v1alpha1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: t.Name(),
+		},
+		Spec: v1alpha1.PerconaServerMongoDBSpec{
+			Backup: v1alpha1.BackupSpec{
+				Storages: storagesSpec,
+			},
+		},
+	}, nil, nil)
+
+	client.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil).Run(func(args mock.Arguments) {
+		secret := args.Get(0).(*corev1.Secret)
+		assert.Equal(t, "test-s3-credentials", secret.Name)
+		secret.Data = map[string][]byte{
+			awsAccessKeySecretKey:       []byte("test-aws-access-key"),
+			awsSecretAccessKeySecretKey: []byte("test-aws-secret-access-key"),
+		}
+	})
+
+	secret, err := c.newAgentStoragesConfigSecret()
+	assert.NoError(t, err)
+	assert.NotNil(t, secret)
+	assert.Equal(t, c.agentStoragesConfigSecretName(), secret.Name)
+
+	storages := make(map[string]pbmStorage.Storage)
+	err = yaml.Unmarshal([]byte(secret.StringData[agentStoragesConfigFile]), storages)
+	assert.NoError(t, err)
+	assert.NotNil(t, storages["test"])
+
+	testStorage := storages["test"]
+	assert.Equal(t, "us-west-2", testStorage.S3.Region)
+	assert.Equal(t, "https://minio.local/minio", testStorage.S3.EndpointURL)
+	assert.Equal(t, "my-s3-bucket-name", testStorage.S3.Bucket)
+	assert.Equal(t, "test-aws-access-key", testStorage.S3.Credentials.AccessKeyID)
+	assert.Equal(t, "test-aws-secret-access-key", testStorage.S3.Credentials.SecretAccessKey)
+
+	client.AssertExpectations(t)
 }

@@ -262,6 +262,15 @@
   revision = "398fe3f8568f58b8d353575d08d346bc33c7f130"
 
 [[projects]]
+  name = "github.com/percona/percona-backup-mongodb"
+  packages = [
+    "internal/utils",
+    "storage"
+  ]
+  revision = "a9c9566e1c92d69cefa425b7b8a40e10250307c9"
+  version = "v0.3.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/petar/GoLLRB"
   packages = ["llrb"]
@@ -272,6 +281,12 @@
   packages = ["."]
   revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
   version = "v2.0.1"
+
+[[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
@@ -713,6 +728,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "41e1bc2b5a672e36ce2471b9780238e41aab00622843cc5858433a36394e7923"
+  inputs-digest = "407c1a61cf0223675d0f55c359c297a3ce42d7354c4c9ec263185e710ff9fcb7"
   solver-name = "gps-cdcl"
   solver-version = 1

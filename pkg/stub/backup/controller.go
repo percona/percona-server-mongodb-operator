@@ -17,14 +17,8 @@ import (
 // DefaultCompressionType is the default backup data compression type
 var DefaultCompressionType = v1alpha1.BackupCompressionGzip
 
-// DefaultDestinationType is the default backup destination type
-var DefaultDestinationType = v1alpha1.BackupDestinationS3
-
-// DefaultS3SecretName is the default name of the AWS S3 credentials secret
-const DefaultS3SecretName = "percona-server-mongodb-backup-s3"
-
 // DefaultVersion is the default version of the percona/percona-backup-mongodb project
-const DefaultVersion = "0.2.1"
+const DefaultVersion = "0.3.0"
 
 const backupImagePrefix = "percona/percona-server-mongodb-operator"
 

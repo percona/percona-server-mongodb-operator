@@ -19,8 +19,9 @@ func TestStubBackupEnsureCoordinator(t *testing.T) {
 			Name: t.Name(),
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Coordinator: &v1alpha1.BackupCoordinatorSpec{
+					EnableClientsLogging: DefaultEnableClientsLogging,
 					ResourcesSpec: &v1alpha1.ResourcesSpec{
 						Limits: &v1alpha1.ResourceSpecRequirements{
 							Cpu:     "1",
@@ -67,8 +68,9 @@ func TestStubBackupDeleteCoordinator(t *testing.T) {
 			Name: t.Name(),
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Coordinator: &v1alpha1.BackupCoordinatorSpec{
+					EnableClientsLogging: DefaultEnableClientsLogging,
 					ResourcesSpec: &v1alpha1.ResourcesSpec{
 						Limits: &v1alpha1.ResourceSpecRequirements{
 							Cpu:     "1",

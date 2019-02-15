@@ -21,7 +21,7 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 			Name: t.Name(),
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Tasks: []*v1alpha1.BackupTaskSpec{},
 			},
 		},
@@ -35,10 +35,9 @@ func TestStubBackupEnsureBackupTasks(t *testing.T) {
 		c.client = client
 
 		c.psmdb.Spec.Backup.Tasks = append(c.psmdb.Spec.Backup.Tasks, &v1alpha1.BackupTaskSpec{
-			Name:            t.Name(),
-			Enabled:         true,
-			Schedule:        "* * * * *",
-			DestinationType: v1alpha1.BackupDestinationS3,
+			Name:     t.Name(),
+			Enabled:  true,
+			Schedule: "* * * * *",
 		})
 
 		// test success
@@ -127,7 +126,7 @@ func TestStubBackupDeleteBackupTasks(t *testing.T) {
 			Name: t.Name(),
 		},
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Tasks: []*v1alpha1.BackupTaskSpec{},
 			},
 		},

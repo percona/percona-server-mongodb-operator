@@ -67,3 +67,7 @@ required = [
 [[constraint]]
   name = "github.com/stretchr/testify"
   version = "1.3.0"
+
+[[constraint]]
+  name = "github.com/percona/percona-backup-mongodb"
+  version = "v0.3.0"

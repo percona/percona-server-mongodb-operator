@@ -31,6 +31,7 @@ func (c *Controller) newBackupCronJobContainerArgs(backup *v1alpha1.BackupTaskSp
 	args := []string{
 		"run", "backup",
 		"--description=" + c.psmdb.Name + "-" + backup.Name,
+		"--storage=" + backup.StorageName,
 	}
 
 	switch backup.CompressionType {
@@ -38,13 +39,6 @@ func (c *Controller) newBackupCronJobContainerArgs(backup *v1alpha1.BackupTaskSp
 		args = append(args, "--compression-algorithm=gzip")
 	default:
 		args = append(args, "--compression-algorithm=none")
-	}
-
-	switch backup.DestinationType {
-	case v1alpha1.BackupDestinationS3:
-		args = append(args, "--destination-type=aws")
-	default:
-		args = append(args, "--destination-type=file")
 	}
 
 	return args

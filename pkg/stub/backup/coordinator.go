@@ -13,6 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+// DefaultEnableClientsLogging is the default for the backup coordinator clients logging
+var DefaultEnableClientsLogging = &util.TrueVar
+
 const (
 	coordinatorAPIPort       = int32(10001)
 	coordinatorRPCPort       = int32(10000)
@@ -41,11 +44,11 @@ func (c *Controller) newCoordinatorPodSpec(resources corev1.ResourceRequirements
 				Env: []corev1.EnvVar{
 					{
 						Name:  "PBM_COORDINATOR_ENABLE_CLIENTS_LOGGING",
-						Value: "true",
+						Value: strconv.FormatBool(*c.psmdb.Spec.Backup.Coordinator.EnableClientsLogging),
 					},
 					{
 						Name:  "PBM_COORDINATOR_DEBUG",
-						Value: strconv.FormatBool(c.psmdb.Spec.Backup.Coordinator.Debug),
+						Value: strconv.FormatBool(c.psmdb.Spec.Backup.Debug),
 					},
 					{
 						Name:  "PBM_COORDINATOR_API_PORT",

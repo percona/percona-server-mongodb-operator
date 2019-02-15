@@ -16,9 +16,10 @@ func (c *Controller) updateStatus(backupTask *v1alpha1.BackupTaskSpec) error {
 
 	cronJob := newCronJob(c.psmdb, backupTask)
 	status := &v1alpha1.BackupTaskStatus{
-		Enabled: backupTask.Enabled,
-		Name:    backupTask.Name,
-		CronJob: cronJob.Name,
+		Enabled:     backupTask.Enabled,
+		Name:        backupTask.Name,
+		StorageName: backupTask.StorageName,
+		CronJob:     cronJob.Name,
 	}
 
 	for i, bkpStatus := range data.Status.Backups {

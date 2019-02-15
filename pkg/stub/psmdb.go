@@ -100,7 +100,7 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		spec.RunUID = config.DefaultRunUID
 	}
 
-	if spec.Backup != nil && spec.Backup.Enabled {
+	if spec.Backup.Enabled {
 		if spec.Backup.RestartOnFailure == nil {
 			spec.Backup.RestartOnFailure = &util.TrueVar
 		}
@@ -110,18 +110,12 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 		if spec.Backup.Coordinator == nil {
 			spec.Backup.Coordinator = &v1alpha1.BackupCoordinatorSpec{}
 		}
-		if spec.Backup.S3 == nil {
-			spec.Backup.S3 = &v1alpha1.BackupS3Spec{}
-		}
-		if spec.Backup.S3.Secret == "" {
-			spec.Backup.S3.Secret = backup.DefaultS3SecretName
+		if spec.Backup.Coordinator.EnableClientsLogging == nil {
+			spec.Backup.Coordinator.EnableClientsLogging = backup.DefaultEnableClientsLogging
 		}
 		for _, bkpTask := range spec.Backup.Tasks {
 			if bkpTask.CompressionType == "" {
 				bkpTask.CompressionType = backup.DefaultCompressionType
-			}
-			if bkpTask.DestinationType == "" {
-				bkpTask.DestinationType = backup.DefaultDestinationType
 			}
 		}
 	}
@@ -130,9 +124,11 @@ func (h *Handler) addSpecDefaults(m *v1alpha1.PerconaServerMongoDB) {
 // hasBackupsEnabled returns a boolean reflecting if there are any backups
 // enabled in the PSMDB spec
 func (h *Handler) hasBackupsEnabled(m *v1alpha1.PerconaServerMongoDB) bool {
-	for _, backupTask := range m.Spec.Backup.Tasks {
-		if backupTask.Enabled && backupTask.Schedule != "" {
-			return true
+	if m.Spec.Backup.Enabled {
+		for _, backupTask := range m.Spec.Backup.Tasks {
+			if backupTask != nil && backupTask.Enabled && backupTask.Schedule != "" {
+				return true
+			}
 		}
 	}
 	return false
@@ -154,14 +150,45 @@ func (h *Handler) newStatefulSetContainers(m *v1alpha1.PerconaServerMongoDB, rep
 	containers := []corev1.Container{
 		mongod.NewContainer(m, replset, resources, runUID),
 	}
-	if m.Spec.Backup != nil && m.Spec.Backup.Enabled {
+	if m.Spec.Backup.Enabled {
 		containers = append(containers, h.backups.NewAgentContainer(replset))
 	}
 	return containers
 }
 
+// newStatefulSetVolumes returns a slice of volumes PSMDB stateful set
+func (h *Handler) newStatefulSetVolumes(m *v1alpha1.PerconaServerMongoDB) ([]corev1.Volume, error) {
+	volumes := []corev1.Volume{
+		{
+			Name: m.Spec.Secrets.Key,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &secretFileMode,
+					SecretName:  m.Spec.Secrets.Key,
+					Optional:    &util.FalseVar,
+				},
+			},
+		},
+	}
+
+	if m.Spec.Backup.Enabled {
+		agentVolumes, err := h.backups.NewAgentVolumes()
+		if err != nil {
+			return nil, err
+		}
+		volumes = append(volumes, agentVolumes...)
+	}
+
+	return volumes, nil
+}
+
 // newStatefulSet returns a PSMDB stateful set
 func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements) (*appsv1.StatefulSet, error) {
+	volumes, err := h.newStatefulSetVolumes(m)
+	if err != nil {
+		return nil, err
+	}
+
 	runUID := util.GetContainerRunUID(m, h.serverVersion)
 	ls := util.LabelsForPerconaServerMongoDBReplset(m, replset)
 	set := util.NewStatefulSet(m, m.Name+"-"+replset.Name)
@@ -182,18 +209,7 @@ func (h *Handler) newStatefulSet(m *v1alpha1.PerconaServerMongoDB, replset *v1al
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: runUID,
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: m.Spec.Secrets.Key,
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								DefaultMode: &secretFileMode,
-								SecretName:  m.Spec.Secrets.Key,
-								Optional:    &util.FalseVar,
-							},
-						},
-					},
-				},
+				Volumes: volumes,
 			},
 		},
 		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{

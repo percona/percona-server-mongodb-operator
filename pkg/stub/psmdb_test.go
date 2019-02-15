@@ -4,10 +4,15 @@ import (
 	"testing"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/config"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/sdk/mocks"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/testutil"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/internal/util"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/stub/backup"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -104,7 +109,9 @@ func TestNewStatefulSet(t *testing.T) {
 	resources, err := util.ParseResourceSpecRequirements(replset.Limits, replset.Requests)
 	assert.NoError(t, err)
 
+	client := &mocks.Client{}
 	h := &Handler{
+		backups: backup.New(client, psmdb, nil, nil),
 		serverVersion: &v1alpha1.ServerVersion{
 			Platform: v1alpha1.PlatformKubernetes,
 		},
@@ -115,7 +122,9 @@ func TestNewStatefulSet(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, set)
 	assert.Equal(t, t.Name()+"-"+config.DefaultReplsetName, set.Name)
+	assert.Len(t, set.Spec.Template.Spec.Volumes, 1)
 	assert.Len(t, set.Spec.Template.Spec.Containers, 1)
+	assert.Len(t, set.Spec.Template.Spec.Containers[0].VolumeMounts, 2)
 	assert.Contains(t, set.Spec.Template.Spec.Containers[0].Args, "--storageEngine=wiredTiger")
 	assert.Contains(t, set.Spec.Template.Spec.Containers[0].Args, "--wiredTigerCacheSizeGB=0.25")
 	assert.Len(t, set.Spec.Template.Spec.Containers[0].Ports, 1)
@@ -150,4 +159,45 @@ func TestNewStatefulSet(t *testing.T) {
 	osSet, err := h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
 	assert.Nil(t, osSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
+
+	// test enabling of backups enables config-file secret volume
+	psmdb.Spec.Backup = v1alpha1.BackupSpec{
+		Enabled: true,
+		Storages: map[string]v1alpha1.BackupStorageSpec{
+			"test": v1alpha1.BackupStorageSpec{
+				Type: v1alpha1.BackupStorageS3,
+				S3: v1alpha1.BackupStorageS3Spec{
+					Bucket:            t.Name(),
+					Region:            "us-west-2",
+					CredentialsSecret: "test-s3",
+				},
+			},
+		},
+		Tasks: []*v1alpha1.BackupTaskSpec{
+			{
+				Name:        "test",
+				Enabled:     true,
+				Schedule:    "* * * * *",
+				StorageName: "test",
+			},
+		},
+	}
+
+	client.On("Get", mock.AnythingOfType("*v1.Secret")).Return(nil).Run(func(args mock.Arguments) {
+		secret := args.Get(0).(*corev1.Secret)
+		assert.Equal(t, "test-s3", secret.Name)
+	})
+	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(nil).Once()
+
+	bkpEnabledSet, err := h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
+	assert.NoError(t, err)
+	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Volumes, 2)
+	assert.Len(t, bkpEnabledSet.Spec.Template.Spec.Containers, 2, "backup agent container was not added")
+	assert.Equal(t, backup.AgentContainerName, bkpEnabledSet.Spec.Template.Spec.Containers[1].Name, "backup agent container was not added")
+
+	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(testutil.AlreadyExistsError).Once()
+	_, err = h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
+	assert.NoError(t, err)
+
+	client.AssertExpectations(t)
 }

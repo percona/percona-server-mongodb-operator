@@ -65,13 +65,11 @@ spec:
     #  filter: '{}'
   backup:
     enabled: false
-    version: 0.2.1
+    debug: false
+    version: 0.3.0
     restartOnFailure: true
-    s3:
-      secret: my-cluster-name-backup-s3
-      bucket: S3-BACKUP-BUCKET-NAME-HERE
-      region: us-west-2
     coordinator:
+      enableClientsLogging: true
       resources:
         limits:
           cpu: "100m"
@@ -81,13 +79,27 @@ spec:
           cpu: "100m"
           memory: "0.1G"
         #storageClass: aws-gp2
-      debug: false
+    storages:
+      s3-us-west:
+        type: s3
+        s3:
+          bucket: S3-BACKUP-BUCKET-NAME-HERE
+          credentialsSecret: my-cluster-name-backup-s3
+          region: us-west-2
+      #minio:
+      #  type: s3
+      #  s3:
+      #    bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+      #    credentialsSecret: my-cluster-name-backup-minio
+      #    endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
     tasks:
-      - name: daily
+      - name: daily-s3-us-west
         enabled: true
         schedule: "0 0 * * *"
+        storageName: s3-us-west
         compressionType: gzip
-      - name: weekly
+      - name: weekly-s3-us-west
         enabled: false
         schedule: "0 0 * * 0"
+        storageName: s3-us-west
         compressionType: gzip

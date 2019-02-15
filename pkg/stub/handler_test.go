@@ -23,8 +23,9 @@ import (
 func TestHasBackupsEnabled(t *testing.T) {
 	psmdb := &v1alpha1.PerconaServerMongoDB{
 		Spec: v1alpha1.PerconaServerMongoDBSpec{
-			Backup: &v1alpha1.BackupSpec{
-				Tasks: []*v1alpha1.BackupTaskSpec{},
+			Backup: v1alpha1.BackupSpec{
+				Enabled: true,
+				Tasks:   []*v1alpha1.BackupTaskSpec{},
 			},
 		},
 	}
@@ -88,7 +89,7 @@ func TestHandlerHandle(t *testing.T) {
 					Port: 99999,
 				},
 			},
-			Backup: &v1alpha1.BackupSpec{
+			Backup: v1alpha1.BackupSpec{
 				Enabled: true,
 				Coordinator: &v1alpha1.BackupCoordinatorSpec{
 					ResourcesSpec: &v1alpha1.ResourcesSpec{
