@@ -70,4 +70,4 @@ required = [
 
 [[constraint]]
   name = "github.com/percona/percona-backup-mongodb"
-  branch = "master"
+  version = "v0.3.0"
