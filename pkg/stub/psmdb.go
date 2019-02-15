@@ -171,7 +171,7 @@ func (h *Handler) newStatefulSetVolumes(m *v1alpha1.PerconaServerMongoDB) []core
 		},
 	}
 
-	if h.hasBackupsEnabled(m) {
+	if m.Spec.Backup.Enabled {
 		agentVolumes, err := h.backups.NewAgentVolumes()
 		if err == nil {
 			volumes = append(volumes, agentVolumes...)
