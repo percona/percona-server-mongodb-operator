@@ -106,10 +106,8 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
-        - mountPath: /data/db
-          name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: some-name-intrnl-mongodb-key
+          name: arbiter-intrnl-mongodb-key
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -119,23 +117,12 @@ spec:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: some-name-intrnl-mongodb-key
+      - name: arbiter-intrnl-mongodb-key
         secret:
           defaultMode: 48
           optional: false
-          secretName: some-name-intrnl-mongodb-key
+          secretName: arbiter-intrnl-mongodb-key
   updateStrategy:
     rollingUpdate:
       partition: 0
     type: RollingUpdate
-  volumeClaimTemplates:
-  - metadata:
-      name: mongod-data
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 1Gi
-    status:
-      phase: Pending

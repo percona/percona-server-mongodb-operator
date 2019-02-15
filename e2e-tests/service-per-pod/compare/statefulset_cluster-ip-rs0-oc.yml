@@ -93,11 +93,11 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
+        - mountPath: /etc/mongodb-secrets
+          name: cluster-ip-intrnl-mongodb-key
+          readOnly: true
         - mountPath: /data/db
           name: mongod-data
-        - mountPath: /etc/mongodb-secrets
-          name: percona-server-mongodb-key
-          readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always

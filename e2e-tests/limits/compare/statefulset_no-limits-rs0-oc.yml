@@ -105,11 +105,11 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
-        - mountPath: /data/db
-          name: mongod-data
         - mountPath: /etc/mongodb-secrets
           name: no-limits-intrnl-mongodb-key
           readOnly: true
+        - mountPath: /data/db
+          name: mongod-data
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always
