@@ -66,7 +66,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 					},
 				},
 			},
-			InitialDelaySeconds: int32(60),
+			InitialDelaySeconds: int32(90),
 			TimeoutSeconds:      int32(5),
 			PeriodSeconds:       int32(10),
 			FailureThreshold:    int32(12),

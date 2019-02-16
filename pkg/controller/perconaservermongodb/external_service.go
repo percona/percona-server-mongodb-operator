@@ -16,14 +16,9 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 	services := make([]corev1.Service, 0)
 
 	for _, pod := range podList.Items {
-		// logrus.Infof("Checking that pod %s of replset %s has attached service", pod.Name, replset.Name)
-
 		service := &corev1.Service{}
-		// logrus.Debugf("Service meta: %v", meta)
-
 		if err := r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: cr.Namespace}, service); err != nil {
 			if errors.IsNotFound(err) {
-				// logrus.Infof("pod %s of replset %s doesn't have attached service", pod.Name, replset.Name)
 				service = psmdb.ExternalService(cr, replset, pod.Name)
 
 				err = setControllerReference(cr, service, r.scheme)

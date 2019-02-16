@@ -238,6 +238,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			if err != nil {
 				return reconcile.Result{}, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
 			}
+			if replset.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+				lbsvc := srvs[:0]
+				for _, svc := range srvs {
+					if len(svc.Status.LoadBalancer.Ingress) > 0 {
+						lbsvc = append(lbsvc, svc)
+					}
+				}
+				srvs = lbsvc
+			}
 			crState.Services = append(crState.Services, srvs...)
 		} else {
 			service := psmdb.Service(cr, replset)
@@ -476,7 +485,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 				return fmt.Errorf("failed to fetch service address: %v", err)
 			}
 			cmd = append(cmd, "--ip", hostname.Host, "--port", strconv.Itoa(hostname.Port))
-
 		}
 
 		var errb bytes.Buffer

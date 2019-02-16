@@ -141,42 +141,38 @@ func GetServiceAddr(svc corev1.Service, pod corev1.Pod, cl client.Client) (*Serv
 func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 	var retries uint64 = 0
 
-	meta := &corev1.Service{}
+	var ip string
+	var hostname string
 
 	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
 	for range ticker.C {
+		retries++
 
-		if retries >= 900 {
-			ticker.Stop()
+		if retries >= 1000 {
 			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
 		}
 
-		err := cl.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, meta)
-
+		svc := &corev1.Service{}
+		err := cl.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, svc)
 		if err != nil {
-			ticker.Stop()
 			return "", fmt.Errorf("failed to fetch service: %v", err)
 		}
 
-		if len(meta.Status.LoadBalancer.Ingress) != 0 {
-			ticker.Stop()
+		if len(svc.Status.LoadBalancer.Ingress) != 0 {
+			ip = svc.Status.LoadBalancer.Ingress[0].IP
+			hostname = svc.Status.LoadBalancer.Ingress[0].Hostname
 		}
-		retries++
-	}
 
-	if len(meta.Status.LoadBalancer.Ingress) == 0 {
-		return "", fmt.Errorf("cannot detect ingress point for Service %s", meta.Name)
-	}
+		if ip != "" {
+			return ip, nil
+		}
 
-	ip := meta.Status.LoadBalancer.Ingress[0].IP
-	hostname := meta.Status.LoadBalancer.Ingress[0].Hostname
+		if hostname != "" {
+			return hostname, nil
+		}
 
-	if ip == "" && hostname == "" {
-		return "", fmt.Errorf("cannot fetch any hostname from ingress for Service %s", meta.Name)
 	}
-	if ip != "" {
-		return ip, nil
-	}
-	return hostname, nil
+	return "", fmt.Errorf("can't get service %s ingress, retry limit reached", pod.Name)
 }
