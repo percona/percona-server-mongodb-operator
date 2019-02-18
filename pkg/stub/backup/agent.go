@@ -68,6 +68,13 @@ func (c *Controller) newAgentStoragesConfigSecret() (*corev1.Secret, error) {
 	for storageName, storageSpec := range c.psmdb.Spec.Backup.Storages {
 		switch storageSpec.Type {
 		case v1alpha1.BackupStorageS3:
+			// https://jira.percona.com/browse/CLOUD-132 workaround
+			// with an empty CredentialsSecret k8s.client returns objectsList instead of an object,
+			// which in turn cause panic
+			if storageSpec.S3.CredentialsSecret == "" {
+				logrus.Errorf("error: no credentials specified for the secret name %s", storageName)
+				continue
+			}
 			s3secret, err := util.GetSecret(c.psmdb, c.client, storageSpec.S3.CredentialsSecret)
 			if err != nil {
 				logrus.Errorf("error getting s3 credentials secret name %s: %v", storageName, err)
