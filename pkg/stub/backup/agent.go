@@ -137,7 +137,13 @@ func (c *Controller) NewAgentVolumes() ([]corev1.Volume, error) {
 
 	err = c.client.Create(secret)
 	if err != nil {
-		if !k8serrors.IsAlreadyExists(err) {
+		if k8serrors.IsAlreadyExists(err) {
+			err = c.client.Update(secret)
+			if err != nil {
+				logrus.Errorf("failed to update backup agent config file secret %s: %v", secret.Name, err)
+				return nil, err
+			}
+		} else {
 			logrus.Errorf("failed to create backup agent config file secret %s: %v", secret.Name, err)
 			return nil, err
 		}

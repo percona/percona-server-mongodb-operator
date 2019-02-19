@@ -196,6 +196,7 @@ func TestNewStatefulSet(t *testing.T) {
 	assert.Equal(t, backup.AgentContainerName, bkpEnabledSet.Spec.Template.Spec.Containers[1].Name, "backup agent container was not added")
 
 	client.On("Create", mock.AnythingOfType("*v1.Secret")).Return(testutil.AlreadyExistsError).Once()
+	client.On("Update", mock.AnythingOfType("*v1.Secret")).Return(nil).Once()
 	_, err = h.newStatefulSet(psmdb, psmdb.Spec.Replsets[0], resources)
 	assert.NoError(t, err)
 
