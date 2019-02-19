@@ -90,6 +90,7 @@ spec:
       #  type: s3
       #  s3:
       #    bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+      #    region: us-west-1
       #    credentialsSecret: my-cluster-name-backup-minio
       #    endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
     tasks:
