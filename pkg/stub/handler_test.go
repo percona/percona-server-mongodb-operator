@@ -143,6 +143,7 @@ func TestHandlerHandle(t *testing.T) {
 			mock.AnythingOfType("*v1.ServiceList"),
 			mock.AnythingOfType("sdk.ListOption"),
 		).Return(nil)
+		client.On("Delete", mock.AnythingOfType("*v1.StatefulSet")).Return(nil)
 
 		assert.NoError(t, h.Handle(context.TODO(), event))
 		assert.Equal(t, map[string]*watchdog.Watchdog{}, h.watchdog)
