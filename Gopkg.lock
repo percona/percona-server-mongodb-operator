@@ -259,7 +259,8 @@
     "watchdog/replset",
     "watchdog/watcher"
   ]
-  revision = "398fe3f8568f58b8d353575d08d346bc33c7f130"
+  revision = "7d64c3fef0052e90faaec71d1c4bec531040f893"
+  version = "0.4.2"
 
 [[projects]]
   name = "github.com/percona/percona-backup-mongodb"
@@ -728,6 +729,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "407c1a61cf0223675d0f55c359c297a3ce42d7354c4c9ec263185e710ff9fcb7"
+  inputs-digest = "e27cfe3e377e7903d38fe68b22fd2ca6f0e159e9c5bfb9b345b8590612403826"
   solver-name = "gps-cdcl"
   solver-version = 1
