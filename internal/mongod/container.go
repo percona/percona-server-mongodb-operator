@@ -245,26 +245,6 @@ func newContainerVolumeMounts(m *v1alpha1.PerconaServerMongoDB) []corev1.VolumeM
 			ReadOnly:  true,
 		},
 	}
-
-}
-
-func NewBackupContainerVolumeMounts(m *v1alpha1.PerconaServerMongoDB, backupVolName, backupMountDir string) []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      backupVolName,
-			MountPath: backupMountDir,
-		},
-		{
-			Name:      MongodDataVolClaimName,
-			MountPath: MongodContainerDataDir,
-		},
-		{
-			Name:      m.Spec.Secrets.Key,
-			MountPath: MongodSecretsDir,
-			ReadOnly:  true,
-		},
-	}
-
 }
 
 func newContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64, vms []corev1.VolumeMount) corev1.Container {
@@ -323,17 +303,7 @@ func newContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpe
 			RunAsNonRoot: &util.TrueVar,
 			RunAsUser:    runUID,
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      MongodDataVolClaimName,
-				MountPath: MongodContainerDataDir,
-			},
-			{
-				Name:      m.Spec.Secrets.Key,
-				MountPath: MongodSecretsDir,
-				ReadOnly:  true,
-			},
-		},
+		VolumeMounts: vms,
 	}
 }
 
@@ -341,11 +311,15 @@ func NewContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpe
 	return newContainer(m, replset, MongodContainerName, resources, runUID, newContainerVolumeMounts(m))
 }
 
-func NewBackupContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64, vms []corev1.VolumeMount) corev1.Container {
-	return newContainer(m, replset, MongodBackupContainerName, resources, runUID, vms)
-}
-
 func NewArbiterContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.ReplsetSpec, resources corev1.ResourceRequirements, runUID *int64) corev1.Container {
 	// TODO reduce the resources consumption for arbiter
-	return newContainer(m, replset, MongodArbiterContainerName, resources, runUID, newContainerVolumeMounts(m))
+	return newContainer(m, replset, MongodArbiterContainerName, resources, runUID,
+		[]corev1.VolumeMount{
+			{
+				Name:      m.Spec.Secrets.Key,
+				MountPath: MongodSecretsDir,
+				ReadOnly:  true,
+			},
+		},
+	)
 }

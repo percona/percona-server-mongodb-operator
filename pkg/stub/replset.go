@@ -222,6 +222,11 @@ func (h *Handler) ensureReplset(m *v1alpha1.PerconaServerMongoDB, podList *corev
 			return nil, err
 		}
 		sets["arbiter"] = arbiter
+	} else {
+		err := h.client.Delete(util.NewStatefulSet(m, m.Name+"-"+replset.Name+"-arbiter"))
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("delete proxysql: %v", err)
+		}
 	}
 
 	// Initiate the replset if it hasn't already been initiated + there are pods +
