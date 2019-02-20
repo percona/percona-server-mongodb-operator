@@ -56,14 +56,12 @@ spec:
     #  format: BSON
     #  filter: '{}'
   backup:
-    enabled: false
-    version: 0.2.1
+    enabled: true
+    debug: true
+    version: 0.3.0
     restartOnFailure: true
-    s3:
-      secret: s3-secret
-      bucket: psmdb-operator-testing
-      region: eu-central-1
     coordinator:
+      enableClientsLogging: true
       resources:
         limits:
           cpu: "100m"
@@ -73,9 +71,30 @@ spec:
           cpu: "100m"
           memory: "0.1G"
         #storageClass: aws-gp2
-      debug: false
+    storages:
+      aws-s3:
+        type: s3
+        s3:
+          credentialsSecret: aws-s3-secret
+          region: us-east-1
+          bucket: operator-testing
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+      gcp-cs:
+        type: s3
+        s3:
+          credentialsSecret: gcp-cs-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: https://storage.googleapis.com
     tasks:
     - name: weekly
       enabled: true
       schedule: "0 0 * * 0"
       compressionType: gzip
+      storageName: aws-s3

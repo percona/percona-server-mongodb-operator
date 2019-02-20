@@ -1,7 +1,7 @@
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
-  name: some-name-backup-every-min
+  name: some-name-backup-every-min-aws-s3
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
     controller: true
@@ -23,9 +23,9 @@ spec:
           - args:
             - run
             - backup
-            - --description=some-name-every-min
+            - --description=some-name-every-min-aws-s3
+            - --storage=aws-s3
             - --compression-algorithm=gzip
-            - --destination-type=aws
             env:
             - name: PBMCTL_SERVER_ADDRESS
               value: some-name-backup-coordinator:10001

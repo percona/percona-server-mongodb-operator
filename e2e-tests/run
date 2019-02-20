@@ -12,3 +12,5 @@ $dir/self-healing/run
 $dir/operator-self-healing/run
 $dir/service-per-pod/run
 $dir/arbiter/run
+$dir/demand-backup/run
+$dir/scheduled-backup/run

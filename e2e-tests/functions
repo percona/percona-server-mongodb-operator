@@ -1,7 +1,7 @@
 #!/bin/bash
 
 GIT_COMMIT=$(git rev-parse HEAD)
-GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g' | tr '[:upper:]' '[:lower:]')}
+GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_MONGOD36=${IMAGE_MONGOD36:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}-mongod3.6"}
 tmp_dir=$(mktemp -d)
@@ -123,6 +123,35 @@ deploy_operator() {
     sleep 2
 
     wait_pod $(get_operator_pod)
+}
+
+deploy_helm() {
+    local namespace="$1"
+    if [ "$OPENSHIFT" == 1 ]; then
+        export TILLER_NAMESPACE=tiller
+        oc new-project tiller || :
+        oc project tiller
+        oc process -f https://github.com/openshift/origin/raw/master/examples/helm/tiller-template.yaml -p TILLER_NAMESPACE="tiller" -p HELM_VERSION=v2.12.1 | oc apply -f -
+    else
+        kubectl --namespace kube-system create sa tiller || :
+        kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller || :
+        helm init --service-account tiller
+        kubectl config set-context $(kubectl config current-context) --namespace="kube-system"
+    fi
+
+    tiller_pod=$(
+        kubectl get pods \
+            --selector=name=tiller \
+            -o 'jsonpath={.items[].metadata.name}'
+    )
+    wait_pod $tiller_pod
+
+    if [ "$OPENSHIFT" == 1 ]; then
+        oc project "$namespace"
+        oc policy add-role-to-user edit "system:serviceaccount:tiller:tiller"
+    else
+        kubectl config set-context $(kubectl config current-context) --namespace="$namespace"
+    fi
 }
 
 wait_for_running() {
@@ -307,12 +336,14 @@ desc() {
 }
 
 get_backup_name() {
-    local name="$1"
-    let last_pod="$2-1" || :
+    local storage_name="$1"
+    local pod_name="$2"
+    let last_pod="$3-1" || :
 
     for i in $(seq 0 $last_pod); do
-        kubectl logs ${name}-${i} -c backup-agent \
+        kubectl logs ${pod_name}-${i} -c backup-agent \
             | grep db_backup_name \
+            | grep $storage_name \
             | $sed -re 's/.*db_backup_name:["\]+([^"\]+).*/\1/'
     done
 }
