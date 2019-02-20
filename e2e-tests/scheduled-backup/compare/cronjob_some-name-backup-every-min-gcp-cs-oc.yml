@@ -1,7 +1,7 @@
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
-  name: some-name-backup-every-min-aws-s3
+  name: some-name-backup-every-min-gcp-cs
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
     controller: true
@@ -23,8 +23,8 @@ spec:
           - args:
             - run
             - backup
-            - --description=some-name-every-min-aws-s3
-            - --storage=aws-s3
+            - --description=some-name-every-min-gcp-cs
+            - --storage=gcp-cs
             - --compression-algorithm=gzip
             env:
             - name: PBMCTL_SERVER_ADDRESS
@@ -34,14 +34,12 @@ spec:
             resources: {}
             securityContext:
               runAsNonRoot: true
-              runAsUser: 1001
             terminationMessagePath: /dev/termination-log
             terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
           restartPolicy: OnFailure
           schedulerName: default-scheduler
-          securityContext:
-            fsGroup: 1001
+          securityContext: {}
           terminationGracePeriodSeconds: 30
   schedule: '* * * * *'
   successfulJobsHistoryLimit: 3

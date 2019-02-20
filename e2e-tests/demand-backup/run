@@ -96,19 +96,20 @@ desc 'run backups'
 run_backup aws-s3
 run_backup minio
 run_backup gcp-cs
+backup_name_aws=$(get_backup_name  aws-s3 $cluster 3 | sort | head -1)
+backup_name_minio=$(get_backup_name minio $cluster 3 | sort | head -1)
+backup_name_gcp=$(get_backup_name  gcp-cs $cluster 3 | sort | head -1)
+sleep 65
 
 desc 'check backup and restore'
-backup_name_aws=$(get_backup_name aws-s3 $cluster 3 | sort | head -1)
 curl -s "https://s3.amazonaws.com/operator-testing/${backup_name_aws}" | gunzip > /dev/null
 run_restore aws-s3 $backup_name_aws
 
-backup_name_minio=$(get_backup_name minio $cluster 3 | sort | head -1)
 kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
     /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
     /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_name_minio} | grep ${backup_name_minio}
 run_restore minio $backup_name_minio
 
-backup_name_gcp=$(get_backup_name gcp-cs $cluster 3 | sort | head -1)
 curl -s "https://storage.googleapis.com/operator-testing/${backup_name_gcp}" | gunzip > /dev/null
 run_restore gcp-cs $backup_name_gcp
 
