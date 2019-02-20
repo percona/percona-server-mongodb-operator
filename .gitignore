@@ -169,3 +169,4 @@ fabric.properties
 
 # credentials
 client-secret.json
+e2e-tests/conf/cloud-secret.yml
