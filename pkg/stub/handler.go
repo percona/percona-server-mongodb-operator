@@ -100,6 +100,14 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 
 		// apply Spec defaults
 		h.addSpecDefaults(psmdb)
+		// have to write down update defaults
+		// in order its not to be rewritten later while status updating
+		err := h.client.Update(psmdb)
+		if err != nil {
+			err = fmt.Errorf("failed to update psmdb/%s with safe defaults: %v", psmdb.Name, err)
+			logrus.Error(err)
+			return err
+		}
 
 		// Setup watchdog 'k8s' pod source and CustomResourceState struct for CR
 		// (https://github.com/percona/mongodb-orchestration-tools/blob/master/pkg/pod/pod.go#L51-L56)
@@ -143,7 +151,7 @@ func (h *Handler) Handle(ctx context.Context, event opSdk.Event) error {
 		}
 
 		// Create the mongodb internal auth key if it doesn't exist
-		err := h.client.Create(newMongoKeySecret(o))
+		err = h.client.Create(newMongoKeySecret(o))
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				logrus.Errorf("failed to create psmdb auth key: %v", err)
