@@ -30,6 +30,8 @@ before_install:
 - gcloud version
 - openssl aes-256-cbc -K $encrypted_1109b9af4527_key -iv $encrypted_1109b9af4527_iv
   -in client-secret.json.enc -out client-secret.json -d
+- openssl aes-256-cbc -K $encrypted_fd8c235f3723_key -iv $encrypted_fd8c235f3723_iv
+  -in cloud-secret.yml.enc -out e2e-tests/conf/cloud-secret.yml -d
 - gcloud auth activate-service-account --key-file client-secret.json
 - gcloud config set project $GCP_PROJECT
 - curl -s https://storage.googleapis.com/kubernetes-helm/helm-v2.12.1-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
@@ -54,7 +56,7 @@ matrix:
     - ./e2e-tests/init-deploy/run
     - ./e2e-tests/limits/run
     - ./e2e-tests/scaling/run
-  - name: "Advanced features"
+  - name: "E2E Advanced features"
     script:
     - ./e2e-tests/build
     - gcloud container clusters create --zone us-central1-a $CLUSTER_NAME
@@ -63,7 +65,7 @@ matrix:
       --user travis-ci@$GCP_PROJECT.iam.gserviceaccount.com
     - ./e2e-tests/arbiter/run
     - ./e2e-tests/service-per-pod/run
-  - name: "Self-Healing"
+  - name: "E2E Self-Healing"
     script:
     - ./e2e-tests/build
     - gcloud container clusters create --zone us-central1-a $CLUSTER_NAME
@@ -72,6 +74,15 @@ matrix:
       --user travis-ci@$GCP_PROJECT.iam.gserviceaccount.com
     - ./e2e-tests/self-healing/run
     - ./e2e-tests/operator-self-healing/run
+  - name: "E2E Backups"
+    script:
+    - ./e2e-tests/build
+    - gcloud container clusters create --zone us-central1-a $CLUSTER_NAME
+      --cluster-version 1.11 --machine-type n1-standard-4 --preemptible --num-nodes=3
+    - kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin
+      --user travis-ci@$GCP_PROJECT.iam.gserviceaccount.com
+    - ./e2e-tests/demand-backup/run
+    - ./e2e-tests/scheduled-backup/run
 after_success:
 - gcloud container clusters delete --zone us-central1-a $CLUSTER_NAME
 after_failure:
