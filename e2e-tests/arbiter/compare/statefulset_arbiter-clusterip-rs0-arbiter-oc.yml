@@ -126,18 +126,9 @@ spec:
           defaultMode: 48
           optional: false
           secretName: some-key
+      - emptyDir: {}
+        name: mongod-data
   updateStrategy:
     rollingUpdate:
       partition: 0
     type: RollingUpdate
-  volumeClaimTemplates:
-  - metadata:
-      name: mongod-data
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 1Gi
-    status:
-      phase: Pending

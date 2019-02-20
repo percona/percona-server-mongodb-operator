@@ -97,6 +97,12 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 							},
 						},
 					},
+					{
+						Name: mongod.MongodDataVolClaimName,
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
 				},
 			},
 		},
