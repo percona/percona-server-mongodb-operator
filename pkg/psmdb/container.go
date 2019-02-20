@@ -89,6 +89,10 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
+				Name:      MongodDataVolClaimName,
+				MountPath: MongodContainerDataDir,
+			},
+			{
 				Name:      ikeyName,
 				MountPath: mongodSecretsDir,
 				ReadOnly:  true,

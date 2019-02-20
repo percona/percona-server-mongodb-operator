@@ -327,16 +327,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
 			pvc,
 		}
-
-		if len(sfsSpec.Template.Spec.Containers) > 0 {
-			sfsSpec.Template.Spec.Containers[0].VolumeMounts = append(
-				sfsSpec.Template.Spec.Containers[0].VolumeMounts,
-				corev1.VolumeMount{
-					Name:      psmdb.MongodDataVolClaimName,
-					MountPath: psmdb.MongodContainerDataDir,
+	} else {
+		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
+			corev1.Volume{
+				Name: psmdb.MongodDataVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
-			)
-		}
+			},
+		)
 	}
 
 	if errors.IsNotFound(errGet) {
