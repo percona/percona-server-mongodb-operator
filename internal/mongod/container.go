@@ -316,6 +316,10 @@ func NewArbiterContainer(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1.Rep
 	return newContainer(m, replset, MongodArbiterContainerName, resources, runUID,
 		[]corev1.VolumeMount{
 			{
+				Name:      MongodDataVolClaimName,
+				MountPath: MongodContainerDataDir,
+			},
+			{
 				Name:      m.Spec.Secrets.Key,
 				MountPath: MongodSecretsDir,
 				ReadOnly:  true,
