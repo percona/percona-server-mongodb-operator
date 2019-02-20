@@ -97,6 +97,9 @@ wait_backup $(kubectl get job | grep ${cluster%%-rs0}-backup-every-min-minio  | 
 backup_name_minio=$(get_backup_name minio $cluster 3 | sort | head -1)
 wait_backup $(kubectl get job | grep ${cluster%%-rs0}-backup-every-min-gcp-cs | awk '{print$1}' | tail -1)
 backup_name_gcp=$(get_backup_name gcp-cs $cluster 3 | sort | head -1)
+kubectl apply \
+    -f $test_dir/conf/$cluster.yml
+sleep 5
 
 desc 'check backup and restore -- aws-s3'
 kubectl get pods \

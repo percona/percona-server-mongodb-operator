@@ -34,12 +34,14 @@ spec:
             resources: {}
             securityContext:
               runAsNonRoot: true
+              runAsUser: 1001
             terminationMessagePath: /dev/termination-log
             terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
           restartPolicy: OnFailure
           schedulerName: default-scheduler
-          securityContext: {}
+          securityContext:
+            fsGroup: 1001
           terminationGracePeriodSeconds: 30
   schedule: '* * * * *'
   successfulJobsHistoryLimit: 3

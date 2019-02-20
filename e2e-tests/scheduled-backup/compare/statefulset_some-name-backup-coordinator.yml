@@ -30,7 +30,7 @@ spec:
         - name: PBM_COORDINATOR_ENABLE_CLIENTS_LOGGING
           value: "true"
         - name: PBM_COORDINATOR_DEBUG
-          value: "false"
+          value: "true"
         - name: PBM_COORDINATOR_API_PORT
           value: "10001"
         - name: PBM_COORDINATOR_GRPC_PORT
