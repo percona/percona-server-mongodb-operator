@@ -100,9 +100,6 @@ func (h *Handler) newArbiter(m *v1alpha1.PerconaServerMongoDB, replset *v1alpha1
 				},
 			},
 		},
-		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			util.NewPersistentVolumeClaim(m, resources, mongod.MongodDataVolClaimName, replset.StorageClass),
-		},
 	}
 	util.AddOwnerRefToObject(arbiter, util.AsOwner(m))
 	return arbiter, nil
