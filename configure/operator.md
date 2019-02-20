@@ -78,9 +78,11 @@ The ``backup`` section in the [deploy/cr.yaml](https://github.com/Percona-Lab/pe
 |enabled                         | boolean    | `false`   | Enables or disables the backups functionality |
 |version                         | string     | `0.2.1`   |                                               |
 |restartOnFailure                | boolean    | `true`    |                                               |
-|s3.secret                       | string     | `my-cluster-name-backup-s3`| [Kubernetes imagePullSecret](https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets) for backups |
-|s3.bucket                       | string     |           | The [Amazon S3 bucket](https://docs.aws.amazon.com/en_us/AmazonS3/latest/dev/UsingBucket.html) name for backups                    |
-|s3.region                       | string     |`us-west-2`| The [AWS region](https://docs.aws.amazon.com/en_us/general/latest/gr/rande.html) to use |
+|storages.type                   | string     | `s3`      | Type of the cloud storage to be used for backups. Currently only `s3` type is supported                                                          |
+|storages.s3.credentialsSecret   | string     | `my-cluster-name-backup-s3`| [Kubernetes imagePullSecret](https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets) for backups |
+|storages.s3.bucket              | string     |           | The [Amazon S3 bucket](https://docs.aws.amazon.com/en_us/AmazonS3/latest/dev/UsingBucket.html) name for backups                    |
+|storages.s3.region              | string     |`us-west-2`| The [AWS region](https://docs.aws.amazon.com/en_us/general/latest/gr/rande.html) to use |
+|storages.s3.endpointUrl         | string     |           | The endpoint URL of the S3-compatible storage to be used (not needed for the original Amazon S3 cloud)                             |
 |coordinator.resources.limits.cpu| string     |`100m`     | Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
 |coordinator.resources.limits.memory | string |`0.2G`     | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
 |coordinator.resources.limits.storage| string |`1Gi`      | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
@@ -91,5 +93,6 @@ The ``backup`` section in the [deploy/cr.yaml](https://github.com/Percona-Lab/pe
 |tasks.name                      | string     | `sat-night-backup` | The backup name    |
 |tasks.enabled                   | boolean    | `true`             | Enables or disables this exact backup |
 |tasks.schedule                  | string     | `0 0 * * 6`        | Scheduled time to make a backup, specified in the [crontab format](https://en.wikipedia.org/wiki/Cron)                                                        |
+|tasks.storageName               | string     | `st-us-west`       | Name of the S3-compatible storage for backups, configured in the `storages` subsection                                                                       |
 |tasks.compressionType           | string     | `gzip`             | The compression format to store backups in |
 
