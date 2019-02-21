@@ -17,7 +17,7 @@ The operator is configured via the spec section of the [deploy/cr.yaml](https://
 
 Each spec in its turn may contain some key-value pairs. The secrets one has only two of them:
 
-| Key | Value Type | Default | Description |
+| Key | Value Type | Example | Description |
 |-----|------------|---------|-------------|
 |key  | string     | my-cluster-name-mongodb-key   | The secret name for the [MongoDB Internal Auth Key](https://docs.mongodb.com/manual/core/security-internal-authentication/). This secret is auto-created by the operator if it doesn't exist |
 |users| string     | my-cluster-name-mongodb-users | The secret name for the MongoDB users required to run the operator. **This secret is required to run the operator!** |
@@ -26,7 +26,7 @@ Each spec in its turn may contain some key-value pairs. The secrets one has only
 
 The replsets section controls the MongoDB Replica Set. 
 
-| Key                     | Value Type | Default | Description                                                                         |
+| Key                     | Value Type | Example | Description                                                                         |
 |-------------------------|------------|---------|-------------------------------------------------------------------------------------|
 |name                     | string     | rs0     | The name of the [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/) |
 |size                     | int        | 3       | The size of the MongoDB Replica Set, must be >= 3 for [High-Availability](https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability) |
@@ -45,7 +45,7 @@ The replsets section controls the MongoDB Replica Set.
 
 The largest section in the deploy/cr.yaml file contains the Mongod configuration options.
 
-| Key | Value Type | Default | Description |
+| Key | Value Type | Example | Description |
 |-----|------------|---------|-------------|
 |net.port |       int | 27017    | Sets the MongoDB ['net.port' option](https://docs.mongodb.com/manual/reference/configuration-options/#net.port)    |
 |net.hostPort|    int | 0        | Sets the Kubernetes ['hostPort' option](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#support-hostport) |
@@ -73,7 +73,7 @@ security.redactClientLogData|bool|false|Enables/disables [PSMDB Log Redaction](h
 
 The ``backup`` section in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file contains the following configuration options for the regular Percona Server for MongoDB backups.
 
-| Key                            | Value Type | Default   | Description                                   |
+| Key                            | Value Type | Example   | Description                                   |
 |--------------------------------|------------|-----------|-----------------------------------------------|
 |enabled                         | boolean    | `false`   | Enables or disables the backups functionality |
 |version                         | string     | `0.2.1`   |                                               |
