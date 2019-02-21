@@ -19,6 +19,14 @@ import (
 	"path/filepath"
 )
 
+// FrameworkHost returns the service/framework host/DNS suffix using
+// the FRAMEWORK_HOST environment variable that is set automatically
+// by DC/OS.
+// Added to resolve https://jira.percona.com/browse/PMDCOS-5
+func FrameworkHost() string {
+	return os.Getenv(EnvFrameworkHost)
+}
+
 func MesosSandboxPathOrFallback(path string, fallback string) string {
 	mesosSandbox := os.Getenv(EnvMesosSandbox)
 	if mesosSandbox != "" {

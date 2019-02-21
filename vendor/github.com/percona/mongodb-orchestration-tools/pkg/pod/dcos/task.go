@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/percona/mongodb-orchestration-tools/internal/dcos"
 	"github.com/percona/mongodb-orchestration-tools/pkg"
 	"github.com/percona/mongodb-orchestration-tools/pkg/db"
 	"github.com/percona/mongodb-orchestration-tools/pkg/pod"
@@ -30,7 +31,6 @@ const backupPodNamePrefix = "backup-"
 type TaskState string
 
 var (
-	AutoIPDNSSuffix   string    = "autoip.dcos.thisdcos.directory"
 	TaskStateError    TaskState = "TASK_ERROR"
 	TaskStateFailed   TaskState = "TASK_FAILED"
 	TaskStateFinished TaskState = "TASK_FINISHED"
@@ -100,7 +100,7 @@ func (task *Task) Name() string {
 }
 
 func (task *Task) Service() string {
-	return os.Getenv(pkg.EnvServiceName)
+	return os.Getenv(dcos.EnvFrameworkName)
 }
 
 func (task *Task) HasState() bool {
@@ -137,11 +137,11 @@ func (task *Task) IsTaskType(taskType pod.TaskType) bool {
 
 func (task *Task) GetMongoAddr() (*db.Addr, error) {
 	addr := &db.Addr{
-		Host: task.data.Info.Name + "." + task.Service() + "." + AutoIPDNSSuffix,
+		Host: task.data.Info.Name + "." + dcos.FrameworkHost(),
 	}
 	portStr, err := task.getEnvVar(pkg.EnvMongoDBPort)
 	if err != nil {
-		return addr, err
+		return nil, err
 	}
 	addr.Port, err = strconv.Atoi(portStr)
 	return addr, err

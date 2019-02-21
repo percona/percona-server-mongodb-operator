@@ -16,6 +16,7 @@ package dcos
 
 const (
 	EnvFrameworkHost    = "FRAMEWORK_HOST"
+	EnvFrameworkName    = "FRAMEWORK_NAME"
 	EnvPodName          = "POD_NAME"
 	EnvTaskName         = "TASK_NAME"
 	EnvMesosSandbox     = "MESOS_SANDBOX"
@@ -23,7 +24,6 @@ const (
 	EnvSecretsEnabled   = "SECRETS_ENABLED"
 
 	EnvMongoDBMemoryMB                 = "MONGODB_MEM"
-	EnvMongoDBPrimaryAddr              = "MONGODB_PRIMARY_ADDR"
 	EnvMongoDBMongodEndpointName       = "MONGODB_MONGOD_ENDPOINT_NAME"
 	EnvMongoDBChangeUserDb             = "MONGODB_CHANGE_USER_DB"
 	EnvMongoDBChangeUserUsername       = "MONGODB_CHANGE_USER_USERNAME"

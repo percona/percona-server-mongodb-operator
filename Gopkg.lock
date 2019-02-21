@@ -355,8 +355,7 @@
   version = "v1.2"
 
 [[projects]]
-  branch = "master"
-  digest = "1:bd4f485629225e90731e8ad6164ebd5cd16ad7f36be0d0bc9f241f57f4ee661e"
+  digest = "1:6e3bf76ba89087399b4df31fd432960eb73a5d7b42d4362f8e1fff48ab326062"
   name = "github.com/percona/mongodb-orchestration-tools"
   packages = [
     ".",
@@ -375,7 +374,8 @@
     "watchdog/watcher",
   ]
   pruneopts = "NT"
-  revision = "398fe3f8568f58b8d353575d08d346bc33c7f130"
+  revision = "7d64c3fef0052e90faaec71d1c4bec531040f893"
+  version = "0.4.2"
 
 [[projects]]
   branch = "master"
@@ -392,6 +392,14 @@
   pruneopts = "NT"
   revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
   version = "v2.0.1"
+
+[[projects]]
+  digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  pruneopts = "NT"
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:ec2a29e3bd141038ae5c3d3a4f57db0c341fcc1d98055a607aedd683aed124ee"
@@ -453,6 +461,14 @@
   pruneopts = "NT"
   revision = "298182f68c66c05229eb03ac171abe6e309ee79a"
   version = "v1.0.3"
+
+[[projects]]
+  digest = "1:8e8fc2cb42cfa0a18fda0c9c4034092faa7aac773da5efdde8828eb4b96c001d"
+  name = "github.com/stretchr/testify"
+  packages = ["assert"]
+  pruneopts = "NT"
+  revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
+  version = "v1.3.0"
 
 [[projects]]
   digest = "1:3c6a707aed0dc09fe8b8ba6476b6b48c0356d1c8004257b5a98ec92fb615f6da"
@@ -950,6 +966,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/go-logr/logr",
     "github.com/operator-framework/operator-sdk/pkg/k8sutil",
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/ready",
@@ -959,6 +976,7 @@
     "github.com/percona/mongodb-orchestration-tools/watchdog",
     "github.com/percona/mongodb-orchestration-tools/watchdog/config",
     "github.com/percona/mongodb-orchestration-tools/watchdog/metrics",
+    "github.com/stretchr/testify/assert",
     "gopkg.in/mgo.v2",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",

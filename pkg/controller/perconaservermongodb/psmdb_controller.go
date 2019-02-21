@@ -278,6 +278,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			} else {
 				log.WithValues("replset", replset.Name).Error(err, "Failed to init replset")
 			}
+		} else {
+			rstatus.Initialized = true
 		}
 	}
 
@@ -439,10 +441,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureWatchdog(cr *api.PerconaServerMong
 		ReplsetTimeout: 3 * time.Second,
 	}, r.pods, r.watchdogMetrics, r.watchdogQuit)
 	go r.watchdog[cr.Name].Run()
-
-	// register prometheus collector
-	// prometheus.MustRegister(h.watchdogMetrics)
-	// logrus.Debug("Registered watchdog Prometheus collector")
 }
 
 func setControllerReference(cr *api.PerconaServerMongoDB, obj metav1.Object, scheme *runtime.Scheme) error {

@@ -158,23 +158,23 @@ func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
 	// Replset size can't be 0 or 1.
 	// But 2 + the Arbiter is possible.
 	if rs.Size < 2 {
-		loginfo("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize)
+		loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize))
 		rs.Size = defaultMongodSize
 	}
 
 	if rs.Arbiter.Enabled {
 		if rs.Arbiter.Size != 1 {
-			loginfo("Arbiter size will be changed from %d to 1 due to safe config", rs.Arbiter.Size)
+			loginfo(fmt.Sprintf("Arbiter size will be changed from %d to 1 due to safe config", rs.Arbiter.Size))
 			rs.Arbiter.Size = 1
 		}
 		if rs.Size%2 != 0 {
-			loginfo("Arbiter will be switched off. There is no need in arbiter with odd replset size (%d)", rs.Size)
+			loginfo(fmt.Sprintf("Arbiter will be switched off. There is no need in arbiter with odd replset size (%d)", rs.Size))
 			rs.Arbiter.Enabled = false
 			rs.Arbiter.Size = 0
 		}
 	} else {
 		if rs.Size%2 == 0 {
-			loginfo("Replset size will be increased from %d to %d", rs.Size, rs.Size+1)
+			loginfo(fmt.Sprintf("Replset size will be increased from %d to %d", rs.Size, rs.Size+1))
 			rs.Size++
 		}
 	}

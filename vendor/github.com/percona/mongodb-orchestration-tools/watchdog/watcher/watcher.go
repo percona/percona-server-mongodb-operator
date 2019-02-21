@@ -98,7 +98,7 @@ func (rw *Watcher) connectReplsetSession() error {
 					session.Close()
 				}
 			} else {
-				return errors.New("no addresses for dial info")
+				log.Errorf("no addresses for mongodb replset: %s", rw.replset.Name)
 			}
 		case <-time.After(connectReplsetTimeout):
 			return errors.New("timeout getting replset connection")
