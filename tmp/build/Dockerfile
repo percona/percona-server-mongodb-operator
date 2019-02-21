@@ -1,4 +1,4 @@
-FROM alpine:3.6
+FROM alpine:3.9
 
 RUN adduser -D percona-server-mongodb-operator
 USER percona-server-mongodb-operator
