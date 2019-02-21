@@ -113,8 +113,8 @@ func main() {
 
 	app.Flag(
 		"service",
-		"DC/OS SDK service/framework name, overridden by env var "+pkg.EnvServiceName,
-	).Default(pkg.DefaultServiceName).Envar(pkg.EnvServiceName).StringVar(&cnf.ServiceName)
+		"DC/OS SDK service/framework name, overridden by env var "+dcos.EnvFrameworkName,
+	).Default(pkg.DefaultServiceName).Envar(dcos.EnvFrameworkName).StringVar(&cnf.ServiceName)
 	app.Flag(
 		"connectRetrySleep",
 		"duration to wait between retries of the connection/ping to mongodb",
