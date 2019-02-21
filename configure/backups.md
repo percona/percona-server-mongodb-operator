@@ -33,6 +33,12 @@ Here is an example which uses Amazon S3 storage for backups:
            bucket: S3-BACKUP-BUCKET-NAME-HERE
            region: us-west-2
            credentialsSecret: my-cluster-name-backup-s3
+     tasks:
+      - name: daily-s3-us-west
+        enabled: true
+        schedule: "0 0 * * *"
+        storageName: s3-us-west
+        compressionType: gzip
      ...
    ```
 
