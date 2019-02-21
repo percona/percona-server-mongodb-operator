@@ -18,15 +18,40 @@ This section contains three subsections:
 * `coordinator` subsection allows to configure Kubernetes limits and claims for the Percona Backup for MongoDB Coordinator daemon.
 * `tasks` subsection allows to actually schedule backups (the schedule is specified in crontab format).
 
-The options within these three subsections are explained in the [Operator Options](https://percona-lab.github.io/percona-xtradb-cluster-operator/configure/operator).
+Here is an example which uses Amazon S3 storage for backups:
+
+   ```
+   ...
+   backup:
+     enabled: true
+     version: 0.3.0
+     ...
+     storages:
+       s3-us-west:
+         type: s3
+         s3:
+           bucket: S3-BACKUP-BUCKET-NAME-HERE
+           region: us-west-2
+           credentialsSecret: my-cluster-name-backup-s3
+     ...
+   ```
+
+   **Note:** *if you use some S3-compatible storage instead of the original Amazon S3, one more key is needed in the `s3` subsection: the `endpointUrl`, which points to the actual cloud used for backups and is specific to the cloud provider. For example, using [Google Cloud](https://cloud.google.com) involves the following one: `endpointUrl: https://storage.googleapis.com`.
+
+The options within these three subsections are further explained in the [Operator Options](https://percona-lab.github.io/percona-xtradb-cluster-operator/configure/operator).
 
 ## Making on-demand backup
 
 To make on-demand backup, user should run [the PBM Control tool](https://github.com/percona/percona-backup-mongodb#pbm-control-pbmctl) inside of the coordinator container, supplying it with needed options, like in the following example:
 
-   ```
-   kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.2.1-backup-pbmctl --restart=Never -- --server-address=my-cluster-name-backup-coordinator:10001 run backup --destination-type=aws --compression-algorithm=gzip --description=my-backup
-   ```
+```bash
+    kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
+      run backup \
+      --server-address=<cluster-name>-backup-coordinator:10001 \
+      --storage $storage \
+      --compression-algorithm=gzip \
+      --description=my-backup```
+```
 
 ## Restore the cluster from a previously saved backup
 
@@ -44,63 +69,4 @@ When the editing is done, the restore job can be started in the following way (e
    oc create -f deploy/backup-restore.yaml
    ```
 
-## Backups on a private S3-compatible storage
-
-As it was already mentioned, any cloud storage which implements the S3 API can be used for backups.
-This section explains how to setup and use your own storage by example of [Minio](https://www.minio.io/) - an S3-compatible object storage server deployed via Docker on your own infrastructure.
-
-Setting up Minio to be used with Percona Server for MongoDB Operator backups involves following steps:
-
-1. First of all, install Minio into your Kubernetes or OpenShift environment and create the correspondent Kubernetes Service:
-
-   ```bash
-      helm install \
-        --name minio-service \
-        --set accessKey=some-access-key \
-        --set secretKey=some-secret-key \
-        --set service.type=ClusterIP \
-        --set configPath=/tmp/.minio/ \
-        --set persistence.size=2G \
-        --set environment.MINIO_REGION=us-east-1 \
-        stable/minio
-   ```
-   Of course, actual keys should be used instead of `some-access-key` and `some-secret-key` parameters.
-
-2. The next thing to do is to create an S3 bucket for backups:
-
-   ```bash
-      kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-       /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-       /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
-   ```
-
-**Note:** *You may notice `AWS_DEFAULT_REGION` is not of much sense with the private cloud. Just use the same region value here and on later steps (`us-east-1` is a good default choice). Also `some-access-key` and `some-secret-key` should be the same as ones on the previous step.*
-
-3. Now edit the backup section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file to set proper values for the `bucket` (the S3 bucket for backups created on the previous step), `region`, `credentialsSecret` and the `endpointUrl` (which should point to the previously created Minio Service: `http://minio.psmdb.svc.cluster.local:9000/minio/`).
-
-4. When the setup process is over, making backup is rather simple. Following example illustrates making on-demand backup on Minio:
-
-   ```bash
-       kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
-         run backup \
-         --server-address=some-name-backup-coordinator:10001 \
-         --storage $storage \
-         --compression-algorithm=gzip \
-         --description=my-backup```
-   ```
-
-5. To restore a previously saved backup you will need to specify the backup name. List of available backups can be obtained as follows:
-
-   ```bash
-      kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- list backups --server-address=some-name-backup-coordinator:10001
-   ```
-   Now, restore the backup, substituting its name to the `backup-name` parameter:
-
-   ```bash
-      kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
-        run restore \
-        --server-address=some-name-backup-coordinator:10001 \
-        --storage $storage \
-        backup-name
-   ```
 
