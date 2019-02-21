@@ -24,7 +24,7 @@ docs:
       - title: "Backups"
         url: ./configure/backups
       - title: "Private Cloud for Backups"
-      - url: ./private
+      - url: ./configure/private
       - title: "Arbiter nodes"
         url: ./configure/arbiter
       - title: "Expose nodes"
