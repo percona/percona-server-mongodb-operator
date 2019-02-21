@@ -16,6 +16,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
         --set service.type=ClusterIP \
         --set configPath=/tmp/.minio/ \
         --set persistence.size=2G \
+        --set persistence.storageClass=aws-io1 \
         --set environment.MINIO_REGION=us-east-1 \
         stable/minio
    ```

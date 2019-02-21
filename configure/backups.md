@@ -42,7 +42,7 @@ Here is an example which uses Amazon S3 storage for backups:
      ...
    ```
 
-   **Note:** *if you use some S3-compatible storage instead of the original Amazon S3, one more key is needed in the `s3` subsection: the `endpointUrl`, which points to the actual cloud used for backups and is specific to the cloud provider. For example, using [Google Cloud](https://cloud.google.com) involves the following one: `endpointUrl: https://storage.googleapis.com`.
+**Note:** *if you use some S3-compatible storage instead of the original Amazon S3, one more key is needed in the `s3` subsection: the `endpointUrl`, which points to the actual cloud used for backups and is specific to the cloud provider. For example, using [Google Cloud](https://cloud.google.com) involves the following one: `endpointUrl: https://storage.googleapis.com`.*
 
 The options within these three subsections are further explained in the [Operator Options](https://percona-lab.github.io/percona-xtradb-cluster-operator/configure/operator).
 
