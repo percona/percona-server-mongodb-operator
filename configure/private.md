@@ -54,8 +54,6 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
      ...
    ```
 
-**Note** *You can also 
-
    The option which should be specially mentioned is `credentialsSecret` which is a [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. Sample [backup-s3.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) can be used to create this secret object. Check that it contains proper `name` value (equal to the one specified for `credentialsSecret`, i.e. `my-cluster-name-backup-s3` in the last example), and also proper `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. After editing is finished, secrets object should be created (or updated with the new name and/or keys) using the following command:
 
    ```bash
