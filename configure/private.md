@@ -22,7 +22,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
    ```
 
    Don't forget to substitute default `some-access-key` and `some-secret-key` strings in this command with some actual unique key values which can be used later for the access control.
-
+   `storageClass` option is needed if you are going to use special [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) for backups. Otherwise it may be omitted.
    You may also notice `MINIO_REGION` value which is not of much sense within the private cloud. Just use the same region value here and on later steps (`us-east-1` is a good default choice).
 
 2. The next thing to do is to create an S3 bucket for backups:
@@ -35,7 +35,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
 
    This command creates the bucket named `operator-testing` with already chosen access and secret keys (substitute `some-access-key` and `some-secret-key` with the values used on the previous step).
 
-3. Now edit the backup section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file to set proper values for the `bucket` (the S3 bucket for backups created on the previous step), `region`, `credentialsSecret` and the `endpointUrl` (which should point to the previously created Minio Service).
+3. Now edit the backup section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file to set proper values for the `bucket` (the S3 bucket for backups created on the previous step), `region`, `credentialsSecret` and the `endpointUrl` (which should point to the previously created Minio Service). 
 
    ```
    ...
@@ -52,6 +52,14 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
            credentialsSecret: my-cluster-name-backup-minio
            endpointUrl: http://minio-service:9000
      ...
+   ```
+
+**Note** *You can also 
+
+   The option which should be specially mentioned is `credentialsSecret` which is a [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. Sample [backup-s3.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) can be used to create this secret object. Check that it contains proper `name` value (equal to the one specified for `credentialsSecret`, i.e. `my-cluster-name-backup-s3` in the last example), and also proper `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. After editing is finished, secrets object should be created (or updated with the new name and/or keys) using the following command:
+
+   ```bash
+   $ kubectl apply -f deploy/backup-s3.yaml
    ```
 
 4. When the setup process is over, making backup is rather simple. Following example illustrates how to make an on-demand backup:
