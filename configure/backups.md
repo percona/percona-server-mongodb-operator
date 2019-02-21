@@ -74,7 +74,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
    ```
 
-**Note:** *You may notice `AWS_DEFAULT_REGION` is not of much sense with the private cloud. Just use the same region value here and on later steps (`us-east-1` is a good default choice).*
+**Note:** *You may notice `AWS_DEFAULT_REGION` is not of much sense with the private cloud. Just use the same region value here and on later steps (`us-east-1` is a good default choice). Also `some-access-key` and `some-secret-key` should be the same as ones on the previous step.*
 
 3. Now edit the backup section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file to set proper values for the `bucket` (the S3 bucket for backups created on the previous step), `region`, `credentialsSecret` and the `endpointUrl` (which should point to the previously created Minio Service: `http://minio.psmdb.svc.cluster.local:9000/minio/`).
 
@@ -88,6 +88,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
          --compression-algorithm=gzip \
          --description=my-backup```
    ```
+
 5. To restore a previously saved backup you will need to specify the backup name. List of available backups can be obtained as follows:
 
    ```bash
