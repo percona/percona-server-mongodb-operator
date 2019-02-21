@@ -23,8 +23,8 @@ docs:
         url: ./configure/operator
       - title: "Backups"
         url: ./configure/backups
-      - title: "Private Cloud for Backups"
-      - url: ./configure/private
+      - title: "Backups on Private Cloud"
+        url: ./configure/private
       - title: "Arbiter nodes"
         url: ./configure/arbiter
       - title: "Expose nodes"
