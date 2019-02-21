@@ -59,14 +59,14 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
        kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
          run backup \
          --server-address=<cluster-name>-backup-coordinator:10001 \
-         --storage $storage \
+         --storage <storage> \
          --compression-algorithm=gzip \
          --description=my-backup```
    ```
 
-   Don't forget to specify the name of your cluster instead of the `<cluster-name>` part of the Backup Coordinator URL (the same cluster name which is specified in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file).
+   Don't forget to specify the name of your cluster instead of the `<cluster-name>` part of the Backup Coordinator URL (the same cluster name which is specified in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file). Also `<storage>` should be substituted with the actual storage name, which is featured as a subsection inside of the `backups` one in [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. In the upper example it is `minio`.
 
-5. To restore a previously saved backup you will need to specify the backup name. List of available backups can be obtained from the Backup Coordinator as follows (supposedly that you once again use Backup Coordinator's proper URL, like in previous step):
+5. To restore a previously saved backup you will need to specify the backup name. List of available backups can be obtained from the Backup Coordinator as follows (supposedly that you once again use the Backup Coordinator's proper URL and the storage name like you did in previous step):
 
    ```bash
       kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- list backups --server-address=<cluster-name>-backup-coordinator:10001
@@ -77,7 +77,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
       kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
         run restore \
         --server-address=<cluster-name>-backup-coordinator:10001 \
-        --storage $storage \
+        --storage <storage> \
         backup-name
    ```
 

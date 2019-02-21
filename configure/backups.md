@@ -46,6 +46,12 @@ Here is an example which uses Amazon S3 storage for backups:
 
 The options within these three subsections are further explained in the [Operator Options](https://percona-lab.github.io/percona-xtradb-cluster-operator/configure/operator).
 
+The only option which should be mentioned separately is `credentialsSecret` which is a [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. Sample [backup-s3.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) can be used to create this secret object. Check that it contains proper `name` value (equal to the one specified for `credentialsSecret`, i.e. `my-cluster-name-backup-s3` in the last example), and also proper `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. After editing is finished, secrets object should be created (or updated with the new name and/or keys) using the following command:
+
+   ```bash
+   $ kubectl apply -f deploy/backup-s3.yaml
+   ```
+
 ## Making on-demand backup
 
 To make on-demand backup, user should run [the PBM Control tool](https://github.com/percona/percona-backup-mongodb#pbm-control-pbmctl) inside of the coordinator container, supplying it with needed options, like in the following example:
@@ -54,25 +60,27 @@ To make on-demand backup, user should run [the PBM Control tool](https://github.
     kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
       run backup \
       --server-address=<cluster-name>-backup-coordinator:10001 \
-      --storage $storage \
+      --storage <storage> \
       --compression-algorithm=gzip \
       --description=my-backup```
 ```
 
+Don't forget to specify the name of your cluster instead of the `<cluster-name>` part of the Backup Coordinator URL (the same cluster name which is specified in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file). Also `<storage>` should be substituted with the actual storage name, which is featured as a subsection inside of the `backups` one in [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. In the upper example it is `s3-us-west`.
+
 ## Restore the cluster from a previously saved backup
 
-Previously saved backups can be restored with a special *backup restore job*, configured with the [deploy/backup-restore.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-restore.yaml) file. Following keys in this file should be edited before the job can be run:
+To restore a previously saved backup you will need to specify the backup name. List of available backups can be obtained from the Backup Coordinator as follows (supposedly that you once again use the Backup Coordinator's proper URL and the storage name like you did to make on-demand backup):
 
- * Both entries of the `secretKeyRef.name` key should be the same as the `s3.secret` key value in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) backup section
-* `BUCKET_NAME` is the S3 bucket name, and it should be same as the `s3.bucket` key value in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) backup section
-* `BACKUP_NAME` is the unique name (without the`.dump.gz` suffix) of the particular backup to be restored (the list of available backups can be seen in the S3 browser)
-* `MONGODB_DSN` is a connect string starting with `mongodb+srv://BACKUP-USER-HERE:BACKUP-PASSWORD-HERE...`, where `BACKUP-USER-HERE` and `BACKUP-PASSWORD-HERE` parts should be changed to the proper username and password of the backup user, same as ones in [deploy/mongodb-users.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/mongodb-users.yaml) secret file.
-    
-
-When the editing is done, the restore job can be started in the following way (e.g. on the OpenShift platform):
-
+   ```bash
+      kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- list backups --server-address=<cluster-name>-backup-coordinator:10001
    ```
-   oc create -f deploy/backup-restore.yaml
-   ```
+   Now, restore the backup, using its name instead of the `backup-name` parameter:
 
+   ```bash
+      kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
+        run restore \
+        --server-address=<cluster-name>-backup-coordinator:10001 \
+        --storage <storage> \
+        backup-name
+   ```
 
