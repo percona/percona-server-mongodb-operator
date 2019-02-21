@@ -79,9 +79,9 @@ The ``backup`` section in the [deploy/cr.yaml](https://github.com/Percona-Lab/pe
 |version                         | string     | `0.2.1`   |                                               |
 |restartOnFailure                | boolean    | `true`    |                                               |
 |storages.type                   | string     | `s3`      | Type of the cloud storage to be used for backups. Currently only `s3` type is supported                                                          |
-|storages.s3.credentialsSecret   | string     | `my-cluster-name-backup-s3`| [Kubernetes imagePullSecret](https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets) for backups |
+|storages.s3.credentialsSecret   | string     | `my-cluster-name-backup-s3`| [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. It should contain `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. |
 |storages.s3.bucket              | string     |           | The [Amazon S3 bucket](https://docs.aws.amazon.com/en_us/AmazonS3/latest/dev/UsingBucket.html) name for backups                    |
-|storages.s3.region              | string     |`us-west-2`| The [AWS region](https://docs.aws.amazon.com/en_us/general/latest/gr/rande.html) to use |
+|storages.s3.region              | string     |`us-east-1`| The [AWS region](https://docs.aws.amazon.com/en_us/general/latest/gr/rande.html) to use |
 |storages.s3.endpointUrl         | string     |           | The endpoint URL of the S3-compatible storage to be used (not needed for the original Amazon S3 cloud)                             |
 |coordinator.resources.limits.cpu| string     |`100m`     | Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
 |coordinator.resources.limits.memory | string |`0.2G`     | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
