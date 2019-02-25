@@ -355,7 +355,7 @@
   version = "v1.2"
 
 [[projects]]
-  digest = "1:6e3bf76ba89087399b4df31fd432960eb73a5d7b42d4362f8e1fff48ab326062"
+  digest = "1:710b83d54afc6fbbefe45c6ab6dfffb76fef4d2bc2a5668ede7bfeaa01ee7236"
   name = "github.com/percona/mongodb-orchestration-tools"
   packages = [
     ".",
@@ -373,7 +373,7 @@
     "watchdog/replset",
     "watchdog/watcher",
   ]
-  pruneopts = "NT"
+  pruneopts = "T"
   revision = "7d64c3fef0052e90faaec71d1c4bec531040f893"
   version = "0.4.2"
 

@@ -1,0 +1,7 @@
+{
+      user: "myApp",
+      pwd: "myAppPasswd123456",
+      roles: [
+          { db: "myApp", role: "readWrite" }
+      ]
+}
