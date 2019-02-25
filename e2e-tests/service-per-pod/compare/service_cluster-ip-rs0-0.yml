@@ -5,7 +5,6 @@ metadata:
     app: percona-server-mongodb
     cluster: cluster-ip
     replset: rs0
-    type: expose-externally
   name: cluster-ip-rs0-0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1

@@ -61,7 +61,6 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 
 	svc.Labels = map[string]string{
 		"app":     "percona-server-mongodb",
-		"type":    "expose-externally",
 		"replset": replset.Name,
 		"cluster": m.Name,
 	}
