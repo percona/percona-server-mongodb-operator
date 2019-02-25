@@ -23,18 +23,21 @@ RUN export GNUPGHOME="$(mktemp -d)" \
         && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm \
         && rpm --import /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY \
         && percona-release disable all \
-        && percona-release enable original release
+        && percona-release enable psmdb-40 release
 
 # the numeric UID is needed for OpenShift
 RUN useradd -u 1001 -r -g 0 -s /sbin/nologin \
             -c "Default Application User" mongodb
 
-ENV PERCONA_MAJOR 36
-ENV PERCONA_VERSION 3.6.8-2.0.el7
+ENV PERCONA_MAJOR 40
+ENV PERCONA_VERSION 4.0.5-2.el7
 
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \
         && yum install -y \
-                Percona-Server-MongoDB-36-server-${PERCONA_VERSION} \
+                percona-server-mongodb-server-${PERCONA_VERSION} \
+                percona-server-mongodb-mongos-${PERCONA_VERSION} \
+                percona-server-mongodb-shell-${PERCONA_VERSION} \
+                percona-server-mongodb-tools-${PERCONA_VERSION} \
                 curl \
                 jq \
         && yum clean all \
@@ -43,7 +46,7 @@ RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.n
 
 VOLUME ["/data/db"]
 
-RUN curl -o /entrypoint.sh https://raw.githubusercontent.com/percona/percona-docker/master/percona-server-mongodb.36/ps-entry.sh \
+RUN curl -o /entrypoint.sh https://raw.githubusercontent.com/percona/percona-docker/master/percona-server-mongodb.40/ps-entry.sh \
     && chmod 755 /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 

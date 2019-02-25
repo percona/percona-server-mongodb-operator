@@ -52,8 +52,16 @@ build_mongod36() {
     docker push ${IMAGE_MONGOD36}
 }
 
+build_mongod40() {
+    pushd ${src_dir}
+        docker build --no-cache --squash -t ${IMAGE_MONGOD40} -f build/Dockerfile.mongod40 .
+    popd
+    docker push ${IMAGE_MONGOD40}
+}
+
 until docker ps;
     do sleep 1;
 done
 build_operator
+build_mongod40
 build_mongod36
