@@ -70,7 +70,7 @@ spec:
             - k8s
             - liveness
           failureThreshold: 12
-          initialDelaySeconds: 60
+          initialDelaySeconds: 90
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 5
@@ -96,7 +96,7 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: percona-server-mongodb-key
+          name: local-balancer-intrnl-mongodb-key
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -105,11 +105,11 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: percona-server-mongodb-key
+      - name: local-balancer-intrnl-mongodb-key
         secret:
           defaultMode: 48
           optional: false
-          secretName: percona-server-mongodb-key
+          secretName: local-balancer-intrnl-mongodb-key
   updateStrategy:
     rollingUpdate:
       partition: 0

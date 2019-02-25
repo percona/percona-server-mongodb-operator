@@ -70,7 +70,7 @@ spec:
             - k8s
             - liveness
           failureThreshold: 12
-          initialDelaySeconds: 60
+          initialDelaySeconds: 90
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 5
@@ -93,11 +93,11 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
         - mountPath: /etc/mongodb-secrets
           name: cluster-ip-intrnl-mongodb-key
           readOnly: true
-        - mountPath: /data/db
-          name: mongod-data
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -105,11 +105,11 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: percona-server-mongodb-key
+      - name: cluster-ip-intrnl-mongodb-key
         secret:
           defaultMode: 48
           optional: false
-          secretName: percona-server-mongodb-key
+          secretName: cluster-ip-intrnl-mongodb-key
   updateStrategy:
     rollingUpdate:
       partition: 0
