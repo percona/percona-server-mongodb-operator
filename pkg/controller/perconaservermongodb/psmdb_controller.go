@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/backup"
+
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/percona/mongodb-orchestration-tools/watchdog"
@@ -187,6 +189,24 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		Name: cr.Name,
 	}
 
+	if cr.Spec.Backup.Enabled {
+		err := r.reconcileBackupCoordinator(cr)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("reconcile backup coordinator: %v", err)
+		}
+
+		err = r.reconcileBackupStorageConfig(cr)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("reconcile backup storage config: %v", err)
+		}
+
+		// TODO: start after replset was inited? which one?
+		err = r.reconcileBackupTasks(cr)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("reconcile backup tasks: %v", err)
+		}
+	}
+
 	for i, replset := range cr.Spec.Replsets {
 		// multiple replica sets is not supported until sharding is
 		// added to the operator
@@ -276,7 +296,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			if err == nil {
 				rstatus.Initialized = true
 			} else {
-				log.WithValues("replset", replset.Name).Error(err, "Failed to init replset")
+				reqLogger.Error(err, "Failed to init replset", "replset", replset.Name)
 			}
 		} else {
 			rstatus.Initialized = true
@@ -319,6 +339,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLables, size, internalKeyName, r.serverVersion)
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
+	}
+	if cr.Spec.Backup.Enabled {
+		sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, r.serverVersion))
+		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, backup.AgentVolume(cr.Name))
 	}
 
 	if !arbiter {

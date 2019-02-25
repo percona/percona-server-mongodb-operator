@@ -11,7 +11,7 @@ spec:
     users: my-cluster-name-mongodb-users
   replsets:
   - name: rs0
-    size: 5
+    size: 3
     expose:
       enabled: false
       exposeType: LoadBalancer
@@ -64,16 +64,44 @@ spec:
     #  filter: '{}'
   backup:
     enabled: false
-    version: 0.1.0
+    debug: false
     restartOnFailure: true
+    taskImage: "percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl"
+    agentImage: "percona/percona-server-mongodb-operator:0.3.0-backup-agent"
     coordinator:
+      image: "percona/percona-server-mongodb-operator:0.3.0-backup-coordinator"
+      enableClientsLogging: true
       resources:
         limits:
           cpu: "100m"
           memory: "0.2G"
-          storage: "1Gi"
         requests:
           cpu: "100m"
           memory: "0.1G"
-        #storageClass: aws-gp2
-      debug: false
+          storage: "1Gi"
+      #storageClass: aws-gp2
+    storages:
+      s3-us-west:
+        type: s3
+        s3:
+          bucket: S3-BACKUP-BUCKET-NAME-HERE
+          credentialsSecret: my-cluster-name-backup-s3
+          region: us-west-2
+      #minio:
+      #  type: s3
+      #  s3:
+      #    bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+      #    region: us-west-1
+      #    credentialsSecret: my-cluster-name-backup-minio
+      #    endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
+    tasks:
+      - name: daily-s3-us-west
+        enabled: true
+        schedule: "0 0 * * *"
+        storageName: s3-us-west
+        compressionType: gzip
+      - name: weekly-s3-us-west
+        enabled: false
+        schedule: "0 0 * * 0"
+        storageName: s3-us-west
+        compressionType: gzip

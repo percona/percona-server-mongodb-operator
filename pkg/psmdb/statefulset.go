@@ -37,6 +37,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 
 	fvar := false
 
+	// TODO: do as the backup - serialize resources straight via cr.yaml
 	resources, err := CreateResources(replset.Resources)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)

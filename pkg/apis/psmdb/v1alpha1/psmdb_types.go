@@ -47,7 +47,7 @@ type PerconaServerMongoDBSpec struct {
 	Mongod          *MongodSpec       `json:"mongod,omitempty"`
 	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
 	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
-	Backup          *BackupSpec       `json:"backup,omitempty"`
+	Backup          BackupSpec        `json:"backup,omitempty"`
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 }
 
@@ -218,14 +218,10 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupCoordinatorSpec struct {
-	*ResourcesSpec `json:"resources,omitempty"`
-	Debug          bool `json:"debug,omitempty"`
-}
-
-type BackupS3Spec struct {
-	Secret string `json:"secret,omitempty"`
-	Bucket string `json:"bucket,omitempty"`
-	Region string `json:"region,omitempty"`
+	Resources            *corev1.ResourceRequirements `json:"resources,omitempty"`
+	Image                string                       `json:"image,omitempty"`
+	StorageClass         string                       `json:"storageClass,omitempty"`
+	EnableClientsLogging bool                         `json:"enableClientsLogging,omitempty"`
 }
 
 type BackupDestinationType string
@@ -235,20 +231,48 @@ var (
 	BackupDestinationFile BackupDestinationType = "file"
 )
 
+type BackupCompressionType string
+
+var (
+	BackupCompressionGzip BackupCompressionType = "gzip"
+)
+
 type BackupTaskSpec struct {
-	Name            string                `json:"name,omitempty"`
+	Name            string                `json:"name"`
 	Enabled         bool                  `json:"enabled"`
 	Schedule        string                `json:"schedule,omitempty"`
-	DestinationType BackupDestinationType `json:"destinationType,omitempty"`
+	StorageName     string                `json:"storageName,omitempty"`
+	CompressionType BackupCompressionType `json:"compressionType,omitempty"`
+}
+
+type BackupStorageS3Spec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	Region            string `json:"region,omitempty"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+}
+
+type BackupStorageType string
+
+const (
+	BackupStorageFilesystem BackupStorageType = "filesystem"
+	BackupStorageS3         BackupStorageType = "s3"
+)
+
+type BackupStorageSpec struct {
+	Type BackupStorageType   `json:"type"`
+	S3   BackupStorageS3Spec `json:"s3,omitempty"`
 }
 
 type BackupSpec struct {
-	Enabled          bool                   `json:"enabled"`
-	Version          string                 `json:"version,omitempty"`
-	RestartOnFailure *bool                  `json:"restartOnFailure,omitempty"`
-	Coordinator      *BackupCoordinatorSpec `json:"coordinator,omitempty"`
-	S3               *BackupS3Spec          `json:"s3,omitempty"`
-	Tasks            []*BackupTaskSpec      `json:"tasks,omitempty"`
+	Enabled          bool                         `json:"enabled"`
+	Debug            bool                         `json:"debug"`
+	RestartOnFailure *bool                        `json:"restartOnFailure,omitempty"`
+	Coordinator      BackupCoordinatorSpec        `json:"coordinator,omitempty"`
+	Storages         map[string]BackupStorageSpec `json:"storages,omitempty"`
+	TaskImage        string                       `json:"taskImage,omitempty"`
+	AgentImage       string                       `json:"agentImage,omitempty"`
+	Tasks            []BackupTaskSpec             `json:"tasks,omitempty"`
 }
 
 type Arbiter struct {

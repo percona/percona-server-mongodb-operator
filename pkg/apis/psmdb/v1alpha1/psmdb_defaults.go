@@ -23,7 +23,6 @@ var (
 	defaultImagePullPolicy                = corev1.PullAlways
 
 	defaultBackupDestinationType = BackupDestinationS3
-	defaultBackupVersion         = "0.2.0"
 	defaultBackupS3SecretName    = "percona-server-mongodb-backup-s3"
 )
 
@@ -109,26 +108,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.RunUID = defaultRunUID
 	}
 
-	if cr.Spec.Backup != nil && cr.Spec.Backup.Enabled {
+	if cr.Spec.Backup.Enabled {
 		if cr.Spec.Backup.RestartOnFailure == nil {
 			t := true
 			cr.Spec.Backup.RestartOnFailure = &t
 		}
-		if cr.Spec.Backup.Version == "" {
-			cr.Spec.Backup.Version = defaultBackupVersion
-		}
-		if cr.Spec.Backup.Coordinator == nil {
-			cr.Spec.Backup.Coordinator = &BackupCoordinatorSpec{}
-		}
-		if cr.Spec.Backup.S3 == nil {
-			cr.Spec.Backup.S3 = &BackupS3Spec{}
-		}
-		if cr.Spec.Backup.S3.Secret == "" {
-			cr.Spec.Backup.S3.Secret = defaultBackupS3SecretName
-		}
 		for _, bkpTask := range cr.Spec.Backup.Tasks {
-			if bkpTask.DestinationType == "" {
-				bkpTask.DestinationType = defaultBackupDestinationType
+			if bkpTask.CompressionType == "" {
+				bkpTask.CompressionType = BackupCompressionGzip
 			}
 		}
 	}
