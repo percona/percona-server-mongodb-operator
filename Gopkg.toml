@@ -56,3 +56,7 @@ required = [
   [[prune.project]]
     name = "k8s.io/code-generator"
     non-go = false
+
+  [[prune.project]]
+    name = "github.com/percona/mongodb-orchestration-tools"
+    non-go = false

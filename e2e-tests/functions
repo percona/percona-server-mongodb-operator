@@ -1,9 +1,11 @@
 #!/bin/bash
 
 GIT_COMMIT=$(git rev-parse HEAD)
-GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g' | tr '[:upper:]' '[:lower:]')}
+GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_MONGOD36=${IMAGE_MONGOD36:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}-mongod3.6"}
+IMAGE_MONGOD40=${IMAGE_MONGOD40:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}-mongod4.0"}
+IMAGE_MONGOD=$IMAGE_MONGOD40
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -164,7 +166,7 @@ compare_kubectl() {
     local new_result="${tmp_dir}/${resource//\//_}.yml"
 
     if [ "$OPENSHIFT" = 1 -a -f ${expected_result//.yml/-oc.yml} ]; then
-        local expected_result=${expected_result//.yml/-oc.yml}
+        expected_result=${expected_result//.yml/-oc.yml}
     fi
 
     kubectl get -o yaml ${resource} \
@@ -216,7 +218,7 @@ compare_mongo_cmd() {
     local suffix="$4"
 
     run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:' \
+        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
         | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
         > $tmp_dir/${command}
     diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
@@ -226,7 +228,7 @@ get_mongo_primary_endpoint() {
     local uri="$1"
 
     run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
-        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:" \
+        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
         | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
         | grep ":27017$"
 }
@@ -248,13 +250,18 @@ get_mongo_primary() {
 compare_mongo_user() {
     local uri="$1"
     local user=$(echo $uri | cut -d : -f 1)
+    local expected_result=${test_dir}/compare/$user.json
+
+    if [ "$IMAGE_MONGOD" == "$IMAGE_MONGOD40" -a -f ${test_dir}/compare/$user-40.json ]; then
+        expected_result=${test_dir}/compare/$user-40.json
+    fi
 
     run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
-        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:" \
+        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
         | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
         | $sed -e '/"ok" : 1/,+4d' \
         > $tmp_dir/$user.json
-    diff ${test_dir}/compare/$user.json $tmp_dir/$user.json
+    diff $expected_result $tmp_dir/$user.json
 }
 
 start_gke() {
@@ -320,5 +327,5 @@ get_backup_name() {
 apply_cluster() {
     local file=$1
 
-    sed -e "s^image:.*^image: $IMAGE_MONGOD36^" "$file" | kubectl apply -f -
+    sed -e "s^image:.*^image: $IMAGE_MONGOD^" "$file" | kubectl apply -f -
 }
