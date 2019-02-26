@@ -19,15 +19,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupCoordinator(cr *api.Perco
 		return fmt.Errorf("set owner ref for coordinator StatefulSet: %v", err)
 	}
 
-	ctx := context.TODO()
-	err = r.client.Create(ctx, cSfs)
-	if err != nil && errors.IsAlreadyExists(err) {
-		err := r.client.Update(ctx, cSfs)
-		if err != nil {
-			return fmt.Errorf("update coordinator StatefulSet: %v", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("create coordinator StatefulSet: %v", err)
+	err = r.createOrUpdate(cSfs, cSfs.Name, cSfs.Namespace)
+	if err != nil {
+		return fmt.Errorf("statefulset: %v", err)
 	}
 
 	cService := backup.CoordinatorService(cr.Name, cr.Namespace)
@@ -37,13 +31,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupCoordinator(cr *api.Perco
 		return fmt.Errorf("set owner ref for coordinator Service: %v", err)
 	}
 
-	err = r.client.Create(ctx, cService)
-	if err != nil && errors.IsAlreadyExists(err) {
-		err := r.client.Update(ctx, cService)
-		if err != nil {
-			return fmt.Errorf("update coordinator Service: %v", err)
-		}
-	} else if err != nil {
+	err = r.client.Create(context.TODO(), cService)
+	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create coordinator Service: %v", err)
 	}
 

@@ -583,3 +583,30 @@ func (r *ReconcilePerconaServerMongoDB) getExtServices(m *api.PerconaServerMongo
 	}
 	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
 }
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdate(currentObj runtime.Object, name, namespace string) error {
+	ctx := context.TODO()
+
+	foundObj := currentObj.DeepCopyObject()
+	err := r.client.Get(ctx,
+		types.NamespacedName{Name: name, Namespace: namespace},
+		foundObj)
+
+	if err != nil && errors.IsNotFound(err) {
+		err := r.client.Create(ctx, currentObj)
+		if err != nil {
+			return fmt.Errorf("create: %v", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("get: %v", err)
+	}
+
+	currentObj.GetObjectKind().SetGroupVersionKind(foundObj.GetObjectKind().GroupVersionKind())
+	err = r.client.Update(ctx, currentObj)
+	if err != nil {
+		return fmt.Errorf("update: %v", err)
+	}
+
+	return nil
+}

@@ -6,7 +6,7 @@ const (
 	coordinatorDataMount     = "/data"
 	coordinatorSuffix        = "-backup-coordinator"
 	coordinatorContainerName = "-backup-coordinator"
-	coordinatorDataVolume    = "-backup-metadata"
+	coordinatorDataVolume    = "backup-metadata"
 	coordinatorRPCPortName   = "rpc"
 	coordinatorAPIPortName   = "api"
 

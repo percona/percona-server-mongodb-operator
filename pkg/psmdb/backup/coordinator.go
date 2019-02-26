@@ -82,7 +82,7 @@ func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, crName, namespace s
 				Spec: newCoordinatorPodSpec(spec, crName+coordinatorContainerName, namespace, fsgroup, debug),
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				coordinatorPersistentVolumeClaim(spec, crName+coordinatorDataVolume, namespace),
+				coordinatorPersistentVolumeClaim(spec, coordinatorDataVolume, namespace),
 			},
 		},
 	}
@@ -119,6 +119,17 @@ func coordinatorPersistentVolumeClaim(spec *api.BackupCoordinatorSpec, name, nam
 func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, name, namespace string, runUID *int64, debug bool) corev1.PodSpec {
 	trueVar := true
 
+	res := &corev1.ResourceRequirements{}
+	// TODO: make resources handling idiomatic and consitent across operator
+	if spec.Resources != nil {
+		res.Limits = make(corev1.ResourceList)
+		res.Limits[corev1.ResourceCPU] = spec.Resources.Limits[corev1.ResourceCPU]
+		res.Limits[corev1.ResourceMemory] = spec.Resources.Limits[corev1.ResourceMemory]
+		res.Requests = make(corev1.ResourceList)
+		res.Requests[corev1.ResourceCPU] = spec.Resources.Requests[corev1.ResourceCPU]
+		res.Requests[corev1.ResourceMemory] = spec.Resources.Requests[corev1.ResourceMemory]
+	}
+
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
@@ -148,7 +159,7 @@ func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, name, namespace stri
 					},
 				},
 
-				Resources: *spec.Resources,
+				Resources: *res,
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &trueVar,
 					RunAsUser:    runUID,
