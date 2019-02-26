@@ -33,7 +33,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, sv *version.ServerVersion) cor
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PBM_AGENT_SERVER_ADDRESS",
-				Value: cr.Name + coordinatorSuffix + ":" + strconv.Itoa(coordinatorAPIPort),
+				Value: cr.Name + coordinatorSuffix + ":" + strconv.Itoa(coordinatorRPCPort),
 			},
 			{
 				Name:  "PBM_AGENT_STORAGES_CONFIG",
