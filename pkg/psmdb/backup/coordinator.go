@@ -46,7 +46,7 @@ func CoordinatorService(crName, namespace string) *corev1.Service {
 	}
 }
 
-func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, crName, namespace string, sv *version.ServerVersion, debug bool) *appsv1.StatefulSet {
+func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, image string, crName, namespace string, sv *version.ServerVersion, debug bool) *appsv1.StatefulSet {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -79,7 +79,7 @@ func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, crName, namespace s
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
 				},
-				Spec: newCoordinatorPodSpec(spec, crName+coordinatorContainerName, namespace, fsgroup, debug),
+				Spec: newCoordinatorPodSpec(spec, image, crName+coordinatorContainerName, namespace, fsgroup, debug),
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				coordinatorPersistentVolumeClaim(spec, coordinatorDataVolume, namespace),
@@ -116,7 +116,7 @@ func coordinatorPersistentVolumeClaim(spec *api.BackupCoordinatorSpec, name, nam
 	return vc
 }
 
-func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, name, namespace string, runUID *int64, debug bool) corev1.PodSpec {
+func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, name, namespace string, runUID *int64, debug bool) corev1.PodSpec {
 	trueVar := true
 
 	res := &corev1.ResourceRequirements{}
@@ -134,8 +134,9 @@ func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, name, namespace stri
 		Containers: []corev1.Container{
 			{
 				Name:            name,
-				Image:           spec.Image,
+				Image:           image,
 				ImagePullPolicy: corev1.PullAlways,
+				Command:         []string{"pbm-coordinator"},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "PBM_COORDINATOR_ENABLE_CLIENTS_LOGGING",

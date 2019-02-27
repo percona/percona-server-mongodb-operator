@@ -28,7 +28,8 @@ func AgentContainer(cr *api.PerconaServerMongoDB, sv *version.ServerVersion) cor
 
 	return corev1.Container{
 		Name:            agentContainerName,
-		Image:           cr.Spec.Backup.AgentImage,
+		Image:           cr.Spec.Backup.Image,
+		Command:         []string{"pbm-agent"},
 		ImagePullPolicy: corev1.PullAlways,
 		Env: []corev1.EnvVar{
 			{

@@ -12,7 +12,7 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupCoordinator(cr *api.PerconaServerMongoDB) error {
 	spec := &cr.Spec.Backup
-	cSfs := backup.CoordinatorStatefulSet(&spec.Coordinator, cr.Name, cr.Namespace, r.serverVersion, spec.Debug)
+	cSfs := backup.CoordinatorStatefulSet(&spec.Coordinator, spec.Image, cr.Name, cr.Namespace, r.serverVersion, spec.Debug)
 
 	err := setControllerReference(cr, cSfs, r.scheme)
 	if err != nil {
@@ -46,7 +46,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 
 	for _, task := range cr.Spec.Backup.Tasks {
 		if task.Enabled {
-			cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup.TaskImage, r.serverVersion)
+			cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup.Image, r.serverVersion)
 
 			err := r.client.Create(ctx, cjob)
 			if err != nil && errors.IsAlreadyExists(err) {

@@ -219,7 +219,6 @@ type MongodSpecOperationProfiling struct {
 
 type BackupCoordinatorSpec struct {
 	Resources            *corev1.ResourceRequirements `json:"resources,omitempty"`
-	Image                string                       `json:"image,omitempty"`
 	StorageClass         string                       `json:"storageClass,omitempty"`
 	EnableClientsLogging bool                         `json:"enableClientsLogging,omitempty"`
 }
@@ -270,8 +269,7 @@ type BackupSpec struct {
 	RestartOnFailure *bool                        `json:"restartOnFailure,omitempty"`
 	Coordinator      BackupCoordinatorSpec        `json:"coordinator,omitempty"`
 	Storages         map[string]BackupStorageSpec `json:"storages,omitempty"`
-	TaskImage        string                       `json:"taskImage,omitempty"`
-	AgentImage       string                       `json:"agentImage,omitempty"`
+	Image            string                       `json:"image,omitempty"`
 	Tasks            []BackupTaskSpec             `json:"tasks,omitempty"`
 }
 

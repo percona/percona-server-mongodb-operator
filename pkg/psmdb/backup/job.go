@@ -25,8 +25,9 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, 
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers: []corev1.Container{
 			{
-				Name:  backupCtlContainerName,
-				Image: image,
+				Name:    backupCtlContainerName,
+				Image:   image,
+				Command: []string{"pbmctl"},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "PBMCTL_SERVER_ADDRESS",

@@ -66,10 +66,8 @@ spec:
     enabled: true
     debug: true
     restartOnFailure: true
-    taskImage: "percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl"
-    agentImage: "percona/percona-server-mongodb-operator:0.3.0-backup-agent"
+    image: "perconalab/percona-server-mongodb-operator:0.3.0-backup"
     coordinator:
-      image: "percona/percona-server-mongodb-operator:0.3.0-backup-coordinator"
       enableClientsLogging: true
       resources:
         limits:
