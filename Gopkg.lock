@@ -378,6 +378,17 @@
   version = "0.4.2"
 
 [[projects]]
+  digest = "1:8223bfd52ce6b3cf4bfafc1c49dd7e1e4bc8bc2c997372c9e2cca12c2b56c24b"
+  name = "github.com/percona/percona-backup-mongodb"
+  packages = [
+    "internal/utils",
+    "storage",
+  ]
+  pruneopts = "NT"
+  revision = "a9c9566e1c92d69cefa425b7b8a40e10250307c9"
+  version = "v0.3.0"
+
+[[projects]]
   branch = "master"
   digest = "1:bf2ac97824a7221eb16b096aecc1c390d4c8a4e49524386aaa2e2dd215cbfb31"
   name = "github.com/petar/GoLLRB"
@@ -392,6 +403,14 @@
   pruneopts = "NT"
   revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
   version = "v2.0.1"
+
+[[projects]]
+  digest = "1:14715f705ff5dfe0ffd6571d7d201dd8e921030f8070321a79380d8ca4ec1a24"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
 
 [[projects]]
   digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
@@ -976,9 +995,13 @@
     "github.com/percona/mongodb-orchestration-tools/watchdog",
     "github.com/percona/mongodb-orchestration-tools/watchdog/config",
     "github.com/percona/mongodb-orchestration-tools/watchdog/metrics",
+    "github.com/percona/percona-backup-mongodb/storage",
     "github.com/stretchr/testify/assert",
     "gopkg.in/mgo.v2",
+    "gopkg.in/yaml.v2",
     "k8s.io/api/apps/v1",
+    "k8s.io/api/batch/v1",
+    "k8s.io/api/batch/v1beta1",
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/api/resource",
