@@ -249,6 +249,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			}
 
 			crState.Statefulsets = append(crState.Statefulsets, *arbiterSfs)
+		} else {
+			r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
+				cr.Name+"-"+replset.Name+"-arbiter",
+				cr.Namespace,
+			))
 		}
 
 		// Create Service
@@ -340,20 +345,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
-	if cr.Spec.Backup.Enabled {
-		sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, r.serverVersion))
-		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, backup.AgentVolume(cr.Name))
-	}
 
-	if !arbiter {
-		pvc, err := psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset)
-		if err != nil {
-			return nil, fmt.Errorf("pvc create: %v", err)
-		}
-		sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
-			pvc,
-		}
-	} else {
+	if arbiter {
 		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 			corev1.Volume{
 				Name: psmdb.MongodDataVolClaimName,
@@ -362,6 +355,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 				},
 			},
 		)
+	} else {
+		pvc, err := psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset)
+		if err != nil {
+			return nil, fmt.Errorf("pvc create: %v", err)
+		}
+		sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
+			pvc,
+		}
+
+		if cr.Spec.Backup.Enabled {
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, r.serverVersion))
+			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, backup.AgentVolume(cr.Name))
+		}
 	}
 
 	if errors.IsNotFound(errGet) {
