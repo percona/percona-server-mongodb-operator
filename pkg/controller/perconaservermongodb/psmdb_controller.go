@@ -250,10 +250,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 			crState.Statefulsets = append(crState.Statefulsets, *arbiterSfs)
 		} else {
-			r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
+			err := r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
 				cr.Name+"-"+replset.Name+"-arbiter",
 				cr.Namespace,
 			))
+
+			if err != nil {
+				return reconcile.Result{}, fmt.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+			}
 		}
 
 		// Create Service
