@@ -46,7 +46,7 @@ func CoordinatorService(crName, namespace string) *corev1.Service {
 	}
 }
 
-func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, image string, crName, namespace string, sv *version.ServerVersion, debug bool) *appsv1.StatefulSet {
+func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, image string, imagePullSecrets []corev1.LocalObjectReference, crName, namespace string, sv *version.ServerVersion, debug bool) *appsv1.StatefulSet {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -79,7 +79,7 @@ func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, image string, crNam
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
 				},
-				Spec: newCoordinatorPodSpec(spec, image, crName+coordinatorContainerName, namespace, fsgroup, debug),
+				Spec: newCoordinatorPodSpec(spec, image, imagePullSecrets, crName+coordinatorContainerName, namespace, fsgroup, debug),
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				coordinatorPersistentVolumeClaim(spec, coordinatorDataVolume, namespace),
@@ -116,7 +116,7 @@ func coordinatorPersistentVolumeClaim(spec *api.BackupCoordinatorSpec, name, nam
 	return vc
 }
 
-func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, name, namespace string, runUID *int64, debug bool) corev1.PodSpec {
+func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, imagePullSecrets []corev1.LocalObjectReference, name, namespace string, runUID *int64, debug bool) corev1.PodSpec {
 	trueVar := true
 
 	res := &corev1.ResourceRequirements{}
@@ -192,6 +192,7 @@ func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, name, 
 				},
 			},
 		},
+		ImagePullSecrets: imagePullSecrets,
 		SecurityContext: &corev1.PodSecurityContext{
 			FSGroup: runUID,
 		},

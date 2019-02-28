@@ -12,7 +12,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, sv *version.ServerVersion) *batchv1b.CronJob {
+func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, imagePullSecrets []corev1.LocalObjectReference, sv *version.ServerVersion) *batchv1b.CronJob {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -22,7 +22,8 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, 
 	trueVar := true
 
 	backupPod := corev1.PodSpec{
-		RestartPolicy: corev1.RestartPolicyNever,
+		RestartPolicy:    corev1.RestartPolicyNever,
+		ImagePullSecrets: imagePullSecrets,
 		Containers: []corev1.Container{
 			{
 				Name:    backupCtlContainerName,

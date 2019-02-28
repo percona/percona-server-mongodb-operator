@@ -54,8 +54,9 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Labels: ls,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:      podAffinity(ls),
-				RestartPolicy: corev1.RestartPolicyAlways,
+				Affinity:         podAffinity(ls),
+				RestartPolicy:    corev1.RestartPolicyAlways,
+				ImagePullSecrets: m.Spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					container(m, replset, containerName, resources, fsgroup, ikeyName),
 				},

@@ -5,6 +5,8 @@ metadata:
 spec:
   #platform: openshift
   image: perconalab/percona-server-mongodb-operator:master-mongod3.6
+  # imagePullSecrets:
+  #   - name: private-registry-credentials
   imagePullPolicy: Always
   secrets:
     key: my-cluster-name-mongodb-key

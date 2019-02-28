@@ -40,15 +40,16 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Platform        *version.Platform `json:"platform,omitempty"`
-	Image           string            `json:"image,omitempty"`
-	RunUID          int64             `json:"runUid,omitempty"`
-	UnsafeConf      bool              `json:"allowUnsafeConfigurations"`
-	Mongod          *MongodSpec       `json:"mongod,omitempty"`
-	Replsets        []*ReplsetSpec    `json:"replsets,omitempty"`
-	Secrets         *SecretsSpec      `json:"secrets,omitempty"`
-	Backup          BackupSpec        `json:"backup,omitempty"`
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	Platform         *version.Platform             `json:"platform,omitempty"`
+	Image            string                        `json:"image,omitempty"`
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	RunUID           int64                         `json:"runUid,omitempty"`
+	UnsafeConf       bool                          `json:"allowUnsafeConfigurations"`
+	Mongod           *MongodSpec                   `json:"mongod,omitempty"`
+	Replsets         []*ReplsetSpec                `json:"replsets,omitempty"`
+	Secrets          *SecretsSpec                  `json:"secrets,omitempty"`
+	Backup           BackupSpec                    `json:"backup,omitempty"`
+	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 }
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
