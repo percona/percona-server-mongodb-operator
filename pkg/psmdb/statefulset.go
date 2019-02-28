@@ -28,7 +28,9 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 
 var secretFileMode int32 = 0060
 
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
+// StatefulSpec returns spec for stateful set
+// TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
+func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -43,6 +45,12 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
 	}
 
+	for k, v := range multiAZ.Labels {
+		if _, ok := ls[k]; !ok {
+			ls[k] = v
+		}
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
@@ -51,12 +59,16 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: ls,
+				Labels:      ls,
+				Annotations: multiAZ.Annotations,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:         PodAffinity(replset.Affinity, ls),
-				RestartPolicy:    corev1.RestartPolicyAlways,
-				ImagePullSecrets: m.Spec.ImagePullSecrets,
+				Affinity:          PodAffinity(multiAZ.Affinity, ls),
+				NodeSelector:      multiAZ.NodeSelector,
+				Tolerations:       multiAZ.Tolerations,
+				PriorityClassName: multiAZ.PriorityClassName,
+				RestartPolicy:     corev1.RestartPolicyAlways,
+				ImagePullSecrets:  m.Spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					container(m, replset, containerName, resources, fsgroup, ikeyName),
 				},
@@ -115,7 +127,7 @@ func PersistentVolumeClaim(name, namespace string, replset *api.ReplsetSpec) (co
 }
 
 // PodAffinity returns podAffinity options for the pod
-func PodAffinity(af *api.PodAffinity, lables map[string]string) *corev1.Affinity {
+func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
 	if af == nil {
 		return nil
 	}
@@ -133,22 +145,22 @@ func PodAffinity(af *api.PodAffinity, lables map[string]string) *corev1.Affinity
 								{
 									Key:      "app",
 									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{lables["app"]},
+									Values:   []string{labels["app"]},
 								},
 								{
 									Key:      "cluster",
 									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{lables["cluster"]},
+									Values:   []string{labels["cluster"]},
 								},
 								{
 									Key:      "component",
 									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{lables["component"]},
+									Values:   []string{labels["component"]},
 								},
 								{
 									Key:      "replset",
 									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{lables["replset"]},
+									Values:   []string{labels["replset"]},
 								},
 							},
 						},

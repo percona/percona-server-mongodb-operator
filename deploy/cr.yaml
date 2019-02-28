@@ -13,7 +13,7 @@ spec:
     users: my-cluster-name-mongodb-users
   replsets:
   - name: rs0
-    size: 2
+    size: 3
     expose:
       enabled: false
       exposeType: LoadBalancer

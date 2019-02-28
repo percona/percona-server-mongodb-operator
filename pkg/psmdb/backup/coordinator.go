@@ -63,6 +63,12 @@ func CoordinatorStatefulSet(cr *api.PerconaServerMongoDB, spec *api.BackupCoordi
 		"component": "backup-coordinator",
 	}
 
+	for k, v := range spec.Labels {
+		if _, ok := ls[k]; !ok {
+			ls[k] = v
+		}
+	}
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -79,7 +85,8 @@ func CoordinatorStatefulSet(cr *api.PerconaServerMongoDB, spec *api.BackupCoordi
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
+					Labels:      ls,
+					Annotations: spec.Annotations,
 				},
 				Spec: newCoordinatorPodSpec(spec, cr.Spec.Backup.Image, cr.Spec.ImagePullSecrets, cr.Name+coordinatorContainerName, cr.Namespace, ls, fsgroup, debug),
 			},
@@ -133,7 +140,10 @@ func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, imageP
 	}
 
 	return corev1.PodSpec{
-		Affinity: psmdb.PodAffinity(spec.Affinity, labels),
+		Affinity:          psmdb.PodAffinity(spec.Affinity, labels),
+		NodeSelector:      spec.NodeSelector,
+		Tolerations:       spec.Tolerations,
+		PriorityClassName: spec.PriorityClassName,
 		Containers: []corev1.Container{
 			{
 				Name:            name,

@@ -215,7 +215,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			continue
 		}
 
-		matchLables := map[string]string{
+		matchLabels := map[string]string{
 			"app":     "percona-server-mongodb",
 			"cluster": cr.Name,
 			"replset": replset.Name,
@@ -225,7 +225,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err := r.client.List(context.TODO(),
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(matchLables),
+				LabelSelector: labels.SelectorFromSet(matchLabels),
 			},
 			pods,
 		)
@@ -235,7 +235,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		crState.Pods = append(crState.Pods, pods.Items...)
 
-		sfs, err := r.reconcileStatefulSet(false, cr, replset, matchLables, internalKey.Name)
+		sfs, err := r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey.Name)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 		}
@@ -243,7 +243,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		crState.Statefulsets = append(crState.Statefulsets, *sfs)
 
 		if replset.Arbiter.Enabled {
-			arbiterSfs, err := r.reconcileStatefulSet(true, cr, replset, matchLables, internalKey.Name)
+			arbiterSfs, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey.Name)
 			if err != nil {
 				return reconcile.Result{}, fmt.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 			}
@@ -324,16 +324,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLables map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
-	matchLables["component"] = "node"
+	matchLabels["component"] = "node"
+	multiAZ := replset.MultiAZ
 	if arbiter {
 		sfsName += "-arbiter"
 		containerName += "-arbiter"
 		size = replset.Arbiter.Size
-		matchLables["component"] = "arbiter"
+		matchLabels["component"] = "arbiter"
+		multiAZ = replset.Arbiter.MultiAZ
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -347,7 +349,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		return nil, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLables, size, internalKeyName, r.serverVersion)
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, r.serverVersion)
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
