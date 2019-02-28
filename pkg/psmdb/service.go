@@ -18,9 +18,9 @@ import (
 // Service returns a core/v1 API Service
 func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Service {
 	ls := map[string]string{
-		"app":                       "percona-server-mongodb",
-		"percona-server-mongodb_cr": m.Name,
-		"replset":                   replset.Name,
+		"app":     "percona-server-mongodb",
+		"cluster": m.Name,
+		"replset": replset.Name,
 	}
 
 	return &corev1.Service{

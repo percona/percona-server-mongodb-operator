@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -118,6 +119,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				bkpTask.CompressionType = BackupCompressionGzip
 			}
 		}
+		cr.Spec.Backup.Coordinator.MultiAZ.reconcileAffinityOpts()
 	}
 
 	cr.Status.Replsets = make(map[string]*ReplsetStatus)
@@ -129,6 +131,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) {
 	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	}
+
+	rs.MultiAZ.reconcileAffinityOpts()
+
+	if rs.Arbiter.Enabled {
+		rs.Arbiter.MultiAZ.reconcileAffinityOpts()
 	}
 
 	if !unsafe {
@@ -165,5 +173,42 @@ func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
 			rs.Size++
 		}
 	}
+}
 
+var affinityValidTopologyKeys = map[string]struct{}{
+	"kubernetes.io/hostname":                   struct{}{},
+	"failure-domain.beta.kubernetes.io/zone":   struct{}{},
+	"failure-domain.beta.kubernetes.io/region": struct{}{},
+}
+
+var defaultAffinityTopologyKey = "kubernetes.io/hostname"
+
+const affinityOff = "none"
+
+// reconcileAffinityOpts ensures that the affinity is set to the valid values.
+// - if the affinity doesn't set at all - set topology key to `defaultAffinityTopologyKey`
+// - if topology key is set and the value not the one of `affinityValidTopologyKeys` - set to `defaultAffinityTopologyKey`
+// - if topology key set to valuse of `affinityOff` - disable the affinity at all
+// - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
+func (m *MultiAZ) reconcileAffinityOpts() {
+	switch {
+	case m.Affinity == nil:
+		m.Affinity = &PodAffinity{
+			TopologyKey: &defaultAffinityTopologyKey,
+		}
+
+	case m.Affinity.TopologyKey == nil:
+		m.Affinity.TopologyKey = &defaultAffinityTopologyKey
+
+	case m.Affinity.Advanced != nil:
+		m.Affinity.TopologyKey = nil
+
+	case strings.ToLower(*m.Affinity.TopologyKey) == affinityOff:
+		m.Affinity = nil
+
+	case m.Affinity != nil && m.Affinity.TopologyKey != nil:
+		if _, ok := affinityValidTopologyKeys[*m.Affinity.TopologyKey]; !ok {
+			m.Affinity.TopologyKey = &defaultAffinityTopologyKey
+		}
+	}
 }

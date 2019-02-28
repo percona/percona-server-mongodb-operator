@@ -216,9 +216,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		matchLables := map[string]string{
-			"app":                       "percona-server-mongodb",
-			"percona-server-mongodb_cr": cr.Name,
-			"replset":                   replset.Name,
+			"app":     "percona-server-mongodb",
+			"cluster": cr.Name,
+			"replset": replset.Name,
 		}
 
 		pods := &corev1.PodList{}
@@ -255,7 +255,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				cr.Namespace,
 			))
 
-			if err != nil {
+			if err != nil && !errors.IsNotFound(err) {
 				return reconcile.Result{}, fmt.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
 			}
 		}
@@ -328,10 +328,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
+	matchLables["component"] = "node"
 	if arbiter {
 		sfsName += "-arbiter"
 		containerName += "-arbiter"
 		size = replset.Arbiter.Size
+		matchLables["component"] = "arbiter"
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)

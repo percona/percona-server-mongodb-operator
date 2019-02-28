@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sversion "k8s.io/apimachinery/pkg/version"
@@ -57,6 +58,21 @@ type PerconaServerMongoDBStatus struct {
 	Replsets map[string]*ReplsetStatus `json:"replsets,omitempty"`
 }
 
+type MultiAZ struct {
+	Affinity            *PodAffinity                           `json:"affinity,omitempty"`
+	NodeSelector        map[string]string                      `json:"nodeSelector,omitempty"`
+	Tolerations         []corev1.Toleration                    `json:"tolerations,omitempty"`
+	PriorityClassName   string                                 `json:"priorityClassName,omitempty"`
+	Annotations         map[string]string                      `json:"annotations,omitempty"`
+	Labels              map[string]string                      `json:"labels,omitempty"`
+	PodDisruptionBudget *policyv1beta1.PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+}
+
+type PodAffinity struct {
+	TopologyKey *string          `json:"antiAffinityTopologyKey,omitempty"`
+	Advanced    *corev1.Affinity `json:"advanced,omitempty"`
+}
+
 type ReplsetSpec struct {
 	Resources    *ResourcesSpec `json:"resources,omitempty"`
 	Name         string         `json:"name"`
@@ -65,6 +81,7 @@ type ReplsetSpec struct {
 	ClusterRole  ClusterRole    `json:"clusterRole,omitempty"`
 	Arbiter      Arbiter        `json:"arbiter,omitempty"`
 	Expose       Expose         `json:"expose,omitempty"`
+	MultiAZ
 }
 
 type ResourceSpecRequirements struct {
@@ -222,6 +239,7 @@ type BackupCoordinatorSpec struct {
 	Resources            *corev1.ResourceRequirements `json:"resources,omitempty"`
 	StorageClass         string                       `json:"storageClass,omitempty"`
 	EnableClientsLogging bool                         `json:"enableClientsLogging,omitempty"`
+	MultiAZ
 }
 
 type BackupDestinationType string
@@ -277,6 +295,7 @@ type BackupSpec struct {
 type Arbiter struct {
 	Enabled bool  `json:"enabled"`
 	Size    int32 `json:"size"`
+	MultiAZ
 }
 
 type Expose struct {

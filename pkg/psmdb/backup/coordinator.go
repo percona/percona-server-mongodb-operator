@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
 
@@ -16,9 +17,9 @@ func CoordinatorService(crName, namespace string) *corev1.Service {
 	name := crName + coordinatorSuffix
 
 	ls := map[string]string{
-		"app":                       "percona-server-mongodb",
-		"percona-server-mongodb_cr": crName,
-		"backup-coordinator":        "true",
+		"app":       "percona-server-mongodb",
+		"cluster":   crName,
+		"component": "backup-coordinator",
 	}
 
 	return &corev1.Service{
@@ -46,19 +47,20 @@ func CoordinatorService(crName, namespace string) *corev1.Service {
 	}
 }
 
-func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, image string, imagePullSecrets []corev1.LocalObjectReference, crName, namespace string, sv *version.ServerVersion, debug bool) *appsv1.StatefulSet {
+func CoordinatorStatefulSet(cr *api.PerconaServerMongoDB, spec *api.BackupCoordinatorSpec, sv *version.ServerVersion, debug bool) *appsv1.StatefulSet {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
 
-	name := crName + coordinatorSuffix
+	name := cr.Name + coordinatorSuffix
 
 	ls := map[string]string{
-		"app":                       "percona-server-mongodb",
-		"percona-server-mongodb_cr": crName,
-		"backup-coordinator":        "true",
+		"app":       "percona-server-mongodb",
+		"cluster":   cr.Name,
+		"replset":   "general",
+		"component": "backup-coordinator",
 	}
 
 	return &appsv1.StatefulSet{
@@ -68,7 +70,7 @@ func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, image string, image
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: namespace,
+			Namespace: cr.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: name,
@@ -79,10 +81,10 @@ func CoordinatorStatefulSet(spec *api.BackupCoordinatorSpec, image string, image
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
 				},
-				Spec: newCoordinatorPodSpec(spec, image, imagePullSecrets, crName+coordinatorContainerName, namespace, fsgroup, debug),
+				Spec: newCoordinatorPodSpec(spec, cr.Spec.Backup.Image, cr.Spec.ImagePullSecrets, cr.Name+coordinatorContainerName, cr.Namespace, ls, fsgroup, debug),
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				coordinatorPersistentVolumeClaim(spec, coordinatorDataVolume, namespace),
+				coordinatorPersistentVolumeClaim(spec, coordinatorDataVolume, cr.Namespace),
 			},
 		},
 	}
@@ -116,7 +118,7 @@ func coordinatorPersistentVolumeClaim(spec *api.BackupCoordinatorSpec, name, nam
 	return vc
 }
 
-func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, imagePullSecrets []corev1.LocalObjectReference, name, namespace string, runUID *int64, debug bool) corev1.PodSpec {
+func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, imagePullSecrets []corev1.LocalObjectReference, name, namespace string, labels map[string]string, runUID *int64, debug bool) corev1.PodSpec {
 	trueVar := true
 
 	res := &corev1.ResourceRequirements{}
@@ -131,6 +133,7 @@ func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, imageP
 	}
 
 	return corev1.PodSpec{
+		Affinity: psmdb.PodAffinity(spec.Affinity, labels),
 		Containers: []corev1.Container{
 			{
 				Name:            name,

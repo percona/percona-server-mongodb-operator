@@ -54,7 +54,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Labels: ls,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:         podAffinity(ls),
+				Affinity:         PodAffinity(replset.Affinity, ls),
 				RestartPolicy:    corev1.RestartPolicyAlways,
 				ImagePullSecrets: m.Spec.ImagePullSecrets,
 				Containers: []corev1.Container{
@@ -114,22 +114,50 @@ func PersistentVolumeClaim(name, namespace string, replset *api.ReplsetSpec) (co
 	return vc, nil
 }
 
-// podAffinity returns an Affinity configuration that aims to
-// avoid deploying more than one pod on the same kubelet hostname
-func podAffinity(ls map[string]string) *corev1.Affinity {
-	return &corev1.Affinity{
-		PodAntiAffinity: &corev1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-				{
-					Weight: 100,
-					PodAffinityTerm: corev1.PodAffinityTerm{
+// PodAffinity returns podAffinity options for the pod
+func PodAffinity(af *api.PodAffinity, lables map[string]string) *corev1.Affinity {
+	if af == nil {
+		return nil
+	}
+
+	switch {
+	case af.Advanced != nil:
+		return af.Advanced
+	case af.TopologyKey != nil:
+		return &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+					{
 						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: ls,
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      "app",
+									Operator: metav1.LabelSelectorOpIn,
+									Values:   []string{lables["app"]},
+								},
+								{
+									Key:      "cluster",
+									Operator: metav1.LabelSelectorOpIn,
+									Values:   []string{lables["cluster"]},
+								},
+								{
+									Key:      "component",
+									Operator: metav1.LabelSelectorOpIn,
+									Values:   []string{lables["component"]},
+								},
+								{
+									Key:      "replset",
+									Operator: metav1.LabelSelectorOpIn,
+									Values:   []string{lables["replset"]},
+								},
+							},
 						},
-						TopologyKey: "kubernetes.io/hostname",
+						TopologyKey: *af.TopologyKey,
 					},
 				},
 			},
-		},
+		}
 	}
+
+	return nil
 }

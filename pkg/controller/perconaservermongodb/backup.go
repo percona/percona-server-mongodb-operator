@@ -12,7 +12,7 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupCoordinator(cr *api.PerconaServerMongoDB) error {
 	spec := &cr.Spec.Backup
-	cSfs := backup.CoordinatorStatefulSet(&spec.Coordinator, spec.Image, cr.Spec.ImagePullSecrets, cr.Name, cr.Namespace, r.serverVersion, spec.Debug)
+	cSfs := backup.CoordinatorStatefulSet(cr, &spec.Coordinator, r.serverVersion, spec.Debug)
 
 	err := setControllerReference(cr, cSfs, r.scheme)
 	if err != nil {

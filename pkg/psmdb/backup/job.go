@@ -62,8 +62,8 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, 
 			JobTemplate: batchv1b.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app":                       "percona-server-mongodb",
-						"percona-server-mongodb_cr": crName,
+						"app":     "percona-server-mongodb",
+						"cluster": crName,
 					},
 				},
 				Spec: batchv1.JobSpec{
