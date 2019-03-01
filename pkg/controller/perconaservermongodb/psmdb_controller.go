@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/backup"
-
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
 	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
 	"github.com/percona/mongodb-orchestration-tools/watchdog"
@@ -18,11 +16,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -33,6 +33,7 @@ import (
 	"github.com/Percona-Lab/percona-server-mongodb-operator/clientcmd"
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
@@ -330,12 +331,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	containerName := "mongod"
 	matchLabels["component"] = "node"
 	multiAZ := replset.MultiAZ
+	pdbspec := replset.PodDisruptionBudget
 	if arbiter {
 		sfsName += "-arbiter"
 		containerName += "-arbiter"
 		size = replset.Arbiter.Size
 		matchLabels["component"] = "arbiter"
 		multiAZ = replset.Arbiter.MultiAZ
+		pdbspec = replset.Arbiter.PodDisruptionBudget
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -385,6 +388,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			return nil, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
 		}
 	} else {
+		if pdbspec != nil {
+			pdb := psmdb.PodDisruptionBudget(pdbspec, matchLabels, cr.Namespace)
+			err = setControllerReference(sfs, pdb, r.scheme)
+			if err != nil {
+				return nil, fmt.Errorf("pdb set owner reference to stateful set %s: %v", sfs.Name, err)
+			}
+
+			err = r.client.Create(context.TODO(), pdb)
+			if err != nil && !errors.IsAlreadyExists(err) {
+				return nil, fmt.Errorf("create PodDisruptionBudget for %s: %v", sfs.Name, err)
+			}
+		}
+
 		sfs.Spec.Replicas = &size
 		sfs.Spec.Template.Spec.Containers = sfsSpec.Template.Spec.Containers
 		err = r.client.Update(context.TODO(), sfs)
@@ -481,15 +497,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureWatchdog(cr *api.PerconaServerMong
 	go r.watchdog[cr.Name].Run()
 }
 
-func setControllerReference(cr *api.PerconaServerMongoDB, obj metav1.Object, scheme *runtime.Scheme) error {
-	ownerRef, err := cr.OwnerRef(scheme)
-	if err != nil {
-		return err
-	}
-	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
-	return nil
-}
-
 var ErrNoRunningMongodContainers = fmt.Errorf("no mongod containers in running state")
 
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
@@ -536,8 +543,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 // isMongodPod returns a boolean reflecting if a pod
 // is running a mongod container
 func isMongodPod(pod corev1.Pod) bool {
-	container := getPodContainer(&pod, "mongod")
-	return container != nil
+	return getPodContainer(&pod, "mongod") != nil
 }
 
 func getPodContainer(pod *corev1.Pod, containerName string) *corev1.Container {
@@ -623,4 +629,36 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(currentObj runtime.Object
 	}
 
 	return nil
+}
+
+func setControllerReference(owner runtime.Object, obj metav1.Object, scheme *runtime.Scheme) error {
+	ownerRef, err := OwnerRef(owner, scheme)
+	if err != nil {
+		return err
+	}
+	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
+	return nil
+}
+
+// OwnerRef returns OwnerReference to object
+func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference, error) {
+	gvk, err := apiutil.GVKForObject(ro, scheme)
+	if err != nil {
+		return metav1.OwnerReference{}, err
+	}
+
+	trueVar := true
+
+	ca, err := meta.Accessor(ro)
+	if err != nil {
+		return metav1.OwnerReference{}, err
+	}
+
+	return metav1.OwnerReference{
+		APIVersion: gvk.GroupVersion().String(),
+		Kind:       gvk.Kind,
+		Name:       ca.GetName(),
+		UID:        ca.GetUID(),
+		Controller: &trueVar,
+	}, nil
 }

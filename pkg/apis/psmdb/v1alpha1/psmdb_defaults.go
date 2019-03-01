@@ -6,6 +6,8 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
 )
@@ -119,7 +121,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				bkpTask.CompressionType = BackupCompressionGzip
 			}
 		}
-		cr.Spec.Backup.Coordinator.MultiAZ.reconcileAffinityOpts()
+		cr.Spec.Backup.Coordinator.MultiAZ.reconcileOpts()
 	}
 
 	cr.Status.Replsets = make(map[string]*ReplsetStatus)
@@ -133,10 +135,10 @@ func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) {
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
 
-	rs.MultiAZ.reconcileAffinityOpts()
+	rs.MultiAZ.reconcileOpts()
 
 	if rs.Arbiter.Enabled {
-		rs.Arbiter.MultiAZ.reconcileAffinityOpts()
+		rs.Arbiter.MultiAZ.reconcileOpts()
 	}
 
 	if !unsafe {
@@ -172,6 +174,15 @@ func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
 			loginfo(fmt.Sprintf("Replset size will be increased from %d to %d", rs.Size, rs.Size+1))
 			rs.Size++
 		}
+	}
+}
+
+func (m *MultiAZ) reconcileOpts() {
+	m.reconcileAffinityOpts()
+
+	if m.PodDisruptionBudget == nil {
+		defaultMaxUnavailable := intstr.FromInt(1)
+		m.PodDisruptionBudget = &policyv1beta1.PodDisruptionBudgetSpec{MaxUnavailable: &defaultMaxUnavailable}
 	}
 }
 
