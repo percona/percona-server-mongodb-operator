@@ -379,6 +379,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, r.serverVersion))
 			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, backup.AgentVolume(cr.Name))
 		}
+
+		if cr.Spec.PMM.Enabled {
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users))
+		}
 	}
 
 	if errors.IsNotFound(errGet) {

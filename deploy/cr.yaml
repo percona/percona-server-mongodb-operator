@@ -11,6 +11,10 @@ spec:
   secrets:
     key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
+  pmm:
+    enabled: false
+    image: perconalab/pmm-client-fb:v.1.17.2-18536d0
+    serverHost: monitoring-service
   replsets:
   - name: rs0
     size: 3

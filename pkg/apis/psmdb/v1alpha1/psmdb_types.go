@@ -51,11 +51,18 @@ type PerconaServerMongoDBSpec struct {
 	Secrets          *SecretsSpec                  `json:"secrets,omitempty"`
 	Backup           BackupSpec                    `json:"backup,omitempty"`
 	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	PMM              PMMSpec                       `json:"pmm,omitempty"`
 }
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
 	Replsets map[string]*ReplsetStatus `json:"replsets,omitempty"`
+}
+
+type PMMSpec struct {
+	Enabled    bool   `json:"enabled,omitempty"`
+	ServerHost string `json:"serverHost,omitempty"`
+	Image      string `json:"image,omitempty"`
 }
 
 type MultiAZ struct {
