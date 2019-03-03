@@ -190,19 +190,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		Name: cr.Name,
 	}
 
-	if cr.Spec.Backup.Enabled {
-		err := r.reconcileBackupCoordinator(cr)
-		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("reconcile backup coordinator: %v", err)
-		}
+	bcpSfs, err := r.reconcileBackupCoordinator(cr)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("reconcile backup coordinator: %v", err)
+	}
 
-		err = r.reconcileBackupStorageConfig(cr)
+	if cr.Spec.Backup.Enabled {
+		err = r.reconcileBackupStorageConfig(cr, bcpSfs)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("reconcile backup storage config: %v", err)
 		}
 
-		// TODO: start after replset was inited? which one?
-		err = r.reconcileBackupTasks(cr)
+		err = r.reconcileBackupTasks(cr, bcpSfs)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("reconcile backup tasks: %v", err)
 		}
@@ -407,6 +406,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 		sfs.Spec.Replicas = &size
 		sfs.Spec.Template.Spec.Containers = sfsSpec.Template.Spec.Containers
+		sfs.Spec.Template.Spec.Volumes = sfsSpec.Template.Spec.Volumes
 		err = r.client.Update(context.TODO(), sfs)
 		if err != nil {
 			return nil, fmt.Errorf("update StatefulSet %s: %v", sfs.Name, err)
