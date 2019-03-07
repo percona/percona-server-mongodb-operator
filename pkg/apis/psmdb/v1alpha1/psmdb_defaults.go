@@ -102,13 +102,24 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				Size: defaultMongodSize,
 			},
 		}
-	} else {
-		for _, replset := range cr.Spec.Replsets {
-			replset.SetDefauts(cr.Spec.UnsafeConf, log)
-		}
 	}
+
+	for _, replset := range cr.Spec.Replsets {
+		if cr.Spec.Pause {
+			replset.Size = 0
+			replset.Arbiter.Enabled = false
+			continue
+		}
+		replset.SetDefauts(cr.Spec.UnsafeConf, log)
+	}
+
 	if cr.Spec.RunUID == 0 && platform != version.PlatformOpenshift {
 		cr.Spec.RunUID = defaultRunUID
+	}
+
+	// there is shouldn't be any backups while pause
+	if cr.Spec.Pause {
+		cr.Spec.Backup.Enabled = false
 	}
 
 	if cr.Spec.Backup.Enabled {

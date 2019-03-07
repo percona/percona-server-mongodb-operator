@@ -41,6 +41,7 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
+	Pause            bool                          `json:"pause,omitempty"`
 	Platform         *version.Platform             `json:"platform,omitempty"`
 	Image            string                        `json:"image,omitempty"`
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
