@@ -3,13 +3,11 @@ package psmdb
 import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 )
 
-func PodDisruptionBudget(spec *policyv1beta1.PodDisruptionBudgetSpec, labels map[string]string, namespace string) *policyv1beta1.PodDisruptionBudget {
-	spec.Selector = &metav1.LabelSelector{
-		MatchLabels: labels,
-	}
-
+func PodDisruptionBudget(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string) *policyv1beta1.PodDisruptionBudget {
 	return &policyv1beta1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "policy/v1beta1",
@@ -19,6 +17,12 @@ func PodDisruptionBudget(spec *policyv1beta1.PodDisruptionBudgetSpec, labels map
 			Name:      labels["app.kubernetes.io/instance"] + "-" + labels["app.kubernetes.io/component"] + "-" + labels["app.kubernetes.io/replset"],
 			Namespace: namespace,
 		},
-		Spec: *spec,
+		Spec: policyv1beta1.PodDisruptionBudgetSpec{
+			MinAvailable:   spec.MinAvailable,
+			MaxUnavailable: spec.MaxUnavailable,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
 	}
 }

@@ -216,12 +216,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		matchLabels := map[string]string{
-			"app.kubernetes.io/name": "percona-server-mongodb",
-			"app.kubernetes.io/instance": cr.Name,
-			"app.kubernetes.io/replset": replset.Name,
+			"app.kubernetes.io/name":       "percona-server-mongodb",
+			"app.kubernetes.io/instance":   cr.Name,
+			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-			"app.kubernetes.io/component": "mongod",
-			"app.kubernetes.io/part-of": "percona-server-mongodb",
+			"app.kubernetes.io/component":  "mongod",
+			"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		}
 
 		pods := &corev1.PodList{}
@@ -327,6 +327,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	return rr, nil
 }
 
+// TODO: reduce cyclomatic complexity
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
@@ -394,17 +395,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			return nil, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
 		}
 	} else {
-		if pdbspec != nil {
-			pdb := psmdb.PodDisruptionBudget(pdbspec, matchLabels, cr.Namespace)
-			err = setControllerReference(sfs, pdb, r.scheme)
-			if err != nil {
-				return nil, fmt.Errorf("pdb set owner reference to stateful set %s: %v", sfs.Name, err)
-			}
-
-			err = r.client.Create(context.TODO(), pdb)
-			if err != nil && !errors.IsAlreadyExists(err) {
-				return nil, fmt.Errorf("create PodDisruptionBudget for %s: %v", sfs.Name, err)
-			}
+		err := r.reconcilePDB(pdbspec, matchLabels, cr.Namespace, sfs)
+		if err != nil {
+			return nil, fmt.Errorf("PodDisruptionBudget for %s: %v", sfs.Name, err)
 		}
 
 		sfs.Spec.Replicas = &size
@@ -417,6 +410,29 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	return sfs, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner runtime.Object) error {
+	if spec == nil {
+		return nil
+	}
+
+	pdb := psmdb.PodDisruptionBudget(spec, labels, namespace)
+	err := setControllerReference(owner, pdb, r.scheme)
+	if err != nil {
+		return fmt.Errorf("set owner reference: %v", err)
+	}
+
+	err = r.client.Create(context.TODO(), pdb)
+	if err == nil {
+		return nil
+	}
+
+	if errors.IsAlreadyExists(err) {
+		return r.client.Update(context.TODO(), pdb)
+	}
+
+	return fmt.Errorf("create: %v", err)
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsetInitialized(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) bool {

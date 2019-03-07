@@ -2,9 +2,9 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -67,13 +67,18 @@ type PMMSpec struct {
 }
 
 type MultiAZ struct {
-	Affinity            *PodAffinity                           `json:"affinity,omitempty"`
-	NodeSelector        map[string]string                      `json:"nodeSelector,omitempty"`
-	Tolerations         []corev1.Toleration                    `json:"tolerations,omitempty"`
-	PriorityClassName   string                                 `json:"priorityClassName,omitempty"`
-	Annotations         map[string]string                      `json:"annotations,omitempty"`
-	Labels              map[string]string                      `json:"labels,omitempty"`
-	PodDisruptionBudget *policyv1beta1.PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	Affinity            *PodAffinity             `json:"affinity,omitempty"`
+	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
+	Tolerations         []corev1.Toleration      `json:"tolerations,omitempty"`
+	PriorityClassName   string                   `json:"priorityClassName,omitempty"`
+	Annotations         map[string]string        `json:"annotations,omitempty"`
+	Labels              map[string]string        `json:"labels,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+}
+
+type PodDisruptionBudgetSpec struct {
+	MinAvailable   *intstr.IntOrString `json:"minAvailable,omitempty"`
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 type PodAffinity struct {
