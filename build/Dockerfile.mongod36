@@ -1,22 +1,16 @@
-FROM golang
-
-COPY vendor /go/src
-RUN cd /go/src/github.com/percona/mongodb-orchestration-tools \
-    && make bin/mongodb-healthcheck bin/k8s-mongodb-initiator
-
 FROM centos:7
 MAINTAINER Percona Development <info@percona.com>
 
-COPY --from=0 \
-	/go/src/github.com/percona/mongodb-orchestration-tools/bin/mongodb-healthcheck \
-	/go/src/github.com/percona/mongodb-orchestration-tools/bin/k8s-mongodb-initiator \
+COPY \
+	vendor/github.com/percona/mongodb-orchestration-tools/bin/mongodb-healthcheck \
+	vendor/github.com/percona/mongodb-orchestration-tools/bin/k8s-mongodb-initiator \
 	/usr/local/bin/
 
 # check repository package signature in secure way
 RUN export GNUPGHOME="$(mktemp -d)" \
         && gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A \
         && gpg --export --armor 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A > ${GNUPGHOME}/RPM-GPG-KEY-Percona \
-        && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona /etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7 \
+        && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona \
         && curl -L -o /tmp/percona-release.rpm https://repo.percona.com/percona/yum/percona-release-1.0-7.noarch.rpm \
         && rpmkeys --checksig /tmp/percona-release.rpm \
         && yum install -y /tmp/percona-release.rpm \
@@ -30,7 +24,7 @@ RUN useradd -u 1001 -r -g 0 -s /sbin/nologin \
             -c "Default Application User" mongodb
 
 ENV PERCONA_MAJOR 36
-ENV PERCONA_VERSION 3.6.8-2.0.el7
+ENV PERCONA_VERSION 3.6.10-3.0.el7
 
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \
         && yum install -y \
@@ -48,3 +42,7 @@ RUN curl -o /entrypoint.sh https://raw.githubusercontent.com/percona/percona-doc
 ENTRYPOINT ["/entrypoint.sh"]
 
 EXPOSE 27017
+
+USER 1001
+
+CMD ["mongod"]
