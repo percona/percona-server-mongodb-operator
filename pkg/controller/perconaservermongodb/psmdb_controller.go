@@ -370,12 +370,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			},
 		)
 	} else {
-		pvc, err := psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset)
-		if err != nil {
-			return nil, fmt.Errorf("pvc create: %v", err)
-		}
-		sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
-			pvc,
+		if replset.VolumeSpec.PersistentVolumeClaim != nil {
+			sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
+				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset.VolumeSpec.PersistentVolumeClaim),
+			}
+		} else {
+			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
+				corev1.Volume{
+					Name: psmdb.MongodDataVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						HostPath: replset.VolumeSpec.HostPath,
+						EmptyDir: replset.VolumeSpec.EmptyDir,
+					},
+				},
+			)
 		}
 
 		if cr.Spec.Backup.Enabled {

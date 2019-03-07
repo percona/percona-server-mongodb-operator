@@ -87,14 +87,28 @@ type PodAffinity struct {
 }
 
 type ReplsetSpec struct {
-	Resources    *ResourcesSpec `json:"resources,omitempty"`
-	Name         string         `json:"name"`
-	Size         int32          `json:"size"`
-	StorageClass string         `json:"storageClass,omitempty"`
-	ClusterRole  ClusterRole    `json:"clusterRole,omitempty"`
-	Arbiter      Arbiter        `json:"arbiter,omitempty"`
-	Expose       Expose         `json:"expose,omitempty"`
+	Resources   *ResourcesSpec `json:"resources,omitempty"`
+	Name        string         `json:"name"`
+	Size        int32          `json:"size"`
+	ClusterRole ClusterRole    `json:"clusterRole,omitempty"`
+	Arbiter     Arbiter        `json:"arbiter,omitempty"`
+	Expose      Expose         `json:"expose,omitempty"`
+	VolumeSpec  VolumeSpec     `json:"volumeSpec,omitempty"`
 	MultiAZ
+}
+
+type VolumeSpec struct {
+	// EmptyDir represents a temporary directory that shares a pod's lifetime.
+	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
+
+	// HostPath represents a pre-existing file or directory on the host machine
+	// that is directly exposed to the container.
+	HostPath *corev1.HostPathVolumeSource `json:"hostPath,omitempty"`
+
+	// PersistentVolumeClaim represents a reference to a PersistentVolumeClaim.
+	// It has the highest level of precedence, followed by HostPath and
+	// EmptyDir. And represents the PVC specification.
+	PersistentVolumeClaim *corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
 }
 
 type ResourceSpecRequirements struct {
@@ -105,7 +119,6 @@ type ResourceSpecRequirements struct {
 type ResourcesSpec struct {
 	Limits   *ResourceSpecRequirements `json:"limits,omitempty"`
 	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
-	Storage  string                    `json:"storage,omitempty"`
 }
 
 type SecretsSpec struct {
