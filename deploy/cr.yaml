@@ -32,8 +32,17 @@ spec:
       requests:
         cpu: "300m"
         memory: "0.5G"
-      storage: "3Gi"
-    #storageClass: aws-gp2
+    volumeSpec:
+#      emptyDir: {}
+#      hostPath:
+#        path: /data
+#        type: Directory
+      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 3Gi
   mongod:
     net:
       port: 27017

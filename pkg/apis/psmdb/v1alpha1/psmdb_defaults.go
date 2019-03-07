@@ -109,7 +109,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.Arbiter.Enabled = false
 			continue
 		}
-		replset.SetDefauts(cr.Spec.UnsafeConf, log)
+		err := replset.SetDefauts(cr.Spec.UnsafeConf, log)
+		if err != nil {
+			return err
+		}
 	}
 
 	if cr.Spec.RunUID == 0 && platform != version.PlatformOpenshift {
@@ -140,7 +143,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 }
 
 // SetDefauts set default options for the replset
-func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) {
+func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) error {
+	err := rs.VolumeSpec.reconcileOpts()
+	if err != nil {
+		return fmt.Errorf("Replset %s VolumeSpec: %v", rs.Name, err)
+	}
+
 	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
@@ -154,6 +162,8 @@ func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) {
 	if !unsafe {
 		rs.setSafeDefauts(log)
 	}
+
+	return nil
 }
 
 func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
@@ -232,4 +242,19 @@ func (m *MultiAZ) reconcileAffinityOpts() {
 			m.Affinity.TopologyKey = &defaultAffinityTopologyKey
 		}
 	}
+}
+
+func (v *VolumeSpec) reconcileOpts() error {
+	if v.PersistentVolumeClaim != nil {
+		_, ok := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+		if !ok {
+			return fmt.Errorf("volume.resources.storage can't be empty")
+		}
+
+		if v.PersistentVolumeClaim.AccessModes == nil || len(v.PersistentVolumeClaim.AccessModes) == 0 {
+			v.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+		}
+	}
+
+	return nil
 }

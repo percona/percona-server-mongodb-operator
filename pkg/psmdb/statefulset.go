@@ -5,7 +5,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -93,13 +92,8 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 }
 
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
-func PersistentVolumeClaim(name, namespace string, replset *api.ReplsetSpec) (corev1.PersistentVolumeClaim, error) {
-	size, err := resource.ParseQuantity(replset.Resources.Storage)
-	if err != nil {
-		return corev1.PersistentVolumeClaim{}, fmt.Errorf("wrong volume size value %q: %v", replset.Resources.Storage, err)
-	}
-
-	vc := corev1.PersistentVolumeClaim{
+func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
+	return corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
@@ -108,22 +102,8 @@ func PersistentVolumeClaim(name, namespace string, replset *api.ReplsetSpec) (co
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
-			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: size,
-				},
-			},
-		},
+		Spec: *spec,
 	}
-	if replset.StorageClass != "" {
-		vc.Spec.StorageClassName = &replset.StorageClass
-	}
-
-	return vc, nil
 }
 
 // PodAffinity returns podAffinity options for the pod
