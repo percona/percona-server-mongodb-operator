@@ -3,6 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
 spec:
+  pause: false
   #platform: openshift
   image: perconalab/percona-server-mongodb-operator:master-mongod3.6
   # imagePullSecrets:
