@@ -17,12 +17,12 @@ func CoordinatorService(crName, namespace string) *corev1.Service {
 	name := crName + coordinatorSuffix
 
 	ls := map[string]string{
-		"app.kubernetes.io/name": "percona-server-mongodb",
-		"app.kubernetes.io/instance": crName,
-		"app.kubernetes.io/replset": "general",
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   crName,
+		"app.kubernetes.io/replset":    "general",
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/component": "backup-coordinator",
-		"app.kubernetes.io/part-of": "percona-server-mongodb",
+		"app.kubernetes.io/component":  "backup-coordinator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
 	return &corev1.Service{
@@ -50,22 +50,33 @@ func CoordinatorService(crName, namespace string) *corev1.Service {
 	}
 }
 
-func CoordinatorStatefulSet(cr *api.PerconaServerMongoDB, spec *api.BackupCoordinatorSpec, sv *version.ServerVersion, debug bool) *appsv1.StatefulSet {
+func CoordinatorStatefulSet(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "apps/v1",
+			Kind:       "StatefulSet",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + coordinatorSuffix,
+			Namespace: cr.Namespace,
+		},
+	}
+}
+
+func CoordinatorStatefulSetSpec(cr *api.PerconaServerMongoDB, spec *api.BackupCoordinatorSpec, sv *version.ServerVersion, debug bool) appsv1.StatefulSetSpec {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
 
-	name := cr.Name + coordinatorSuffix
-
 	ls := map[string]string{
-		"app.kubernetes.io/name": "percona-server-mongodb",
-		"app.kubernetes.io/instance": cr.Name,
-		"app.kubernetes.io/replset": "general",
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/replset":    "general",
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/component": "backup-coordinator",
-		"app.kubernetes.io/part-of": "percona-server-mongodb",
+		"app.kubernetes.io/component":  "backup-coordinator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
 	for k, v := range spec.Labels {
@@ -74,30 +85,20 @@ func CoordinatorStatefulSet(cr *api.PerconaServerMongoDB, spec *api.BackupCoordi
 		}
 	}
 
-	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
+	return appsv1.StatefulSetSpec{
+		ServiceName: cr.Name + coordinatorSuffix,
+		Selector: &metav1.LabelSelector{
+			MatchLabels: ls,
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      ls,
+				Annotations: spec.Annotations,
+			},
+			Spec: newCoordinatorPodSpec(spec, cr.Spec.Backup.Image, cr.Spec.ImagePullSecrets, cr.Name+coordinatorContainerName, cr.Namespace, ls, fsgroup, debug),
 		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: name,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: ls,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      ls,
-					Annotations: spec.Annotations,
-				},
-				Spec: newCoordinatorPodSpec(spec, cr.Spec.Backup.Image, cr.Spec.ImagePullSecrets, cr.Name+coordinatorContainerName, cr.Namespace, ls, fsgroup, debug),
-			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				coordinatorPersistentVolumeClaim(spec, coordinatorDataVolume, cr.Namespace),
-			},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+			coordinatorPersistentVolumeClaim(spec, coordinatorDataVolume, cr.Namespace),
 		},
 	}
 }
