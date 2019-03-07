@@ -14,28 +14,23 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: percona-server-mongodb
-      percona-server-mongodb_cr: another-name
-      replset: rs0
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: another-name
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
   serviceName: another-name-rs0
   template:
     metadata:
       labels:
-        app: percona-server-mongodb
-        percona-server-mongodb_cr: another-name
-        replset: rs0
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: another-name
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
     spec:
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: percona-server-mongodb
-                  percona-server-mongodb_cr: another-name
-                  replset: rs0
-              topologyKey: kubernetes.io/hostname
-            weight: 100
       containers:
       - args:
         - --bind_ip_all
@@ -106,11 +101,11 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
         - mountPath: /etc/mongodb-secrets
           name: another-name-intrnl-mongodb-key
           readOnly: true
-        - mountPath: /data/db
-          name: mongod-data
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always
