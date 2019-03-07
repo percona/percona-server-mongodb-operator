@@ -42,7 +42,7 @@ no_storage() {
     sleep 20
 
     kubectl logs $(get_operator_pod) \
-        | grep "wrong volume size value"
+        | grep "volumeSpec should be specified"
 
     # delete cluster
     kubectl delete \
