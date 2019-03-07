@@ -17,9 +17,12 @@ func CoordinatorService(crName, namespace string) *corev1.Service {
 	name := crName + coordinatorSuffix
 
 	ls := map[string]string{
-		"app":       "percona-server-mongodb",
-		"cluster":   crName,
-		"component": "backup-coordinator",
+		"app.kubernetes.io/name": "percona-server-mongodb",
+		"app.kubernetes.io/instance": crName,
+		"app.kubernetes.io/replset": "general",
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/component": "backup-coordinator",
+		"app.kubernetes.io/part-of": "percona-server-mongodb",
 	}
 
 	return &corev1.Service{
@@ -57,10 +60,12 @@ func CoordinatorStatefulSet(cr *api.PerconaServerMongoDB, spec *api.BackupCoordi
 	name := cr.Name + coordinatorSuffix
 
 	ls := map[string]string{
-		"app":       "percona-server-mongodb",
-		"cluster":   cr.Name,
-		"replset":   "general",
-		"component": "backup-coordinator",
+		"app.kubernetes.io/name": "percona-server-mongodb",
+		"app.kubernetes.io/instance": cr.Name,
+		"app.kubernetes.io/replset": "general",
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/component": "backup-coordinator",
+		"app.kubernetes.io/part-of": "percona-server-mongodb",
 	}
 
 	for k, v := range spec.Labels {

@@ -216,9 +216,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		matchLabels := map[string]string{
-			"app":     "percona-server-mongodb",
-			"cluster": cr.Name,
-			"replset": replset.Name,
+			"app.kubernetes.io/name": "percona-server-mongodb",
+			"app.kubernetes.io/instance": cr.Name,
+			"app.kubernetes.io/replset": replset.Name,
+			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+			"app.kubernetes.io/component": "mongod",
+			"app.kubernetes.io/part-of": "percona-server-mongodb",
 		}
 
 		pods := &corev1.PodList{}
@@ -328,14 +331,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
-	matchLabels["component"] = "node"
+	matchLabels["app.kubernetes.io/component"] = "mongod"
 	multiAZ := replset.MultiAZ
 	pdbspec := replset.PodDisruptionBudget
 	if arbiter {
 		sfsName += "-arbiter"
 		containerName += "-arbiter"
 		size = replset.Arbiter.Size
-		matchLabels["component"] = "arbiter"
+		matchLabels["app.kubernetes.io/component"] = "arbiter"
 		multiAZ = replset.Arbiter.MultiAZ
 		pdbspec = replset.Arbiter.PodDisruptionBudget
 	}

@@ -141,28 +141,7 @@ func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 					{
 						LabelSelector: &metav1.LabelSelector{
-							MatchExpressions: []metav1.LabelSelectorRequirement{
-								{
-									Key:      "app",
-									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{labels["app"]},
-								},
-								{
-									Key:      "cluster",
-									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{labels["cluster"]},
-								},
-								{
-									Key:      "component",
-									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{labels["component"]},
-								},
-								{
-									Key:      "replset",
-									Operator: metav1.LabelSelectorOpIn,
-									Values:   []string{labels["replset"]},
-								},
-							},
+							MatchLabels: labels,
 						},
 						TopologyKey: *af.TopologyKey,
 					},

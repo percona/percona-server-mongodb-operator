@@ -16,7 +16,7 @@ func PodDisruptionBudget(spec *policyv1beta1.PodDisruptionBudgetSpec, labels map
 			Kind:       "PodDisruptionBudget",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      labels["cluster"] + "-" + labels["component"] + "-" + labels["replset"],
+			Name:      labels["app.kubernetes.io/instance"] + "-" + labels["app.kubernetes.io/component"] + "-" + labels["app.kubernetes.io/replset"],
 			Namespace: namespace,
 		},
 		Spec: *spec,

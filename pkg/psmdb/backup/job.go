@@ -62,8 +62,12 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, 
 			JobTemplate: batchv1b.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app":     "percona-server-mongodb",
-						"cluster": crName,
+						"app.kubernetes.io/name": "percona-server-mongodb",
+						"app.kubernetes.io/instance": crName,
+						"app.kubernetes.io/replset": "general",
+						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+						"app.kubernetes.io/component": "backup-schedule",
+						"app.kubernetes.io/part-of": "percona-server-mongodb",
 					},
 				},
 				Spec: batchv1.JobSpec{
