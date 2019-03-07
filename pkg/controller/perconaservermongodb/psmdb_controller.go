@@ -15,6 +15,7 @@ import (
 	"gopkg.in/mgo.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -431,16 +432,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudg
 		return fmt.Errorf("set owner reference: %v", err)
 	}
 
-	err = r.client.Create(context.TODO(), pdb)
-	if err == nil {
-		return nil
+	cpdb := &policyv1beta1.PodDisruptionBudget{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pdb.Name, Namespace: namespace}, cpdb)
+	if err != nil && errors.IsNotFound(err) {
+		return r.client.Create(context.TODO(), pdb)
+	} else if err != nil {
+		return fmt.Errorf("get: %v", err)
 	}
 
-	if errors.IsAlreadyExists(err) {
-		return r.client.Update(context.TODO(), pdb)
-	}
-
-	return fmt.Errorf("create: %v", err)
+	cpdb.Spec = pdb.Spec
+	return r.client.Update(context.TODO(), cpdb)
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsetInitialized(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) bool {
