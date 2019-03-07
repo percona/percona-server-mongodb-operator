@@ -22,7 +22,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupCoordinator(cr *api.Perco
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupSfs(cr *api.PerconaServerMongoDB) (*appsv1.StatefulSet, error) {
-	cSfs := backup.CoordinatorStatefulSet(cr, &cr.Spec.Backup.Coordinator, r.serverVersion, cr.Spec.Backup.Debug)
+	cSfs := backup.CoordinatorStatefulSet(cr)
 	if !cr.Spec.Backup.Enabled {
 		err := r.client.Delete(context.TODO(), cSfs)
 		if err != nil && !errors.IsNotFound(err) {
@@ -30,6 +30,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupSfs(cr *api.PerconaServer
 		}
 		return cSfs, nil
 	}
+
+	cSfs.Spec = backup.CoordinatorStatefulSetSpec(cr, &cr.Spec.Backup.Coordinator, r.serverVersion, cr.Spec.Backup.Debug)
 
 	err := setControllerReference(cr, cSfs, r.scheme)
 	if err != nil {
