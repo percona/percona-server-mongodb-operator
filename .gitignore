@@ -1,3 +1,6 @@
+# ignore
+client-secret.json
+e2e-tests/conf/cloud-secret.yml
 
 # Temporary Build Files
 tmp/_output
