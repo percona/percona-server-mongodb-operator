@@ -17,8 +17,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/controller"
+	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
+	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
 )
 
 var log = logf.Log.WithName("cmd")

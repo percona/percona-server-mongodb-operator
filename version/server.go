@@ -8,7 +8,7 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/rest"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/clientcmd"
+	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 )
 
 type Platform string

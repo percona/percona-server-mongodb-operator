@@ -21,7 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	version "github.com/Percona-Lab/percona-server-mongodb-operator/version"
+	version "github.com/percona/percona-server-mongodb-operator/version"
 	v1 "k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"

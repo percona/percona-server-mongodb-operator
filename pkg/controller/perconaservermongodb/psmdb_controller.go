@@ -31,12 +31,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/clientcmd"
-	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/psmdb/secret"
-	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/clientcmd"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 var log = logf.Log.WithName("controller_psmdb")

@@ -3,7 +3,7 @@ package psmdb
 import (
 	corev1 "k8s.io/api/core/v1"
 
-	api "github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 )
 
 // PMMContainer returns a pmm container from given spec

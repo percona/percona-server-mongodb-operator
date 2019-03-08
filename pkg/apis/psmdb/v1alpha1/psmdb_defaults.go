@@ -7,7 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/Percona-Lab/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 var (

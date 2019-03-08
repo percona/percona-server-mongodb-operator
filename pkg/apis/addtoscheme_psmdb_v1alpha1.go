@@ -1,7 +1,7 @@
 package apis
 
 import (
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 )
 
 func init() {

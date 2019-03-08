@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/Percona-Lab/percona-server-mongodb-operator/pkg/controller/perconaservermongodb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/controller/perconaservermongodb"
 )
 
 func init() {
