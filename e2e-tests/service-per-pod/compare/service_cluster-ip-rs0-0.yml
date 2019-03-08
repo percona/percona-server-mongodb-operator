@@ -2,9 +2,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: percona-server-mongodb
-    cluster: cluster-ip
-    replset: rs0
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: cluster-ip
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
   name: cluster-ip-rs0-0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
