@@ -93,7 +93,7 @@ type ReplsetSpec struct {
 	ClusterRole ClusterRole    `json:"clusterRole,omitempty"`
 	Arbiter     Arbiter        `json:"arbiter,omitempty"`
 	Expose      Expose         `json:"expose,omitempty"`
-	VolumeSpec  VolumeSpec     `json:"volumeSpec,omitempty"`
+	VolumeSpec  *VolumeSpec    `json:"volumeSpec,omitempty"`
 	MultiAZ
 }
 

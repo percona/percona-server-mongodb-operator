@@ -144,9 +144,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 // SetDefauts set default options for the replset
 func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) error {
+	if rs.VolumeSpec == nil {
+		return fmt.Errorf("replset %s: volumeSpec should be specified", rs.Name)
+	}
+
 	err := rs.VolumeSpec.reconcileOpts()
 	if err != nil {
-		return fmt.Errorf("Replset %s VolumeSpec: %v", rs.Name, err)
+		return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
 	}
 
 	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {
