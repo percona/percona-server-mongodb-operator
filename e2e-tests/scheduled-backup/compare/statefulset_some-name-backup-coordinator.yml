@@ -14,23 +14,43 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: percona-server-mongodb
-      backup-coordinator: "true"
-      percona-server-mongodb_cr: some-name
+      app.kubernetes.io/component: backup-coordinator
+      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: general
   serviceName: some-name-backup-coordinator
   template:
     metadata:
       labels:
-        app: percona-server-mongodb
-        backup-coordinator: "true"
-        percona-server-mongodb_cr: some-name
+        app.kubernetes.io/component: backup-coordinator
+        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: general
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: backup-coordinator
+                app.kubernetes.io/instance: some-name
+                app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                app.kubernetes.io/name: percona-server-mongodb
+                app.kubernetes.io/part-of: percona-server-mongodb
+                app.kubernetes.io/replset: general
+            topologyKey: kubernetes.io/hostname
       containers:
-      - env:
+      - command:
+        - pbm-coordinator
+        env:
         - name: PBM_COORDINATOR_ENABLE_CLIENTS_LOGGING
           value: "true"
         - name: PBM_COORDINATOR_DEBUG
-          value: "false"
+          value: "true"
         - name: PBM_COORDINATOR_API_PORT
           value: "10001"
         - name: PBM_COORDINATOR_GRPC_PORT
@@ -46,7 +66,7 @@ spec:
           tcpSocket:
             port: 10000
           timeoutSeconds: 3
-        name: backup-coordinator
+        name: some-name-backup-coordinator
         ports:
         - containerPort: 10000
           name: rpc

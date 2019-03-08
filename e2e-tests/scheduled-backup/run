@@ -6,19 +6,69 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
+run_restore() {
+    local storage=$1
+    local backup_name=$2
+
+    run_mongo \
+        'use myApp\n db.test.insert({ x: 100501 })' \
+        "myApp:myPass@$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
+
+    kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup --restart=Never -- \
+        pbmctl run restore \
+        --server-address=some-name-backup-coordinator:10001 \
+        --storage $storage \
+        ${backup_name/_rs0.dump.gz}.json \
+        | grep 'Restore completed'
+
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+}
+
 create_namespace $namespace
+deploy_helm $namespace
 deploy_operator
+
+desc 'install Minio'
+helm del --purge minio-service || :
+helm install \
+    --name minio-service \
+    --set accessKey=some-access-key \
+    --set secretKey=some-secret-key \
+    --set service.type=ClusterIP \
+    --set configPath=/tmp/.minio/ \
+    --set persistence.size=2G \
+    --set environment.MINIO_REGION=us-east-1 \
+    --set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
+    stable/minio
+MINIO_POD=$(kubectl get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
+wait_pod $MINIO_POD
+
+# create bucket
+kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+    /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
 
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl apply \
-    -f $test_dir/conf/$cluster.yml \
-    -f $conf_dir/backup-secrets.yml \
+    -f $conf_dir/cloud-secret.yml \
+    -f $conf_dir/minio-secret.yml \
     -f $conf_dir/secrets.yml \
     -f $conf_dir/client.yml
+
+apply_cluster $test_dir/conf/$cluster.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
+desc 'check if service and statefulset created with expected config'
+compare_kubectl statefulset/$cluster
+compare_kubectl statefulset/${cluster%%-rs0}-backup-coordinator
+compare_kubectl service/${cluster%%-rs0}-backup-coordinator
 
 desc 'write data, read from all'
 run_mongo \
@@ -32,44 +82,51 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 desc 'add backups schedule, wait for the first backup'
-kubectl apply \
-    -f $test_dir/conf/$cluster-2.yml
+apply_cluster $test_dir/conf/$cluster-2.yml
 wait_pod ${cluster%%-rs0}-backup-coordinator-0
-wait_cron ${cluster%%-rs0}-backup-every-min
-compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min
+wait_cron ${cluster%%-rs0}-backup-every-min-aws-s3
+wait_cron ${cluster%%-rs0}-backup-every-min-minio
+wait_cron ${cluster%%-rs0}-backup-every-min-gcp-cs
+compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-aws-s3
+compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-minio
+compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-gcp-cs
 sleep 65
-wait_backup $(kubectl get job | grep ${cluster%%-rs0}-backup-every-min | awk '{print$1}' | tail -1)
+wait_backup $(kubectl get job | grep ${cluster%%-rs0}-backup-every-min-aws-s3 | awk '{print$1}' | tail -1)
+backup_name_aws=$(get_backup_name aws-s3 $cluster 3 | sort | head -1)
+wait_backup $(kubectl get job | grep ${cluster%%-rs0}-backup-every-min-minio  | awk '{print$1}' | tail -1)
+backup_name_minio=$(get_backup_name minio $cluster 3 | sort | head -1)
+wait_backup $(kubectl get job | grep ${cluster%%-rs0}-backup-every-min-gcp-cs | awk '{print$1}' | tail -1)
+backup_name_gcp=$(get_backup_name gcp-cs $cluster 3 | sort | head -1)
+apply_cluster $test_dir/conf/$cluster.yml
+sleep 5
+
+desc 'check backup and restore -- aws-s3'
 kubectl get pods \
-    | grep ${cluster%%-rs0}-backup-every-min \
+    | grep ${cluster%%-rs0}-backup-every-min-aws-s3 \
     | awk '{print$1}' \
     | xargs -n1 kubectl logs \
     | grep 'Backup completed'
+curl -s "https://s3.amazonaws.com/operator-testing/${backup_name_aws}" | gunzip > /dev/null
+run_restore aws-s3 $backup_name_aws
 
-backup_name=$(get_backup_name $cluster 3 | sort | head -1)
-aws s3 ls s3://psmdb-operator-testing/${backup_name}
-aws s3 cp s3://psmdb-operator-testing/${backup_name} $tmp_dir/${backup_name}
+desc 'check backup and restore -- minio'
+kubectl get pods \
+    | grep ${cluster%%-rs0}-backup-every-min-minio \
+    | awk '{print$1}' \
+    | xargs -n1 kubectl logs \
+    | grep 'Backup completed'
+kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+    /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_name_minio} | grep ${backup_name_minio}
+run_restore minio $backup_name_minio
 
-desc 'check if service and statefulset created with expected config'
-compare_kubectl statefulset/$cluster
-compare_kubectl statefulset/${cluster%%-rs0}-backup-coordinator
-compare_kubectl service/${cluster%%-rs0}-backup-coordinator
-
-run_mongo \
-    'use myApp\n db.test.insert({ x: 100501 })' \
-    "myApp:myPass@$cluster.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
-
-cat $conf_dir/backup-restore.yml \
-    | sed -e "s/value: BACKUP_NAME/value: ${backup_name/.dump.gz/}/" \
-    | sed -e "s/value: $cluster/value: $cluster.$namespace.svc.cluster.local/" \
-    | kubectl apply -f -
-
-wait_backup backup-restorer
-
-compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+desc 'check backup and restore -- gcp-cs'
+kubectl get pods \
+    | grep ${cluster%%-rs0}-backup-every-min-gcp-cs \
+    | awk '{print$1}' \
+    | xargs -n1 kubectl logs \
+    | grep 'Backup completed'
+curl -s "https://storage.googleapis.com/operator-testing/${backup_name_gcp}" | gunzip > /dev/null
+run_restore gcp-cs $backup_name_gcp
 
 destroy $namespace

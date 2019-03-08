@@ -1,20 +1,24 @@
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
-  name: some-name-backup-every-min
+  name: some-name-backup-every-min-minio
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1alpha1
+  - apiVersion: apps/v1
     controller: true
-    kind: PerconaServerMongoDB
-    name: some-name
+    kind: StatefulSet
+    name: some-name-backup-coordinator
 spec:
   concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
   jobTemplate:
     metadata:
       labels:
-        app: percona-server-mongodb
-        percona-server-mongodb_cr: some-name
+        app.kubernetes.io/component: backup-schedule
+        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: general
     spec:
       template:
         metadata:
@@ -23,25 +27,25 @@ spec:
           - args:
             - run
             - backup
-            - --description=some-name-every-min
+            - --description=some-name-every-min-minio
+            - --storage=minio
             - --compression-algorithm=gzip
-            - --destination-type=aws
+            command:
+            - pbmctl
             env:
             - name: PBMCTL_SERVER_ADDRESS
               value: some-name-backup-coordinator:10001
-            imagePullPolicy: Always
+            imagePullPolicy: IfNotPresent
             name: backup-pmbctl
             resources: {}
             securityContext:
               runAsNonRoot: true
-              runAsUser: 1001
             terminationMessagePath: /dev/termination-log
             terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
-          restartPolicy: OnFailure
+          restartPolicy: Never
           schedulerName: default-scheduler
-          securityContext:
-            fsGroup: 1001
+          securityContext: {}
           terminationGracePeriodSeconds: 30
   schedule: '* * * * *'
   successfulJobsHistoryLimit: 3
