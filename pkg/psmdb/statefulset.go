@@ -116,6 +116,10 @@ func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity
 	case af.Advanced != nil:
 		return af.Advanced
 	case af.TopologyKey != nil:
+		if *af.TopologyKey == api.AffinityOff {
+			return nil
+		}
+
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{

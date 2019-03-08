@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -207,6 +206,7 @@ func (m *MultiAZ) reconcileOpts() {
 }
 
 var affinityValidTopologyKeys = map[string]struct{}{
+	AffinityOff:                                struct{}{},
 	"kubernetes.io/hostname":                   struct{}{},
 	"failure-domain.beta.kubernetes.io/zone":   struct{}{},
 	"failure-domain.beta.kubernetes.io/region": struct{}{},
@@ -214,12 +214,12 @@ var affinityValidTopologyKeys = map[string]struct{}{
 
 var defaultAffinityTopologyKey = "kubernetes.io/hostname"
 
-const affinityOff = "none"
+const AffinityOff = "none"
 
 // reconcileAffinityOpts ensures that the affinity is set to the valid values.
 // - if the affinity doesn't set at all - set topology key to `defaultAffinityTopologyKey`
 // - if topology key is set and the value not the one of `affinityValidTopologyKeys` - set to `defaultAffinityTopologyKey`
-// - if topology key set to valuse of `affinityOff` - disable the affinity at all
+// - if topology key set to valuse of `AffinityOff` - disable the affinity at all
 // - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
 func (m *MultiAZ) reconcileAffinityOpts() {
 	switch {
@@ -233,9 +233,6 @@ func (m *MultiAZ) reconcileAffinityOpts() {
 
 	case m.Affinity.Advanced != nil:
 		m.Affinity.TopologyKey = nil
-
-	case strings.ToLower(*m.Affinity.TopologyKey) == affinityOff:
-		m.Affinity = nil
 
 	case m.Affinity != nil && m.Affinity.TopologyKey != nil:
 		if _, ok := affinityValidTopologyKeys[*m.Affinity.TopologyKey]; !ok {
