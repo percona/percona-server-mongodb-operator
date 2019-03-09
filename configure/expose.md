@@ -7,7 +7,7 @@ Because of this, you should connect to Percona Server for MongoDB via Kubernetes
 Sometimes it is not possible to reach Pods via Kubernetes internal DNS names.
 To make Pods of the Replica Set accessible, Percona Server for MongoDB Operator can assigns a [Kubernetes Service](https://kubernetes.io/docs/concepts/services-networking/service/) to each Pod.
 
-This feature can be configured in the Replica Set section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file:
+This feature can be configured in the Replica Set section of the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file:
 
 * set 'expose.enabled' option to 'true' to allow exposing Pods via services,
 * set 'expose.exposeType' option specifying the IP address type to be used:

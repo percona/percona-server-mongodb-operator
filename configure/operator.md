@@ -1,7 +1,7 @@
 Custom Resource options
 ==============================================================
 
-The operator is configured via the spec section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. This file contains the following spec sections: 
+The operator is configured via the spec section of the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. This file contains the following spec sections: 
 
 | Key | Value Type | Default | Description                                      |
 |-----|------------|---------|--------------------------------------------------|
@@ -71,7 +71,7 @@ security.redactClientLogData|bool|false|Enables/disables [PSMDB Log Redaction](h
 
 ## backup section
 
-The ``backup`` section in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file contains the following configuration options for the regular Percona Server for MongoDB backups.
+The ``backup`` section in the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file contains the following configuration options for the regular Percona Server for MongoDB backups.
 
 | Key                            | Value Type | Example   | Description                                   |
 |--------------------------------|------------|-----------|-----------------------------------------------|

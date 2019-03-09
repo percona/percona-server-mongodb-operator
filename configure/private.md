@@ -35,7 +35,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
 
    This command creates the bucket named `operator-testing` with already chosen access and secret keys (substitute `some-access-key` and `some-secret-key` with the values used on the previous step).
 
-3. Now edit the backup section of the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file to set proper values for the `bucket` (the S3 bucket for backups created on the previous step), `region`, `credentialsSecret` and the `endpointUrl` (which should point to the previously created Minio Service). 
+3. Now edit the backup section of the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file to set proper values for the `bucket` (the S3 bucket for backups created on the previous step), `region`, `credentialsSecret` and the `endpointUrl` (which should point to the previously created Minio Service). 
 
    ```
    ...
@@ -54,7 +54,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
      ...
    ```
 
-   The option which should be specially mentioned is `credentialsSecret` which is a [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. Sample [backup-s3.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) can be used to create this secret object. Check that it contains proper `name` value (equal to the one specified for `credentialsSecret`, i.e. `my-cluster-name-backup-s3` in the last example), and also proper `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. After editing is finished, secrets object should be created (or updated with the new name and/or keys) using the following command:
+   The option which should be specially mentioned is `credentialsSecret` which is a [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. Sample [backup-s3.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) can be used to create this secret object. Check that it contains proper `name` value (equal to the one specified for `credentialsSecret`, i.e. `my-cluster-name-backup-s3` in the last example), and also proper `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. After editing is finished, secrets object should be created (or updated with the new name and/or keys) using the following command:
 
    ```bash
    $ kubectl apply -f deploy/backup-s3.yaml
@@ -71,7 +71,7 @@ Setting up Minio to be used with Percona Server for MongoDB Operator backups inv
          --description=my-backup```
    ```
 
-   Don't forget to specify the name of your cluster instead of the `<cluster-name>` part of the Backup Coordinator URL (the same cluster name which is specified in the [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file). Also `<storage>` should be substituted with the actual storage name, which is featured as a subsection inside of the `backups` one in [deploy/cr.yaml](https://github.com/Percona-Lab/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. In the upper example it is `minio`.
+   Don't forget to specify the name of your cluster instead of the `<cluster-name>` part of the Backup Coordinator URL (the same cluster name which is specified in the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file). Also `<storage>` should be substituted with the actual storage name, which is featured as a subsection inside of the `backups` one in [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file. In the upper example it is `minio`.
 
 5. To restore a previously saved backup you will need to specify the backup name. List of available backups can be obtained from the Backup Coordinator as follows (supposedly that you once again use the Backup Coordinator's proper URL and the storage name like you did in previous step):
 
