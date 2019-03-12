@@ -33,7 +33,7 @@ func PMMContainer(spec api.PMMSpec, secrets string) corev1.Container {
 				},
 			},
 			{
-				Name: "MONGODB_PASSWORD ",
+				Name: "MONGODB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
@@ -45,7 +45,7 @@ func PMMContainer(spec api.PMMSpec, secrets string) corev1.Container {
 			},
 			{
 				Name:  "DB_ARGS",
-				Value: "--uri=mongodb://$MONGODB_USER:$MONGODB_PASSWORD@127.0.0.1:27017",
+				Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
 			},
 		},
 	}

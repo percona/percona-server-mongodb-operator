@@ -1,0 +1,27 @@
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDB
+metadata:
+  name: monitoring
+spec:
+  #platform: openshift
+  image:
+  mongod:
+    operationProfiling:
+      mode: all
+      rateLimit: 1
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  pmm:
+    enabled: true
+    image: perconalab/pmm-client-fb:v.1.17.2-18536d0
+    serverHost: monitoring-service
+  secrets:
+    users: some-users
