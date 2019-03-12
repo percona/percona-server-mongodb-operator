@@ -55,6 +55,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupService(cr *api.PerconaSe
 		if err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("delete Service: %v", err)
 		}
+
+		return nil
 	}
 
 	err := setControllerReference(cr, cService, r.scheme)
