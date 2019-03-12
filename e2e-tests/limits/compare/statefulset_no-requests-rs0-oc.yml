@@ -3,9 +3,12 @@ kind: StatefulSet
 metadata:
   generation: 1
   labels:
-    app: percona-server-mongodb
-    percona-server-mongodb_cr: no-requests
-    replset: rs0
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: no-requests
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
   name: no-requests-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
@@ -18,28 +21,35 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: percona-server-mongodb
-      percona-server-mongodb_cr: no-requests
-      replset: rs0
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: no-requests
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
   serviceName: no-requests-rs0
   template:
     metadata:
       labels:
-        app: percona-server-mongodb
-        percona-server-mongodb_cr: no-requests
-        replset: rs0
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: no-requests
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
     spec:
       affinity:
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: percona-server-mongodb
-                  percona-server-mongodb_cr: no-requests
-                  replset: rs0
-              topologyKey: kubernetes.io/hostname
-            weight: 100
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: mongod
+                app.kubernetes.io/instance: no-requests
+                app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                app.kubernetes.io/name: percona-server-mongodb
+                app.kubernetes.io/part-of: percona-server-mongodb
+                app.kubernetes.io/replset: rs0
+            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - --bind_ip_all

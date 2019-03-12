@@ -6,24 +6,56 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
-  secrets:
-    key: some-key
-    users: some-users
-  replsets:
-  - name: rs0
-    size: 3
-    resources:
-      limits:
-        cpu: "500m"
-        memory: "1G"
-        storage: "1Gi"
-      requests:
-        cpu: "100m"
-        memory: "0.1G"
+  backup:
+    enabled: true
+    debug: true
+    restartOnFailure: true
+    image: perconalab/percona-server-mongodb-operator:0.3.0-backup
+    coordinator:
+      enableClientsLogging: true
+      resources:
+        limits:
+          cpu: 100m
+          memory: 0.2G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+          storage: 1Gi
+    storages:
+      aws-s3:
+        type: s3
+        s3:
+          credentialsSecret: aws-s3-secret
+          region: us-east-1
+          bucket: operator-testing
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+      gcp-cs:
+        type: s3
+        s3:
+          credentialsSecret: gcp-cs-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: https://storage.googleapis.com
+    tasks:
+    - name: weekly
+      enabled: true
+      schedule: "0 0 * * 0"
+      compressionType: gzip
+      storageName: aws-s3
   mongod:
     net:
-      port: 27017
       hostPort: 0
+      port: 27017
+    operationProfiling:
+      mode: slowOp
+      rateLimit: 1
+      slowOpThresholdMs: 100
     security:
       redactClientLogData: false
     setParameter:
@@ -39,43 +71,31 @@ spec:
         nsSize: 16
         smallfiles: false
       wiredTiger:
+        collectionConfig:
+          blockCompressor: snappy
         engineConfig:
           cacheSizeRatio: 0.5
           directoryForIndexes: false
           journalCompressor: snappy
-        collectionConfig:
-          blockCompressor: snappy
         indexConfig:
           prefixCompression: true
-    operationProfiling:
-      mode: slowOp
-      slowOpThresholdMs: 100
-      rateLimit: 1
-    #auditLog:
-    #  destination: file
-    #  format: BSON
-    #  filter: '{}'
-  backup:
-    enabled: false
-    version: 0.2.1
-    restartOnFailure: true
-    s3:
-      secret: s3-secret
-      bucket: psmdb-operator-testing
-      region: eu-central-1
-    coordinator:
-      resources:
-        limits:
-          cpu: "100m"
-          memory: "0.2G"
-          storage: "1Gi"
-        requests:
-          cpu: "100m"
-          memory: "0.1G"
-        #storageClass: aws-gp2
-      debug: false
-    tasks:
-    - name: weekly
-      enabled: true
-      schedule: "0 0 * * 0"
-      compressionType: gzip
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  secrets:
+    key: some-key
+    users: some-users

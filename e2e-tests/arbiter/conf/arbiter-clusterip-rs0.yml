@@ -6,30 +6,14 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
-  secrets:
-    key: some-key
-    users: some-users
-  replsets:
-  - name: rs0
-    size: 2
-    arbiter:
-      enabled: true
-      size: 1
-    expose:
-      enabled: true
-      exposeType: ClusterIP
-    resources:
-      limits:
-        cpu: "500m"
-        memory: "0.5G"
-      storage: "1Gi"
-      requests:
-        cpu: "100m"
-        memory: "0.1G"
   mongod:
     net:
-      port: 27017
       hostPort: 0
+      port: 27017
+    operationProfiling:
+      mode: slowOp
+      rateLimit: 1
+      slowOpThresholdMs: 100
     security:
       redactClientLogData: false
     setParameter:
@@ -45,19 +29,37 @@ spec:
         nsSize: 16
         smallfiles: false
       wiredTiger:
+        collectionConfig:
+          blockCompressor: snappy
         engineConfig:
           cacheSizeRatio: 0.5
           directoryForIndexes: false
           journalCompressor: snappy
-        collectionConfig:
-          blockCompressor: snappy
         indexConfig:
           prefixCompression: true
-    operationProfiling:
-      mode: slowOp
-      slowOpThresholdMs: 100
-      rateLimit: 1
-    #auditLog:
-    #  destination: file
-    #  format: BSON
-    #  filter: '{}'
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    arbiter:
+      enabled: true
+      size: 1
+    expose:
+      enabled: true
+      exposeType: ClusterIP
+    resources:
+      limits:
+        cpu: 500m
+        memory: 0.5G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 2
+  secrets:
+    key: some-key
+    users: some-users

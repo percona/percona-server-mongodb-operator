@@ -5,13 +5,18 @@ metadata:
 spec:
   #platform: openshift
   image:
-  secrets:
-    users: some-users
   replsets:
   - name: rs0
-    size: 3
-    resources:
-      storage: "1Gi"
+    affinity:
+      antiAffinityTopologyKey: none
     expose:
       enabled: true
       exposeType: LoadBalancer
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  secrets:
+    users: some-users

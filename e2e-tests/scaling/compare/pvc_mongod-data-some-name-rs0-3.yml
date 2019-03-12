@@ -5,9 +5,12 @@ metadata:
     pv.kubernetes.io/bind-completed: "yes"
     pv.kubernetes.io/bound-by-controller: "yes"
   labels:
-    app: percona-server-mongodb
-    percona-server-mongodb_cr: some-name
-    replset: rs0
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
   name: mongod-data-some-name-rs0-3
 spec:
   accessModes:
