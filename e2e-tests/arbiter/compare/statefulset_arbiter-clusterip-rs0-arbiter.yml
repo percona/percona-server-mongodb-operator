@@ -14,28 +14,34 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: percona-server-mongodb
-      percona-server-mongodb_cr: arbiter-clusterip
-      replset: rs0
+      app.kubernetes.io/component: arbiter
+      app.kubernetes.io/instance: arbiter-clusterip
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
   serviceName: arbiter-clusterip-rs0
   template:
     metadata:
       labels:
-        app: percona-server-mongodb
-        percona-server-mongodb_cr: arbiter-clusterip
-        replset: rs0
+        app.kubernetes.io/component: arbiter
+        app.kubernetes.io/instance: arbiter-clusterip
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
     spec:
       affinity:
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: percona-server-mongodb
-                  percona-server-mongodb_cr: arbiter-clusterip
-                  replset: rs0
-              topologyKey: kubernetes.io/hostname
-            weight: 100
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: arbiter-clusterip
+                app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                app.kubernetes.io/name: percona-server-mongodb
+                app.kubernetes.io/part-of: percona-server-mongodb
+                app.kubernetes.io/replset: rs0
+            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - --bind_ip_all
@@ -44,19 +50,9 @@ spec:
         - --port=27017
         - --replSet=rs0
         - --storageEngine=wiredTiger
-        - --slowms=100
+        - --slowms=0
         - --profile=1
-        - --rateLimit=1
-        - --wiredTigerCacheSizeGB=0.25
-        - --wiredTigerCollectionBlockCompressor=snappy
-        - --wiredTigerJournalCompressor=snappy
         - --wiredTigerIndexPrefixCompression=true
-        - --setParameter
-        - ttlMonitorSleepSecs=60
-        - --setParameter
-        - wiredTigerConcurrentReadTransactions=128
-        - --setParameter
-        - wiredTigerConcurrentWriteTransactions=128
         env:
         - name: SERVICE_NAME
           value: arbiter-clusterip
@@ -93,13 +89,7 @@ spec:
           tcpSocket:
             port: 27017
           timeoutSeconds: 2
-        resources:
-          limits:
-            cpu: 500m
-            memory: 500M
-          requests:
-            cpu: 100m
-            memory: 100M
+        resources: {}
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001

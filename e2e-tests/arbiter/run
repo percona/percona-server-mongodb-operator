@@ -19,29 +19,35 @@ check_cr_config() {
 
     # check if statefulset created with expected config
     compare_kubectl statefulset/$cluster-arbiter
-    arbiter_ip=$(get_service_ip $cluster-arbiter-0)
-    run_mongo "rs.conf()" "clusterAdmin:clusterAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)" "mongodb" ":27017" \
+
+    # wait for convergence
+    local arbiter_ip=$(get_service_ip $cluster-arbiter-0)
+    local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)"
+    sleep 90
+
+    run_mongo "rs.conf()" "clusterAdmin:clusterAdmin123456@$URI" "mongodb" ":27017" \
         | grep '"host" :' \
         | grep "$arbiter_ip"
 
     # check read and write
     run_mongo \
         'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-        "userAdmin:userAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1)" \
+        "userAdmin:userAdmin123456@$URI" \
         "mongodb" ":27017"
     run_mongo \
         'use myApp\n db.test.insert({ x: 100500 })' \
-        "myApp:myPass@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1)" \
+        "myApp:myPass@$URI" \
         "mongodb" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 
     desc 'kill Primary Pod, check reelection, check data'
-    initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)")
+    initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$URI")
     kubectl delete pods $initial_primary
-    changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)")
+    changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$URI")
     [ "$initial_primary" != "$changed_primary" ]
     wait_for_running $cluster 2
+    sleep 30
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 
