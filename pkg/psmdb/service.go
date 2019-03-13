@@ -22,7 +22,6 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 		"app.kubernetes.io/instance": m.Name,
 		"app.kubernetes.io/replset": replset.Name,
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/component": "mongod",
 		"app.kubernetes.io/part-of": "percona-server-mongodb",
 	}
 
@@ -67,7 +66,6 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 		"app.kubernetes.io/instance": m.Name,
 		"app.kubernetes.io/replset": replset.Name,
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/component": "mongod",
 		"app.kubernetes.io/part-of": "percona-server-mongodb",
 	}
 

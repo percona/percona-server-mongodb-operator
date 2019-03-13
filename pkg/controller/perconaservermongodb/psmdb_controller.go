@@ -221,7 +221,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			"app.kubernetes.io/instance":   cr.Name,
 			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-			"app.kubernetes.io/component":  "mongod",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		}
 
