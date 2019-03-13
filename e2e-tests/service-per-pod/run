@@ -19,14 +19,17 @@ check_cr_config() {
     compare_kubectl statefulset/$cluster
     compare_kubectl service/$cluster-0
 
+    local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"
+    sleep 90
+
     # check read and write
     run_mongo \
         'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-        "userAdmin:userAdmin123456@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)" \
+        "userAdmin:userAdmin123456@$URI" \
         "mongodb" ":27017"
     run_mongo \
         'use myApp\n db.test.insert({ x: 100500 })' \
-        "myApp:myPass@$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)" \
+        "myApp:myPass@$URI" \
         "mongodb" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
