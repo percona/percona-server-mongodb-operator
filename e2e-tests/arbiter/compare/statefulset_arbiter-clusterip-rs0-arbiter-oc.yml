@@ -2,6 +2,13 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
+  labels:
+    app.kubernetes.io/component: arbiter
+    app.kubernetes.io/instance: arbiter-clusterip
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
   name: arbiter-clusterip-rs0-arbiter
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
@@ -92,7 +99,6 @@ spec:
         resources: {}
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -105,8 +111,7 @@ spec:
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
       - name: arbiter-clusterip-intrnl-mongodb-key

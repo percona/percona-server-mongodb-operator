@@ -14,7 +14,6 @@ spec:
     protocol: TCP
     targetPort: 27017
   selector:
-    app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: another-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
