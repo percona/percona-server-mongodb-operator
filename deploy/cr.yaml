@@ -14,7 +14,7 @@ spec:
     users: my-cluster-name-mongodb-users
   pmm:
     enabled: false
-    image: perconalab/pmm-client-fb:v.1.17.2-18536d0
+    image: perconalab/pmm-client:1.17.1
     serverHost: monitoring-service
   replsets:
   - name: rs0
@@ -73,7 +73,7 @@ spec:
     operationProfiling:
       mode: slowOp
       slowOpThresholdMs: 100
-      rateLimit: 1
+      rateLimit: 100
     #auditLog:
     #  destination: file
     #  format: BSON

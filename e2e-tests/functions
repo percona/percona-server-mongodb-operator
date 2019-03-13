@@ -355,6 +355,58 @@ get_backup_name() {
     done
 }
 
+get_service_endpoint() {
+    local service=$1
+
+    local hostname=$(
+        kubectl get service/$service -o json \
+            | jq '.status.loadBalancer.ingress[].hostname' \
+            | sed -e 's/^"//; s/"$//;'
+    )
+    if [ $hostname != "null" ]; then
+        echo $hostname
+        return
+    fi
+
+    local ip=$(
+        kubectl get service/$service -o json \
+            | jq '.status.loadBalancer.ingress[].ip' \
+            | sed -e 's/^"//; s/"$//;'
+    )
+    if [ $ip != "null" ]; then
+        echo $ip
+        return
+    fi
+
+    exit 1
+}
+
+get_metric_values() {
+    local metric=$1
+    local instance=$2
+    local start=$($date -u "+%s" -d "-1 minute")
+    local end=$($date -u "+%s")
+    local endpoint=$(get_service_endpoint monitoring-service)
+    curl -s -k "https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=$metric%7Binstance%3D%22$instance%22%7D&start=$start&end=$end&step=60" \
+        | jq '.data.result[0].values[][1]'
+}
+
+get_qan_values() {
+    local instance=$1
+    local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
+    local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
+    local endpoint=$(get_service_endpoint monitoring-service)
+
+    local uuid=$(
+        curl -s -k "https://$endpoint/qan-api/instances?deleted=no" \
+            | jq '.[] | select(.Subsystem == "mongo" and .Name == "'$instance'") | .UUID' \
+            | sed -e 's/^"//; s/"$//;'
+    )
+
+    curl -s -k "https://$endpoint/qan-api/qan/profile/$uuid?begin=$start&end=$end&offset=0" \
+        | jq '.Query[].Fingerprint'
+}
+
 apply_cluster() {
     local file=$1
 
