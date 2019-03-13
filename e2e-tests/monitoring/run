@@ -17,7 +17,7 @@ if [ "$OPENSHIFT" == 1 ]; then
     platform=openshift
 fi
 helm del --purge monitoring || :
-helm install --name monitoring --set platform=$platform https://s3-us-west-2.amazonaws.com/percona-tmp/pmm-server-1.17.0.tgz
+helm install --name monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-1.17.1.tgz
 
 desc 'create PSMDB cluster'
 kubectl apply \
