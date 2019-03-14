@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: emptydir-rs0
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1alpha1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: emptydir
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: emptydir
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
+  serviceName: emptydir-rs0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: emptydir
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
+    spec:
+      containers:
+      - args:
+        - --bind_ip_all
+        - --auth
+        - --dbpath=/data/db
+        - --port=27017
+        - --replSet=rs0
+        - --storageEngine=wiredTiger
+        - --slowms=0
+        - --profile=1
+        - --wiredTigerIndexPrefixCompression=true
+        env:
+        - name: SERVICE_NAME
+          value: emptydir
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_REPLSET
+          value: rs0
+        envFrom:
+        - secretRef:
+            name: some-users
+            optional: false
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - mongodb-healthcheck
+            - k8s
+            - liveness
+          failureThreshold: 12
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: mongod
+        ports:
+        - containerPort: 27017
+          name: mongodb
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 8
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          tcpSocket:
+            port: 27017
+          timeoutSeconds: 2
+        resources: {}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: emptydir-intrnl-mongodb-key
+          readOnly: true
+        workingDir: /data/db
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: emptydir-intrnl-mongodb-key
+        secret:
+          defaultMode: 48
+          optional: false
+          secretName: emptydir-intrnl-mongodb-key
+      - emptyDir: {}
+        name: mongod-data
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate

@@ -1,0 +1,15 @@
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDB
+metadata:
+  name: emptydir
+spec:
+  image:
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    volumeSpec:
+      emptyDir: {}
+    size: 3
+  secrets:
+    users: some-users

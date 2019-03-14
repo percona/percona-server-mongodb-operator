@@ -1,0 +1,54 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+check_cr_config() {
+    local cluster="$1"
+
+    # apply cr config
+    apply_cluster $test_dir/conf/$cluster.yml
+
+    # check if at least 1 Pod started
+    wait_for_running $cluster 3
+
+    # check if statefulset created with expected config
+    compare_kubectl statefulset/$cluster
+
+    # write data, read from all
+    run_mongo \
+        'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+        "userAdmin:userAdmin123456@$cluster.$namespace"
+    run_mongo \
+        'use myApp\n db.test.insert({ x: 100500 })' \
+        "myApp:myPass@$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+
+    # delete cluster
+    kubectl delete \
+        -f $test_dir/conf/$cluster.yml
+}
+
+main() {
+    create_namespace $namespace
+    deploy_operator
+    kubectl apply \
+        -f $conf_dir/client.yml \
+        -f $conf_dir/secrets.yml \
+        -f $test_dir/conf/hostpath-helper.yml
+
+    desc 'check emptydir'
+    #check_cr_config "emptydir-rs0"
+
+    desc 'check hostpath'
+    check_cr_config "hostpath-rs0"
+
+    destroy $namespace
+}
+
+main
