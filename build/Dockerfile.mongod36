@@ -11,7 +11,7 @@ RUN export GNUPGHOME="$(mktemp -d)" \
         && gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A \
         && gpg --export --armor 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A > ${GNUPGHOME}/RPM-GPG-KEY-Percona \
         && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona \
-        && curl -L -o /tmp/percona-release.rpm https://repo.percona.com/percona/yum/percona-release-1.0-7.noarch.rpm \
+        && curl -L -o /tmp/percona-release.rpm https://repo.percona.com/percona/yum/percona-release-1.0-9.noarch.rpm \
         && rpmkeys --checksig /tmp/percona-release.rpm \
         && yum install -y /tmp/percona-release.rpm \
         && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm \
