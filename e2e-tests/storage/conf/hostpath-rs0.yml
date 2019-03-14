@@ -1,0 +1,17 @@
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDB
+metadata:
+  name: hostpath
+spec:
+  image:
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    volumeSpec:
+      hostPath:
+        path: /tmp/data-dir
+        type: Directory
+    size: 3
+  secrets:
+    users: some-users
