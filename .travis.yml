@@ -51,6 +51,8 @@ jobs:
     - ./e2e-tests/scaling/run
   - stage: "E2E"
     script:
+    - ./e2e-tests/storage/run
+    - ./e2e-tests/monitoring/run
     - ./e2e-tests/arbiter/run
     - ./e2e-tests/service-per-pod/run
   - stage: "E2E"
