@@ -4,13 +4,14 @@ metadata:
   name: my-cluster-name
 spec:
   pause: false
-  #platform: openshift
+#  platform: openshift
   image: percona/percona-server-mongodb-operator:0.3.0-mongod4.0.6
+  imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-  imagePullPolicy: Always
+#  runUid: 1001
+  allowUnsafeConfigurations: false
   secrets:
-    key: my-cluster-name-mongodb-key
     users: my-cluster-name-mongodb-users
   pmm:
     enabled: false
@@ -19,12 +20,63 @@ spec:
   replsets:
   - name: rs0
     size: 3
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+#      advanced:
+#        nodeAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#            nodeSelectorTerms:
+#            - matchExpressions:
+#              - key: kubernetes.io/e2e-az-name
+#                operator: In
+#                values:
+#                - e2e-az1
+#                - e2e-az2
+#    tolerations: 
+#    - key: "node.alpha.kubernetes.io/unreachable"
+#      operator: "Exists"
+#      effect: "NoExecute"
+#      tolerationSeconds: 6000
+#    priorityClassName: high-priority
+#    annotations:
+#      iam.amazonaws.com/role: role-arn
+#    labels:
+#      rack: rack-22
+#    nodeSelector:
+#      disktype: ssd
+    podDisruptionBudget:
+      maxUnavailable: 1
+#      minAvailable: 0
     expose:
       enabled: false
       exposeType: LoadBalancer
     arbiter:
-      enabled: true
+      enabled: false
       size: 1
+      affinity:
+       antiAffinityTopologyKey: "kubernetes.io/hostname"
+#       advanced:
+#         nodeAffinity:
+#           requiredDuringSchedulingIgnoredDuringExecution:
+#             nodeSelectorTerms:
+#             - matchExpressions:
+#               - key: kubernetes.io/e2e-az-name
+#                 operator: In
+#                 values:
+#                 - e2e-az1
+#                 - e2e-az2
+#     tolerations: 
+#     - key: "node.alpha.kubernetes.io/unreachable"
+#       operator: "Exists"
+#       effect: "NoExecute"
+#       tolerationSeconds: 6000
+#     priorityClassName: high-priority
+#     annotations:
+#       iam.amazonaws.com/role: role-arn
+#     labels:
+#       rack: rack-22
+#     nodeSelector:
+#       disktype: ssd
     resources:
       limits:
         cpu: "300m"
@@ -94,6 +146,30 @@ spec:
           memory: "0.1G"
           storage: "1Gi"
       #storageClass: aws-gp2
+      affinity:
+       antiAffinityTopologyKey: "kubernetes.io/hostname"
+#       advanced:
+#         nodeAffinity:
+#           requiredDuringSchedulingIgnoredDuringExecution:
+#             nodeSelectorTerms:
+#             - matchExpressions:
+#               - key: kubernetes.io/e2e-az-name
+#                 operator: In
+#                 values:
+#                 - e2e-az1
+#                 - e2e-az2
+#     tolerations: 
+#     - key: "node.alpha.kubernetes.io/unreachable"
+#       operator: "Exists"
+#       effect: "NoExecute"
+#       tolerationSeconds: 6000
+#     priorityClassName: high-priority
+#     annotations:
+#       iam.amazonaws.com/role: role-arn
+#     labels:
+#       rack: rack-22
+#     nodeSelector:
+#       disktype: ssd
     storages:
       s3-us-west:
         type: s3
