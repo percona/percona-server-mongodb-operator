@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
@@ -469,30 +470,47 @@ func (r *ReconcilePerconaServerMongoDB) getReplsetDialInfo(m *api.PerconaServerM
 // getReplsetAddrs returns a slice of replset host:port addresses
 func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) []string {
 	addrs := make([]string, 0)
-	var hostname string
 
 	if replset.Expose.Enabled {
 		for _, pod := range pods {
-			svc, err := r.getExtServices(m, pod.Name)
+			hostname, err := r.getExtAddr(m.Namespace, pod)
 			if err != nil {
-				log.Error(err, "failed to fetch service address")
+				log.Error(err, "failed to get external hostname")
 				continue
 			}
-			hostname, err := psmdb.GetServiceAddr(*svc, pod, r.client)
-			if err != nil {
-				log.Error(err, "failed to get service hostname")
-				continue
-			}
-			addrs = append(addrs, hostname.String())
+
+			addrs = append(addrs, hostname)
 		}
 	} else {
 		for _, pod := range pods {
-			hostname = podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
-			addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
+			addrs = append(addrs, getAddr(m, pod.Name, replset.Name))
 		}
 	}
 	return addrs
 }
+
+func (r *ReconcilePerconaServerMongoDB) getExtAddr(namespace string, pod corev1.Pod) (string, error) {
+	svc, err := r.getExtServices(namespace, pod.Name)
+	if err != nil {
+		return "", fmt.Errorf("fetch service address: %v", err)
+	}
+
+	hostname, err := psmdb.GetServiceAddr(*svc, pod, r.client)
+	if err != nil {
+		return "", fmt.Errorf("get service hostname: %v", err)
+	}
+
+	return hostname.String(), nil
+}
+
+const clusterServiceDNSSuffix = "svc.cluster.local"
+
+func getAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
+	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, clusterServiceDNSSuffix}, ".") +
+		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
+}
+
+// func (r *ReconcilePerconaServerMongoDB) getExtAddr() string
 
 // ensureWatchdog ensures the PSMDB watchdog has started. This process controls the replica set and sharding
 // state of a PSMDB cluster.
@@ -549,7 +567,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 		}
 
 		if replset.Expose.Enabled {
-			svc, err := r.getExtServices(m, pod.Name)
+			svc, err := r.getExtServices(m.Namespace, pod.Name)
 			if err != nil {
 				return fmt.Errorf("failed to fetch services: %v", err)
 			}
@@ -613,13 +631,13 @@ func isPodReady(pod corev1.Pod) bool {
 	return false
 }
 
-func (r *ReconcilePerconaServerMongoDB) getExtServices(m *api.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
+func (r *ReconcilePerconaServerMongoDB) getExtServices(namespace, podName string) (*corev1.Service, error) {
 	var retries uint64 = 0
 
 	svcMeta := &corev1.Service{}
 
 	for retries <= 5 {
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: m.Namespace}, svcMeta)
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
 
 		if err != nil {
 			if errors.IsNotFound(err) {
