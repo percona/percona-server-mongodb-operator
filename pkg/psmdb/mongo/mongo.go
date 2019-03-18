@@ -1,7 +1,11 @@
-package conductor
+package mongo
 
 import (
+	"time"
+
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Replica Set tags: https://docs.mongodb.com/manual/tutorial/configure-replica-set-tag-sets/#add-tag-sets-to-a-replica-set
@@ -49,9 +53,18 @@ type WriteConcern struct {
 	Journal      bool        `bson:"j,omitempty" json:"j,omitempty"`
 }
 
-// func SetMembers(pods []corev1.Pod) []Member {
-// 	members := []Member{}
-// 	for _, pod := range pods {
-// 		members = append(members)
-// 	}
-// }
+const (
+	envMongoDBClusterAdminUser     = "MONGODB_CLUSTER_ADMIN_USER"
+	envMongoDBClusterAdminPassword = "MONGODB_CLUSTER_ADMIN_PASSWORD"
+)
+
+func Dial(addrs []string, replset string, usersSecret *corev1.Secret) (*mgo.Session, error) {
+	return mgo.DialWithInfo(&mgo.DialInfo{
+		Addrs:          addrs,
+		ReplicaSetName: replset,
+		Username:       string(usersSecret.Data[envMongoDBClusterAdminUser]),
+		Password:       string(usersSecret.Data[envMongoDBClusterAdminPassword]),
+		Timeout:        3 * time.Second,
+		FailFast:       true,
+	})
+}
