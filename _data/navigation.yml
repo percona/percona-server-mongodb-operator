@@ -33,3 +33,5 @@ docs:
         url: ./configure/arbiter
       - title: "Expose nodes"
         url: ./configure/expose
+      - title: "Nodes Assignment"
+        url: ./configure/constraints

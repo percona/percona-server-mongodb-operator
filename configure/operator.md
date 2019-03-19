@@ -9,6 +9,7 @@ The operator is configured via the spec section of the [deploy/cr.yaml](https://
 | version | string | 3.6.8      | The Dockerhub tag of [percona/percona-server-mongodb](https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/) to deploy |
 | secrets | subdoc |            | Operator secrets section                      |
 |replsets | array  |            | Operator MongoDB Replica Set section          |
+| pmm     | subdoc |            | Percona Monitoring and Management section     |
 | mongod  | subdoc |            | Operator MongoDB Mongod configuration section |
 | backup  | subdoc |            | Percona Server for MongoDB backups section    |
 
@@ -33,6 +34,15 @@ The replsets section controls the MongoDB Replica Set.
 |storageClass             | string     |         | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
 |arbiter.enabled          | boolean    | false   | Enable or disable creation of [Replica Set Arbiter](https://docs.mongodb.com/manual/core/replica-set-arbiter/) nodes within the cluster         |
 |arbiter.size             | int        |         | The number of [Replica Set Arbiter](https://docs.mongodb.com/manual/core/replica-set-arbiter/) nodes within the cluster          |
+|arbiter.affinity.antiAffinityTopologyKey|string|`kubernetes.io/hostname`| The [Kubernetes topologyKey](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature) node affinity constraint for the Arbiter |
+|arbiter.tolerations.key                 | string     | `node.alpha.kubernetes.io/unreachable` | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) key  for the Arbiter nodes|
+|arbiter.tolerations.operator            | string     | `Exists`  | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) operator  for the Arbiter nodes|
+|arbiter.tolerations.effect              | string     |`NoExecute`| The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) effect for the Arbiter nodes|
+|arbiter.tolerations.tolerationSeconds   | int | `6000`    | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) time limit  for the Arbiter nodes|
+|arbiter.priorityClassName               | string     | `high-priority`  | The [Kuberentes Pod priority class](https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass)  for the Arbiter nodes|
+|arbiter.annotations.iam.amazonaws.com/role | string |`role-arn`| The [AWS IAM role](https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html)  for the Arbiter nodes                             |
+|arbiter.labels                          | label      | `rack: rack-22` | The [Kubernetes affinity labels](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/)  for the Arbiter nodes                      |
+|arbiter.nodeSelector                    | label      | `disktype: ssd`        | The [Kubernetes nodeSelector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector) affinity constraint  for the Arbiter nodes|
 |expose.enabled           | boolean    | false   | Enable or disable exposing [MongoDB Replica Set](https://docs.mongodb.com/manual/replication/) nodes with dedicated IP addresses         |
 |expose.exposeType        | string     |ClusterIP| the [IP address type](./expose) to be exposed         |
 |resources.limits.cpu     | string     |         |[Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container|
@@ -40,6 +50,25 @@ The replsets section controls the MongoDB Replica Set.
 |resources.limits.storage | string     |         | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for [Persistent Volume Claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) |
 |resources.requests.cpu   | string     |         | [Kubernetes CPU requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container|
 |resources.requests.memory| string     |         | [Kubernetes Memory requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for MongoDB container|
+|affinity.antiAffinityTopologyKey|string|`kubernetes.io/hostname`| The [Kubernetes topologyKey](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature) node affinity constraint for the Replica Set nodes|
+|tolerations.key                 | string     | `node.alpha.kubernetes.io/unreachable` | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) key for the Replica Set nodes |
+|tolerations.operator            | string     | `Exists`  | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) operator  for the Replica Set nodes          |
+|tolerations.effect              | string     |`NoExecute`| The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) effect  for the Replica Set nodes            |
+|tolerations.tolerationSeconds   | int | `6000`    | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) time limit  for the Replica Set nodes        |
+|priorityClassName               | string     | `high-priority`  | The [Kuberentes Pod priority class](https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass)  for the Replica Set nodes|
+|annotations.iam.amazonaws.com/role | string |`role-arn`| The [AWS IAM role](https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html)  for the Replica Set nodes                             |
+|labels                          | label      | `rack: rack-22` | The [Kubernetes affinity labels](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/)  for the Replica Set nodes                      |
+|nodeSelector                    | label      | `disktype: ssd`        | The [Kubernetes nodeSelector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector) affinity constraint  for the Replica Set nodes|
+
+### PMM Section
+
+The ``pmm`` section in the deploy/cr.yaml file contains configuration options for Percona Monitoring and Management.
+
+| Key       | Value Type | Example               | Description                    |
+|-----------|------------|-----------------------|--------------------------------|
+|enabled    | boolean    | `false`               | Enables or disables monitoring Percona Server for MongoDB with [PMM](https://www.percona.com/doc/percona-monitoring-and-management/index.metrics-monitor.dashboard.html) |
+|image      | string     |`perconalab/pmm-client:1.17.1`| PMM Client docker image to use |
+|serverHost | string     | `monitoring-service`  | Address of the PMM Server to collect data from the Cluster |
 
 ### Mongod Section
 
@@ -86,7 +115,15 @@ The ``backup`` section in the [deploy/cr.yaml](https://github.com/percona/percon
 |coordinator.resources.limits.cpu| string     |`100m`     | Kubernetes CPU limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
 |coordinator.resources.limits.memory | string |`0.2G`     | [Kubernetes Memory limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
 |coordinator.resources.limits.storage| string |`1Gi`      | [Kubernetes Storage limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the MongoDB Coordinator container  |
-
+|affinity.antiAffinityTopologyKey|string|`kubernetes.io/hostname`| The [Kubernetes topologyKey](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature) node affinity constraint for the backup storage|
+|tolerations.key                 | string     | `node.alpha.kubernetes.io/unreachable` | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) key  for the backup storage nodes|
+|tolerations.operator            | string     | `Exists`  | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) operator  for the backup storage nodes|
+|tolerations.effect              | string     |`NoExecute`| The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) effect for the backup storage nodes|
+|tolerations.tolerationSeconds   | int | `6000`    | The [Kubernetes Pod tolerations] (https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts) time limit  for the backup storage nodes|
+|priorityClassName               | string     | `high-priority`  | The [Kuberentes Pod priority class](https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass)  for the backup storage nodes|
+|annotations.iam.amazonaws.com/role | string |`role-arn`| The [AWS IAM role](https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html)  for the backup storage nodes                             |
+|labels                          | label      | `rack: rack-22` | The [Kubernetes affinity labels](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/)  for the backup storage nodes                      |
+|nodeSelector                    | label      | `disktype: ssd`        | The [Kubernetes nodeSelector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector) affinity constraint  for the backup storage nodes|
 |coordinator.requests.storage    | string     | `1Gi`     | The [Kubernetes Persistent Volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) size for the MongoDB Coordinator container                           |
 |coordinator.requests.storageClass | string   | `aws-gp2` | Set the [Kubernetes Storage Class](https://kubernetes.io/docs/concepts/storage/storage-classes/) to use with the MongoDB Coordinator container                      |
 |coordinator.debug               | string     | `false`   | Enables or disables debug mode for the MongoDB Coordinator operation     |
