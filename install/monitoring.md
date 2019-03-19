@@ -28,7 +28,7 @@ Following steps are needed to install both PMM Client and PMM Server preconfigur
 4. Now the PMM is installed, and it is time to update ``pmm`` section in the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file.
    * set `pmm.enabled=true`
    * make sure that `serverHost` (the PMM service name, `monitoring-service` by default) is the same as one specified for the `name` parameter on the previous step, but with additional `-service` suffix.
-   * make sure that `MONGODB_CLUSTER_MONITOR_USER` and `MONGODB_CLUSTER_MONITOR_PASSWORD` keys in the [deploy/mongodb-users.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/mongodb-users.yaml) secrets file are the same as ones specified for the `credentials.username` and `credentials.password` parameters on the previous step (if not, fix it and apply with the `kubectl apply -f deploy/mongodb-users.yaml` command).
+   * make sure that `PMM_USER` and `PMM_PASSWORD` keys in the [deploy/mongodb-users.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/mongodb-users.yaml) secrets file are the same as ones specified for the `credentials.username` and `credentials.password` parameters on the previous step (if not, fix it and apply with the `kubectl apply -f deploy/mongodb-users.yaml` command).
 
    When done, apply the edited `deploy/cr.yaml` file:
 
