@@ -44,6 +44,28 @@ func PMMContainer(spec api.PMMSpec, secrets string) corev1.Container {
 				},
 			},
 			{
+				Name: "PMM_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "PMM_SERVER_PASSWORD",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secrets,
+						},
+					},
+				},
+			},
+			{
+				Name: "PMM_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "PMM_SERVER_PASSWORD",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secrets,
+						},
+					},
+				},
+			},
+			{
 				Name:  "DB_ARGS",
 				Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
 			},

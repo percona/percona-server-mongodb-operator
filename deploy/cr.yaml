@@ -12,7 +12,7 @@ spec:
 #  runUid: 1001
   allowUnsafeConfigurations: false
   secrets:
-    users: my-cluster-name-mongodb-users
+    users: my-cluster-name-secrets
   pmm:
     enabled: false
     image: perconalab/pmm-client:1.17.1
