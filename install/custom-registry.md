@@ -81,15 +81,12 @@ Using images from a private Docker registry may be useful in different situation
 
 Following table presents Percona's certified images to be used with the Percona Server for MongoDB Operator:
 
-### 0.2.1-mongod3.6
+### 0.3.0
 
 | Image                                                       | Digest                                                           |
 |-------------------------------------------------------------|------------------------------------------------------------------|
-| perconalab/percona-server-mongodb-operator:0.2.1-mongod3.6  | 69c935ac93d448db76f257965470367683202f725f50d6054eae1c3d2e731b9a |
-
-
-### 0.1.0
-
-| Image                                             | Digest                                                           |
-|---------------------------------------------------|------------------------------------------------------------------|
-| perconalab/percona-server-mongodb-operator:0.1.0  | 7728e707ae3f6094fc101e3a3b973a854b030028e0b4fadab5a66f33cb271a54 |
+| percona/percona-server-mongodb-operator:0.3.0               | 69d2018790ed14de1a79bef1fd7afc5fb91b57374f1e4ca33e5f48996646bb3e |
+| percona/percona-server-mongodb-operator:0.3.0-mongod3.6.10  | a02a10c9e0bc36fac2b1a7e1215832c5816abfbbe0018fca61d133835140b4e8 |
+| percona/percona-server-mongodb-operator:0.3.0-mongod4.0.6   | 0849fee6073e85414ca36d4f394046342d623292f03e9d3afd5bd5b02e6df812 |
+| percona/percona-server-mongodb-operator:0.3.0-backup        | 5a32ddf1194d862b5f6f3826fa85cc4f3c367ccd8e69e501f27b6bf94f7e3917 |
+| perconalab/pmm-client:1.17.1                                | f762cda2eda9ef17bfd1242ede70ee72595611511d8d0c5c46931ecbc968e9af |
