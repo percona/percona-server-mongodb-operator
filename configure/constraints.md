@@ -115,6 +115,9 @@ See the [Kubernetes Pods Priority and Preemption documentation](https://kubernet
 
 ## Pod Disruption Budgets
 
-Creating the *Pod Disruption Budget* is the Kubernetes style to limits the number of Pods of an application that can go down simultaneously due to such *voluntary disruptions* as cluster administrator's actions during the update of deployments or nodes, etc. By such a way Distribution Budgets allow large applications to retain their high availability while maintenance and other administrative activities.
+Creating the [Pod Disruption Budget](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) is the Kubernetes style to limits the number of Pods of an application that can go down simultaneously due to such *voluntary disruptions* as cluster administrator's actions during the update of deployments or nodes, etc. By such a way Distribution Budgets allow large applications to retain their high availability while maintenance and other administrative activities. The ``maxUnavailable`` and ``minAvailable``  options in the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file can be used to set these limits. The recommended variant is the following one:
 
-We recommend to apply Pod Disruption Budgets manually to avoid situation when Kubernetes stopped all your database Pods. See [the official Kubernetes documentation](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) for details.
+   ```
+   podDisruptionBudget:
+      maxUnavailable: 1
+   ```
