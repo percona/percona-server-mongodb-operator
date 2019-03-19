@@ -59,6 +59,8 @@ The replsets section controls the MongoDB Replica Set.
 |annotations.iam.amazonaws.com/role | string |`role-arn`| The [AWS IAM role](https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html)  for the Replica Set nodes                             |
 |labels                          | label      | `rack: rack-22` | The [Kubernetes affinity labels](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/)  for the Replica Set nodes                      |
 |nodeSelector                    | label      | `disktype: ssd`        | The [Kubernetes nodeSelector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector) affinity constraint  for the Replica Set nodes|
+|podDisruptionBudget.maxUnavailable | int     | 1 | The [Kubernetes Pod distribution budget](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) limit specifying the maximum value for unavailable Pods              |
+|podDisruptionBudget.minAvailable | int     | 1 | The [Kubernetes Pod distribution budget](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/) limit specifying the minimum value for available Pods           |
 
 ### PMM Section
 
