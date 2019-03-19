@@ -8,6 +8,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	MaxVotingMembers = 7
+	MaxMembers       = 50
+)
+
 // Replica Set tags: https://docs.mongodb.com/manual/tutorial/configure-replica-set-tag-sets/#add-tag-sets-to-a-replica-set
 type ReplsetTags map[string]string
 
@@ -25,7 +30,7 @@ type Member struct {
 }
 
 type Cluster struct {
-	Name                               string   `bson:"_id" json:"_id"`
+	ID                                 string   `bson:"_id" json:"_id"`
 	Version                            int      `bson:"version" json:"version"`
 	Members                            []Member `bson:"members" json:"members"`
 	Configsvr                          bool     `bson:"configsvr,omitempty" json:"configsvr,omitempty"`

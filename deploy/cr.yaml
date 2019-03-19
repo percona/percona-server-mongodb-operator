@@ -18,7 +18,7 @@ spec:
     serverHost: monitoring-service
   replsets:
   - name: rs0
-    size: 3
+    size: 2
     expose:
       enabled: false
       exposeType: LoadBalancer

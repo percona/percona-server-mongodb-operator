@@ -26,6 +26,8 @@ import (
 // 	return members
 // }
 
+var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
+
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
 	session, err := mongo.Dial(r.getReplsetAddrs(cr, replset, pods.Items), replset.Name, usersSecret)
 	if err != nil {
@@ -35,30 +37,68 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	}
 	defer session.Close()
 
-	// mongo.Members(pods.Items)
+	// cluster := mongo.Cluster{
+	// 	ID: replset.Name,
+	// }
 
-	return nil
+	for key, pod := range pods.Items {
+		if key >= mongo.MaxMembers {
+			err = errReplsetLimit
+			break
+		}
+
+		host, err := r.mongoHost(cr, replset, pod)
+		if err != nil {
+			return fmt.Errorf("get host for pod %s: %v", pod.Name, err)
+		}
+
+		member := mongo.Member{
+			ID:           key,
+			Host:         host,
+			BuildIndexes: true,
+		}
+
+		if key < mongo.MaxVotingMembers {
+			member.Votes = 1
+		}
+
+		switch pod.Labels["app.kubernetes.io/component"] {
+		case "arbiter":
+			member.ArbiterOnly = true
+			member.Priority = 0
+		case "mongod":
+			member.Priority = member.Votes
+			member.Tags = mongo.ReplsetTags{
+				"serviceName": cr.Name,
+			}
+		}
+	}
+
+	return err
 }
 
 // getReplsetAddrs returns a slice of replset host:port addresses
 func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) []string {
 	addrs := make([]string, 0)
 
-	if replset.Expose.Enabled {
-		for _, pod := range pods {
-			hostname, err := r.getExtAddr(m.Namespace, pod)
-			if err != nil {
-				log.Error(err, "failed to get external hostname")
-				continue
-			}
-			addrs = append(addrs, hostname)
+	for _, pod := range pods {
+		host, err := r.mongoHost(m, replset, pod)
+		if err != nil {
+			log.Error(err, "failed to get external hostname")
+			continue
 		}
-	} else {
-		for _, pod := range pods {
-			addrs = append(addrs, getAddr(m, pod.Name, replset.Name))
-		}
+		addrs = append(addrs, host)
 	}
+
 	return addrs
+}
+
+func (r *ReconcilePerconaServerMongoDB) mongoHost(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) (string, error) {
+	if replset.Expose.Enabled {
+		return r.getExtAddr(m.Namespace, pod)
+	}
+
+	return getAddr(m, pod.Name, replset.Name), nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getExtAddr(namespace string, pod corev1.Pod) (string, error) {
