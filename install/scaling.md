@@ -1,5 +1,5 @@
 Scale Percona Server for MongoDB on Kubernetes and OpenShift
-----------------------------------------------------------
+------------------------------------------------------------
 
 One of the great advantages brought by Kubernetes and the OpenShift platform is the ease of an application scaling. Scaling a Deployment up or down ensures new Pods are created and set to available Kubernetes nodes.
 
