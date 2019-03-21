@@ -110,7 +110,7 @@ The ``backup`` section in the [deploy/cr.yaml](https://github.com/percona/percon
 | Key                            | Value Type | Example   | Description                                   |
 |--------------------------------|------------|-----------|-----------------------------------------------|
 |enabled                         | boolean    | `false`   | Enables or disables the backups functionality |
-|version                         | string     | `0.2.1`   |                                               |
+|version                         | string     | `0.3.0`   |                                               |
 |restartOnFailure                | boolean    | `true`    |                                               |
 |storages.type                   | string     | `s3`      | Type of the cloud storage to be used for backups. Currently only `s3` type is supported                                                          |
 |storages.s3.credentialsSecret   | string     | `my-cluster-name-backup-s3`| [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. It should contain `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. |

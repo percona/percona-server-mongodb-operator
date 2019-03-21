@@ -44,7 +44,7 @@ Here is an example which uses Amazon S3 storage for backups:
 
 **Note:** *if you use some S3-compatible storage instead of the original Amazon S3, one more key is needed in the `s3` subsection: the `endpointUrl`, which points to the actual cloud used for backups and is specific to the cloud provider. For example, using [Google Cloud](https://cloud.google.com) involves the following one: `endpointUrl: https://storage.googleapis.com`.*
 
-The options within these three subsections are further explained in the [Operator Options](https://percona-lab.github.io/percona-xtradb-cluster-operator/configure/operator).
+The options within these three subsections are further explained in the [Operator Options](https://percona.github.io/percona-xtradb-cluster-operator/configure/operator).
 
 The only option which should be mentioned separately is `credentialsSecret` which is a [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/) for backups. Sample [backup-s3.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml) can be used to create this secret object. Check that it contains proper `name` value (equal to the one specified for `credentialsSecret`, i.e. `my-cluster-name-backup-s3` in the last example), and also proper `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys. After editing is finished, secrets object should be created (or updated with the new name and/or keys) using the following command:
 
