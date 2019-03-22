@@ -19,8 +19,10 @@ spec:
   replsets:
   - name: rs0
     size: 2
+    affinity:
+      antiAffinityTopologyKey: "none"
     expose:
-      enabled: false
+      enabled: true
       exposeType: LoadBalancer
     arbiter:
       enabled: true

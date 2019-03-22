@@ -8,23 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
-
-// func SetMembers(pods []corev1.Pod) []mongo.Member {
-// 	members := []mongo.Member{}
-// 	for _, pod := range pods {
-// 		members = append(members)
-// 	}
-
-// 	return members
-// }
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
@@ -37,10 +29,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	}
 	defer session.Close()
 
-	// cluster := mongo.Cluster{
-	// 	ID: replset.Name,
-	// }
+	cnf, err := mongo.ReadConfig(session)
+	if err != nil {
+		return errors.Wrap(err, "get mongo config")
+	}
 
+	members := mongo.RSMembers{}
 	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
 			err = errReplsetLimit
@@ -58,23 +52,41 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			BuildIndexes: true,
 		}
 
-		if key < mongo.MaxVotingMembers {
-			member.Votes = 1
-		}
-
 		switch pod.Labels["app.kubernetes.io/component"] {
 		case "arbiter":
 			member.ArbiterOnly = true
 			member.Priority = 0
 		case "mongod":
-			member.Priority = member.Votes
 			member.Tags = mongo.ReplsetTags{
 				"serviceName": cr.Name,
 			}
 		}
+
+		members = append(members, member)
 	}
 
-	return err
+	if cnf.Members.RemoveOld(members) {
+		cnf.Members.SetVotes()
+
+		cnf.Version++
+		err = mongo.WriteConfig(session, cnf)
+		if err != nil {
+			return errors.Wrap(err, "delete: write mongo config")
+		}
+	}
+
+	if cnf.Members.AddNew(members) {
+		cnf.Members.RemoveOld(members)
+		cnf.Members.SetVotes()
+
+		cnf.Version++
+		err = mongo.WriteConfig(session, cnf)
+		if err != nil {
+			return errors.Wrap(err, "add new: write mongo config")
+		}
+	}
+
+	return nil
 }
 
 // getReplsetAddrs returns a slice of replset host:port addresses
@@ -216,7 +228,7 @@ func (r *ReconcilePerconaServerMongoDB) getExtServices(namespace, podName string
 		err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
 
 		if err != nil {
-			if errors.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				retries += 1
 				time.Sleep(500 * time.Millisecond)
 				log.Info("Service for %s not found. Retry", podName)

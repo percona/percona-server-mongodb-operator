@@ -268,7 +268,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		err = r.reconcileCluster(cr, replset, *pods, secrets)
 		if err != nil {
-			reqLogger.Error(err, "Failed to reconcile cluster", "replset", replset.Name)
+			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 	}
 
