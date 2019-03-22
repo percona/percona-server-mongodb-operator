@@ -262,34 +262,6 @@
   version = "v1.1.5"
 
 [[projects]]
-  digest = "1:05b6cc8603ca203244fc77d72978ab3346add31e8dca886b66599d8ff9cbe5af"
-  name = "github.com/klauspost/compress"
-  packages = [
-    "flate",
-    "gzip",
-    "zlib",
-  ]
-  pruneopts = "NT"
-  revision = "30be6041bed523c18e269a700ebd9c2ea9328574"
-  version = "v1.4.1"
-
-[[projects]]
-  digest = "1:486e8431071ab1edb434ddeb78410ab1a92a3d8f8a9d7c6a3d1743fd92485959"
-  name = "github.com/klauspost/cpuid"
-  packages = ["."]
-  pruneopts = "NT"
-  revision = "e7e905edc00ea8827e58662220139109efea09db"
-  version = "v1.2.0"
-
-[[projects]]
-  digest = "1:4059c14e87a2de3a434430340521b5feece186c1469eff0834c29a63870de3ed"
-  name = "github.com/konsorten/go-windows-terminal-sequences"
-  packages = ["."]
-  pruneopts = "NT"
-  revision = "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242"
-  version = "v1.0.1"
-
-[[projects]]
   branch = "master"
   digest = "1:7d9fcac7f1228470c4ea0ee31cdfb662a758c44df691e39b3e76c11d3e12ba8f"
   name = "github.com/mailru/easyjson"
@@ -353,29 +325,6 @@
   pruneopts = "NT"
   revision = "adf5a7427709b9deb95d29d3fa8a2bf9cfd388f1"
   version = "v1.2"
-
-[[projects]]
-  digest = "1:710b83d54afc6fbbefe45c6ab6dfffb76fef4d2bc2a5668ede7bfeaa01ee7236"
-  name = "github.com/percona/mongodb-orchestration-tools"
-  packages = [
-    ".",
-    "internal/db",
-    "internal/dcos",
-    "internal/dcos/api",
-    "pkg",
-    "pkg/db",
-    "pkg/pod",
-    "pkg/pod/dcos",
-    "pkg/pod/k8s",
-    "watchdog",
-    "watchdog/config",
-    "watchdog/metrics",
-    "watchdog/replset",
-    "watchdog/watcher",
-  ]
-  pruneopts = "T"
-  revision = "7d64c3fef0052e90faaec71d1c4bec531040f893"
-  version = "0.4.2"
 
 [[projects]]
   digest = "1:8223bfd52ce6b3cf4bfafc1c49dd7e1e4bc8bc2c997372c9e2cca12c2b56c24b"
@@ -466,14 +415,6 @@
   revision = "b1a0a9a36d7453ba0f62578b99712f3a6c5f82d1"
 
 [[projects]]
-  digest = "1:1f84287a4ca2c8f729d8155ba4c45915f5854ebbd214e406070779753da68422"
-  name = "github.com/sirupsen/logrus"
-  packages = ["."]
-  pruneopts = "NT"
-  revision = "e1e72e9de974bd926e5c56f83753fba2df402ce5"
-  version = "v1.3.0"
-
-[[projects]]
   digest = "1:9d8420bbf131d1618bde6530af37c3799340d3762cc47210c1d9532a4c3a2779"
   name = "github.com/spf13/pflag"
   packages = ["."]
@@ -488,37 +429,6 @@
   pruneopts = "NT"
   revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
   version = "v1.3.0"
-
-[[projects]]
-  digest = "1:3c6a707aed0dc09fe8b8ba6476b6b48c0356d1c8004257b5a98ec92fb615f6da"
-  name = "github.com/timvaillancourt/go-mongodb-replset"
-  packages = [
-    "config",
-    "status",
-  ]
-  pruneopts = "NT"
-  revision = "173aaa3b66aff9a03babec116e1f5a2570b8e4be"
-  version = "0.2.0"
-
-[[projects]]
-  digest = "1:af354641f23332b1a8d5d361d11b5a9171589e412a67d499633706c611acc064"
-  name = "github.com/valyala/bytebufferpool"
-  packages = ["."]
-  pruneopts = "NT"
-  revision = "e746df99fe4a3986f4d4f79e13c1e0117ce9c2f7"
-  version = "v1.0.0"
-
-[[projects]]
-  digest = "1:6bbc2501a704c4dbe04d87b7f361a8a21e7408b1b1a97f6d0b6383130802da7c"
-  name = "github.com/valyala/fasthttp"
-  packages = [
-    ".",
-    "fasthttputil",
-    "stackless",
-  ]
-  pruneopts = "NT"
-  revision = "e5f51c11919d4f66400334047b897ef0a94c6f3c"
-  version = "v20180529"
 
 [[projects]]
   digest = "1:22f696cee54865fb8e9ff91df7b633f6b8f22037a8015253c6b6a71ca82219c7"
@@ -990,20 +900,19 @@
     "github.com/operator-framework/operator-sdk/pkg/leader",
     "github.com/operator-framework/operator-sdk/pkg/ready",
     "github.com/operator-framework/operator-sdk/version",
-    "github.com/percona/mongodb-orchestration-tools/pkg",
-    "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s",
-    "github.com/percona/mongodb-orchestration-tools/watchdog",
-    "github.com/percona/mongodb-orchestration-tools/watchdog/config",
-    "github.com/percona/mongodb-orchestration-tools/watchdog/metrics",
     "github.com/percona/percona-backup-mongodb/storage",
+    "github.com/pkg/errors",
     "github.com/stretchr/testify/assert",
     "gopkg.in/mgo.v2",
+    "gopkg.in/mgo.v2/bson",
     "gopkg.in/yaml.v2",
     "k8s.io/api/apps/v1",
     "k8s.io/api/batch/v1",
     "k8s.io/api/batch/v1beta1",
     "k8s.io/api/core/v1",
+    "k8s.io/api/policy/v1beta1",
     "k8s.io/apimachinery/pkg/api/errors",
+    "k8s.io/apimachinery/pkg/api/meta",
     "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/labels",
