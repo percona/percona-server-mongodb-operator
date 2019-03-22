@@ -230,6 +230,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			}
 		}
 
+		err = r.removeOudatedServices(cr, replset, pods)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to remove old services of replset %s: %v", replset.Name, err)
+		}
+
 		// Create Service
 		if replset.Expose.Enabled {
 			srvs, err := r.ensureExternalServices(cr, replset, pods)

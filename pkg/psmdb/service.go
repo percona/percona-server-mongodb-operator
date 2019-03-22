@@ -18,11 +18,11 @@ import (
 // Service returns a core/v1 API Service
 func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Service {
 	ls := map[string]string{
-		"app.kubernetes.io/name": "percona-server-mongodb",
-		"app.kubernetes.io/instance": m.Name,
-		"app.kubernetes.io/replset": replset.Name,
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   m.Name,
+		"app.kubernetes.io/replset":    replset.Name,
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of": "percona-server-mongodb",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
 	return &corev1.Service{
@@ -62,11 +62,12 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 	}
 
 	svc.Labels = map[string]string{
-		"app.kubernetes.io/name": "percona-server-mongodb",
-		"app.kubernetes.io/instance": m.Name,
-		"app.kubernetes.io/replset": replset.Name,
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   m.Name,
+		"app.kubernetes.io/replset":    replset.Name,
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of": "percona-server-mongodb",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+		"app.kubernetes.io/component":  "external-service",
 	}
 
 	svc.Spec = corev1.ServiceSpec{
