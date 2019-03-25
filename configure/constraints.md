@@ -1,7 +1,7 @@
 Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes
 =====================================================================================
 
-The operator does good job automatically assigning new Pods to nodes with sufficient to achieve balanced distribution accross the cluster. Still there are situations when it worth to ensure that pods will land on specific nodes: for example, to get speed advantages of the SSD equipped machine, or to reduce costs choosing nodes in a same availability zone.
+The operator does good job automatically assigning new Pods to nodes with sufficient to achieve balanced distribution across the cluster. Still there are situations when it worth to ensure that pods will land on specific nodes: for example, to get speed advantages of the SSD equipped machine, or to reduce costs choosing nodes in a same availability zone.
 
 Appropriate (sub)sections (``replsets``, ``replsets.arbiter``, and ``backup``) of the [deploy/cr.yaml](https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml) file contain keys which can be used to do this, depending on what is the best for a particular situation.
 
