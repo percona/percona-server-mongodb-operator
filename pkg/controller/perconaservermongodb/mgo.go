@@ -25,7 +25,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
-		return r.handleReplsetInit(cr, replset, pods.Items)
+		if !cr.Status.Replsets[replset.Name].Initialized {
+			err = r.handleReplsetInit(cr, replset, pods.Items)
+			if err != nil {
+				return errors.Wrap(err, "handleReplsetInit:")
+			}
+			cr.Status.Replsets[replset.Name].Initialized = true
+			return nil
+		}
+		return errors.Wrap(err, "dial:")
 	}
 	defer session.Close()
 

@@ -65,7 +65,8 @@ type ReplSetGetConfig struct {
 
 // OKResponse is a standard MongoDB response
 type OKResponse struct {
-	OK int `bson:"ok" json:"ok" json:"ok"`
+	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
+	OK     int    `bson:"ok" json:"ok" json:"ok"`
 }
 
 // WriteConcern document: https://docs.mongodb.com/manual/reference/write-concern/
@@ -117,14 +118,14 @@ func ReadConfig(session *mgo.Session) (RSConfig, error) {
 func WriteConfig(session *mgo.Session, cfg RSConfig) error {
 	resp := &OKResponse{}
 
-	err := session.Run(bson.D{{"replSetReconfig", cfg}}, resp)
+	// TODO The 'force' flag should be set to true if there is no PRIMARY in the replset (but this shouldn't ever happen).
+	err := session.Run(bson.D{{"replSetReconfig", cfg}, {"force", false}}, resp)
 	if err != nil {
 		return errors.Wrap(err, "replSetReconfig")
 	}
 
-	// TODO check for .Errmsg
 	if resp.OK != 1 {
-		return errors.New("unknown mongo error")
+		return errors.Wrap(err, "mongo")
 	}
 
 	return nil
