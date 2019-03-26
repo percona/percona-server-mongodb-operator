@@ -1,18 +1,10 @@
 package perconaservermongodb
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
-	motPkg "github.com/percona/mongodb-orchestration-tools/pkg"
-	podk8s "github.com/percona/mongodb-orchestration-tools/pkg/pod/k8s"
-	"github.com/percona/mongodb-orchestration-tools/watchdog"
-	wdConfig "github.com/percona/mongodb-orchestration-tools/watchdog/config"
-	wdMetrics "github.com/percona/mongodb-orchestration-tools/watchdog/metrics"
-	"gopkg.in/mgo.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -72,11 +64,6 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		serverVersion: sv,
 		reconcileIn:   time.Second * 5,
 
-		watchdogMetrics: wdMetrics.NewCollector(),
-		watchdogQuit:    make(chan bool, 1),
-
-		watchdog: make(map[string]*watchdog.Watchdog),
-
 		clientcmd: cli,
 	}, nil
 }
@@ -110,11 +97,6 @@ type ReconcilePerconaServerMongoDB struct {
 	clientcmd     *clientcmd.Client
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
-
-	pods            *podk8s.Pods
-	watchdog        map[string]*watchdog.Watchdog
-	watchdogMetrics *wdMetrics.Collector
-	watchdogQuit    chan bool
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDB object and makes changes based on the state read
@@ -182,15 +164,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("get mongodb secrets: %v", err)
 	}
 
-	// Setup watchdog 'k8s' pod source and CustomResourceState struct for CR
-	// (https://github.com/percona/mongodb-orchestration-tools/blob/master/pkg/pod/pod.go#L51-L56)
-	if r.pods == nil {
-		r.pods = podk8s.NewPods(cr.Namespace)
-	}
-	crState := &podk8s.CustomResourceState{
-		Name: cr.Name,
-	}
-
 	bcpSfs, err := r.reconcileBackupCoordinator(cr)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile backup coordinator: %v", err)
@@ -236,22 +209,16 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, fmt.Errorf("get pods list for replset %s: %v", replset.Name, err)
 		}
 
-		crState.Pods = append(crState.Pods, pods.Items...)
-
-		sfs, err := r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey.Name)
+		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey.Name)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 		}
 
-		crState.Statefulsets = append(crState.Statefulsets, *sfs)
-
 		if replset.Arbiter.Enabled {
-			arbiterSfs, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey.Name)
+			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey.Name)
 			if err != nil {
 				return reconcile.Result{}, fmt.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 			}
-
-			crState.Statefulsets = append(crState.Statefulsets, *arbiterSfs)
 		} else {
 			err := r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
 				cr.Name+"-"+replset.Name+"-arbiter",
@@ -263,9 +230,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			}
 		}
 
+		err = r.removeOudatedServices(cr, replset, pods)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to remove old services of replset %s: %v", replset.Name, err)
+		}
+
 		// Create Service
 		if replset.Expose.Enabled {
-			crState.ServicesExpose = true
 			srvs, err := r.ensureExternalServices(cr, replset, pods)
 			if err != nil {
 				return reconcile.Result{}, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
@@ -279,7 +250,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				}
 				srvs = lbsvc
 			}
-			crState.Services = append(crState.Services, srvs...)
 		} else {
 			service := psmdb.Service(cr, replset)
 
@@ -292,8 +262,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			if err != nil && !errors.IsAlreadyExists(err) {
 				return reconcile.Result{}, fmt.Errorf("failed to create service for replset %s: %v", replset.Name, err)
 			}
-
-			crState.Services = append(crState.Services, *service)
 		}
 
 		var rstatus *api.ReplsetStatus
@@ -303,15 +271,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			cr.Status.Replsets[replset.Name] = rstatus
 		}
 
-		if !r.rsetInitialized(cr, replset, *pods, secrets) {
-			err = r.handleReplsetInit(cr, replset, pods.Items)
-			if err == nil {
-				rstatus.Initialized = true
-			} else {
-				reqLogger.Error(err, "Failed to init replset", "replset", replset.Name)
-			}
-		} else {
-			rstatus.Initialized = true
+		err = r.reconcileCluster(cr, replset, *pods, secrets)
+		if err != nil {
+			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 	}
 
@@ -319,10 +281,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("update psmdb status: %v", err)
 	}
-	// Ensure the watchdog is started (to contol the MongoDB Replica Set config)
-	r.ensureWatchdog(cr, secrets)
-
-	r.pods.Update(crState)
 
 	return rr, nil
 }
@@ -441,198 +399,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudg
 
 	cpdb.Spec = pdb.Spec
 	return r.client.Update(context.TODO(), cpdb)
-}
-
-func (r *ReconcilePerconaServerMongoDB) rsetInitialized(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) bool {
-	session, err := mgo.DialWithInfo(r.getReplsetDialInfo(cr, replset, pods.Items, usersSecret))
-	if err != nil {
-		// log.Info("Cannot connect to mongodb replset %s to check initialization: %v", replset.Name, err)
-		return false
-	}
-
-	session.Close()
-	return true
-}
-
-// getReplsetDialInfo returns a *mgo.Session configured to connect (with auth) to a Pod MongoDB
-func (r *ReconcilePerconaServerMongoDB) getReplsetDialInfo(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod, usersSecret *corev1.Secret) *mgo.DialInfo {
-	return &mgo.DialInfo{
-		Addrs:          r.getReplsetAddrs(m, replset, pods),
-		ReplicaSetName: replset.Name,
-		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
-		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
-		Timeout:        3 * time.Second,
-		FailFast:       true,
-	}
-}
-
-// getReplsetAddrs returns a slice of replset host:port addresses
-func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) []string {
-	addrs := make([]string, 0)
-	var hostname string
-
-	if replset.Expose.Enabled {
-		for _, pod := range pods {
-			svc, err := r.getExtServices(m, pod.Name)
-			if err != nil {
-				log.Error(err, "failed to fetch service address")
-				continue
-			}
-			hostname, err := psmdb.GetServiceAddr(*svc, pod, r.client)
-			if err != nil {
-				log.Error(err, "failed to get service hostname")
-				continue
-			}
-			addrs = append(addrs, hostname.String())
-		}
-	} else {
-		for _, pod := range pods {
-			hostname = podk8s.GetMongoHost(pod.Name, m.Name, replset.Name, m.Namespace)
-			addrs = append(addrs, hostname+":"+strconv.Itoa(int(m.Spec.Mongod.Net.Port)))
-		}
-	}
-	return addrs
-}
-
-// ensureWatchdog ensures the PSMDB watchdog has started. This process controls the replica set and sharding
-// state of a PSMDB cluster.
-//
-// See: https://github.com/percona/mongodb-orchestration-tools/tree/master/watchdog
-//
-func (r *ReconcilePerconaServerMongoDB) ensureWatchdog(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret) {
-	// Skip if watchdog is started
-	if _, ok := r.watchdog[cr.Name]; ok {
-		return
-	}
-
-	// Skip if there are no initialized replsets
-	var doStart bool
-	for _, replset := range cr.Status.Replsets {
-		if replset.Initialized {
-			doStart = true
-			break
-		}
-	}
-	if !doStart {
-		return
-	}
-
-	// Start the watchdog if it has not been started
-	r.watchdog[cr.Name] = watchdog.New(&wdConfig.Config{
-		Username:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminUser]),
-		Password:       string(usersSecret.Data[motPkg.EnvMongoDBClusterAdminPassword]),
-		APIPoll:        5 * time.Second,
-		ReplsetPoll:    5 * time.Second,
-		ReplsetTimeout: 3 * time.Second,
-	}, r.pods, r.watchdogMetrics, r.watchdogQuit)
-	go r.watchdog[cr.Name].Run()
-}
-
-var ErrNoRunningMongodContainers = fmt.Errorf("no mongod containers in running state")
-
-// handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
-// This must be ran from within the running container to utilise the MongoDB Localhost Exeception.
-//
-// See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
-//
-func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
-	for _, pod := range pods {
-		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
-			continue
-		}
-
-		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
-
-		cmd := []string{
-			"k8s-mongodb-initiator",
-			"init",
-		}
-
-		if replset.Expose.Enabled {
-			svc, err := r.getExtServices(m, pod.Name)
-			if err != nil {
-				return fmt.Errorf("failed to fetch services: %v", err)
-			}
-			hostname, err := psmdb.GetServiceAddr(*svc, pod, r.client)
-			if err != nil {
-				return fmt.Errorf("failed to fetch service address: %v", err)
-			}
-			cmd = append(cmd, "--ip", hostname.Host, "--port", strconv.Itoa(hostname.Port))
-		}
-
-		var errb bytes.Buffer
-		err := r.clientcmd.Exec(&pod, "mongod", cmd, nil, nil, &errb, false)
-		if err != nil {
-			return fmt.Errorf("exec: %v /  %s", err, errb.String())
-		}
-
-		return nil
-	}
-	return ErrNoRunningMongodContainers
-}
-
-// isMongodPod returns a boolean reflecting if a pod
-// is running a mongod container
-func isMongodPod(pod corev1.Pod) bool {
-	return getPodContainer(&pod, "mongod") != nil
-}
-
-func getPodContainer(pod *corev1.Pod, containerName string) *corev1.Container {
-	for _, cont := range pod.Spec.Containers {
-		if cont.Name == containerName {
-			return &cont
-		}
-	}
-	return nil
-}
-
-// isContainerAndPodRunning returns a boolean reflecting if
-// a container and pod are in a running state
-func isContainerAndPodRunning(pod corev1.Pod, containerName string) bool {
-	if pod.Status.Phase != corev1.PodRunning {
-		return false
-	}
-	for _, container := range pod.Status.ContainerStatuses {
-		if container.Name == containerName && container.State.Running != nil {
-			return true
-		}
-	}
-	return false
-}
-
-// isPodReady returns a boolean reflecting if a pod is in a "ready" state
-func isPodReady(pod corev1.Pod) bool {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Status != corev1.ConditionTrue {
-			continue
-		}
-		if condition.Type == corev1.PodReady {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *ReconcilePerconaServerMongoDB) getExtServices(m *api.PerconaServerMongoDB, podName string) (*corev1.Service, error) {
-	var retries uint64 = 0
-
-	svcMeta := &corev1.Service{}
-
-	for retries <= 5 {
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: m.Namespace}, svcMeta)
-
-		if err != nil {
-			if errors.IsNotFound(err) {
-				retries += 1
-				time.Sleep(500 * time.Millisecond)
-				log.Info("Service for %s not found. Retry", podName)
-				continue
-			}
-			return nil, fmt.Errorf("failed to fetch service: %v", err)
-		}
-		return svcMeta, nil
-	}
-	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdate(currentObj runtime.Object, name, namespace string) error {

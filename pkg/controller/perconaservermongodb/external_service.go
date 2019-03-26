@@ -6,7 +6,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -20,7 +22,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 		if err := r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: cr.Namespace}, service); err != nil {
 			if errors.IsNotFound(err) {
 				service = psmdb.ExternalService(cr, replset, pod.Name)
-
 				err = setControllerReference(cr, service, r.scheme)
 				if err != nil {
 					return nil, fmt.Errorf("set owner ref for InternalKey %s: %v", service.Name, err)
@@ -35,33 +36,47 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 			}
 		}
 
-		// logrus.Infof("service %s for pod %s of repleset %s has been found", meta.Name, pod.Name, replset.Name)
-
-		// if err := updateExtService(h.client, meta); err != nil {
-		// 	return nil, fmt.Errorf("failed to update external service for replset %s: %v", replset.Name, err)
-		// }
-
 		services = append(services, *service)
 	}
 
 	return services, nil
 }
 
-// !!! WTF? why we need this ?!?!
-// func updateExtService(cli sdk.Client, svc *corev1.Service) error {
-// 	var retries uint64 = 0
+func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podList *corev1.PodList) error {
+	if len(podList.Items) == 0 {
+		return nil
+	}
 
-// 	for retries <= 5 {
-// 		if err := cli.Update(svc); err != nil {
-// 			if errors.IsConflict(err) {
-// 				retries += 1
-// 				time.Sleep(500 * time.Millisecond)
-// 				continue
-// 			} else {
-// 				return fmt.Errorf("failed to update service: %v", err)
-// 			}
-// 		}
-// 		return nil
-// 	}
-// 	return fmt.Errorf("failed to update service %s, retries limit reached", svc.Name)
-// }
+	podNames := make(map[string]struct{}, len(podList.Items))
+
+	// needed just for labels
+	service := psmdb.ExternalService(cr, replset, podList.Items[0].Name)
+
+	for _, pod := range podList.Items {
+		podNames[pod.Name] = struct{}{}
+	}
+
+	// clear old services
+	svcList := &corev1.ServiceList{}
+	err := r.client.List(context.TODO(),
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(service.Labels),
+		},
+		svcList,
+	)
+	if err != nil {
+		return fmt.Errorf("get current services: %v", err)
+	}
+
+	for _, svc := range svcList.Items {
+		if _, ok := podNames[svc.Name]; !ok {
+			err := r.client.Delete(context.TODO(), &svc)
+			if err != nil {
+				return fmt.Errorf("delete service %s: %v", svc.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
