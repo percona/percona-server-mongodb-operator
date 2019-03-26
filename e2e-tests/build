@@ -24,9 +24,6 @@ build_operator() {
         export GIT_COMMIT='$GIT_COMMIT'
         export GIT_BRANCH='$GIT_BRANCH'
 
-        cd /go/src/${repo}/vendor/github.com/percona/mongodb-orchestration-tools
-        make clean
-
         cd /go/src/${repo}
         mkdir -p build/_output/bin
         GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
@@ -76,6 +73,6 @@ until docker ps;
     do sleep 1;
 done
 build_operator
-build_tools
-build_mongod40
-build_mongod36
+#build_tools
+#build_mongod40
+#build_mongod36

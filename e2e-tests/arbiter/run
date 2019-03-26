@@ -44,6 +44,7 @@ check_cr_config() {
     desc 'kill Primary Pod, check reelection, check data'
     initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$URI")
     kubectl delete pods $initial_primary
+    sleep 10
     changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$URI")
     [ "$initial_primary" != "$changed_primary" ]
     wait_for_running $cluster 2

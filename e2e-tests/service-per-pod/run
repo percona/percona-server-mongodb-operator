@@ -20,7 +20,7 @@ check_cr_config() {
     compare_kubectl service/$cluster-0
 
     local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"
-    sleep 90
+    sleep 120
 
     # check read and write
     run_mongo \
