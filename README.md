@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.org/percona/percona-server-mongodb-operator.svg?branch=master)](https://travis-ci.org/percona/percona-server-mongodb-operator)
 [![Go Report Card](https://goreportcard.com/badge/github.com/percona/percona-server-mongodb-operator)](https://goreportcard.com/report/github.com/percona/percona-server-mongodb-operator)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fpercona%2Fpercona-server-mongodb-operator.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fpercona%2Fpercona-server-mongodb-operator?ref=badge_shield)
 
 A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) based on the [Operator SDK](https://github.com/operator-framework/operator-sdk).
 
@@ -34,3 +35,7 @@ As a general rule of thumb, please try to create bug reports that are:
 - *Specific.* Include as much detail as possible: which version, what environment, etc.
 - *Unique.* Do not duplicate existing tickets.
 - *Scoped to a Single Bug.* One bug per report.
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fpercona%2Fpercona-server-mongodb-operator.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fpercona%2Fpercona-server-mongodb-operator?ref=badge_large)
