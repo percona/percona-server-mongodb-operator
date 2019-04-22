@@ -170,3 +170,4 @@ fabric.properties
 # Editor-based Rest Client
 .idea/httpRequests
 
+e2e-tests/init-deploy/smallrun
