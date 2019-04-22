@@ -344,6 +344,20 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 		return fmt.Errorf("create certificate: %v", err)
 	}
 
+	intCertificate := cm.Certificate{}
+	intCertificate.Namespace = namespace
+	intCertificate.Kind = "Certificate"
+	intCertificate.Name = cr.Spec.SSLInternalSecretName + ".com"
+	intCertificate.Spec.SecretName = cr.Spec.SSLInternalSecretName
+	intCertificate.Spec.CommonName = cr.Spec.SSLInternalSecretName + "-pxc"
+	intCertificate.Spec.IsCA = true
+	intCertificate.Spec.IssuerRef.Name = issuerName
+	intCertificate.Spec.IssuerRef.Kind = issuerKind
+	err = r.client.Create(context.TODO(), &intCertificate)
+	if err != nil {
+		return fmt.Errorf("create internal certificate: %v", err)
+	}
+
 	return nil
 }
 
@@ -381,13 +395,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	// add TLS/SSL Volume
-	t := true
+	t := cr.Spec.UnsafeConf
 	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 		corev1.Volume{
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: sfs.Name + "-ssl",
+					SecretName: cr.Spec.SSLSecretName,
 					Optional:   &t,
 				},
 			},
@@ -396,7 +410,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: sfs.Name + "-ssl-internal",
+					SecretName: cr.Spec.SSLInternalSecretName,
 					Optional:   &t,
 				},
 			},

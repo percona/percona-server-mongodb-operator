@@ -22,7 +22,8 @@ type PerconaServerMongoDB struct {
 	Spec   PerconaServerMongoDBSpec   `json:"spec,omitempty"`
 	Status PerconaServerMongoDBStatus `json:"status,omitempty"`
 
-	SSLSecretName string `json:"sslSecretName,omitempty"`
+	SSLSecretName         string `json:"sslSecretName,omitempty"`
+	SSLInternalSecretName string `json:"sslInternalSecretName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -43,19 +44,20 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Pause            bool                          `json:"pause,omitempty"`
-	Platform         *version.Platform             `json:"platform,omitempty"`
-	Image            string                        `json:"image,omitempty"`
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	RunUID           int64                         `json:"runUid,omitempty"`
-	UnsafeConf       bool                          `json:"allowUnsafeConfigurations"`
-	Mongod           *MongodSpec                   `json:"mongod,omitempty"`
-	Replsets         []*ReplsetSpec                `json:"replsets,omitempty"`
-	Secrets          *SecretsSpec                  `json:"secrets,omitempty"`
-	Backup           BackupSpec                    `json:"backup,omitempty"`
-	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
-	PMM              PMMSpec                       `json:"pmm,omitempty"`
-	SSLSecretName    string                        `json:"sslSecretName,omitempty"`
+	Pause                 bool                          `json:"pause,omitempty"`
+	Platform              *version.Platform             `json:"platform,omitempty"`
+	Image                 string                        `json:"image,omitempty"`
+	ImagePullSecrets      []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	RunUID                int64                         `json:"runUid,omitempty"`
+	UnsafeConf            bool                          `json:"allowUnsafeConfigurations"`
+	Mongod                *MongodSpec                   `json:"mongod,omitempty"`
+	Replsets              []*ReplsetSpec                `json:"replsets,omitempty"`
+	Secrets               *SecretsSpec                  `json:"secrets,omitempty"`
+	Backup                BackupSpec                    `json:"backup,omitempty"`
+	ImagePullPolicy       corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	PMM                   PMMSpec                       `json:"pmm,omitempty"`
+	SSLSecretName         string                        `json:"sslSecretName,omitempty"`
+	SSLInternalSecretName string                        `json:"sslInternalSecretName,omitempty"`
 }
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
