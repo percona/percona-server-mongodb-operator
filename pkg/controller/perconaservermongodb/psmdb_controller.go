@@ -395,14 +395,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	// add TLS/SSL Volume
-	t := cr.Spec.UnsafeConf
 	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 		corev1.Volume{
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: cr.Spec.SSLSecretName,
-					Optional:   &t,
+					Optional:   &cr.Spec.UnsafeConf,
 				},
 			},
 		},
@@ -411,7 +410,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: cr.Spec.SSLInternalSecretName,
-					Optional:   &t,
+					Optional:   &cr.Spec.UnsafeConf,
 				},
 			},
 		},
