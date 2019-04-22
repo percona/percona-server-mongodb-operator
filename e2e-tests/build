@@ -17,7 +17,7 @@ build_operator() {
         git config --get remote.origin.url \
             | sed -e 's^.*github.com[:/]^github.com/^; s/.git$//'
     )
-    docker run --rm -v ${src_dir}:/go/src/${repo} golang:1.11 sh -c "
+    docker run --rm -v ${src_dir}:/go/src/${repo} golang:1.12 sh -c "
         set -o errexit
         set -o xtrace
         export GO_LDFLAGS='-w -s $GO_LDFLAGS'
@@ -45,26 +45,16 @@ build_operator() {
     docker push ${IMAGE}
 }
 
-build_tools() {
-    tools_repo="github.com/percona/mongodb-orchestration-tools"
-    docker run --rm -v ${src_dir}/vendor/${tools_repo}:/go/src/${tools_repo} golang:1.11 sh -c "
-        set -o errexit
-        set -o xtrace
- 
-        cd /go/src/${tools_repo}
-        make clean bin/mongodb-healthcheck bin/k8s-mongodb-initiator
-    "
-}
 build_mongod36() {
     pushd ${src_dir}
-        docker build --no-cache --squash -t ${IMAGE_MONGOD36} -f build/Dockerfile.mongod36 .
+        docker build -t ${IMAGE_MONGOD36} -f build/Dockerfile.mongod36 .
     popd
     docker push ${IMAGE_MONGOD36}
 }
 
 build_mongod40() {
     pushd ${src_dir}
-        docker build --no-cache --squash -t ${IMAGE_MONGOD40} -f build/Dockerfile.mongod40 .
+        docker build -t ${IMAGE_MONGOD40} -f build/Dockerfile.mongod40 .
     popd
     docker push ${IMAGE_MONGOD40}
 }
@@ -73,6 +63,5 @@ until docker ps;
     do sleep 1;
 done
 build_operator
-#build_tools
-#build_mongod40
+build_mongod40
 #build_mongod36
