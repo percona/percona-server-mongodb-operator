@@ -64,3 +64,7 @@ required = [
 [[constraint]]
   name = "github.com/percona/percona-backup-mongodb"
   version = "0.3.0"
+
+[[constraint]]
+  name = "github.com/jetstack/cert-manager"
+  version = "0.7.0"
