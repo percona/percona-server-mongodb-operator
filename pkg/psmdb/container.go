@@ -97,6 +97,16 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 				MountPath: mongodSecretsDir,
 				ReadOnly:  true,
 			},
+			{
+				Name:      "ssl",
+				MountPath: sslDir,
+				ReadOnly:  true,
+			},
+			{
+				Name:      "ssl-internal",
+				MountPath: sslInternalDir,
+				ReadOnly:  true,
+			},
 		},
 	}
 }
@@ -111,6 +121,20 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		"--port=" + strconv.Itoa(int(mSpec.Net.Port)),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mSpec.Storage.Engine),
+		"--relaxPermChecks",
+		"--sslMode=preferSSL",
+	}
+
+	if m.Spec.UnsafeConf {
+		args = append(args,
+			"--sslAllowInvalidCertificates",
+			"--clusterAuthMode=keyFile",
+			"--keyFile="+mongodSecretsDir+"/mongodb-key",
+		)
+	} else {
+		args = append(args,
+			"--clusterAuthMode=x509",
+		)
 	}
 
 	// sharding
