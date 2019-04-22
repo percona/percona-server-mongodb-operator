@@ -135,10 +135,8 @@ func (r *ReconcilePerconaServerMongoDB) getExtAddr(namespace string, pod corev1.
 	return hostname.String(), nil
 }
 
-const clusterServiceDNSSuffix = "svc.cluster.local"
-
 func getAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
-	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, clusterServiceDNSSuffix}, ".") +
+	return strings.Join([]string{pod, m.Name + "-" + replset}, ".") +
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }
 
