@@ -23,6 +23,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -129,6 +130,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("wrong psmdb options: %v", err)
+	}
+
+	if !cr.Spec.UnsafeConf {
+		err = r.reconsileSSL(cr, cr.Namespace)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("psmd ssl secret: %v", err)
+		}
 	}
 
 	internalKey := secret.InternalKeyMeta(cr.Name+"-intrnl-mongodb-key", cr.Namespace)
@@ -283,6 +291,60 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoDB, namespace string) error {
+	secretObj := corev1.Secret{}
+	err := r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: namespace,
+			Name:      cr.Spec.SSLSecretName,
+		},
+		&secretObj,
+	)
+	if err == nil {
+		return nil
+	} else if !errors.IsNotFound(err) {
+		return fmt.Errorf("get secret: %v", err)
+	}
+
+	issuerKind := "ClusterIssuer"
+	issuerName := cr.Spec.SSLSecretName + "-ca"
+
+	issuer := cm.ClusterIssuer{}
+	issuer.Namespace = namespace
+	issuer.Kind = issuerKind
+	issuer.Name = issuerName
+	issuer.Spec.SelfSigned = &cm.SelfSignedIssuer{}
+	err = r.client.Create(context.TODO(), &issuer)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("create issuer: %v", err)
+	}
+	issuer = cm.ClusterIssuer{}
+	err = r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Name: issuerName,
+		},
+		&issuer,
+	)
+	if err != nil {
+		return fmt.Errorf("get issuer: %v", err)
+	}
+	certificate := cm.Certificate{}
+	certificate.Namespace = namespace
+	certificate.Kind = "Certificate"
+	certificate.Name = cr.Spec.SSLSecretName + ".com"
+	certificate.Spec.SecretName = cr.Spec.SSLSecretName
+	certificate.Spec.CommonName = cr.Spec.SSLSecretName + "-pxc"
+	certificate.Spec.IsCA = true
+	certificate.Spec.IssuerRef.Name = issuerName
+	certificate.Spec.IssuerRef.Kind = issuerKind
+	err = r.client.Create(context.TODO(), &certificate)
+	if err != nil {
+		return fmt.Errorf("create certificate: %v", err)
+	}
+
+	return nil
 }
 
 // TODO: reduce cyclomatic complexity

@@ -21,6 +21,8 @@ type PerconaServerMongoDB struct {
 
 	Spec   PerconaServerMongoDBSpec   `json:"spec,omitempty"`
 	Status PerconaServerMongoDBStatus `json:"status,omitempty"`
+
+	SSLSecretName string `json:"sslSecretName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -53,6 +55,7 @@ type PerconaServerMongoDBSpec struct {
 	Backup           BackupSpec                    `json:"backup,omitempty"`
 	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	PMM              PMMSpec                       `json:"pmm,omitempty"`
+	SSLSecretName    string                        `json:"sslSecretName,omitempty"`
 }
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
