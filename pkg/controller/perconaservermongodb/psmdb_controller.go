@@ -135,7 +135,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if !cr.Spec.UnsafeConf {
 		err = r.reconsileSSL(cr, cr.Namespace)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("psmd ssl secret: %v", err)
+			return reconcile.Result{}, fmt.Errorf(`TLS secret handler return error: "%v". Please create your TLS secrets `+cr.Spec.SSLSecretName+` and `+cr.Spec.SSLInternalSecretName+` manually or setup cert-manager correctly`, err)
 		}
 	}
 
@@ -320,16 +320,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create issuer: %v", err)
 	}
-	issuer = cm.ClusterIssuer{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name: issuerName,
-		},
-		&issuer,
-	)
-	if err != nil {
-		return fmt.Errorf("get issuer: %v", err)
-	}
+
 	certificate := cm.Certificate{}
 	certificate.Namespace = namespace
 	certificate.Kind = "Certificate"
@@ -340,10 +331,12 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	certificate.Spec.IssuerRef.Name = issuerName
 	certificate.Spec.IssuerRef.Kind = issuerKind
 	err = r.client.Create(context.TODO(), &certificate)
-	if err != nil {
+	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create certificate: %v", err)
 	}
-
+	if cr.Spec.SSLSecretName == cr.Spec.SSLInternalSecretName {
+		return nil
+	}
 	intCertificate := cm.Certificate{}
 	intCertificate.Namespace = namespace
 	intCertificate.Kind = "Certificate"
@@ -354,7 +347,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	intCertificate.Spec.IssuerRef.Name = issuerName
 	intCertificate.Spec.IssuerRef.Kind = issuerKind
 	err = r.client.Create(context.TODO(), &intCertificate)
-	if err != nil {
+	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create internal certificate: %v", err)
 	}
 
