@@ -25,7 +25,7 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 	}
 }
 
-var secretFileMode int32 = 0060
+var secretFileMode int32 = 288
 
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
