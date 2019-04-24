@@ -1,0 +1,7 @@
+apiVersion: psmdb.percona.com/v1alpha1
+kind: PerconaServerMongoDBBackup
+metadata:
+  name: example-perconaservermongodbbackup
+spec:
+  # Add fields here
+  size: 3

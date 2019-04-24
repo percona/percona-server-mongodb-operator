@@ -6,6 +6,7 @@ rules:
 - apiGroups:
   - psmdb.percona.com
   resources:
+  - perconaservermongodbbackups
   - perconaservermongodbs
   verbs:
   - "get"
