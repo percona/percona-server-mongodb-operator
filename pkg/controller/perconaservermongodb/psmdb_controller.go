@@ -133,7 +133,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if !cr.Spec.UnsafeConf {
-		err = r.reconsileSSL(cr, cr.Namespace)
+		err = r.reconsileSSL(cr)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf(`TLS secrets handler: "%v". Please create your TLS secrets `+cr.Spec.SSLSecretName+` and `+cr.Spec.SSLInternalSecretName+` manually or setup cert-manager correctly`, err)
 		}
@@ -293,11 +293,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoDB, namespace string) error {
+func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoDB) error {
 	secretObj := corev1.Secret{}
 	err := r.client.Get(context.TODO(),
 		types.NamespacedName{
-			Namespace: namespace,
+			Namespace: cr.Namespace,
 			Name:      cr.Spec.SSLSecretName,
 		},
 		&secretObj,
@@ -319,7 +319,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	}
 
 	issuer := cm.ClusterIssuer{}
-	issuer.Namespace = namespace
+	issuer.Namespace = cr.Namespace
 	issuer.Kind = issuerKind
 	issuer.Name = issuerName
 	issuer.Spec.SelfSigned = &cm.SelfSignedIssuer{}
@@ -329,7 +329,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	}
 
 	certificate := cm.Certificate{}
-	certificate.Namespace = namespace
+	certificate.Namespace = cr.Namespace
 	certificate.Kind = "Certificate"
 	certificate.Name = cr.Spec.SSLSecretName
 	certificate.Spec.SecretName = cr.Spec.SSLSecretName
@@ -346,7 +346,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 		return nil
 	}
 	intCertificate := cm.Certificate{}
-	intCertificate.Namespace = namespace
+	intCertificate.Namespace = cr.Namespace
 	intCertificate.Kind = "Certificate"
 	intCertificate.Name = cr.Spec.SSLInternalSecretName
 	intCertificate.Spec.SecretName = cr.Spec.SSLInternalSecretName
