@@ -122,7 +122,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mSpec.Storage.Engine),
 		"--relaxPermChecks",
-		"--sslMode=preferSSL",
 	}
 
 	if m.Spec.UnsafeConf {
@@ -133,6 +132,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		)
 	} else {
 		args = append(args,
+			"--sslMode=preferSSL",
 			"--clusterAuthMode=x509",
 		)
 	}
