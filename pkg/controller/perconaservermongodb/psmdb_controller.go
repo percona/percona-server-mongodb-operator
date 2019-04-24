@@ -309,7 +309,14 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	}
 
 	issuerKind := "ClusterIssuer"
-	issuerName := cr.Spec.SSLSecretName + "-ca"
+	issuerName := cr.Name + "-psmdb-ca"
+	var certificateDNSNames []string
+	for _, replset := range cr.Spec.Replsets {
+		certificateDNSNames = append(certificateDNSNames,
+			cr.Name+"-"+replset.Name,
+			"*."+cr.Name+"-"+replset.Name,
+		)
+	}
 
 	issuer := cm.ClusterIssuer{}
 	issuer.Namespace = namespace
@@ -324,9 +331,10 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	certificate := cm.Certificate{}
 	certificate.Namespace = namespace
 	certificate.Kind = "Certificate"
-	certificate.Name = cr.Spec.SSLSecretName + ".com"
+	certificate.Name = cr.Spec.SSLSecretName
 	certificate.Spec.SecretName = cr.Spec.SSLSecretName
-	certificate.Spec.CommonName = cr.Spec.SSLSecretName + "-pxc"
+	certificate.Spec.CommonName = cr.Name
+	certificate.Spec.DNSNames = certificateDNSNames
 	certificate.Spec.IsCA = true
 	certificate.Spec.IssuerRef.Name = issuerName
 	certificate.Spec.IssuerRef.Kind = issuerKind
@@ -340,9 +348,10 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	intCertificate := cm.Certificate{}
 	intCertificate.Namespace = namespace
 	intCertificate.Kind = "Certificate"
-	intCertificate.Name = cr.Spec.SSLInternalSecretName + ".com"
+	intCertificate.Name = cr.Spec.SSLInternalSecretName
 	intCertificate.Spec.SecretName = cr.Spec.SSLInternalSecretName
-	intCertificate.Spec.CommonName = cr.Spec.SSLInternalSecretName + "-pxc"
+	intCertificate.Spec.CommonName = cr.Name
+	intCertificate.Spec.DNSNames = certificateDNSNames
 	intCertificate.Spec.IsCA = true
 	intCertificate.Spec.IssuerRef.Name = issuerName
 	intCertificate.Spec.IssuerRef.Kind = issuerKind
