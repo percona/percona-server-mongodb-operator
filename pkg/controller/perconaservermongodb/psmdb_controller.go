@@ -140,13 +140,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	internalKey := secret.InternalKeyMeta(cr.Name+"-intrnl-mongodb-key", cr.Namespace)
+	internalKey := secret.InternalKeyMeta(cr.Name+"-mongodb-keyfile", cr.Namespace)
 	err = setControllerReference(cr, internalKey, r.scheme)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("set owner ref for InternalKey %s: %v", internalKey.Name, err)
 	}
 
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-intrnl-mongodb-key", Namespace: cr.Namespace}, internalKey)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-mongodb-keyfile", Namespace: cr.Namespace}, internalKey)
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Creating a new internal mongo key", "Namespace", cr.Namespace, "Name", internalKey.Name)
 
