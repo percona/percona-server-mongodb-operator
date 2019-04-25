@@ -18,3 +18,7 @@ const (
 	awsAccessKeySecretKey       = "AWS_ACCESS_KEY_ID"
 	awsSecretAccessKeySecretKey = "AWS_SECRET_ACCESS_KEY"
 )
+
+func GetCoordinatorSuffix() string {
+	return coordinatorSuffix
+}
