@@ -2,6 +2,7 @@ package perconaservermongodbbackup
 
 import (
 	"context"
+	"fmt"
 
 	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -98,7 +99,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
+	err = reconcileBC(instance)
+	if err != nil {
+		log.Error(err, "BackupHandler: ")
+		return reconcile.Result{}, err
+	}
 	// Define a new Pod object
 	pod := newPodForCR(instance)
 
@@ -126,6 +131,26 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	// Pod already exists - don't requeue
 	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
 	return reconcile.Result{}, nil
+}
+
+func reconcileBC(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
+	bh, err := newBackupHandler(cr.Spec.PSMDBCluster, cr.Name, cr.Spec.StorageName)
+	if err != nil {
+		return err
+	}
+
+	exist, err := bh.BackupExist()
+	if err != nil {
+		return err
+	}
+	if exist {
+		return fmt.Errorf("Backup already exist")
+	}
+	err = bh.StartBackup()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // newPodForCR returns a busybox pod with the same name/namespace as the cr

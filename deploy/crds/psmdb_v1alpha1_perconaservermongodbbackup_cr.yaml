@@ -3,5 +3,5 @@ kind: PerconaServerMongoDBBackup
 metadata:
   name: example-perconaservermongodbbackup
 spec:
-  # Add fields here
-  size: 3
+  psmdbCluster: some-name
+  storageName: fs-psmdb-test
