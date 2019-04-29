@@ -3,16 +3,15 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"time"
 
 	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -85,7 +84,9 @@ type ReconcilePerconaServerMongoDBBackup struct {
 func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling PerconaServerMongoDBBackup")
-
+	rr := reconcile.Result{
+		RequeueAfter: time.Second * 5,
+	}
 	// Fetch the PerconaServerMongoDBBackup instance
 	instance := &psmdbv1alpha1.PerconaServerMongoDBBackup{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
@@ -94,61 +95,85 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return reconcile.Result{}, nil
+			log.Info("Backup get:" + err.Error())
+			return rr, nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
+		log.Info("Backup get:" + err.Error())
+		return rr, err
 	}
-	err = reconcileBC(instance)
+
+	/*psmdb, err := r.getPSMDBConfig(instance)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("invalid backup cluster: %v", err)
+	}
+
+	if len(psmdb.Spec.Backup.Image) == 0 {
+		return reconcile.Result{}, fmt.Errorf("a backup image should be set in the PSMDB config")
+	}*/
+
+	err = r.reconcileBC(instance)
 	if err != nil {
 		log.Error(err, "BackupHandler: ")
-		return reconcile.Result{}, err
-	}
-	// Define a new Pod object
-	pod := newPodForCR(instance)
-
-	// Set PerconaServerMongoDBBackup instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
-		return reconcile.Result{}, err
+		return rr, err
 	}
 
-	// Check if this Pod already exists
-	found := &corev1.Pod{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
-		err = r.client.Create(context.TODO(), pod)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		// Pod created successfully - don't requeue
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Pod already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
-	return reconcile.Result{}, nil
+	return rr, nil
 }
 
-func reconcileBC(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
+	log.Info("Backup handling: start with cluster" + cr.Spec.PSMDBCluster + ", cr Name:" + cr.Name + ", storage name:" + cr.Spec.StorageName)
+	if len(cr.Name) == 0 || len(cr.Spec.StorageName) == 0 || len(cr.Spec.PSMDBCluster) == 0 {
+		return fmt.Errorf("not enough data")
+	}
 	bh, err := newBackupHandler(cr.Spec.PSMDBCluster, cr.Name, cr.Spec.StorageName)
 	if err != nil {
 		return err
 	}
-
-	exist, err := bh.BackupExist()
+	log.Info("Backup handling: check exist")
+	exist, _, err := bh.BackupExist()
 	if err != nil {
 		return err
 	}
 	if exist {
+		err = r.updateStatus(cr, bh.BackupData)
+		if err != nil {
+			log.Info("Backup status:" + err.Error())
+			return err
+		}
 		return fmt.Errorf("Backup already exist")
 	}
+	log.Info("Backup handling: start backup")
 	err = bh.StartBackup()
 	if err != nil {
+		log.Info("Backup handling err: " + err.Error())
 		return err
+	}
+	log.Info("Backup handling: start backup return")
+
+	err = r.updateStatus(cr, bh.BackupData)
+	if err != nil {
+		log.Info("Backup status:" + err.Error())
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBBackup, b BackupData) error {
+	cr.Status = psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
+
+	//cr.Status.StartAt.Time = time.Unix(b.Start, 0)
+	//cr.Status.CompletedAt.Time = time.Unix(b.End, 0)
+	cr.Status.State = b.Status
+
+	err := r.client.Status().Update(context.TODO(), cr)
+	if err != nil {
+		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
+		// so try to update whole CR
+		err := r.client.Update(context.TODO(), cr)
+		if err != nil {
+			return fmt.Errorf("send update: %v", err)
+		}
 	}
 	return nil
 }
@@ -174,4 +199,24 @@ func newPodForCR(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) *corev1.Pod {
 			},
 		},
 	}
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) getPSMDBConfig(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (*psmdbv1alpha1.PerconaServerMongoDB, error) {
+	psmdb := psmdbv1alpha1.PerconaServerMongoDB{}
+	clusterName := cr.Spec.PSMDBCluster
+	err := r.client.Get(context.TODO(),
+		client.ObjectKey{
+			Namespace: cr.Namespace,
+			Name:      clusterName,
+		},
+		&psmdb,
+	)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("get clusters list: %v", err)
+	} else {
+		return nil, fmt.Errorf("PSMDB not found")
+	}
+
+	return &psmdb, nil
 }

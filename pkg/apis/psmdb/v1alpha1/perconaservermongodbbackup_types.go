@@ -19,6 +19,14 @@ type PerconaServerMongoDBBackupSpec struct {
 type PerconaServerMongoDBBackupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
+	Name          string               `json:"name,omitempty"`
+	State         string               `json:"state,omitempty"`
+	StartAt       *metav1.Time         `json:"start,omitempty"`
+	CompletedAt   *metav1.Time         `json:"completed,omitempty"`
+	LastScheduled *metav1.Time         `json:"lastscheduled,omitempty"`
+	Destination   string               `json:"destination,omitempty"`
+	StorageName   string               `json:"storageName,omitempty"`
+	S3            *BackupStorageS3Spec `json:"s3,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -41,6 +49,14 @@ type PerconaServerMongoDBBackupList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PerconaServerMongoDBBackup `json:"items"`
 }
+
+type PSMDBBackupState string
+
+const (
+	BackupStarting  PSMDBBackupState = "Starting"
+	BackupFailed                     = "Failed"
+	BackupSucceeded                  = "Ready"
+)
 
 func init() {
 	SchemeBuilder.Register(&PerconaServerMongoDBBackup{}, &PerconaServerMongoDBBackupList{})
