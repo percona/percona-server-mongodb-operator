@@ -103,18 +103,15 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, err
 	}
 
-	/*psmdb, err := r.getPSMDBConfig(instance)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("invalid backup cluster: %v", err)
-	}
-
-	if len(psmdb.Spec.Backup.Image) == 0 {
-		return reconcile.Result{}, fmt.Errorf("a backup image should be set in the PSMDB config")
-	}*/
-
 	err = r.reconcileBC(instance)
 	if err != nil {
 		log.Error(err, "BackupHandler: ")
+		return rr, err
+	}
+
+	err = r.updateStatus(instance)
+	if err != nil {
+		log.Info("Backup status:" + err.Error())
 		return rr, err
 	}
 
@@ -122,7 +119,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
-	log.Info("Backup handling: start with cluster" + cr.Spec.PSMDBCluster + ", cr Name:" + cr.Name + ", storage name:" + cr.Spec.StorageName)
 	if len(cr.Name) == 0 || len(cr.Spec.StorageName) == 0 || len(cr.Spec.PSMDBCluster) == 0 {
 		return fmt.Errorf("not enough data")
 	}
@@ -130,42 +126,40 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.Perc
 	if err != nil {
 		return err
 	}
-	log.Info("Backup handling: check exist")
+
 	exist, _, err := bh.BackupExist()
 	if err != nil {
 		return err
 	}
 	if exist {
-		err = r.updateStatus(cr, bh.BackupData)
-		if err != nil {
-			log.Info("Backup status:" + err.Error())
-			return err
-		}
-		return fmt.Errorf("Backup already exist")
+		cr.Status = setupNewStatus(bh.BackupData)
+		return nil
 	}
-	log.Info("Backup handling: start backup")
+
 	err = bh.StartBackup()
 	if err != nil {
 		log.Info("Backup handling err: " + err.Error())
 		return err
 	}
-	log.Info("Backup handling: start backup return")
 
-	err = r.updateStatus(cr, bh.BackupData)
-	if err != nil {
-		log.Info("Backup status:" + err.Error())
-		return err
-	}
+	cr.Status = setupNewStatus(bh.BackupData)
+
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBBackup, b BackupData) error {
-	cr.Status = psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
+func setupNewStatus(backupData BackupData) (status psmdbv1alpha1.PerconaServerMongoDBBackupStatus) {
+	status.StorageName = backupData.StorageName
+	status.StartAt = &metav1.Time{
+		Time: time.Unix(backupData.Start, 0),
+	}
+	status.CompletedAt = &metav1.Time{
+		Time: time.Unix(backupData.End, 0),
+	}
+	status.State = backupData.Status
+	return
+}
 
-	//cr.Status.StartAt.Time = time.Unix(b.Start, 0)
-	//cr.Status.CompletedAt.Time = time.Unix(b.End, 0)
-	cr.Status.State = b.Status
-
+func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
 	err := r.client.Status().Update(context.TODO(), cr)
 	if err != nil {
 		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
@@ -176,47 +170,4 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1alpha1.Per
 		}
 	}
 	return nil
-}
-
-// newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) *corev1.Pod {
-	labels := map[string]string{
-		"app": cr.Name,
-	}
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
-			Namespace: cr.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
-				},
-			},
-		},
-	}
-}
-
-func (r *ReconcilePerconaServerMongoDBBackup) getPSMDBConfig(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (*psmdbv1alpha1.PerconaServerMongoDB, error) {
-	psmdb := psmdbv1alpha1.PerconaServerMongoDB{}
-	clusterName := cr.Spec.PSMDBCluster
-	err := r.client.Get(context.TODO(),
-		client.ObjectKey{
-			Namespace: cr.Namespace,
-			Name:      clusterName,
-		},
-		&psmdb,
-	)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return nil, fmt.Errorf("get clusters list: %v", err)
-	} else {
-		return nil, fmt.Errorf("PSMDB not found")
-	}
-
-	return &psmdb, nil
 }

@@ -89,10 +89,12 @@ func (b *BackupHandler) StartBackup() error {
 	}
 	_, err := b.Client.RunBackup(context.Background(), msg)
 	if err != nil {
+		b.BackupData.Status = "notrunning"
+		b.BackupData.End = 0
 		return err
 	}
 
-	b.BackupData.Status = "running"
+	b.BackupData.Status = "rejected"
 	b.BackupData.End = 0
 
 	return nil
