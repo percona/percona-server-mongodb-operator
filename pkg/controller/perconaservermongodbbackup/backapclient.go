@@ -19,17 +19,29 @@ func newBackupHandler(crName, backupName, storageName string) (BackupHandler, er
 		return b, err
 	}
 	client := pbapi.NewApiClient(conn)
-	b = BackupHandler{
-		Client:      client,
+	bData := BackupData{
 		StorageName: storageName,
 		Name:        backupName,
+		Start:       0,
+		End:         0,
+		Type:        "",
+		Status:      "",
+	}
+	b = BackupHandler{
+		Client:     client,
+		BackupData: bData,
 	}
 	return b, nil
 }
 
 // BackupHandler implements BC
 type BackupHandler struct {
-	Client      pbapi.ApiClient
+	Client     pbapi.ApiClient
+	BackupData BackupData
+}
+
+// Back
+type BackupData struct {
 	Status      string
 	Start       int64
 	End         int64
@@ -39,10 +51,10 @@ type BackupHandler struct {
 }
 
 // BackupExist is check if backup exist and update it status if true
-func (b *BackupHandler) BackupExist() (bool, error) {
+func (b *BackupHandler) BackupExist() (bool, BackupData, error) {
 	stream, err := b.Client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
 	if err != nil {
-		return false, err
+		return false, BackupData{}, err
 	}
 
 	for {
@@ -51,17 +63,20 @@ func (b *BackupHandler) BackupExist() (bool, error) {
 			if err == io.EOF {
 				break
 			}
-			return false, err
+			return false, BackupData{}, err
 		}
-		if msg.Metadata.Description == b.Name {
+		if msg.Metadata.Description == b.BackupData.Name {
+			b.BackupData.Start = msg.Metadata.StartTs
 			if msg.Metadata.EndTs > 0 {
-				b.Status = "ready"
+				b.BackupData.Status = "ready"
+			} else {
+				b.BackupData.Status = "running"
 			}
-			return true, nil
+			return true, b.BackupData, nil
 
 		}
 	}
-	return false, nil
+	return false, BackupData{}, nil
 }
 
 // StartBackup is for starting new backup
@@ -69,9 +84,16 @@ func (b *BackupHandler) StartBackup() error {
 	msg := &pbapi.RunBackupParams{
 		CompressionType: pbapi.CompressionType_COMPRESSION_TYPE_NO_COMPRESSION,
 		Cypher:          pbapi.Cypher_CYPHER_NO_CYPHER,
-		Description:     b.Name,
-		StorageName:     b.StorageName,
+		Description:     b.BackupData.Name,
+		StorageName:     b.BackupData.StorageName,
 	}
-	b.Client.RunBackup(context.Background(), msg)
+	_, err := b.Client.RunBackup(context.Background(), msg)
+	if err != nil {
+		return err
+	}
+
+	b.BackupData.Status = "running"
+	b.BackupData.End = 0
+
 	return nil
 }
