@@ -8,7 +8,6 @@ import (
 	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -82,8 +81,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling PerconaServerMongoDBBackup")
+	//reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
 	}
@@ -103,59 +102,48 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, err
 	}
 
+	err = instance.CheckFields()
+	if err != nil {
+		return rr, fmt.Errorf("fields check: %v", err)
+	}
+
+	if len(instance.Status.Name) != 0 && instance.Status.State == statusReady {
+		return rr, nil
+	}
+
 	err = r.reconcileBC(instance)
 	if err != nil {
-		log.Error(err, "BackupHandler: ")
-		return rr, err
+		return rr, fmt.Errorf("reconcile backup: " + err.Error())
 	}
 
 	err = r.updateStatus(instance)
 	if err != nil {
-		log.Info("Backup status:" + err.Error())
-		return rr, err
+		return rr, fmt.Errorf("update status:" + err.Error())
 	}
 
 	return rr, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
-	if len(cr.Name) == 0 || len(cr.Spec.StorageName) == 0 || len(cr.Spec.PSMDBCluster) == 0 {
-		return fmt.Errorf("not enough data")
-	}
-	bh, err := newBackupHandler(cr.Spec.PSMDBCluster, cr.Name, cr.Spec.StorageName)
+	bh, err := newBackupHandler(cr)
 	if err != nil {
-		return err
+		return fmt.Errorf("handler creation: %v", err)
 	}
 
-	exist, _, err := bh.BackupExist()
+	exist, err := bh.CheckAndUpdateBackup(cr)
 	if err != nil {
-		return err
+		return fmt.Errorf("check and update backup: %v", err)
 	}
 	if exist {
-		cr.Status = setupNewStatus(bh.BackupData)
 		return nil
 	}
-	log.Info("Backup handling: Start backup")
-	err = bh.StartBackup()
+
+	err = bh.StartBackup(cr)
 	if err != nil {
-		log.Info("Backup handling err: " + err.Error())
-		return err
+		return fmt.Errorf("start backup: %v", err)
 	}
-	cr.Status = setupNewStatus(bh.BackupData)
 
 	return nil
-}
-
-func setupNewStatus(backupData BackupData) (status psmdbv1alpha1.PerconaServerMongoDBBackupStatus) {
-	status.StorageName = backupData.StorageName
-	status.StartAt = &metav1.Time{
-		Time: time.Unix(backupData.Start, 0),
-	}
-	status.CompletedAt = &metav1.Time{
-		Time: time.Unix(backupData.End, 0),
-	}
-	status.State = backupData.Status
-	return
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
@@ -163,6 +151,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1alpha1.Per
 	if err != nil {
 		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
 		// so try to update whole CR
+		//TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
 		err := r.client.Update(context.TODO(), cr)
 		if err != nil {
 			return fmt.Errorf("send update: %v", err)
