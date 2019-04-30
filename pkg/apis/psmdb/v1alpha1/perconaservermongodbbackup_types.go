@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -60,4 +62,17 @@ const (
 
 func init() {
 	SchemeBuilder.Register(&PerconaServerMongoDBBackup{}, &PerconaServerMongoDBBackupList{})
+}
+
+func (p *PerconaServerMongoDBBackup) CheckFields() error {
+	if len(p.Name) == 0 {
+		return fmt.Errorf("metadata name field is empty")
+	}
+	if len(p.Spec.StorageName) == 0 {
+		return fmt.Errorf("spec storageName field is empty")
+	}
+	if len(p.Spec.PSMDBCluster) == 0 {
+		return fmt.Errorf("spec psmsdbCluster field is empty")
+	}
+	return nil
 }

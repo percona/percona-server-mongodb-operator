@@ -4,34 +4,44 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
+	"time"
 
 	pbapi "github.com/percona/percona-backup-mongodb/proto/api"
+	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"google.golang.org/grpc"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	statusRequested = "requested"
+	statusRejected  = "regected"
+	statusReady     = "ready"
 )
 
 // newBackup creates new Backup
-func newBackupHandler(crName, backupName, storageName string) (BackupHandler, error) {
+func newBackupHandler(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (BackupHandler, error) {
+	if len(cr.Status.Name) == 0 {
+		cr.Status = psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
+			Name:        cr.Name,
+			StorageName: cr.Spec.StorageName,
+			StartAt:     &metav1.Time{},
+			CompletedAt: &metav1.Time{},
+		}
+	}
 	b := BackupHandler{}
 
 	grpcOps := grpc.WithInsecure()
-	conn, err := grpc.Dial(crName+backup.GetCoordinatorSuffix()+":10001", grpcOps)
+	conn, err := grpc.Dial(cr.Spec.PSMDBCluster+backup.GetCoordinatorSuffix()+":10001", grpcOps)
 	if err != nil {
 		return b, err
 	}
 
 	client := pbapi.NewApiClient(conn)
-	bData := BackupData{
-		StorageName: storageName,
-		Name:        backupName,
-		Start:       0,
-		End:         0,
-		Type:        "",
-		Status:      "",
-	}
+
 	b = BackupHandler{
-		Client:     client,
-		BackupData: bData,
+		Client: client,
 	}
 
 	return b, nil
@@ -39,25 +49,14 @@ func newBackupHandler(crName, backupName, storageName string) (BackupHandler, er
 
 // BackupHandler is for working with backup coordinator
 type BackupHandler struct {
-	Client     pbapi.ApiClient
-	BackupData BackupData
+	Client pbapi.ApiClient
 }
 
-// BackupData is for storing backup data
-type BackupData struct {
-	Status      string
-	Start       int64
-	End         int64
-	Type        string
-	Name        string
-	StorageName string
-}
-
-// BackupExist is check if backup exist and update it status if true
-func (b *BackupHandler) BackupExist() (bool, BackupData, error) {
+// CheckAndUpdateBackup is for check if backup exist and update CR status if true.
+func (b *BackupHandler) CheckAndUpdateBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (bool, error) {
 	stream, err := b.Client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
 	if err != nil {
-		return false, BackupData{}, err
+		return false, err
 	}
 	for {
 		msg, err := stream.Recv()
@@ -65,22 +64,37 @@ func (b *BackupHandler) BackupExist() (bool, BackupData, error) {
 			if err == io.EOF {
 				break
 			}
-			return false, BackupData{}, err
+			return false, err
 		}
-		if msg.Metadata.Description == b.BackupData.Name {
-			b.BackupData.Start = msg.Metadata.StartTs
-			if msg.Metadata.EndTs > 0 {
-				b.BackupData.Status = "ready"
+		if msg.Metadata.Description == cr.Name {
+			cr.Status.StartAt = &metav1.Time{
+				Time: time.Unix(msg.Metadata.StartTs, 0),
 			}
-			return true, b.BackupData, nil
+			if msg.Metadata.StartTs > 0 {
+				cr.Status.State = statusRequested
+			}
+			if msg.Metadata.EndTs > 0 {
+				cr.Status.CompletedAt = &metav1.Time{
+					Time: time.Unix(msg.Metadata.EndTs, 0),
+				}
+				cr.Status.State = statusReady
+			}
+			for k, v := range msg.Metadata.Replicasets {
+				if len(v.DbBackupName) > 0 {
+					jsonName := strings.Split(v.DbBackupName, "_"+k)
+					cr.Status.Destination = jsonName[0] + ".json"
+					break
+				}
+			}
+			return true, nil
 		}
 	}
 
-	return false, BackupData{}, nil
+	return false, nil
 }
 
 // StartBackup is for starting new backup
-func (b *BackupHandler) StartBackup() error {
+func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
 
 	stream, err := b.Client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
 	if err != nil {
@@ -99,27 +113,28 @@ func (b *BackupHandler) StartBackup() error {
 		storages = append(storages, *msg)
 	}
 
-	// Checking is coordinator have availeble storage
+	// Checking if the coordinator has availeble storage
 	in := false
 	for _, s := range storages {
-		if s.Name == b.BackupData.StorageName {
+		if s.Name == cr.Spec.StorageName {
 			in = true
+			break
 		}
 	}
 	if !in {
-		return fmt.Errorf("storage not availeble")
+		return fmt.Errorf("storage is not availeble")
 	}
 
 	msg := &pbapi.RunBackupParams{
+		BackupType:      pbapi.BackupType_BACKUP_TYPE_LOGICAL,
 		CompressionType: pbapi.CompressionType_COMPRESSION_TYPE_GZIP,
 		Cypher:          pbapi.Cypher_CYPHER_NO_CYPHER,
-		Description:     b.BackupData.Name,
-		StorageName:     b.BackupData.StorageName,
+		Description:     cr.Name,
+		StorageName:     cr.Spec.StorageName,
 	}
 	resp, err := b.Client.RunBackup(context.Background(), msg)
 	if err != nil {
-		b.BackupData.Status = "rejected"
-		b.BackupData.End = 0
+		cr.Status.State = statusRejected
 		return err
 	}
 	if resp != nil {
@@ -130,8 +145,6 @@ func (b *BackupHandler) StartBackup() error {
 			log.Info("Backup msg", resp.Message)
 		}
 	}
-	b.BackupData.Status = "running"
-	b.BackupData.End = 0
-
+	cr.Status.State = statusRequested
 	return nil
 }
