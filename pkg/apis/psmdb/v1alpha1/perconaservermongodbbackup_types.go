@@ -17,18 +17,25 @@ type PerconaServerMongoDBBackupSpec struct {
 	StorageName  string `json:"storageName,omitempty"`
 }
 
+type PerconaSMDBStatusState string
+
+const (
+	StateRequested PerconaSMDBStatusState = "requested"
+	StateRejected  PerconaSMDBStatusState = "rejected"
+	StateReady     PerconaSMDBStatusState = "ready"
+)
+
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	Name          string               `json:"name,omitempty"`
-	State         string               `json:"state,omitempty"`
-	StartAt       *metav1.Time         `json:"start,omitempty"`
-	CompletedAt   *metav1.Time         `json:"completed,omitempty"`
-	LastScheduled *metav1.Time         `json:"lastscheduled,omitempty"`
-	Destination   string               `json:"destination,omitempty"`
-	StorageName   string               `json:"storageName,omitempty"`
-	S3            *BackupStorageS3Spec `json:"s3,omitempty"`
+	State         PerconaSMDBStatusState `json:"state,omitempty"`
+	StartAt       *metav1.Time           `json:"start,omitempty"`
+	CompletedAt   *metav1.Time           `json:"completed,omitempty"`
+	LastScheduled *metav1.Time           `json:"lastscheduled,omitempty"`
+	Destination   string                 `json:"destination,omitempty"`
+	StorageName   string                 `json:"storageName,omitempty"`
+	S3            *BackupStorageS3Spec   `json:"s3,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -65,9 +72,6 @@ func init() {
 }
 
 func (p *PerconaServerMongoDBBackup) CheckFields() error {
-	if len(p.Name) == 0 {
-		return fmt.Errorf("metadata name field is empty")
-	}
 	if len(p.Spec.StorageName) == 0 {
 		return fmt.Errorf("spec storageName field is empty")
 	}

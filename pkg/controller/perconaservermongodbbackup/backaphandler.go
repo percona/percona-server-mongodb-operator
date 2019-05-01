@@ -14,22 +14,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	statusRequested = "requested"
-	statusRejected  = "regected"
-	statusReady     = "ready"
-)
-
 // newBackup creates new Backup
 func newBackupHandler(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (BackupHandler, error) {
-	if len(cr.Status.Name) == 0 {
-		cr.Status = psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
-			Name:        cr.Name,
-			StorageName: cr.Spec.StorageName,
-			StartAt:     &metav1.Time{},
-			CompletedAt: &metav1.Time{},
-		}
-	}
 	b := BackupHandler{}
 
 	grpcOps := grpc.WithInsecure()
@@ -52,53 +38,62 @@ type BackupHandler struct {
 	Client pbapi.ApiClient
 }
 
-// CheckAndUpdateBackup is for check if backup exist and update CR status if true.
-func (b *BackupHandler) CheckAndUpdateBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (bool, error) {
+// CheckBackup is for check if backup exist
+func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (psmdbv1alpha1.PerconaServerMongoDBBackupStatus, error) {
+	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
+
 	stream, err := b.Client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
 	if err != nil {
-		return false, err
+		return backupStatus, err
 	}
+	defer stream.CloseSend()
+
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			return false, err
+			return backupStatus, err
 		}
 		if msg.Metadata.Description == cr.Name {
-			cr.Status.StartAt = &metav1.Time{
+			backupStatus.StartAt = &metav1.Time{
 				Time: time.Unix(msg.Metadata.StartTs, 0),
 			}
 			if msg.Metadata.StartTs > 0 {
-				cr.Status.State = statusRequested
+				backupStatus.State = psmdbv1alpha1.StateRequested
 			}
 			if msg.Metadata.EndTs > 0 {
-				cr.Status.CompletedAt = &metav1.Time{
+				backupStatus.CompletedAt = &metav1.Time{
 					Time: time.Unix(msg.Metadata.EndTs, 0),
 				}
-				cr.Status.State = statusReady
+				backupStatus.State = psmdbv1alpha1.StateReady
+			}
+			if len(msg.Metadata.StorageName) > 0 {
+				backupStatus.StorageName = msg.Metadata.StorageName
 			}
 			for k, v := range msg.Metadata.Replicasets {
 				if len(v.DbBackupName) > 0 {
 					jsonName := strings.Split(v.DbBackupName, "_"+k)
-					cr.Status.Destination = jsonName[0] + ".json"
+					backupStatus.Destination = jsonName[0] + ".json"
 					break
 				}
 			}
-			return true, nil
+			return backupStatus, nil
 		}
 	}
 
-	return false, nil
+	return backupStatus, nil
 }
 
 // StartBackup is for starting new backup
-func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
-
+func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (psmdbv1alpha1.PerconaServerMongoDBBackupStatus, error) {
+	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
+		StorageName: cr.Spec.StorageName,
+	}
 	stream, err := b.Client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
 	if err != nil {
-		return fmt.Errorf("cannot list storages")
+		return backupStatus, fmt.Errorf("cannot list storages")
 	}
 
 	storages := []pbapi.StorageInfo{}
@@ -108,12 +103,16 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 			if err == io.EOF {
 				break
 			}
-			return err
+			return backupStatus, err
 		}
 		storages = append(storages, *msg)
 	}
+	err = stream.CloseSend()
+	if err != nil {
+		return backupStatus, fmt.Errorf("cannot close stream: %v", err)
+	}
 
-	// Checking if the coordinator has availeble storage
+	// Checking if the storage exists
 	in := false
 	for _, s := range storages {
 		if s.Name == cr.Spec.StorageName {
@@ -122,7 +121,7 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 		}
 	}
 	if !in {
-		return fmt.Errorf("storage is not availeble")
+		return backupStatus, fmt.Errorf("storage is not availeble")
 	}
 
 	msg := &pbapi.RunBackupParams{
@@ -132,19 +131,12 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 		Description:     cr.Name,
 		StorageName:     cr.Spec.StorageName,
 	}
-	resp, err := b.Client.RunBackup(context.Background(), msg)
+	_, err = b.Client.RunBackup(context.Background(), msg)
 	if err != nil {
-		cr.Status.State = statusRejected
-		return err
+		backupStatus.State = psmdbv1alpha1.StateRejected
+		return backupStatus, err
 	}
-	if resp != nil {
-		if resp.Code > 0 {
-			log.Info("Backup resp code:", resp.Code)
-		}
-		if len(resp.Message) > 0 {
-			log.Info("Backup msg", resp.Message)
-		}
-	}
-	cr.Status.State = statusRequested
-	return nil
+
+	backupStatus.State = psmdbv1alpha1.StateRequested
+	return backupStatus, nil
 }
