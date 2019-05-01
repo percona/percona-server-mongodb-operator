@@ -96,7 +96,8 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 		return backupStatus, fmt.Errorf("cannot list storages")
 	}
 
-	storages := []pbapi.StorageInfo{}
+	// Checking if the storage exists
+	in := false
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -105,21 +106,17 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 			}
 			return backupStatus, err
 		}
-		storages = append(storages, *msg)
+		if msg.Name == cr.Spec.StorageName {
+			in = true
+			break
+		}
 	}
+
 	err = stream.CloseSend()
 	if err != nil {
 		return backupStatus, fmt.Errorf("cannot close stream: %v", err)
 	}
 
-	// Checking if the storage exists
-	in := false
-	for _, s := range storages {
-		if s.Name == cr.Spec.StorageName {
-			in = true
-			break
-		}
-	}
 	if !in {
 		return backupStatus, fmt.Errorf("storage is not availeble")
 	}
