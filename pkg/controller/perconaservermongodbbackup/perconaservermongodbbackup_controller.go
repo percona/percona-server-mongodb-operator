@@ -8,6 +8,7 @@ import (
 	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -107,7 +108,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, fmt.Errorf("fields check: %v", err)
 	}
 
-	if len(instance.Status.Name) != 0 && instance.Status.State == statusReady {
+	if instance.Status.State == psmdbv1alpha1.StateReady {
 		return rr, nil
 	}
 
@@ -129,20 +130,30 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.Perc
 	if err != nil {
 		return fmt.Errorf("handler creation: %v", err)
 	}
-
-	exist, err := bh.CheckAndUpdateBackup(cr)
+	if len(cr.Status.State) == 0 {
+		cr.Status = psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
+			StorageName: cr.Spec.StorageName,
+			StartAt:     &metav1.Time{},
+			CompletedAt: &metav1.Time{},
+		}
+	}
+	backupStatus, err := bh.CheckBackup(cr)
 	if err != nil {
 		return fmt.Errorf("check and update backup: %v", err)
 	}
-	if exist {
+	if len(backupStatus.State) > 0 {
+		cr.Status = backupStatus
 		return nil
 	}
 
-	err = bh.StartBackup(cr)
+	backupStatus, err = bh.StartBackup(cr)
 	if err != nil {
 		return fmt.Errorf("start backup: %v", err)
 	}
-
+	if len(backupStatus.State) > 0 {
+		cr.Status = backupStatus
+		return nil
+	}
 	return nil
 }
 
