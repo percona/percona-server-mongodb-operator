@@ -2,6 +2,7 @@ package perconaservermongodbbackup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -42,48 +43,68 @@ type BackupHandler struct {
 func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (psmdbv1alpha1.PerconaServerMongoDBBackupStatus, error) {
 	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
 
-	stream, err := b.Client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
+	backup, err := b.getMetaData(cr.Name)
 	if err != nil {
 		return backupStatus, err
+	}
+	if len(backup.Metadata.Description) == 0 {
+		return backupStatus, nil
+	}
+	backupStatus = b.getNewStatus(backup)
+
+	return backupStatus, nil
+}
+
+func (b *BackupHandler) getMetaData(name string) (*pbapi.MetadataFile, error) {
+	backup := &pbapi.MetadataFile{}
+	stream, err := b.Client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
+	if err != nil {
+		return backup, err
 	}
 	defer stream.CloseSend()
 
 	for {
-		msg, err := stream.Recv()
+		backup, err = stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			return backupStatus, err
+			return backup, err
 		}
-		if msg.Metadata.Description == cr.Name {
-			backupStatus.StartAt = &metav1.Time{
-				Time: time.Unix(msg.Metadata.StartTs, 0),
-			}
-			if msg.Metadata.StartTs > 0 {
-				backupStatus.State = psmdbv1alpha1.StateRequested
-			}
-			if msg.Metadata.EndTs > 0 {
-				backupStatus.CompletedAt = &metav1.Time{
-					Time: time.Unix(msg.Metadata.EndTs, 0),
-				}
-				backupStatus.State = psmdbv1alpha1.StateReady
-			}
-			if len(msg.Metadata.StorageName) > 0 {
-				backupStatus.StorageName = msg.Metadata.StorageName
-			}
-			for k, v := range msg.Metadata.Replicasets {
-				if len(v.DbBackupName) > 0 {
-					jsonName := strings.Split(v.DbBackupName, "_"+k)
-					backupStatus.Destination = jsonName[0] + ".json"
-					break
-				}
-			}
-			return backupStatus, nil
+		if backup.Metadata.Description == name {
+			return backup, nil
+		}
+	}
+	return backup, nil
+}
+
+func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.PerconaServerMongoDBBackupStatus {
+	newStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
+
+	newStatus.StartAt = &metav1.Time{
+		Time: time.Unix(backup.Metadata.StartTs, 0),
+	}
+	if backup.Metadata.StartTs > 0 {
+		newStatus.State = psmdbv1alpha1.StateRequested
+	}
+	if backup.Metadata.EndTs > 0 {
+		newStatus.CompletedAt = &metav1.Time{
+			Time: time.Unix(backup.Metadata.EndTs, 0),
+		}
+		newStatus.State = psmdbv1alpha1.StateReady
+	}
+	if len(backup.Metadata.StorageName) > 0 {
+		newStatus.StorageName = backup.Metadata.StorageName
+	}
+	for k, v := range backup.Metadata.Replicasets {
+		if len(v.DbBackupName) > 0 {
+			jsonName := strings.Split(v.DbBackupName, "_"+k)
+			newStatus.Destination = jsonName[0] + ".json"
+			break
 		}
 	}
 
-	return backupStatus, nil
+	return newStatus
 }
 
 // StartBackup is for starting new backup
@@ -91,34 +112,13 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
 		StorageName: cr.Spec.StorageName,
 	}
-	stream, err := b.Client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
+
+	exists, err := b.isStorageExists(cr.Spec.StorageName)
 	if err != nil {
-		return backupStatus, fmt.Errorf("cannot list storages")
+		return backupStatus, fmt.Errorf("check storage: %v", err)
 	}
-
-	// Checking if the storage exists
-	in := false
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return backupStatus, err
-		}
-		if msg.Name == cr.Spec.StorageName {
-			in = true
-			break
-		}
-	}
-
-	err = stream.CloseSend()
-	if err != nil {
-		return backupStatus, fmt.Errorf("cannot close stream: %v", err)
-	}
-
-	if !in {
-		return backupStatus, fmt.Errorf("storage is not availeble")
+	if !exists {
+		return backupStatus, errors.New("storage is not availeble")
 	}
 
 	msg := &pbapi.RunBackupParams{
@@ -136,4 +136,24 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 
 	backupStatus.State = psmdbv1alpha1.StateRequested
 	return backupStatus, nil
+}
+
+func (b *BackupHandler) isStorageExists(storageName string) (bool, error) {
+	stream, err := b.Client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
+	if err != nil {
+		return false, fmt.Errorf("cannot list storages")
+	}
+	defer stream.CloseSend()
+
+	for storage, err := stream.Recv(); err != io.EOF; {
+		if err != nil {
+			return false, fmt.Errorf("stream error: %v", err)
+		}
+
+		if storage.Name == storageName {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
