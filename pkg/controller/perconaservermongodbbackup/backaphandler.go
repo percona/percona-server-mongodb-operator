@@ -141,7 +141,7 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 func (b *BackupHandler) isStorageExists(storageName string) (bool, error) {
 	stream, err := b.Client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
 	if err != nil {
-		return false, fmt.Errorf("cannot list storages")
+		return false, fmt.Errorf("list storages: %v", err)
 	}
 	defer stream.CloseSend()
 
