@@ -118,7 +118,7 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 		return backupStatus, fmt.Errorf("check storage: %v", err)
 	}
 	if !exists {
-		return backupStatus, errors.New("storage is not availeble")
+		return backupStatus, errors.New("storage is not available")
 	}
 
 	msg := &pbapi.RunBackupParams{
