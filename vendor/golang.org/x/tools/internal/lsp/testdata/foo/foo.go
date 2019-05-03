@@ -4,7 +4,7 @@ type StructFoo struct { //@item(StructFoo, "StructFoo", "struct{...}", "struct")
 	Value int //@item(Value, "Value", "int", "field")
 }
 
-// TODO(rstambler): Create pre-set builtins?
+// Pre-set this marker, as we don't have a "source" for it in this package.
 /* Error() */ //@item(Error, "Error()", "string", "method")
 
 func Foo() { //@item(Foo, "Foo()", "", "func")
@@ -19,5 +19,12 @@ func _() {
 	}
 }
 
-//@complete("", Foo, IntFoo, StructFoo)
-type IntFoo int //@item(IntFoo, "IntFoo", "int", "type")
+func _() {
+	shadowed := 123
+	{
+		shadowed := "hi" //@item(shadowed, "shadowed", "string", "var")
+		sha              //@complete("a", shadowed)
+	}
+}
+
+type IntFoo int //@item(IntFoo, "IntFoo", "int", "type"),complete("", Foo, IntFoo, StructFoo)
