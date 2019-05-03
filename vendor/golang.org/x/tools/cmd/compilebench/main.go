@@ -28,6 +28,9 @@
 //	-cpuprofile file
 //		Write a CPU profile of the compiler to file.
 //
+//	-go path
+//		Path to "go" command (default "go").
+//
 //	-memprofile file
 //		Write a memory profile of the compiler to file.
 //
@@ -37,11 +40,14 @@
 //	-obj
 //		Report object file statistics.
 //
-//  -pkg
+//	-pkg pkg
 //		Benchmark compiling a single package.
 //
 //	-run regexp
 //		Only run benchmarks with names matching regexp.
+//
+//	-short
+//		Skip long-running benchmarks.
 //
 // Although -cpuprofile and -memprofile are intended to write a
 // combined profile for all the executed benchmarks to file,
@@ -329,7 +335,11 @@ func runBuild(name, dir string, count int) {
 		}
 
 		if *flagMemprofile != "" {
-			if err := ioutil.WriteFile(*flagMemprofile, out, 0666); err != nil {
+			outpath := *flagMemprofile
+			if *flagCount != 1 {
+				outpath = fmt.Sprintf("%s_%d", outpath, count)
+			}
+			if err := ioutil.WriteFile(outpath, out, 0666); err != nil {
 				log.Print(err)
 			}
 		}

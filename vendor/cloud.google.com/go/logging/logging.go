@@ -25,6 +25,7 @@
 package logging
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/internal/version"
@@ -233,7 +235,6 @@ type Logger struct {
 	// Options
 	commonResource *mrpb.MonitoredResource
 	commonLabels   map[string]string
-	writeTimeout   time.Duration
 	ctxFunc        func() (context.Context, func())
 }
 
@@ -274,12 +275,17 @@ func detectResource() *mrpb.MonitoredResource {
 		if err != nil {
 			return
 		}
+		name, err := metadata.InstanceName()
+		if err != nil {
+			return
+		}
 		detectedResource.pb = &mrpb.MonitoredResource{
 			Type: "gce_instance",
 			Labels: map[string]string{
-				"project_id":  projectID,
-				"instance_id": id,
-				"zone":        zone,
+				"project_id":    projectID,
+				"instance_id":   id,
+				"instance_name": name,
+				"zone":          zone,
 			},
 		}
 	})
@@ -597,6 +603,10 @@ type Entry struct {
 	// be relative to //tracing.googleapis.com.
 	Trace string
 
+	// ID of the span within the trace associated with the log entry.
+	// The ID is a 16-character hexadecimal encoding of an 8-byte array.
+	SpanID string
+
 	// Optional. Source code location information associated with the log entry,
 	// if any.
 	SourceLocation *logpb.LogEntrySourceLocation
@@ -653,7 +663,7 @@ func fromHTTPRequest(r *HTTPRequest) *logtypepb.HttpRequest {
 	u.Fragment = ""
 	pb := &logtypepb.HttpRequest{
 		RequestMethod:                  r.Request.Method,
-		RequestUrl:                     u.String(),
+		RequestUrl:                     fixUTF8(u.String()),
 		RequestSize:                    r.RequestSize,
 		Status:                         int32(r.Status),
 		ResponseSize:                   r.ResponseSize,
@@ -668,6 +678,27 @@ func fromHTTPRequest(r *HTTPRequest) *logtypepb.HttpRequest {
 		pb.Latency = ptypes.DurationProto(r.Latency)
 	}
 	return pb
+}
+
+// fixUTF8 is a helper that fixes an invalid UTF-8 string by replacing
+// invalid UTF-8 runes with the Unicode replacement character (U+FFFD).
+// See Issue https://github.com/googleapis/google-cloud-go/issues/1383.
+func fixUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+
+	// Otherwise time to build the sequence.
+	buf := new(bytes.Buffer)
+	buf.Grow(len(s))
+	for _, r := range s {
+		if utf8.ValidRune(r) {
+			buf.WriteRune(r)
+		} else {
+			buf.WriteRune('\uFFFD')
+		}
+	}
+	return buf.String()
 }
 
 // toProtoStruct converts v, which must marshal into a JSON object,
@@ -825,6 +856,7 @@ func (l *Logger) toLogEntry(e Entry) (*logpb.LogEntry, error) {
 		Operation:      e.Operation,
 		Labels:         e.Labels,
 		Trace:          e.Trace,
+		SpanId:         e.SpanID,
 		Resource:       e.Resource,
 		SourceLocation: e.SourceLocation,
 	}
