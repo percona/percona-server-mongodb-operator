@@ -4,4 +4,4 @@ metadata:
   name: example-perconaservermongodbbackup
 spec:
   psmdbCluster: some-name
-  storageName: fs-psmdb-test
+  storageName: storage

@@ -9,6 +9,8 @@ rules:
   - perconaservermongodbs
   - perconaservermongodbbackups
   - perconaservermongodbbackups/status
+  - perconaservermongodbrestores
+  - perconaservermongodbrestores/status
   verbs:
   - get
   - list

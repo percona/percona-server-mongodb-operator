@@ -95,11 +95,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			log.Info("Backup get:" + err.Error())
 			return rr, nil
 		}
 		// Error reading the object - requeue the request.
-		log.Info("Backup get:" + err.Error())
 		return rr, err
 	}
 
