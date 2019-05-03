@@ -19,5 +19,5 @@ var (
 )
 
 func init() {
-	SchemeBuilder.Register(&PerconaServerMongoDB{}, &PerconaServerMongoDBList{}, &PerconaServerMongoDBBackup{}, &PerconaServerMongoDBBackupList{})
+	SchemeBuilder.Register(&PerconaServerMongoDB{}, &PerconaServerMongoDBList{}, &PerconaServerMongoDBBackup{}, &PerconaServerMongoDBBackupList{}, &PerconaServerMongoDBRestore{}, &PerconaServerMongoDBRestoreList{})
 }

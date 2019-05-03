@@ -47,7 +47,8 @@ func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 	if err != nil {
 		return backupStatus, err
 	}
-	if len(backup.Metadata.Description) == 0 {
+
+	if len(backup.Filename) == 0 {
 		return backupStatus, nil
 	}
 	backupStatus = b.getNewStatus(backup)
@@ -64,7 +65,7 @@ func (b *BackupHandler) getMetaData(name string) (*pbapi.MetadataFile, error) {
 	defer stream.CloseSend()
 
 	for {
-		backup, err = stream.Recv()
+		backup, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				break
