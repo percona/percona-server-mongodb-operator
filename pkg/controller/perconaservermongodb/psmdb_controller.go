@@ -319,44 +319,60 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 		)
 	}
 
-	issuer := cm.ClusterIssuer{}
-	issuer.Namespace = cr.Namespace
-	issuer.Kind = issuerKind
-	issuer.Name = issuerName
-	issuer.Spec.SelfSigned = &cm.SelfSignedIssuer{}
-	err = r.client.Create(context.TODO(), &issuer)
+	err = r.client.Create(context.TODO(), &cm.Issuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      issuerName,
+			Namespace: cr.Namespace,
+		},
+		Spec: cm.IssuerSpec{
+			IssuerConfig: cm.IssuerConfig{
+				SelfSigned: &cm.SelfSignedIssuer{},
+			},
+		},
+	})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create issuer: %v", err)
 	}
 
-	certificate := cm.Certificate{}
-	certificate.Namespace = cr.Namespace
-	certificate.Kind = "Certificate"
-	certificate.Name = cr.Spec.SSLSecretName
-	certificate.Spec.SecretName = cr.Spec.SSLSecretName
-	certificate.Spec.CommonName = cr.Name
-	certificate.Spec.DNSNames = certificateDNSNames
-	certificate.Spec.IsCA = true
-	certificate.Spec.IssuerRef.Name = issuerName
-	certificate.Spec.IssuerRef.Kind = issuerKind
-	err = r.client.Create(context.TODO(), &certificate)
+	err = r.client.Create(context.TODO(), &cm.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-ssl",
+			Namespace: cr.Namespace,
+		},
+		Spec: cm.CertificateSpec{
+			SecretName: cr.Spec.SSLSecretName,
+			CommonName: cr.Name,
+			DNSNames:   certificateDNSNames,
+			IsCA:       true,
+			IssuerRef: cm.ObjectReference{
+				Name: issuerName,
+				Kind: issuerKind,
+			},
+		},
+	})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create certificate: %v", err)
 	}
 	if cr.Spec.SSLSecretName == cr.Spec.SSLInternalSecretName {
 		return nil
 	}
-	intCertificate := cm.Certificate{}
-	intCertificate.Namespace = cr.Namespace
-	intCertificate.Kind = "Certificate"
-	intCertificate.Name = cr.Spec.SSLInternalSecretName
-	intCertificate.Spec.SecretName = cr.Spec.SSLInternalSecretName
-	intCertificate.Spec.CommonName = cr.Name
-	intCertificate.Spec.DNSNames = certificateDNSNames
-	intCertificate.Spec.IsCA = true
-	intCertificate.Spec.IssuerRef.Name = issuerName
-	intCertificate.Spec.IssuerRef.Kind = issuerKind
-	err = r.client.Create(context.TODO(), &intCertificate)
+
+	err = r.client.Create(context.TODO(), &cm.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-ssl-internal",
+			Namespace: cr.Namespace,
+		},
+		Spec: cm.CertificateSpec{
+			SecretName: cr.Spec.SSLInternalSecretName,
+			CommonName: cr.Name,
+			DNSNames:   certificateDNSNames,
+			IsCA:       true,
+			IssuerRef: cm.ObjectReference{
+				Name: issuerName,
+				Kind: issuerKind,
+			},
+		},
+	})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create internal certificate: %v", err)
 	}
@@ -403,8 +419,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.SSLSecretName,
-					Optional:   &cr.Spec.UnsafeConf,
+					SecretName:  cr.Spec.SSLSecretName,
+					Optional:    &cr.Spec.UnsafeConf,
 					DefaultMode: &secretFileMode,
 				},
 			},
@@ -413,8 +429,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.SSLInternalSecretName,
-					Optional:   &cr.Spec.UnsafeConf,
+					SecretName:  cr.Spec.SSLInternalSecretName,
+					Optional:    &cr.Spec.UnsafeConf,
 					DefaultMode: &secretFileMode,
 				},
 			},
