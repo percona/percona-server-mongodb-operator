@@ -6,14 +6,14 @@ rules:
 - apiGroups:
   - psmdb.percona.com
   resources:
+  - perconaservermongodbs
   - perconaservermongodbbackups
   - perconaservermongodbbackups/status
-  - perconaservermongodbs
   verbs:
-  - "get"
-  - "list"
-  - "update"
-  - "watch"
+  - get
+  - list
+  - update
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -68,29 +68,9 @@ rules:
   - update
   - patch
   - delete
----
-
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
-metadata:
-  name: default-account-percona-server-mongodb-operator
-subjects:
-- kind: ServiceAccount
-  name: default
-roleRef:
-  kind: Role
-  name: percona-server-mongodb-operator
-  apiGroup: rbac.authorization.k8s.io
----
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1beta1
-metadata:
-  name: percona-server-mongodb-operator
-rules:
 - apiGroups:
   - certmanager.k8s.io
   resources:
-  - clusterissuers
   - issuers
   - certificates
   verbs:
@@ -101,16 +81,16 @@ rules:
   - update
   - patch
   - delete
+  - deletecollection
 ---
-kind: ClusterRoleBinding
+kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: percona-server-mongodb-operator-global
+  name: default-account-percona-server-mongodb-operator
 subjects:
-- kind: Group
-  name: system:serviceaccounts
-  apiGroup: rbac.authorization.k8s.io
+- kind: ServiceAccount
+  name: default
 roleRef:
-  kind: ClusterRole
+  kind: Role
   name: percona-server-mongodb-operator
   apiGroup: rbac.authorization.k8s.io
