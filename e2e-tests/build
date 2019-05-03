@@ -64,4 +64,4 @@ until docker ps;
 done
 build_operator
 build_mongod40
-#build_mongod36
+build_mongod36

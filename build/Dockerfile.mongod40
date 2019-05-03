@@ -1,5 +1,12 @@
 FROM centos:7
+#FROM registry.access.redhat.com/rhel7/rhel
+
 MAINTAINER Percona Development <info@percona.com>
+LABEL name="Percona Server for MongoDB" \
+      release="4.0" \
+      vendor="Percona" \
+      summary="Percona Server for MongoDB is our free and open-source drop-in replacement for MongoDB Community Edition" \
+      description="Percona Server for MongoDB is our free and open-source drop-in replacement for MongoDB Community Edition. It offers all the features and benefits of MongoDB Community Edition, plus additional enterprise-grade functionality."
 
 # check repository package signature in secure way
 RUN export GNUPGHOME="$(mktemp -d)" \
@@ -12,14 +19,17 @@ RUN export GNUPGHOME="$(mktemp -d)" \
         && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm \
         && rpm --import /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY \
         && percona-release disable all \
-        && percona-release enable psmdb-40 testing
+        && percona-release enable psmdb-40 release
 
 # the numeric UID is needed for OpenShift
 RUN useradd -u 1001 -r -g 0 -s /sbin/nologin \
             -c "Default Application User" mongodb
 
+# we need licenses from docs
+RUN sed -i '/nodocs/d' /etc/yum.conf
+
 ENV PERCONA_MAJOR 40
-ENV PERCONA_VERSION 4.0.9-5.el7
+ENV PERCONA_VERSION 4.0.9-4.el7
 ENV K8S_TOOLS_VERSION 0.4.2
 
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \
@@ -30,17 +40,19 @@ RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.n
                 percona-server-mongodb-tools-${PERCONA_VERSION} \
                 curl \
                 jq \
-        && yum clean all \
-        && rm -rf /var/cache/yum /data/db  && mkdir -p /data/db \
+        && (yum clean all || :) \
+        && (find /var/cache/yum -type f -delete || :) \
+        && rm -rf /data/db  && mkdir -p /data/db \
         && chown -R 1001:0 /data/db
 
+COPY LICENSE /licenses/LICENSE.Dockerfile
+RUN cp /usr/share/doc/percona-server-mongodb-server-$(echo ${PERCONA_VERSION} | cut -d - -f 1)/GNU-AGPL-3.0 /licenses/LICENSE.Percona-Server-for-MongoDB
 
 RUN curl -fSL https://github.com/percona/mongodb-orchestration-tools/releases/download/${K8S_TOOLS_VERSION}/k8s-mongodb-initiator -o /usr/local/bin/k8s-mongodb-initiator \
     && curl -fSL  https://github.com/percona/mongodb-orchestration-tools/releases/download/${K8S_TOOLS_VERSION}/mongodb-healthcheck -o /usr/local/bin/mongodb-healthcheck \
     && chmod 0755 /usr/local/bin/k8s-mongodb-initiator /usr/local/bin/mongodb-healthcheck
 
 VOLUME ["/data/db"]
-
 
 COPY build/ps-entry.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
