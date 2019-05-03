@@ -15,38 +15,51 @@
 		"authenticatedUserPrivileges" : [
 			{
 				"resource" : {
-					"db" : "admin",
-					"collection" : "system.users"
+					"cluster" : true
 				},
 				"actions" : [
-					"changeStream",
-					"collStats",
-					"createIndex",
-					"dbHash",
-					"dbStats",
-					"dropIndex",
-					"find",
-					"killCursors",
-					"listCollections",
-					"listIndexes",
-					"planCacheRead"
+					"authSchemaUpgrade",
+					"invalidateUserCache",
+					"listDatabases",
+					"viewUser"
 				]
 			},
 			{
 				"resource" : {
-					"db" : "",
-					"collection" : "system.users"
+					"db" : "config",
+					"collection" : ""
 				},
 				"actions" : [
-					"changeStream",
-					"collStats",
-					"dbHash",
-					"dbStats",
-					"find",
-					"killCursors",
-					"listCollections",
-					"listIndexes",
-					"planCacheRead"
+					"changeCustomData",
+					"changePassword",
+					"createRole",
+					"createUser",
+					"dropRole",
+					"dropUser",
+					"grantRole",
+					"revokeRole",
+					"setAuthenticationRestriction",
+					"viewRole",
+					"viewUser"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "local",
+					"collection" : ""
+				},
+				"actions" : [
+					"changeCustomData",
+					"changePassword",
+					"createRole",
+					"createUser",
+					"dropRole",
+					"dropUser",
+					"grantRole",
+					"revokeRole",
+					"setAuthenticationRestriction",
+					"viewRole",
+					"viewUser"
 				]
 			},
 			{
@@ -70,13 +83,38 @@
 			},
 			{
 				"resource" : {
-					"cluster" : true
+					"db" : "",
+					"collection" : "system.users"
 				},
 				"actions" : [
-					"authSchemaUpgrade",
-					"invalidateUserCache",
-					"listDatabases",
-					"viewUser"
+					"changeStream",
+					"collStats",
+					"dbHash",
+					"dbStats",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
+				]
+			},
+			{
+				"resource" : {
+					"db" : "admin",
+					"collection" : "system.users"
+				},
+				"actions" : [
+					"changeStream",
+					"collStats",
+					"createIndex",
+					"dbHash",
+					"dbStats",
+					"dropIndex",
+					"find",
+					"killCursors",
+					"listCollections",
+					"listIndexes",
+					"planCacheRead"
 				]
 			},
 			{
