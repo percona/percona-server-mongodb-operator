@@ -12,15 +12,19 @@ import (
 	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // newBackup creates new Backup
 func newBackupHandler(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (BackupHandler, error) {
 	b := BackupHandler{}
-
-	grpcOps := grpc.WithInsecure()
-	conn, err := grpc.Dial(cr.Spec.PSMDBCluster+backup.GetCoordinatorSuffix()+":10001", grpcOps)
+	grpcOpts := []grpc.DialOption{
+		grpc.WithUnaryInterceptor(makeUnaryInterceptor("")),
+		grpc.WithStreamInterceptor(makeStreamInterceptor("")),
+	}
+	grpcOps := append(grpcOpts, grpc.WithInsecure())
+	conn, err := grpc.Dial(cr.Spec.PSMDBCluster+backup.GetCoordinatorSuffix()+":10001", grpcOps...)
 	if err != nil {
 		return b, err
 	}
@@ -34,6 +38,29 @@ func newBackupHandler(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (BackupHandl
 	return b, nil
 }
 
+func makeUnaryInterceptor(token string) func(ctx context.Context, method string, req interface{}, reply interface{},
+	cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req interface{}, reply interface{},
+		cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		md := metadata.Pairs("authorization", "bearer "+token)
+		ctx = metadata.NewOutgoingContext(ctx, md)
+		err := invoker(ctx, method, req, reply, cc, opts...)
+		return err
+	}
+}
+
+func makeStreamInterceptor(token string) func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
+	method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string,
+		streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+
+		md := metadata.Pairs("authorization", "bearer "+token)
+		ctx = metadata.NewOutgoingContext(ctx, md)
+		return streamer(ctx, desc, cc, method, opts...)
+	}
+}
+
 // BackupHandler is for working with backup coordinator
 type BackupHandler struct {
 	Client pbapi.ApiClient
@@ -45,7 +72,7 @@ func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 
 	backup, err := b.getMetaData(cr.Name)
 	if err != nil {
-		return backupStatus, err
+		return backupStatus, fmt.Errorf("get metadata: %v", err)
 	}
 
 	if len(backup.Filename) == 0 {
