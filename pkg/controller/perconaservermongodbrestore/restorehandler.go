@@ -12,13 +12,11 @@ import (
 // newRestoreHandler return new RestoreHandler
 func newRestoreHandler(cluster string) (RestoreHandler, error) {
 	r := RestoreHandler{}
-
 	grpcOps := grpc.WithInsecure()
 	conn, err := grpc.Dial(cluster+backup.GetCoordinatorSuffix()+":10001", grpcOps)
 	if err != nil {
 		return r, err
 	}
-
 	client := pbapi.NewApiClient(conn)
 
 	r = RestoreHandler{
@@ -34,10 +32,10 @@ type RestoreHandler struct {
 }
 
 // StartRestore is for starting new restore
-func (r *RestoreHandler) StartRestore(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) error {
+func (r *RestoreHandler) StartRestore(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
 	msg := &pbapi.RunRestoreParams{
 		StorageName:  cr.Spec.StorageName,
-		MetadataFile: cr.Spec.BackupFileName,
+		MetadataFile: cr.Status.Destination,
 	}
 	_, err := r.Client.RunRestore(context.Background(), msg)
 	if err != nil {
