@@ -7,7 +7,6 @@ import (
 	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -97,20 +96,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	if instance.Status.State == psmdbv1alpha1.RestoreStateRequested {
 		return reconcile.Result{}, nil
 	}
-	cluster, err := r.checkBackup(instance, request)
+	backup, err := r.getBackup(instance, request)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("check backup: %v", err)
-	}
-	if len(cluster) == 0 {
-		return reconcile.Result{}, fmt.Errorf("backup is not exist")
+		return reconcile.Result{}, fmt.Errorf("get backup: %v", err)
 	}
 
-	restoreHandler, err := newRestoreHandler(cluster)
+	restoreHandler, err := newRestoreHandler(backup.Spec.PSMDBCluster)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("create handler: %v", err)
 	}
 
-	err = restoreHandler.StartRestore(instance)
+	err = restoreHandler.StartRestore(backup)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("start restore: %v", err)
 	}
@@ -126,7 +122,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 }
 
 // checkBackup return cluster name if backup exist
-func (r *ReconcilePerconaServerMongoDBRestore) checkBackup(cr *psmdbv1alpha1.PerconaServerMongoDBRestore, request reconcile.Request) (string, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.PerconaServerMongoDBRestore, request reconcile.Request) (*psmdbv1alpha1.PerconaServerMongoDBBackup, error) {
 	backups := &psmdbv1alpha1.PerconaServerMongoDBBackupList{}
 	err := r.client.List(context.TODO(), &client.ListOptions{
 		Namespace: request.Namespace,
@@ -134,41 +130,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkBackup(cr *psmdbv1alpha1.Per
 		backups)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return "", nil
+			return nil, nil
 		}
-		return "", err
+		return nil, err
 	}
 	for _, v := range backups.Items {
-		if v.Spec.StorageName == cr.Spec.StorageName {
-			if v.Status.Destination == cr.Spec.BackupFileName {
-				return v.Spec.PSMDBCluster, nil
-			}
+		if v.Name == cr.Spec.BackupName {
+
+			return &v, nil
+
 		}
 	}
-	return "", nil
-}
-
-// newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) *corev1.Pod {
-	labels := map[string]string{
-		"app": cr.Name,
-	}
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
-			Namespace: cr.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
-				},
-			},
-		},
-	}
+	return nil, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) error {

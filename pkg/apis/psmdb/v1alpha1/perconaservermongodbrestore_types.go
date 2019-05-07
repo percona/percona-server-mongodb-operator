@@ -11,8 +11,7 @@ import (
 type PerconaServerMongoDBRestoreSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	StorageName    string `json:"storage,omitempty"`
-	BackupFileName string `json:"backupFileName,omitempty"`
+	BackupName string `json:"backupName,omitempty"`
 }
 
 // PerconaSMDBRestoreStatusState is for restore status states
