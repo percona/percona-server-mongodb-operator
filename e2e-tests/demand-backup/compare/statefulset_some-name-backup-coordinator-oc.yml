@@ -2,13 +2,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  labels:
-    app.kubernetes.io/component: backup-coordinator
-    app.kubernetes.io/instance: some-name
-    app.kubernetes.io/managed-by: percona-server-mongodb-operator
-    app.kubernetes.io/name: percona-server-mongodb
-    app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: general
   name: some-name-backup-coordinator
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
