@@ -348,16 +348,16 @@ desc() {
 }
 
 get_backup_name() {
-    local storage_name="$1"
-    local pod_name="$2"
-    let last_pod="$3-1" || :
+    local cluster_short="${1/-rs0*/}"
+    local storage_name="$2"
 
-    for i in $(seq 0 $last_pod); do
-        kubectl logs ${pod_name}-${i} -c backup-agent \
-            | grep db_backup_name \
-            | grep $storage_name \
-            | $sed -re 's/.*db_backup_name:["\]+([^"\]+).*/\1/'
-    done
+    kubectl run -it --rm pbmctl --image=perconalab/percona-server-mongodb-operator:0.4.0-backup --restart=Never -- \
+        pbmctl list backups \
+        --server-address=$cluster_short-backup-coordinator:10001 \
+        2>&1 \
+        | grep my-backup-$storage_name \
+        | awk '{print$1}' \
+        | sed -e 's/.json$//'
 }
 
 get_service_endpoint() {
