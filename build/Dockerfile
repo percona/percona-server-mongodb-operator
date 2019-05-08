@@ -1,7 +1,5 @@
-FROM centos:7
-RUN yum update -y && yum clean all && rm -rf /var/cache/yum
-#FROM registry.access.redhat.com/rhel7-minimal
-#RUN microdnf update && microdnf clean all
+FROM registry.access.redhat.com/ubi7/ubi-minimal
+RUN microdnf update && microdnf clean all
 
 MAINTAINER Percona Development <info@percona.com>
 LABEL name="Percona Server for MongoDB Operator" \
