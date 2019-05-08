@@ -3,8 +3,8 @@
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_MONGOD36=${IMAGE_MONGOD36:-"perconalab/percona-server-mongodb-operator:0.4.0-mongod3.6.10"}
-IMAGE_MONGOD40=${IMAGE_MONGOD40:-"perconalab/percona-server-mongodb-operator:0.4.0-mongod4.0.6"}
+IMAGE_MONGOD36=${IMAGE_MONGOD36:-"perconalab/percona-server-mongodb-operator:0.4.0-mongod3.6"}
+IMAGE_MONGOD40=${IMAGE_MONGOD40:-"perconalab/percona-server-mongodb-operator:0.4.0-mongod4.0"}
 IMAGE_MONGOD=$IMAGE_MONGOD40
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
@@ -133,7 +133,7 @@ deploy_helm() {
         export TILLER_NAMESPACE=tiller
         oc new-project tiller || :
         oc project tiller
-        oc process -f https://github.com/openshift/origin/raw/master/examples/helm/tiller-template.yaml -p TILLER_NAMESPACE="tiller" -p HELM_VERSION=v2.13.0 | oc apply -f -
+        oc process -f https://github.com/openshift/origin/raw/master/examples/helm/tiller-template.yaml -p TILLER_NAMESPACE="tiller" -p HELM_VERSION=v2.13.1 | oc apply -f -
     else
         kubectl --namespace kube-system create sa tiller || :
         kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller || :
@@ -199,7 +199,7 @@ compare_kubectl() {
     fi
 
     kubectl get -o yaml ${resource} \
-        | egrep -v "namespace:|uid:|resourceVersion:|selfLink:|creationTimestamp:|image:|clusterIP:" \
+        | egrep -v "namespace:|uid:|resourceVersion:|selfLink:|creationTimestamp:|image:|clusterIP:|dataSource:|procMount:" \
         | egrep -v "^  storageClassName:|finalizers:|kubernetes.io/pvc-protection|volumeName:|storage-provisioner:" \
         | egrep -v "healthCheckNodePort:|nodePort:" \
         | $sed -e '/^status:$/,+100500d' \
@@ -264,9 +264,10 @@ get_mongo_primary_endpoint() {
 
 get_mongo_primary() {
     local uri="$1"
+    local cluster="$2"
 
     endpoint=$(get_mongo_primary_endpoint $uri)
-    if [[ "$endpoint" =~ ".local" ]]; then
+    if [[ "$endpoint" =~ ".$cluster" ]]; then
         echo $endpoint \
             | cut -d . -f 1
     else
@@ -324,6 +325,10 @@ destroy() {
 
     #TODO: maybe will be enabled later
     #diff $test_dir/compare/operator.log $tmp_dir/operator.log
+
+    kubectl delete psmdb --all
+    kubectl delete psmdb-backup --all || :
+    kubectl delete psmdb-recovery --all || :
 
     if [ "$OPENSHIFT" == 1 ]; then
         oc delete project "$namespace"
