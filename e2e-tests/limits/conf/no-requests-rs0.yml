@@ -60,3 +60,4 @@ spec:
   secrets:
     key: some-key
     users: some-users
+    ssl: some-name-ssl

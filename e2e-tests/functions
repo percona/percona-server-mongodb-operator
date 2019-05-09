@@ -309,6 +309,12 @@ run_pumba() {
     kubectl exec -it "$(get_pumba)" -- /pumba -l info ${cmd}
 }
 
+deploy_cert_manager() {
+    kubectl create namespace cert-manager || :
+    kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
+    kubectl apply -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.7/deploy/manifests/cert-manager.yaml --validate=false || : 2>/dev/null
+}
+
 destroy() {
     local namespace="$1"
 
@@ -330,6 +336,7 @@ destroy() {
     kubectl delete psmdb-backup --all || :
     kubectl delete psmdb-recovery --all || :
 
+    kubectl delete -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.7/deploy/manifests/cert-manager.yaml 2>/dev/null || :
     if [ "$OPENSHIFT" == 1 ]; then
         oc delete project "$namespace"
     else
