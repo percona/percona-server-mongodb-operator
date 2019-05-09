@@ -117,7 +117,7 @@ func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.P
 	}
 	if backup.Metadata.EndTs > 0 {
 		newStatus.CompletedAt = &metav1.Time{
-			Time: time.Unix(backup.Metadata.EndTs, 0),
+			Time: time.Now(),
 		}
 		newStatus.State = psmdbv1alpha1.StateReady
 	}
