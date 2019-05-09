@@ -50,6 +50,9 @@ spec:
         - --port=27017
         - --replSet=rs0
         - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
         - --slowms=100
         - --profile=1
         - --rateLimit=1
@@ -111,7 +114,13 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: no-limits-intrnl-mongodb-key
+          name: no-limits-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -121,11 +130,21 @@ spec:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: no-limits-intrnl-mongodb-key
+      - name: no-limits-mongodb-keyfile
         secret:
-          defaultMode: 48
+          defaultMode: 288
           optional: false
-          secretName: no-limits-intrnl-mongodb-key
+          secretName: no-limits-mongodb-keyfile
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: no-limits-ssl-internal
   updateStrategy:
     rollingUpdate:
       partition: 0

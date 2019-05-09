@@ -2,13 +2,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  labels:
-    app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: no-requests-no-limits
-    app.kubernetes.io/managed-by: percona-server-mongodb-operator
-    app.kubernetes.io/name: percona-server-mongodb
-    app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: rs0
   name: no-requests-no-limits-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
@@ -57,6 +50,9 @@ spec:
         - --port=27017
         - --replSet=rs0
         - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
         - --slowms=100
         - --profile=1
         - --rateLimit=1
@@ -114,7 +110,13 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: no-requests-no-limits-intrnl-mongodb-key
+          name: no-requests-no-limits-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -123,11 +125,21 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: no-requests-no-limits-intrnl-mongodb-key
+      - name: no-requests-no-limits-mongodb-keyfile
         secret:
-          defaultMode: 48
+          defaultMode: 288
           optional: false
-          secretName: no-requests-no-limits-intrnl-mongodb-key
+          secretName: no-requests-no-limits-mongodb-keyfile
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: no-requests-no-limits-ssl-internal
   updateStrategy:
     rollingUpdate:
       partition: 0
