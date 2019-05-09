@@ -58,16 +58,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Mongod.Storage.Engine = defaultStorageEngine
 	}
 
-	if len(cr.SSLSecretName) > 0 {
-		cr.Spec.SSLSecretName = cr.SSLSecretName
-	} else {
-		cr.Spec.SSLSecretName = cr.Name + "-ssl"
+	if cr.Spec.Secrets.SSL == "" {
+		cr.Spec.Secrets.SSL = cr.Name + "-ssl"
 	}
 
-	if len(cr.SSLInternalSecretName) > 0 {
-		cr.Spec.SSLInternalSecretName = cr.SSLInternalSecretName
-	} else {
-		cr.Spec.SSLInternalSecretName = cr.Name + "-ssl-internal"
+	if cr.Spec.Secrets.SSLInternal == "" {
+		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
 	switch cr.Spec.Mongod.Storage.Engine {
