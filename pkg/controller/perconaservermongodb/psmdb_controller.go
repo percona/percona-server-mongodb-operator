@@ -136,7 +136,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if !cr.Spec.UnsafeConf {
 		err = r.reconsileSSL(cr)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf(`TLS secrets handler: "%v". Please create your TLS secrets `+cr.Spec.SSLSecretName+` and `+cr.Spec.SSLInternalSecretName+` manually or setup cert-manager correctly`, err)
+			return reconcile.Result{}, fmt.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
 		}
 	}
 
@@ -299,7 +299,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	err := r.client.Get(context.TODO(),
 		types.NamespacedName{
 			Namespace: cr.Namespace,
-			Name:      cr.Spec.SSLSecretName,
+			Name:      cr.Spec.Secrets.SSL,
 		},
 		&secretObj,
 	)
@@ -340,7 +340,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 			Namespace: cr.Namespace,
 		},
 		Spec: cm.CertificateSpec{
-			SecretName: cr.Spec.SSLSecretName,
+			SecretName: cr.Spec.Secrets.SSL,
 			CommonName: cr.Name,
 			DNSNames:   certificateDNSNames,
 			IsCA:       true,
@@ -353,7 +353,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create certificate: %v", err)
 	}
-	if cr.Spec.SSLSecretName == cr.Spec.SSLInternalSecretName {
+	if cr.Spec.Secrets.SSL == cr.Spec.Secrets.SSLInternal {
 		return nil
 	}
 
@@ -363,7 +363,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 			Namespace: cr.Namespace,
 		},
 		Spec: cm.CertificateSpec{
-			SecretName: cr.Spec.SSLInternalSecretName,
+			SecretName: cr.Spec.Secrets.SSLInternal,
 			CommonName: cr.Name,
 			DNSNames:   certificateDNSNames,
 			IsCA:       true,
@@ -414,12 +414,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	// add TLS/SSL Volume
+	t := true
 	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 		corev1.Volume{
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.SSLSecretName,
+					SecretName:  cr.Spec.Secrets.SSL,
 					Optional:    &cr.Spec.UnsafeConf,
 					DefaultMode: &secretFileMode,
 				},
@@ -429,8 +430,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.SSLInternalSecretName,
-					Optional:    &cr.Spec.UnsafeConf,
+					SecretName:  cr.Spec.Secrets.SSLInternal,
+					Optional:    &t,
 					DefaultMode: &secretFileMode,
 				},
 			},
