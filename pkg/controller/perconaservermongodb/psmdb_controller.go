@@ -309,7 +309,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 		return fmt.Errorf("get secret: %v", err)
 	}
 
-	issuerKind := "ClusterIssuer"
+	issuerKind := "Issuer"
 	issuerName := cr.Name + "-psmdb-ca"
 	var certificateDNSNames []string
 	for _, replset := range cr.Spec.Replsets {
