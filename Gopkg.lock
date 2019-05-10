@@ -969,6 +969,7 @@
     "github.com/pkg/errors",
     "github.com/stretchr/testify/assert",
     "google.golang.org/grpc",
+    "google.golang.org/grpc/metadata",
     "gopkg.in/mgo.v2",
     "gopkg.in/mgo.v2/bson",
     "gopkg.in/yaml.v2",
