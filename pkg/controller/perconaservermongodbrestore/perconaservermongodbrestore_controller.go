@@ -136,7 +136,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.Perco
 	}
 	for _, v := range backups.Items {
 		if v.Name == cr.Spec.BackupName {
-
+			if v.Status.State != psmdbv1alpha1.StateReady {
+				return nil, fmt.Errorf("backup not ready")
+			}
 			return &v, nil
 
 		}
