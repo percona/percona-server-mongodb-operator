@@ -67,10 +67,6 @@ const (
 	BackupSucceeded                  = "Ready"
 )
 
-func init() {
-	SchemeBuilder.Register(&PerconaServerMongoDBBackup{}, &PerconaServerMongoDBBackupList{})
-}
-
 func (p *PerconaServerMongoDBBackup) CheckFields() error {
 	if len(p.Spec.StorageName) == 0 {
 		return fmt.Errorf("spec storageName field is empty")

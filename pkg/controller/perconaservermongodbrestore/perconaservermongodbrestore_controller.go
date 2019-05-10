@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -123,27 +124,22 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 
 // checkBackup return cluster name if backup exist
 func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.PerconaServerMongoDBRestore, request reconcile.Request) (*psmdbv1alpha1.PerconaServerMongoDBBackup, error) {
-	backups := &psmdbv1alpha1.PerconaServerMongoDBBackupList{}
-	err := r.client.List(context.TODO(), &client.ListOptions{
-		Namespace: request.Namespace,
-	},
-		backups)
+	backup := &psmdbv1alpha1.PerconaServerMongoDBBackup{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name:      cr.Spec.BackupName,
+		Namespace: cr.Namespace,
+	}, backup)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	for _, v := range backups.Items {
-		if v.Name == cr.Spec.BackupName {
-			if v.Status.State != psmdbv1alpha1.StateReady {
-				return nil, fmt.Errorf("backup not ready")
-			}
-			return &v, nil
-
-		}
+	if backup.Status.State != psmdbv1alpha1.StateReady {
+		return nil, fmt.Errorf("backup not ready")
 	}
-	return nil, nil
+
+	return backup, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) error {

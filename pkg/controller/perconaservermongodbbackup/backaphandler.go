@@ -22,9 +22,9 @@ func newBackupHandler(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (BackupHandl
 	grpcOpts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(makeUnaryInterceptor("")),
 		grpc.WithStreamInterceptor(makeStreamInterceptor("")),
+		grpc.WithInsecure(),
 	}
-	grpcOps := append(grpcOpts, grpc.WithInsecure())
-	conn, err := grpc.Dial(cr.Spec.PSMDBCluster+backup.GetCoordinatorSuffix()+":10001", grpcOps...)
+	conn, err := grpc.Dial(cr.Spec.PSMDBCluster+backup.GetCoordinatorSuffix()+":10001", grpcOpts...)
 	if err != nil {
 		return b, err
 	}
@@ -32,7 +32,7 @@ func newBackupHandler(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (BackupHandl
 	client := pbapi.NewApiClient(conn)
 
 	b = BackupHandler{
-		Client: client,
+		client: client,
 	}
 
 	return b, nil
@@ -44,8 +44,8 @@ func makeUnaryInterceptor(token string) func(ctx context.Context, method string,
 		cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		md := metadata.Pairs("authorization", "bearer "+token)
 		ctx = metadata.NewOutgoingContext(ctx, md)
-		err := invoker(ctx, method, req, reply, cc, opts...)
-		return err
+
+		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
 
@@ -54,7 +54,6 @@ func makeStreamInterceptor(token string) func(ctx context.Context, desc *grpc.St
 
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string,
 		streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-
 		md := metadata.Pairs("authorization", "bearer "+token)
 		ctx = metadata.NewOutgoingContext(ctx, md)
 		return streamer(ctx, desc, cc, method, opts...)
@@ -63,18 +62,16 @@ func makeStreamInterceptor(token string) func(ctx context.Context, desc *grpc.St
 
 // BackupHandler is for working with backup coordinator
 type BackupHandler struct {
-	Client pbapi.ApiClient
+	client pbapi.ApiClient
 }
 
 // CheckBackup is for check if backup exist
 func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (psmdbv1alpha1.PerconaServerMongoDBBackupStatus, error) {
 	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
-
 	backup, err := b.getMetaData(cr.Name)
 	if err != nil {
 		return backupStatus, fmt.Errorf("get metadata: %v", err)
 	}
-
 	if len(backup.Filename) == 0 {
 		return backupStatus, nil
 	}
@@ -85,7 +82,7 @@ func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 
 func (b *BackupHandler) getMetaData(name string) (*pbapi.MetadataFile, error) {
 	backup := &pbapi.MetadataFile{}
-	stream, err := b.Client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
+	stream, err := b.client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
 	if err != nil {
 		return backup, err
 	}
@@ -108,7 +105,6 @@ func (b *BackupHandler) getMetaData(name string) (*pbapi.MetadataFile, error) {
 
 func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.PerconaServerMongoDBBackupStatus {
 	newStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
-
 	newStatus.StartAt = &metav1.Time{
 		Time: time.Unix(backup.Metadata.StartTs, 0),
 	}
@@ -140,7 +136,6 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
 		StorageName: cr.Spec.StorageName,
 	}
-
 	exists, err := b.isStorageExists(cr.Spec.StorageName)
 	if err != nil {
 		return backupStatus, fmt.Errorf("check storage: %v", err)
@@ -148,7 +143,6 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 	if !exists {
 		return backupStatus, errors.New("storage is not available")
 	}
-
 	msg := &pbapi.RunBackupParams{
 		BackupType:      pbapi.BackupType_BACKUP_TYPE_LOGICAL,
 		CompressionType: pbapi.CompressionType_COMPRESSION_TYPE_GZIP,
@@ -156,28 +150,26 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 		Description:     cr.Name,
 		StorageName:     cr.Spec.StorageName,
 	}
-	_, err = b.Client.RunBackup(context.Background(), msg)
+	_, err = b.client.RunBackup(context.Background(), msg)
 	if err != nil {
 		backupStatus.State = psmdbv1alpha1.StateRejected
 		return backupStatus, err
 	}
-
 	backupStatus.State = psmdbv1alpha1.StateRequested
+
 	return backupStatus, nil
 }
 
 func (b *BackupHandler) isStorageExists(storageName string) (bool, error) {
-	stream, err := b.Client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
+	stream, err := b.client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
 	if err != nil {
 		return false, fmt.Errorf("list storages: %v", err)
 	}
 	defer stream.CloseSend()
-
 	for storage, err := stream.Recv(); err != io.EOF; {
 		if err != nil {
 			return false, fmt.Errorf("stream error: %v", err)
 		}
-
 		if storage.Name == storageName {
 			return true, nil
 		}
