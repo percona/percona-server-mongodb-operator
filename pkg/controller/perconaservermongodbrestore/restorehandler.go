@@ -20,7 +20,7 @@ func newRestoreHandler(cluster string) (RestoreHandler, error) {
 	client := pbapi.NewApiClient(conn)
 
 	r = RestoreHandler{
-		Client: client,
+		client: client,
 	}
 
 	return r, nil
@@ -28,7 +28,7 @@ func newRestoreHandler(cluster string) (RestoreHandler, error) {
 
 // RestoreHandler is for working with backup coordinator
 type RestoreHandler struct {
-	Client pbapi.ApiClient
+	client pbapi.ApiClient
 }
 
 // StartRestore is for starting new restore
@@ -37,7 +37,7 @@ func (r *RestoreHandler) StartRestore(cr *psmdbv1alpha1.PerconaServerMongoDBBack
 		StorageName:  cr.Spec.StorageName,
 		MetadataFile: cr.Status.Destination,
 	}
-	_, err := r.Client.RunRestore(context.Background(), msg)
+	_, err := r.client.RunRestore(context.Background(), msg)
 	if err != nil {
 		return err
 	}

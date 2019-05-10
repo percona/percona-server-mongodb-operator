@@ -48,7 +48,3 @@ type PerconaServerMongoDBRestoreList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PerconaServerMongoDBRestore `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&PerconaServerMongoDBRestore{}, &PerconaServerMongoDBRestoreList{})
-}
