@@ -33,8 +33,8 @@ run_restore() {
         pbmctl run restore \
         --server-address=some-name-backup-coordinator:10001 \
         --storage $storage \
-        ${backup_name}.json
-    #    | grep 'Restore completed'
+        ${backup_name}.json \
+        | grep 'Restore completed'
 
     compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
     compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
@@ -86,6 +86,7 @@ desc 'write data, read from all'
 run_mongo \
     'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
     "userAdmin:userAdmin123456@$cluster.$namespace"
+sleep 2
 run_mongo \
     'use myApp\n db.test.insert({ x: 100500 })' \
     "myApp:myPass@$cluster.$namespace"
