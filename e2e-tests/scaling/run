@@ -22,6 +22,7 @@ desc 'check data consistency: write data, read from all'
 run_mongo \
     'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
     "userAdmin:userAdmin123456@$cluster.$namespace"
+sleep 2
 run_mongo \
     'use myApp\n db.test.insert({ x: 100500 })' \
     "myApp:myPass@$cluster.$namespace"

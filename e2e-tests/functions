@@ -163,6 +163,7 @@ wait_for_running() {
     for i in $(seq 0 $last_pod); do
         wait_pod ${name}-${i}
     done
+    sleep 10
 }
 
 wait_for_delete() {
@@ -223,7 +224,7 @@ run_mongo() {
 get_service_ip() {
     local service=$1
     if [ "$(kubectl get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
-        echo -n $service.${service/-rs0*/}-rs0.$namespace
+        echo -n $service.${service/-rs0*/}-rs0
         return
     fi
     while (kubectl get service/$service -o 'jsonpath={.spec.type}' 2>&1 || : ) | grep -q NotFound; do
@@ -338,9 +339,9 @@ destroy() {
 
     kubectl delete -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.7/deploy/manifests/cert-manager.yaml 2>/dev/null || :
     if [ "$OPENSHIFT" == 1 ]; then
-        oc delete project "$namespace"
+        oc delete --grace-period=0 --force=true project "$namespace"
     else
-        kubectl delete namespace "$namespace"
+        kubectl delete --grace-period=0 --force=true namespace "$namespace"
     fi
     rm -rf ${tmp_dir}
 }
@@ -375,7 +376,7 @@ get_service_endpoint() {
             | jq '.status.loadBalancer.ingress[].hostname' \
             | sed -e 's/^"//; s/"$//;'
     )
-    if [ $hostname != "null" ]; then
+    if [ -n "$hostname" -a "$hostname" != "null" ]; then
         echo $hostname
         return
     fi
@@ -385,7 +386,7 @@ get_service_endpoint() {
             | jq '.status.loadBalancer.ingress[].ip' \
             | sed -e 's/^"//; s/"$//;'
     )
-    if [ $ip != "null" ]; then
+    if [ -n "$ip" -a "$ip" != "null" ]; then
         echo $ip
         return
     fi
@@ -400,7 +401,8 @@ get_metric_values() {
     local end=$($date -u "+%s")
     local endpoint=$(get_service_endpoint monitoring-service)
     curl -s -k "https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=$metric%7Binstance%3D%22$instance%22%7D&start=$start&end=$end&step=60" \
-        | jq '.data.result[0].values[][1]'
+        | jq '.data.result[0].values[][1]' \
+        | grep '^"[0-9]'
 }
 
 get_qan_values() {
