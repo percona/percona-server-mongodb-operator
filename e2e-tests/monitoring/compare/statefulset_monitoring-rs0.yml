@@ -39,6 +39,9 @@ spec:
         - --port=27017
         - --replSet=rs0
         - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
         - --profile=2
         - --rateLimit=1
         - --wiredTigerIndexPrefixCompression=true
@@ -88,7 +91,13 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: monitoring-intrnl-mongodb-key
+          name: monitoring-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
           readOnly: true
         workingDir: /data/db
       - env:
@@ -106,6 +115,16 @@ spec:
             secretKeyRef:
               key: MONGODB_CLUSTER_MONITOR_PASSWORD
               name: some-users
+        - name: PMM_USER
+          valueFrom:
+            secretKeyRef:
+              key: PMM_SERVER_USER
+              name: some-users
+        - name: PMM_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: PMM_SERVER_PASSWORD
+              name: some-users
         - name: DB_ARGS
           value: --uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/
         imagePullPolicy: Always
@@ -120,11 +139,21 @@ spec:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: monitoring-intrnl-mongodb-key
+      - name: monitoring-mongodb-keyfile
         secret:
-          defaultMode: 48
+          defaultMode: 288
           optional: false
-          secretName: monitoring-intrnl-mongodb-key
+          secretName: monitoring-mongodb-keyfile
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: monitoring-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: monitoring-ssl-internal
   updateStrategy:
     rollingUpdate:
       partition: 0

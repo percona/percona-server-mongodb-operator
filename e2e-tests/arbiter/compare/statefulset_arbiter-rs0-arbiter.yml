@@ -50,6 +50,9 @@ spec:
         - --port=27017
         - --replSet=rs0
         - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
         - --slowms=0
         - --profile=1
         - --wiredTigerIndexPrefixCompression=true
@@ -99,7 +102,13 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: arbiter-intrnl-mongodb-key
+          name: arbiter-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -109,11 +118,21 @@ spec:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: arbiter-intrnl-mongodb-key
+      - name: arbiter-mongodb-keyfile
         secret:
-          defaultMode: 48
+          defaultMode: 288
           optional: false
-          secretName: arbiter-intrnl-mongodb-key
+          secretName: arbiter-mongodb-keyfile
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: arbiter-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: arbiter-ssl-internal
       - emptyDir: {}
         name: mongod-data
   updateStrategy:
