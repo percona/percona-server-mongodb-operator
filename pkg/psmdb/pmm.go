@@ -47,7 +47,7 @@ func PMMContainer(spec api.PMMSpec, secrets string) corev1.Container {
 				Name: "PMM_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "PMM_SERVER_PASSWORD",
+						Key: "PMM_SERVER_USER",
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: secrets,
 						},
