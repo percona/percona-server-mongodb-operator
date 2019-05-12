@@ -169,7 +169,7 @@ spec:
       - name: ssl-internal
         secret:
           defaultMode: 288
-          optional: false
+          optional: true
           secretName: some-name-ssl-internal
       - name: some-name-backup-agent-config
         secret:

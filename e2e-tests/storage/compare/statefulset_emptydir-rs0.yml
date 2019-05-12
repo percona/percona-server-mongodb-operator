@@ -88,7 +88,7 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: emptydir-intrnl-mongodb-key
+          name: emptydir-mongodb-keyfile
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -98,11 +98,11 @@ spec:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: emptydir-intrnl-mongodb-key
+      - name: emptydir-mongodb-keyfile
         secret:
           defaultMode: 48
           optional: false
-          secretName: emptydir-intrnl-mongodb-key
+          secretName: emptydir-mongodb-keyfile
       - emptyDir: {}
         name: mongod-data
   updateStrategy:

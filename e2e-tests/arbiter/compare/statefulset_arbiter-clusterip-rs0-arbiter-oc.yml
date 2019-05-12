@@ -2,13 +2,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  labels:
-    app.kubernetes.io/component: arbiter
-    app.kubernetes.io/instance: arbiter-clusterip
-    app.kubernetes.io/managed-by: percona-server-mongodb-operator
-    app.kubernetes.io/name: percona-server-mongodb
-    app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: rs0
   name: arbiter-clusterip-rs0-arbiter
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1alpha1
@@ -57,6 +50,9 @@ spec:
         - --port=27017
         - --replSet=rs0
         - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
         - --slowms=0
         - --profile=1
         - --wiredTigerIndexPrefixCompression=true
@@ -105,7 +101,13 @@ spec:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: arbiter-clusterip-intrnl-mongodb-key
+          name: arbiter-clusterip-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -114,11 +116,21 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: arbiter-clusterip-intrnl-mongodb-key
+      - name: arbiter-clusterip-mongodb-keyfile
         secret:
-          defaultMode: 48
+          defaultMode: 288
           optional: false
-          secretName: arbiter-clusterip-intrnl-mongodb-key
+          secretName: arbiter-clusterip-mongodb-keyfile
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: arbiter-clusterip-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: arbiter-clusterip-ssl-internal
       - emptyDir: {}
         name: mongod-data
   updateStrategy:
