@@ -141,6 +141,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				bkpTask.CompressionType = BackupCompressionGzip
 			}
 		}
+		if cr.Spec.Backup.Coordinator.LivenessInitialDelaySeconds == nil {
+			ld := int32(5)
+			cr.Spec.Backup.Coordinator.LivenessInitialDelaySeconds = &ld
+		}
 		cr.Spec.Backup.Coordinator.MultiAZ.reconcileOpts()
 	}
 
@@ -172,6 +176,16 @@ func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) error {
 
 	if !unsafe {
 		rs.setSafeDefauts(log)
+	}
+
+	if rs.LivenessInitialDelaySeconds == nil {
+		ld := int32(90)
+		rs.LivenessInitialDelaySeconds = &ld
+	}
+
+	if rs.ReadinessInitialDelaySeconds == nil {
+		rd := int32(10)
+		rs.ReadinessInitialDelaySeconds = &rd
 	}
 
 	return nil

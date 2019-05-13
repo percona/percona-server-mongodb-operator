@@ -87,13 +87,15 @@ type PodAffinity struct {
 }
 
 type ReplsetSpec struct {
-	Resources   *ResourcesSpec `json:"resources,omitempty"`
-	Name        string         `json:"name"`
-	Size        int32          `json:"size"`
-	ClusterRole ClusterRole    `json:"clusterRole,omitempty"`
-	Arbiter     Arbiter        `json:"arbiter,omitempty"`
-	Expose      Expose         `json:"expose,omitempty"`
-	VolumeSpec  *VolumeSpec    `json:"volumeSpec,omitempty"`
+	Resources                    *ResourcesSpec `json:"resources,omitempty"`
+	Name                         string         `json:"name"`
+	Size                         int32          `json:"size"`
+	ClusterRole                  ClusterRole    `json:"clusterRole,omitempty"`
+	Arbiter                      Arbiter        `json:"arbiter,omitempty"`
+	Expose                       Expose         `json:"expose,omitempty"`
+	VolumeSpec                   *VolumeSpec    `json:"volumeSpec,omitempty"`
+	ReadinessInitialDelaySeconds *int32         `json:"readinessDelaySec,omitempty"`
+	LivenessInitialDelaySeconds  *int32         `json:"livenessDelaySec,omitempty"`
 	MultiAZ
 }
 
@@ -264,9 +266,10 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupCoordinatorSpec struct {
-	Resources            *corev1.ResourceRequirements `json:"resources,omitempty"`
-	StorageClass         string                       `json:"storageClass,omitempty"`
-	EnableClientsLogging bool                         `json:"enableClientsLogging,omitempty"`
+	Resources                   *corev1.ResourceRequirements `json:"resources,omitempty"`
+	StorageClass                string                       `json:"storageClass,omitempty"`
+	EnableClientsLogging        bool                         `json:"enableClientsLogging,omitempty"`
+	LivenessInitialDelaySeconds *int32                       `json:"livenessDelaySec,omitempty"`
 	MultiAZ
 }
 

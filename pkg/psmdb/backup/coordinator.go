@@ -201,7 +201,7 @@ func newCoordinatorPodSpec(spec *api.BackupCoordinatorSpec, image string, imageP
 					},
 				},
 				LivenessProbe: &corev1.Probe{
-					InitialDelaySeconds: int32(5),
+					InitialDelaySeconds: *spec.LivenessInitialDelaySeconds,
 					TimeoutSeconds:      int32(3),
 					Handler: corev1.Handler{
 						TCPSocket: &corev1.TCPSocketAction{
