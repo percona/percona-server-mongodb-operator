@@ -475,11 +475,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			if err != nil {
 				return nil, fmt.Errorf("check pmm secrets: %v", err)
 			}
-			_, okl := pmmsec.StringData[psmdb.PMMUserKey]
-			_, okp := pmmsec.StringData[psmdb.PMMPasswordKey]
-			customLogin := okl && okp
 
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, customLogin))
+			_, okl := pmmsec.Data[psmdb.PMMUserKey]
+			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
+
+			sfsSpec.Template.Spec.Containers = append(
+				sfsSpec.Template.Spec.Containers,
+				psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp),
+			)
 		}
 	}
 
