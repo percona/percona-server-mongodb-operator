@@ -97,7 +97,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	if instance.Status.State == psmdbv1alpha1.RestoreStateRequested {
 		return reconcile.Result{}, nil
 	}
-	backup, err := r.getBackup(instance, request)
+	backup, err := r.getBackup(instance)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("get backup: %v", err)
 	}
@@ -123,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 }
 
 // checkBackup return cluster name if backup exist
-func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.PerconaServerMongoDBRestore, request reconcile.Request) (*psmdbv1alpha1.PerconaServerMongoDBBackup, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) (*psmdbv1alpha1.PerconaServerMongoDBBackup, error) {
 	backup := &psmdbv1alpha1.PerconaServerMongoDBBackup{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Name:      cr.Spec.BackupName,

@@ -1,8 +1,7 @@
 apiVersion: psmdb.percona.com/v1alpha1
 kind: PerconaServerMongoDBRestore
 metadata:
-  name: example-perconaservermongodbrestore-1
+  name: example-perconaservermongodbrestore-2
 spec:
-  storage: storage
-  backupFileName: file.json
+  backupName: example-perconaservermongodbbackup-2
 
