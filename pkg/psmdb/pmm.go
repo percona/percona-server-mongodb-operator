@@ -6,9 +6,14 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 )
 
+const (
+	PMMUserKey     = "PMM_SERVER_USER"
+	PMMPasswordKey = "PMM_SERVER_PASSWORD"
+)
+
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(spec api.PMMSpec, secrets string) corev1.Container {
-	return corev1.Container{
+func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool) corev1.Container {
+	pmm := corev1.Container{
 		Name:            "pmm-client",
 		Image:           spec.Image,
 		ImagePullPolicy: corev1.PullAlways,
@@ -44,10 +49,23 @@ func PMMContainer(spec api.PMMSpec, secrets string) corev1.Container {
 				},
 			},
 			{
+				Name:  "DB_ARGS",
+				Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
+			},
+		},
+	}
+
+	if customLogin {
+		pmm.Env = append(pmm.Env, []corev1.EnvVar{
+			{
 				Name: "PMM_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
+<<<<<<< HEAD
 						Key: "PMM_SERVER_USER",
+=======
+						Key: PMMUserKey,
+>>>>>>> rl-probes
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: secrets,
 						},
@@ -58,17 +76,15 @@ func PMMContainer(spec api.PMMSpec, secrets string) corev1.Container {
 				Name: "PMM_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "PMM_SERVER_PASSWORD",
+						Key: PMMPasswordKey,
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: secrets,
 						},
 					},
 				},
 			},
-			{
-				Name:  "DB_ARGS",
-				Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
-			},
-		},
+		}...)
 	}
+
+	return pmm
 }
