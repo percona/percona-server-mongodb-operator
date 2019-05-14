@@ -6,6 +6,7 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
+  allowUnsafeConfigurations: false
   backup:
     enabled: true
     debug: true
@@ -22,6 +23,8 @@ spec:
           memory: 0.1G
           storage: 1Gi
       #storageClass: aws-gp2
+      affinity:
+         antiAffinityTopologyKey: "kubernetes.io/hostname"
     storages:
       aws-s3:
         type: s3
