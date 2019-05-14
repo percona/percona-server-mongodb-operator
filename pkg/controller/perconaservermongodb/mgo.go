@@ -22,25 +22,29 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
-	session, err := mongo.Dial(r.getReplsetAddrs(cr, replset, pods.Items), replset.Name, usersSecret)
+
+	session, err := mongo.Dial(r.getReplsetAddrs(cr, replset, pods.Items), replset.Name, usersSecret, true)
 	if err != nil {
-		// try to init replset and if succseed
-		// we'll go further on the next reconcile iteration
-		if !cr.Status.Replsets[replset.Name].Initialized {
-			err = r.handleReplsetInit(cr, replset, pods.Items)
-			if err != nil {
-				return errors.Wrap(err, "handleReplsetInit:")
+		session, err = mongo.Dial(r.getReplsetAddrs(cr, replset, pods.Items), replset.Name, usersSecret, false)
+		if err != nil {
+			// try to init replset and if succseed
+			// we'll go further on the next reconcile iteration
+			if !cr.Status.Replsets[replset.Name].Initialized {
+				err = r.handleReplsetInit(cr, replset, pods.Items)
+				if err != nil {
+					return errors.Wrap(err, "handleReplsetInit:")
+				}
+				cr.Status.Replsets[replset.Name].Initialized = true
+				cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+					Status:             api.ConditionTrue,
+					Type:               api.ClusterRSInit,
+					Message:            replset.Name,
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				})
+				return nil
 			}
-			cr.Status.Replsets[replset.Name].Initialized = true
-			cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
-				Status:             api.ConditionTrue,
-				Type:               api.ClusterRSInit,
-				Message:            replset.Name,
-				LastTransitionTime: metav1.NewTime(time.Now()),
-			})
-			return nil
+			return errors.Wrap(err, "dial:")
 		}
-		return errors.Wrap(err, "dial:")
 	}
 	defer session.Close()
 

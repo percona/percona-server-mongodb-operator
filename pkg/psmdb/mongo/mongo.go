@@ -1,7 +1,9 @@
 package mongo
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/pkg/errors"
@@ -81,15 +83,24 @@ const (
 	envMongoDBClusterAdminPassword = "MONGODB_CLUSTER_ADMIN_PASSWORD"
 )
 
-func Dial(addrs []string, replset string, usersSecret *corev1.Secret) (*mgo.Session, error) {
-	session, err := mgo.DialWithInfo(&mgo.DialInfo{
+func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS bool) (*mgo.Session, error) {
+	dialInfo := mgo.DialInfo{
 		Addrs:          addrs,
 		ReplicaSetName: replset,
 		Username:       string(usersSecret.Data[envMongoDBClusterAdminUser]),
 		Password:       string(usersSecret.Data[envMongoDBClusterAdminPassword]),
 		Timeout:        3 * time.Second,
 		FailFast:       true,
-	})
+	}
+	if useTLS {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true,
+		}
+		dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+			return tls.Dial("tcp", addr.String(), tlsConfig)
+		}
+	}
+	session, err := mgo.DialWithInfo(&dialInfo)
 	if err != nil {
 		return nil, err
 	}
