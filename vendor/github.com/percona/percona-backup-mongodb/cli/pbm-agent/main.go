@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,6 +25,15 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding/gzip"
 	yaml "gopkg.in/yaml.v2"
+)
+
+const (
+	defaultReconnectCount = 3
+	defaultReconnectDelay = 10
+	sampleConfigFile      = "config.sample.yml"
+	defaultServerAddress  = "127.0.0.1:10000"
+	defaultMongoDBHost    = "127.0.0.1"
+	defaultMongoDBPort    = "27017"
 )
 
 type cliOptions struct {
@@ -54,16 +62,12 @@ type cliOptions struct {
 	MongodbSslOptions client.SSLOptions `yaml:"mongodb_ssl_options,omitempty"`
 }
 
-const (
-	sampleConfigFile     = "config.sample.yml"
-	defaultServerAddress = "127.0.0.1:10000"
-	defaultMongoDBHost   = "127.0.0.1"
-	defaultMongoDBPort   = "27017"
-)
-
 var (
-	version         = "dev"
-	commit          = "none"
+	Version         = "dev"
+	Commit          = "none"
+	Build           = "date"
+	Branch          = "master"
+	GoVersion       = "0.0.0"
 	log             = logrus.New()
 	program         = filepath.Base(os.Args[0])
 	grpcCompressors = []string{
@@ -99,22 +103,20 @@ func main() {
 	if opts.Quiet {
 		log.SetLevel(logrus.ErrorLevel)
 	}
-	if opts.Debug {
+	if opts.Debug || os.Getenv("DEBUG") == "1" {
 		log.SetLevel(logrus.DebugLevel)
 	}
-	log.SetLevel(logrus.DebugLevel)
 
-	log.Infof("Starting %s version %s, git commit %s", program, version, commit)
+	log.Infof("Starting %s version %s, git commit %s", program, Version, Commit)
 
 	grpcOpts := getgRPCOptions(opts)
-
-	rand.Seed(time.Now().UnixNano())
 
 	// Connect to the percona-backup-mongodb gRPC server
 	conn, err := grpc.Dial(opts.ServerAddress, grpcOpts...)
 	if err != nil {
 		log.Fatalf("Fail to connect to the gRPC server at %q: %v", opts.ServerAddress, err)
 	}
+
 	defer conn.Close()
 	log.Infof("Connected to the gRPC server at %s", opts.ServerAddress)
 
@@ -139,24 +141,31 @@ func main() {
 			log.Fatalf("Cannot parse MongoDB DSN %q, %s", opts.DSN, err)
 		}
 	}
-	mdbSession := &mgo.Session{}
+	// Test the connection to the MongoDB server before starting the agent.
+	// We don't want to wait until backup/restore start to know there is an error with the
+	// connection options
 	connectionAttempts := 0
 	for {
 		connectionAttempts++
-		mdbSession, err = mgo.DialWithInfo(di)
+		mdbSession, err := mgo.DialWithInfo(di)
 		if err != nil {
-			log.Errorf("Cannot connect to MongoDB at %s: %s", di.Addrs[0], err)
+			log.Errorf("Cannot connect to MongoDB at %s: %s. Connection atempt %d of %d",
+				di.Addrs[0], err, connectionAttempts, opts.MongodbConnOptions.ReconnectCount)
 			if opts.MongodbConnOptions.ReconnectCount == 0 || connectionAttempts < opts.MongodbConnOptions.ReconnectCount {
 				time.Sleep(time.Duration(opts.MongodbConnOptions.ReconnectDelay) * time.Second)
 				continue
 			}
-			log.Fatalf("Could not connect to MongoDB. Retried every %d seconds, %d times", opts.MongodbConnOptions.ReconnectDelay, connectionAttempts)
+			log.Fatalf("Could not connect to MongoDB. Retried every %d seconds, %d times",
+				opts.MongodbConnOptions.ReconnectDelay, connectionAttempts)
 		}
+		if err := mdbSession.Ping(); err != nil {
+			log.Fatalf("Cannot connect to the database server: %s", err)
+		}
+		mdbSession.Close()
 		break
 	}
 
 	log.Infof("Connected to MongoDB at %s", di.Addrs[0])
-	defer mdbSession.Close()
 
 	stg, err := storage.NewStorageBackendsFromYaml(utils.Expand(opts.StoragesConfig))
 	if err != nil {
@@ -175,6 +184,23 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	stgs, err := client.ListStorages()
+	if err != nil {
+		log.Fatalf("Cannot check if all storages from file %q are valid: %s", opts.StoragesConfig, err)
+	}
+	count := 0
+	for _, stg := range stgs {
+		if stg.Valid {
+			count++
+			continue
+		}
+		log.Errorf("Storage %s is not valid. Can read: %v, can write: %v", stg.Name, stg.CanRead, stg.CanWrite)
+	}
+	if count != len(stgs) { // not all storages are valid
+		log.Error("Not all storages are valid")
+	}
+
 	if err := client.Start(); err != nil {
 		log.Fatalf("Cannot start client: %s", err)
 	}
@@ -190,12 +216,14 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 
 	<-c
-	client.Stop()
+	if err := client.Stop(); err != nil {
+		log.Fatalf("Cannot stop client: %s", err)
+	}
 }
 
 func processCliArgs(args []string) (*cliOptions, error) {
 	app := kingpin.New("pbm-agent", "Percona Backup for MongoDB agent")
-	app.Version(fmt.Sprintf("%s version %s, git commit %s", app.Name, version, commit))
+	app.Version(versionMessage())
 
 	opts := &cliOptions{
 		app:           app,
@@ -206,40 +234,72 @@ func processCliArgs(args []string) (*cliOptions, error) {
 		},
 	}
 
-	app.Flag("config-file", "Backup agent config file").Short('c').StringVar(&opts.configFile)
-	app.Flag("debug", "Enable debug log level").Short('v').BoolVar(&opts.Debug)
-	app.Flag("generate-sample-config", "Generate sample config.yml file with the defaults").BoolVar(&opts.generateSampleConfig)
-	app.Flag("log-file", "Backup agent log file").Short('l').StringVar(&opts.LogFile)
-	app.Flag("pid-file", "Backup agent pid file").StringVar(&opts.PIDFile)
-	app.Flag("quiet", "Quiet mode. Log only errors").Short('q').BoolVar(&opts.Quiet)
-	app.Flag("storages-config", "Storages config yaml file").StringVar(&opts.StoragesConfig)
-	app.Flag("use-syslog", "Use syslog instead of Stderr or file").BoolVar(&opts.UseSysLog)
-	//
-	app.Flag("server-address", "Backup coordinator address (host:port)").Short('s').StringVar(&opts.ServerAddress)
-	app.Flag("server-compressor", "Backup coordintor gRPC compression (gzip or none)").Default().EnumVar(&opts.ServerCompressor, grpcCompressors...)
-	app.Flag("tls", "Use TLS for server connection").BoolVar(&opts.TLS)
-	app.Flag("tls-cert-file", "TLS certificate file").ExistingFileVar(&opts.TLSCertFile)
-	app.Flag("tls-key-file", "TLS key file").ExistingFileVar(&opts.TLSKeyFile)
-	app.Flag("tls-ca-file", "TLS CA file").ExistingFileVar(&opts.TLSCAFile)
-	//
-	app.Flag("mongodb-dsn", "MongoDB connection string").StringVar(&opts.DSN)
-	app.Flag("mongodb-host", "MongoDB hostname").Short('H').StringVar(&opts.MongodbConnOptions.Host)
-	app.Flag("mongodb-port", "MongoDB port").Short('P').StringVar(&opts.MongodbConnOptions.Port)
-	app.Flag("mongodb-username", "MongoDB username").Short('u').StringVar(&opts.MongodbConnOptions.User)
-	app.Flag("mongodb-password", "MongoDB password").Short('p').StringVar(&opts.MongodbConnOptions.Password)
-	app.Flag("mongodb-authdb", "MongoDB authentication database").StringVar(&opts.MongodbConnOptions.AuthDB)
-	app.Flag("mongodb-replicaset", "MongoDB Replicaset name").StringVar(&opts.MongodbConnOptions.ReplicasetName)
-	app.Flag("mongodb-reconnect-delay", "MongoDB reconnection delay in seconds").Default("10").IntVar(&opts.MongodbConnOptions.ReconnectDelay)
-	app.Flag("mongodb-reconnect-count", "MongoDB max reconnection attempts (0: forever)").IntVar(&opts.MongodbConnOptions.ReconnectCount)
+	app.Flag("config-file", "Backup agent config file").
+		Short('c').
+		StringVar(&opts.configFile)
+	app.Flag("debug", "Enable debug log level").Short('v').
+		BoolVar(&opts.Debug)
+	app.Flag("generate-sample-config", "Generate sample config.yml file with the defaults").
+		BoolVar(&opts.generateSampleConfig)
+	app.Flag("log-file", "Backup agent log file").
+		Short('l').
+		StringVar(&opts.LogFile)
+	app.Flag("pid-file", "Backup agent pid file").
+		StringVar(&opts.PIDFile)
+	app.Flag("quiet", "Quiet mode. Log only errors").
+		Short('q').
+		BoolVar(&opts.Quiet)
+	app.Flag("storages-config", "Storages config yaml file").
+		Required().
+		StringVar(&opts.StoragesConfig)
+	app.Flag("use-syslog", "Use syslog instead of Stderr or file").
+		BoolVar(&opts.UseSysLog)
+	app.Flag("server-address", "Backup coordinator address (host:port)").
+		Short('s').
+		StringVar(&opts.ServerAddress)
+	app.Flag("server-compressor", "Backup coordintor gRPC compression (gzip or none)").
+		Default().
+		EnumVar(&opts.ServerCompressor, grpcCompressors...)
+	app.Flag("tls", "Use TLS for server connection").
+		BoolVar(&opts.TLS)
+	app.Flag("tls-cert-file", "TLS certificate file").
+		ExistingFileVar(&opts.TLSCertFile)
+	app.Flag("tls-key-file", "TLS key file").
+		ExistingFileVar(&opts.TLSKeyFile)
+	app.Flag("tls-ca-file", "TLS CA file").
+		ExistingFileVar(&opts.TLSCAFile)
+	app.Flag("mongodb-dsn", "MongoDB connection string").
+		StringVar(&opts.DSN)
+	app.Flag("mongodb-host", "MongoDB hostname").
+		Short('H').
+		StringVar(&opts.MongodbConnOptions.Host)
+	app.Flag("mongodb-port", "MongoDB port").
+		Short('P').
+		StringVar(&opts.MongodbConnOptions.Port)
+	app.Flag("mongodb-username", "MongoDB username").
+		Short('u').
+		StringVar(&opts.MongodbConnOptions.User)
+	app.Flag("mongodb-password", "MongoDB password").
+		Short('p').
+		StringVar(&opts.MongodbConnOptions.Password)
+	app.Flag("mongodb-authdb", "MongoDB authentication database").
+		StringVar(&opts.MongodbConnOptions.AuthDB)
+	app.Flag("mongodb-replicaset", "MongoDB Replicaset name").
+		StringVar(&opts.MongodbConnOptions.ReplicasetName)
+	app.Flag("mongodb-reconnect-delay", "MongoDB reconnection delay in seconds").
+		Default(fmt.Sprintf("%d", defaultReconnectDelay)).
+		IntVar(&opts.MongodbConnOptions.ReconnectDelay)
+	app.Flag("mongodb-reconnect-count", "MongoDB max reconnection attempts (0: forever)").
+		Default(fmt.Sprintf("%d", defaultReconnectCount)).
+		IntVar(&opts.MongodbConnOptions.ReconnectCount)
 
 	app.PreAction(func(c *kingpin.ParseContext) error {
 		if opts.configFile == "" {
 			fn := utils.Expand("~/.percona-backup-mongodb.yaml")
 			if _, err := os.Stat(fn); err != nil {
 				return nil
-			} else {
-				opts.configFile = fn
 			}
+			opts.configFile = fn
 		}
 		return utils.LoadOptionsFromFile(opts.configFile, c, opts)
 	})
@@ -335,4 +395,13 @@ func writePidFile(pidFile string) error {
 	// If we get here, then the pidfile didn't exist,
 	// or the pid in it doesn't belong to the user running this app.
 	return ioutil.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0664)
+}
+
+func versionMessage() string {
+	msg := "Version   : " + Version + "\n"
+	msg += "Commit    : " + Commit + "\n"
+	msg += "Build     : " + Build + "\n"
+	msg += "Branch    : " + Branch + "\n"
+	msg += "Go version: " + GoVersion + "\n"
+	return msg
 }

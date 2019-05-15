@@ -22,17 +22,16 @@ import (
 )
 
 const (
-	TestGrpcMessagesPort = "10000"
-	TestGrpcAPIPort      = "10001"
+	TestGrpcMessagesPort      = "10000"
+	TestGrpcAPIPort           = "10001"
+	grpcServerShutdownTimeout = 30
 )
-
-var grpcServerShutdownTimeout = 30
 
 type Daemon struct {
 	grpcServer4Api     *grpc.Server
 	grpcServer4Clients *grpc.Server
 	MessagesServer     *server.MessagesServer
-	APIServer          *api.ApiServer
+	APIServer          *api.Server
 	msgListener        net.Listener
 	apiListener        net.Listener
 	wg                 *sync.WaitGroup
@@ -51,7 +50,8 @@ type PortRs struct {
 	Rs   string
 }
 
-func NewDaemon(ctx context.Context, workDir string, storages *storage.Storages, t *testing.T, logger *logrus.Logger) (*Daemon, error) {
+func NewDaemon(ctx context.Context, workDir string, storages *storage.Storages, t *testing.T,
+	logger *logrus.Logger) (*Daemon, error) {
 	if logger == nil {
 		logger = &logrus.Logger{
 			Out: os.Stderr,
@@ -85,7 +85,7 @@ func NewDaemon(ctx context.Context, workDir string, storages *storage.Storages, 
 	d.ctx, d.cancelFunc = context.WithCancel(ctx)
 	// This is the sever/agents gRPC server
 	d.grpcServer4Clients = grpc.NewServer(opts...)
-	d.MessagesServer = server.NewMessagesServer(workDir, 60, logger)
+	d.MessagesServer = server.NewMessagesServer(workDir)
 	pb.RegisterMessagesServer(d.grpcServer4Clients, d.MessagesServer)
 
 	d.wg.Add(1)
@@ -100,7 +100,7 @@ func NewDaemon(ctx context.Context, workDir string, storages *storage.Storages, 
 
 	// This is the server gRPC API
 	d.grpcServer4Api = grpc.NewServer(opts...)
-	d.APIServer = api.NewApiServer(d.MessagesServer)
+	d.APIServer = api.NewServer(d.MessagesServer)
 	pbapi.RegisterApiServer(d.grpcServer4Api, d.APIServer)
 
 	d.wg.Add(1)
@@ -143,10 +143,10 @@ func (d *Daemon) StartAgents(portRsList []PortRs) error {
 		}
 		c, err := client.NewClient(d.ctx, input)
 		if err != nil {
-			return fmt.Errorf("Cannot create an agent instance %s:%s: %s", dbConnOpts.Host, dbConnOpts.Port, err)
+			return fmt.Errorf("cannot create an agent instance %s:%s: %s", dbConnOpts.Host, dbConnOpts.Port, err)
 		}
 		if err := c.Start(); err != nil {
-			return fmt.Errorf("Cannot start agent instance %s:%s: %s", dbConnOpts.Host, dbConnOpts.Port, err)
+			return fmt.Errorf("cannot start agent instance %s:%s: %s", dbConnOpts.Host, dbConnOpts.Port, err)
 		}
 
 		d.clients = append(d.clients, c)

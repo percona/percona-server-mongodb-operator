@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/percona/percona-backup-mongodb/grpc/api"
 	"github.com/percona/percona-backup-mongodb/grpc/server"
 	"github.com/percona/percona-backup-mongodb/internal/logger"
@@ -18,20 +20,11 @@ import (
 	pb "github.com/percona/percona-backup-mongodb/proto/messages"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/testdata"
-
 	"google.golang.org/grpc/encoding/gzip"
-)
-
-// vars are set by goreleaser
-var (
-	version         = "dev"
-	commit          = "none"
-	grpcCompressors = []string{
-		gzip.Name,
-		"none",
-	}
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/testdata"
 )
 
 type cliOptions struct {
@@ -45,6 +38,7 @@ type cliOptions struct {
 	UseSysLog            bool   `yaml:"sys_log_url" kingpin:"syslog-url"`
 	APIBindIP            string `yaml:"api_bindip" kingpin:"api-bind-ip"`
 	APIPort              int    `yaml:"api_port" kingpin:"api-port"`
+	APIToken             string `yaml:"api_token" kingpin:"api-token"`
 	GrpcBindIP           string `yaml:"grpc_bindip" kingpin:"grpc-bind-ip"`
 	GrpcPort             int    `yaml:"grpc_port" kingpin:"grpc-port"`
 	TLS                  bool   `yaml:"tls" kingpin:"tls"`
@@ -57,22 +51,33 @@ type cliOptions struct {
 	ServerCompressor     string `yaml:"server_compressor" kingpin:"server-compressor"`
 }
 
+type contextKey string
+
+func (c contextKey) String() string {
+	return string(c)
+}
+
 const (
-	defaultGrpcPort           = 10000
-	defaultAPIPort            = 10001
-	defaultClientsRefreshSecs = 60 // Seconds
-	defaultShutdownTimeout    = 5  // Seconds
-	defaultClientsLogging     = true
-	defaultDebugMode          = false
-	defaultWorkDir            = "~/percona-backup-mongodb"
+	defaultGrpcPort        = 10000
+	defaultAPIPort         = 10001
+	defaultShutdownTimeout = 5 // Seconds
+	defaultClientsLogging  = true
+	defaultDebugMode       = false
+	defaultWorkDir         = "~/percona-backup-mongodb"
 )
 
 var (
-	log     = logrus.New()
-	program = filepath.Base(os.Args[0])
+	log       = logrus.New()
+	Version   = "dev"
+	Commit    = "none"
+	Build     = "date"
+	Branch    = "master"
+	GoVersion = "0.0.0"
 )
 
 func main() {
+	program := filepath.Base(os.Args[0])
+
 	opts, err := processCliParams(os.Args[1:])
 	if err != nil {
 		log.Fatalf("Cannot parse command line arguments: %s", err)
@@ -84,7 +89,7 @@ func main() {
 		log = logger.NewDefaultLogger(opts.LogFile)
 	}
 
-	if opts.Debug {
+	if opts.Debug || os.Getenv("DEBUG") == "1" {
 		log.SetLevel(logrus.DebugLevel)
 	}
 
@@ -113,17 +118,18 @@ func main() {
 		grpcOpts = []grpc.ServerOption{grpc.Creds(creds)}
 	}
 
-	log.Infof("Starting %s version %s, git commit %s", program, version, commit)
+	log.Infof("Starting %s version %s, git commit %s", program, Version, Commit)
 
 	stopChan := make(chan interface{})
 	wg := &sync.WaitGroup{}
 
 	var messagesServer *server.MessagesServer
 	grpcServer := grpc.NewServer(grpcOpts...)
+
 	if opts.EnableClientsLogging {
-		messagesServer = server.NewMessagesServerWithClientLogging(opts.WorkDir, opts.ClientsRefreshSecs, log)
+		messagesServer = server.NewMessagesServerWithClientLogging(opts.WorkDir, log)
 	} else {
-		messagesServer = server.NewMessagesServer(opts.WorkDir, opts.ClientsRefreshSecs, log)
+		messagesServer = server.NewMessagesServer(opts.WorkDir)
 	}
 	pb.RegisterMessagesServer(grpcServer, messagesServer)
 
@@ -131,8 +137,14 @@ func main() {
 	log.Printf("Starting agents gRPC server. Listening on %s", lis.Addr().String())
 	runAgentsGRPCServer(grpcServer, lis, opts.ShutdownTimeout, stopChan, wg)
 
-	apiGrpcServer := grpc.NewServer(grpcOpts...)
-	apiServer := api.NewApiServer(messagesServer)
+	apiGrpcOpts := make([]grpc.ServerOption, len(grpcOpts))
+	copy(apiGrpcOpts, grpcOpts)
+	apiGrpcOpts = append(apiGrpcOpts,
+		grpc.StreamInterceptor(grpc_auth.StreamServerInterceptor(buildAuth(opts.APIToken))),
+	)
+
+	apiGrpcServer := grpc.NewServer(apiGrpcOpts...)
+	apiServer := api.NewServer(messagesServer)
 	apipb.RegisterApiServer(apiGrpcServer, apiServer)
 
 	wg.Add(1)
@@ -148,7 +160,8 @@ func main() {
 	wg.Wait()
 }
 
-func runAgentsGRPCServer(grpcServer *grpc.Server, lis net.Listener, shutdownTimeout int, stopChan chan interface{}, wg *sync.WaitGroup) {
+func runAgentsGRPCServer(grpcServer *grpc.Server, lis net.Listener, shutdownTimeout int,
+	stopChan chan interface{}, wg *sync.WaitGroup) {
 	go func() {
 		err := grpcServer.Serve(lis)
 		if err != nil {
@@ -181,7 +194,7 @@ func runAgentsGRPCServer(grpcServer *grpc.Server, lis net.Listener, shutdownTime
 func processCliParams(args []string) (*cliOptions, error) {
 	var err error
 	app := kingpin.New("pbm-coordinator", "Percona Backup for MongoDB coordinator")
-	app.Version(fmt.Sprintf("%s version %s, git commit %s", app.Name, version, commit))
+	app.Version(versionMessage())
 
 	opts := &cliOptions{
 		app:                  app,
@@ -192,6 +205,7 @@ func processCliParams(args []string) (*cliOptions, error) {
 		Debug:                defaultDebugMode,
 		WorkDir:              defaultWorkDir,
 	}
+	grpcCompressors := []string{gzip.Name, "none"}
 
 	app.Flag("config-file", "Config file").Default().Short('c').StringVar(&opts.configFile)
 	app.Flag("work-dir", "Working directory for backup metadata").Short('d').StringVar(&opts.WorkDir)
@@ -201,11 +215,14 @@ func processCliParams(args []string) (*cliOptions, error) {
 	//
 	app.Flag("grpc-bindip", "Bind IP for gRPC client connections").StringVar(&opts.GrpcBindIP)
 	app.Flag("grpc-port", "Listening port for gRPC client connections").IntVar(&opts.GrpcPort)
-	app.Flag("server-compressor", "Backup coordintor gRPC compression (gzip or none)").Default().EnumVar(&opts.ServerCompressor, grpcCompressors...)
+	app.Flag("server-compressor", "Backup coordintor gRPC compression (gzip or none)").Default().
+		EnumVar(&opts.ServerCompressor, grpcCompressors...)
 	app.Flag("api-bindip", "Bind IP for API client connections").StringVar(&opts.APIBindIP)
 	app.Flag("api-port", "Listening port for API client connections").IntVar(&opts.APIPort)
+	app.Flag("api-token", "API token for clients connection").StringVar(&opts.APIToken)
 	app.Flag("clients-refresh-secs", "Frequency in seconds to refresh state of clients").IntVar(&opts.ClientsRefreshSecs)
-	app.Flag("enable-clients-logging", "Enable showing logs coming from agents on the server side").BoolVar(&opts.EnableClientsLogging)
+	app.Flag("enable-clients-logging", "Enable showing logs coming from agents on the server side").
+		BoolVar(&opts.EnableClientsLogging)
 	app.Flag("shutdown-timeout", "Server shutdown timeout").IntVar(&opts.ShutdownTimeout)
 	//
 	app.Flag("tls", "Enable TLS").BoolVar(&opts.TLS)
@@ -218,9 +235,8 @@ func processCliParams(args []string) (*cliOptions, error) {
 			fn := utils.Expand("~/.percona-backup-mongodb.yaml")
 			if _, err := os.Stat(fn); err != nil {
 				return nil
-			} else {
-				opts.configFile = fn
 			}
+			opts.configFile = fn
 		}
 		return utils.LoadOptionsFromFile(opts.configFile, c, opts)
 	})
@@ -247,26 +263,30 @@ func checkWorkDir(dir string) error {
 		return os.MkdirAll(dir, os.ModePerm)
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("Cannot use %s for backups metadata. It is not a directory", dir)
+		return fmt.Errorf("cannot use %s for backups metadata. It is not a directory", dir)
 	}
 	return err
 }
 
-func getgRPCOptions(opts *cliOptions) []grpc.DialOption {
-	var grpcOpts []grpc.DialOption
-	if opts.TLS {
-		creds, err := credentials.NewClientTLSFromFile(opts.TLSCAFile, "")
+func buildAuth(wantToken string) func(context.Context) (context.Context, error) {
+	return func(ctx context.Context) (context.Context, error) {
+		token, err := grpc_auth.AuthFromMD(ctx, "bearer")
 		if err != nil {
-			log.Fatalf("Failed to create TLS credentials %v", err)
+			return nil, err
 		}
-		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(creds))
-	} else {
-		grpcOpts = append(grpcOpts, grpc.WithInsecure())
+		if wantToken != token {
+			return nil, status.Errorf(codes.Unauthenticated, "invalid auth token")
+		}
+		newCtx := context.WithValue(ctx, contextKey("tokenInfo"), time.Now().UTC().Format(time.RFC3339))
+		return newCtx, nil
 	}
-	if opts.ServerCompressor != "" && opts.ServerCompressor != "none" {
-		grpcOpts = append(grpcOpts, grpc.WithDefaultCallOptions(
-			grpc.UseCompressor(opts.ServerCompressor),
-		))
-	}
-	return grpcOpts
+}
+
+func versionMessage() string {
+	msg := "Version   : " + Version + "\n"
+	msg += "Commit    : " + Commit + "\n"
+	msg += "Build     : " + Build + "\n"
+	msg += "Branch    : " + Branch + "\n"
+	msg += "Go version: " + GoVersion + "\n"
+	return msg
 }

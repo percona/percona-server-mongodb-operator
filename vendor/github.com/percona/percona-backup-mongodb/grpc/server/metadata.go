@@ -14,8 +14,9 @@ import (
 )
 
 type BackupMetadata struct {
-	metadata *pb.BackupMetadata
-	lock     *sync.Mutex
+	namePrefix string
+	metadata   *pb.BackupMetadata
+	lock       *sync.Mutex
 }
 
 func NewBackupMetadata(opts *pb.StartBackup) *BackupMetadata {
@@ -27,8 +28,11 @@ func NewBackupMetadata(opts *pb.StartBackup) *BackupMetadata {
 			Cypher:          opts.GetCypher(),
 			Description:     opts.GetDescription(),
 			Replicasets:     make(map[string]*pb.ReplicasetMetadata),
+			StorageName:     opts.GetStorageName(),
+			MongodbVersion:  opts.GetMongodbVersion(),
 		},
-		lock: &sync.Mutex{},
+		namePrefix: opts.GetNamePrefix(),
+		lock:       &sync.Mutex{},
 	}
 }
 
@@ -37,7 +41,7 @@ func (b *BackupMetadata) AddReplicaset(clusterID, replName, replUUID, dbBackupNa
 	b.lock.Lock()
 
 	if _, ok := b.metadata.Replicasets[replName]; ok {
-		return fmt.Errorf("Info for replicaset %s already exists", replName)
+		return fmt.Errorf("info for replicaset %s already exists", replName)
 	}
 
 	// Key is replicaset name instead of UUID because the UUID is randomly generated so, on a
@@ -53,6 +57,10 @@ func (b *BackupMetadata) AddReplicaset(clusterID, replName, replUUID, dbBackupNa
 
 	b.lock.Unlock()
 	return nil
+}
+
+func (b *BackupMetadata) NamePrefix() string {
+	return b.namePrefix
 }
 
 func LoadMetadataFromFile(name string) (*BackupMetadata, error) {
@@ -79,10 +87,17 @@ func (b *BackupMetadata) RemoveReplicaset(replName string) error {
 	defer b.lock.Unlock()
 
 	if _, ok := b.metadata.Replicasets[replName]; !ok {
-		return fmt.Errorf("Info for replicaset %s doesn't exists", replName)
+		return fmt.Errorf("info for replicaset %s doesn't exists", replName)
 	}
 	delete(b.metadata.Replicasets, replName)
 	return nil
+}
+
+func (b *BackupMetadata) JSON() ([]byte, error) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	return json.MarshalIndent(b.metadata, "", "    ")
 }
 
 // WriteMetadataToFile writes the backup metadata to a file as JSON

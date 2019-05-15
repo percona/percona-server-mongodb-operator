@@ -26,8 +26,8 @@ const (
 	//
 	envMongoDBMongosPort = "TEST_MONGODB_MONGOS_PORT"
 	//
-	envMongoDBUser     = "TEST_MONGODB_USERNAME"
-	envMongoDBPassword = "TEST_MONGODB_PASSWORD"
+	envMongoDBUser     = "TEST_MONGODB_ADMIN_USERNAME"
+	envMongoDBPassword = "TEST_MONGODB_ADMIN_PASSWORD"
 )
 
 var (
