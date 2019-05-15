@@ -383,9 +383,16 @@ desc() {
 }
 
 get_backup_name() {
-    local storage="$1"
+    local cluster_short="${1/-rs0*/}"
+    local storage_name="$2"
 
-    kubectl get psmdb-backup backup-$storage -o jsonpath='{.status.destination}'
+    kubectl run -it --rm pbmctl --image=perconalab/percona-server-mongodb-operator:0.4.0-backup --restart=Never -- \
+        pbmctl list backups \
+        --server-address=$cluster_short-backup-coordinator:10001 \
+        2>&1 \
+        | grep backup-$storage_name \
+        | awk '{print$1}' \
+        | sed -e 's/.json$//'
 }
 
 get_service_endpoint() {
