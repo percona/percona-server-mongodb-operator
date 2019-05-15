@@ -43,6 +43,8 @@ spec:
     listKind: PerconaServerMongoDBRestoreList
     plural: perconaservermongodbrestores
     singular: perconaservermongodbrestore
+    shortNames:
+    - psmdb-restore
   scope: Namespaced
   version: v1alpha1
   subresources:

@@ -94,9 +94,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-	if instance.Status.State == psmdbv1alpha1.RestoreStateRequested {
+
+	if instance.Status.State == psmdbv1alpha1.RestoreStateReady {
 		return reconcile.Result{}, nil
 	}
+
 	backup, err := r.getBackup(instance)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("get backup: %v", err)
@@ -106,13 +108,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("create handler: %v", err)
 	}
-
 	err = restoreHandler.StartRestore(backup)
 	if err != nil {
+		instance.Status.State = psmdbv1alpha1.RestoreStateRejected
+		r.updateStatus(instance)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("update status: %v", err)
+		}
 		return reconcile.Result{}, fmt.Errorf("start restore: %v", err)
 	}
 
-	instance.Status.State = psmdbv1alpha1.RestoreStateRequested
+	instance.Status.State = psmdbv1alpha1.RestoreStateReady
 
 	r.updateStatus(instance)
 	if err != nil {
@@ -130,9 +136,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.Perco
 		Namespace: cr.Namespace,
 	}, backup)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
 	if backup.Status.State != psmdbv1alpha1.StateReady {

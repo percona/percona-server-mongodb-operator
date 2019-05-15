@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -11,7 +13,10 @@ import (
 type PerconaServerMongoDBRestoreSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	BackupName string `json:"backupName,omitempty"`
+	BackupName  string `json:"backupName,omitempty"`
+	ClusterName string `json:"clusterName,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	StorageName string `json:"storageName,omitempty"`
 }
 
 // PerconaSMDBRestoreStatusState is for restore status states
@@ -19,6 +24,8 @@ type PerconaSMDBRestoreStatusState string
 
 const (
 	RestoreStateRequested PerconaSMDBRestoreStatusState = "requested"
+	RestoreStateReady     PerconaSMDBRestoreStatusState = "ready"
+	RestoreStateRejected  PerconaSMDBRestoreStatusState = "rejected"
 )
 
 // PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore
@@ -47,4 +54,20 @@ type PerconaServerMongoDBRestoreList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PerconaServerMongoDBRestore `json:"items"`
+}
+
+func (r *PerconaServerMongoDBRestore) CheckFields() error {
+	if len(r.Spec.ClusterName) == 0 {
+		return fmt.Errorf("spec clustereName field is empty")
+	}
+	if len(r.Spec.BackupName) == 0 && len(r.Spec.StorageName) == 0 && len(r.Spec.Destination) == 0 {
+		return fmt.Errorf("fields backupName or StorageNmae and destination is empty")
+	}
+	if len(r.Spec.Destination) > 0 && len(r.Spec.StorageName) == 0 {
+		return fmt.Errorf("spec storageName field is empty")
+	}
+	if len(r.Spec.StorageName) > 0 && len(r.Spec.Destination) == 0 {
+		return fmt.Errorf("spec destination field is empty")
+	}
+	return nil
 }
