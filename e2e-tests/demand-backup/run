@@ -29,12 +29,14 @@ run_restore() {
     compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
     compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
 
-    kubectl run -it --rm pbmctl --image=perconalab/percona-server-mongodb-operator:0.4.0-backup --restart=Never -- \
+    until kubectl run -it --rm pbmctl --image=perconalab/percona-server-mongodb-operator:0.4.0-backup --restart=Never -- \
         pbmctl run restore \
         --server-address=some-name-backup-coordinator:10001 \
         --storage $storage \
-        ${backup_name}.json \
-        | grep 'Restore completed'
+        ${backup_name}.json; do
+
+        sleep 10
+    done
 
     compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
     compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
@@ -101,7 +103,6 @@ run_backup gcp-cs
 backup_name_aws=$(get_backup_name   $cluster aws-s3)
 backup_name_minio=$(get_backup_name $cluster minio)
 backup_name_gcp=$(get_backup_name   $cluster gcp-cs)
-sleep 90
 
 desc 'check backup and restore'
 curl -s "https://s3.amazonaws.com/operator-testing/${backup_name_aws}_rs0.dump.gz" | gunzip > /dev/null
