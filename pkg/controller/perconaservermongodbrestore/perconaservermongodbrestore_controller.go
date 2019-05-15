@@ -108,10 +108,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("create handler: %v", err)
 	}
+
 	err = restoreHandler.StartRestore(backup)
 	if err != nil {
-		instance.Status.State = psmdbv1alpha1.RestoreStateRejected
-		r.updateStatus(instance)
+		instance.Status.State = psmdbv1alpha1.RestoreStateRequested
+		err = r.updateStatus(instance)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("update status: %v", err)
 		}
@@ -120,7 +121,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 
 	instance.Status.State = psmdbv1alpha1.RestoreStateReady
 
-	r.updateStatus(instance)
+	err = r.updateStatus(instance)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("update status: %v", err)
 	}

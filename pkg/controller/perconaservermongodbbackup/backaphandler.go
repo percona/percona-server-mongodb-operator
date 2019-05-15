@@ -79,7 +79,6 @@ func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 }
 
 func (b *BackupHandler) getMetaData(name string) (*pbapi.MetadataFile, error) {
-	log.Info("get metadata")
 	backup := &pbapi.MetadataFile{}
 	stream, err := b.client.BackupsMetadata(context.TODO(), &pbapi.BackupsMetadataParams{})
 	if err != nil {
@@ -103,7 +102,6 @@ func (b *BackupHandler) getMetaData(name string) (*pbapi.MetadataFile, error) {
 }
 
 func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.PerconaServerMongoDBBackupStatus {
-	log.Info("get new status")
 	newStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
 	newStatus.StartAt = &metav1.Time{
 		Time: time.Unix(backup.Metadata.StartTs, 0),
