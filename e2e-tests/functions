@@ -90,16 +90,16 @@ wait_cron() {
 }
 
 wait_backup() {
-    local backup=$1
+    local storage=$1
 
     set +o xtrace
     retry=0
-    echo -n $backup
-    until kubectl get job.batch/$backup -o jsonpath='{.status.completionTime}' 2>/dev/null | grep 'T'; do
+    echo -n $storage
+    until [ "$(kubectl get psmdb-backup backup-$storage -o jsonpath='{.status.state}')" == "ready" ]; do
         sleep 1
         echo -n .
         let retry+=1
-        if [ $retry -ge 60 ]; then
+        if [ $retry -ge 120 ]; then
             kubectl logs $(get_operator_pod) \
                 | grep -v 'level=info' \
                 | grep -v 'level=debug' \
@@ -110,6 +110,33 @@ wait_backup() {
         fi
     done
     set -o xtrace
+}
+
+wait_restore() {
+    local storage=$1
+
+    set +o xtrace
+    retry=0
+    echo -n $storage
+    until [ "$(kubectl get psmdb-restore restore-$storage -o jsonpath='{.status.state}')" == "ready" ]; do
+        sleep 1
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 120 ]; then
+            kubectl logs $(get_operator_pod) \
+                | grep -v 'level=info' \
+                | grep -v 'level=debug' \
+                | grep -v 'Getting tasks for pod' \
+                | grep -v 'Getting pods from source'
+            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+            exit 1
+        fi
+    done
+    set -o xtrace
+
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 }
 
 deploy_operator() {
@@ -356,16 +383,9 @@ desc() {
 }
 
 get_backup_name() {
-    local cluster_short="${1/-rs0*/}"
-    local storage_name="$2"
+    local storage="$1"
 
-    kubectl run -it --rm pbmctl --image=perconalab/percona-server-mongodb-operator:0.4.0-backup --restart=Never -- \
-        pbmctl list backups \
-        --server-address=$cluster_short-backup-coordinator:10001 \
-        2>&1 \
-        | grep my-backup-$storage_name \
-        | awk '{print$1}' \
-        | sed -e 's/.json$//'
+    kubectl get psmdb-backup backup-$storage -o jsonpath='{.status.destination}'
 }
 
 get_service_endpoint() {
