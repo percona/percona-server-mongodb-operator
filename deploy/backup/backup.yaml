@@ -1,7 +1,7 @@
 apiVersion: psmdb.percona.com/v1alpha1
 kind: PerconaServerMongoDBBackup
 metadata:
-  name: example-perconaservermongodbbackup-2
+  name: backup1
 spec:
-  psmdbCluster: some-name
-  storageName: gcs-storage
+  psmdbCluster: my-cluster-name
+  storageName: s3-us-west
