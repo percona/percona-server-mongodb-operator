@@ -146,6 +146,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.Perc
 
 	backupStatus, err = bh.StartBackup(cr)
 	if err != nil {
+		cr.Status = backupStatus
 		return fmt.Errorf("start backup: %v", err)
 	}
 	if len(backupStatus.State) > 0 {

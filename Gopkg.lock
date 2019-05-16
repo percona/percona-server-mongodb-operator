@@ -174,8 +174,7 @@
   revision = "5b532d6fd5efaf7fa130d4e859a2fde0fc3a9e1b"
 
 [[projects]]
-  branch = "master"
-  digest = "1:40cec40187e574fefdc1477e8ce8795140a4817bdbd45c0828023eaeb484c876"
+  digest = "1:d7212166c4b7f30a20fb3de70ab7e36564900b2e36360ffd31958b5af8fed025"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -185,7 +184,8 @@
     "ptypes/timestamp",
   ]
   pruneopts = "NT"
-  revision = "e91709a02e0e8ff8b86b7aa913fdc9ae9498e825"
+  revision = "b5d812f8a3706043e23a9cd5babf2e5423744d30"
+  version = "v1.3.1"
 
 [[projects]]
   digest = "1:05f95ffdfcf651bdb0f05b40b69e7f5663047f8da75c72d58728acb59b5cc107"
@@ -339,7 +339,8 @@
   version = "v1.2"
 
 [[projects]]
-  digest = "1:8223bfd52ce6b3cf4bfafc1c49dd7e1e4bc8bc2c997372c9e2cca12c2b56c24b"
+  branch = "master"
+  digest = "1:069eb8007df133fd828f13ef137c5b07d960187f85b84566db31dd1c5c783ecd"
   name = "github.com/percona/percona-backup-mongodb"
   packages = [
     "internal/utils",
@@ -348,8 +349,7 @@
     "storage",
   ]
   pruneopts = "NT"
-  revision = "a9c9566e1c92d69cefa425b7b8a40e10250307c9"
-  version = "v0.3.0"
+  revision = "916301828af1f47eeaa760ffa209b685ca5664ef"
 
 [[projects]]
   branch = "master"

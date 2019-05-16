@@ -200,3 +200,49 @@ func MongosDialInfo(t *testing.T) *mgo.DialInfo {
 	}
 	return di
 }
+
+func CleanupDatabases(session *mgo.Session, ignore map[string][]string) error {
+	if ignore == nil {
+		ignore = map[string][]string{}
+	}
+
+	// Ensure we don't delete the system.users collection otherwise authentication will be broken
+	if _, ok := ignore["admin"]; !ok {
+		ignore["admin"] = []string{"system.users"}
+	} else {
+		ignore["admin"] = append(ignore["admin"], "system.users")
+	}
+	databases, err := session.DatabaseNames()
+	if err != nil {
+		return errors.Wrap(err, "cannot get DBs list to clean up the config server")
+	}
+	for _, dbName := range databases {
+		collections, err := session.DB(dbName).CollectionNames()
+		if err != nil {
+			return errors.Wrapf(err, "cannot list %s database collections to clean up config server", dbName)
+		}
+		for _, collection := range collections {
+			if skipCollection(dbName, collection, ignore) {
+				continue
+			}
+			if _, err := session.DB(dbName).C(collection).RemoveAll(nil); err != nil {
+				return errors.Wrapf(err, "cannot empty %s.%s collection", dbName, collection)
+			}
+		}
+	}
+
+	return nil
+}
+
+func skipCollection(db, col string, ignoreList map[string][]string) bool {
+	ignoreCols, ok := ignoreList[db]
+	if !ok {
+		return false
+	}
+	for _, c := range ignoreCols {
+		if c == col {
+			return true
+		}
+	}
+	return false
+}

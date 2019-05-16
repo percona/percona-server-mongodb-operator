@@ -52,6 +52,11 @@ func (in *BackupCoordinatorSpec) DeepCopyInto(out *BackupCoordinatorSpec) {
 		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.LivenessInitialDelaySeconds != nil {
+		in, out := &in.LivenessInitialDelaySeconds, &out.LivenessInitialDelaySeconds
+		*out = new(int32)
+		**out = **in
+	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 	return
 }
@@ -1002,6 +1007,16 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		in, out := &in.VolumeSpec, &out.VolumeSpec
 		*out = new(VolumeSpec)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.ReadinessInitialDelaySeconds != nil {
+		in, out := &in.ReadinessInitialDelaySeconds, &out.ReadinessInitialDelaySeconds
+		*out = new(int32)
+		**out = **in
+	}
+	if in.LivenessInitialDelaySeconds != nil {
+		in, out := &in.LivenessInitialDelaySeconds, &out.LivenessInitialDelaySeconds
+		*out = new(int32)
+		**out = **in
 	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 	return

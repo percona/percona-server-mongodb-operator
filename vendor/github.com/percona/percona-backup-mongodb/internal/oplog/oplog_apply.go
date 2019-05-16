@@ -8,7 +8,8 @@ import (
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/percona/percona-backup-mongodb/bsonfile"
-	"github.com/prometheus/common/log"
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 type checker func(bson.MongoTimestamp, bson.MongoTimestamp) bool
@@ -32,7 +33,8 @@ func NewOplogApply(session *mgo.Session, r bsonfile.BSONReader) (*OplogApply, er
 	}, nil
 }
 
-func NewOplogApplyUntil(session *mgo.Session, r bsonfile.BSONReader, stopAtTs bson.MongoTimestamp) (*OplogApply, error) {
+func NewOplogApplyUntil(session *mgo.Session, r bsonfile.BSONReader, stopAtTs bson.MongoTimestamp,
+) (*OplogApply, error) {
 	return &OplogApply{
 		bsonReader: r,
 		dbSession:  session.Clone(),
@@ -47,10 +49,7 @@ func noCheck(ts, stopAt bson.MongoTimestamp) bool {
 }
 
 func check(ts, stopAt bson.MongoTimestamp) bool {
-	if ts > stopAt {
-		return true
-	}
-	return false
+	return ts > stopAt
 }
 
 func (oa *OplogApply) Run() error {
@@ -91,8 +90,8 @@ func (oa *OplogApply) Run() error {
 		result := bson.M{}
 		err := oa.dbSession.Run(bson.M{"applyOps": []bson.M{dest}}, result)
 		if err != nil {
-			log.Errorf("Cannot apply oplog: %s\n%+v\n", err, dest)
-			return err
+			log.Errorf("cannot apply oplog: %s\n%+v\n", err, dest)
+			return errors.Wrap(err, "cannot apply oplog operation")
 		}
 		atomic.AddInt64(&oa.docsCount, 1)
 	}

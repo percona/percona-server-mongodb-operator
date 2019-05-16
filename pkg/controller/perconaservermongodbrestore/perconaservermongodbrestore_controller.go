@@ -94,45 +94,68 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-	if instance.Status.State == psmdbv1alpha1.RestoreStateRequested {
+
+	err = instance.CheckFields()
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("fields check: %v", err)
+	}
+
+	if instance.Status.State == psmdbv1alpha1.RestoreStateReady {
 		return reconcile.Result{}, nil
 	}
-	backup, err := r.getBackup(instance)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("get backup: %v", err)
-	}
 
-	restoreHandler, err := newRestoreHandler(backup.Spec.PSMDBCluster)
+	err = r.reconcileRestore(instance)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("create handler: %v", err)
-	}
-
-	err = restoreHandler.StartRestore(backup)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("start restore: %v", err)
-	}
-
-	instance.Status.State = psmdbv1alpha1.RestoreStateRequested
-
-	r.updateStatus(instance)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("update status: %v", err)
+		return reconcile.Result{}, fmt.Errorf("reconcile: %v", err)
 	}
 
 	return reconcile.Result{}, nil
 }
 
+func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) error {
+	backup, err := r.getBackup(cr)
+	if err != nil {
+		return fmt.Errorf("get backup: %v", err)
+	}
+
+	restoreHandler, err := newRestoreHandler(backup.Spec.PSMDBCluster)
+	if err != nil {
+		return fmt.Errorf("create handler: %v", err)
+	}
+
+	err = restoreHandler.StartRestore(backup)
+	if err != nil {
+		cr.Status.State = psmdbv1alpha1.RestoreStateRequested
+		err = r.updateStatus(cr)
+		if err != nil {
+			return fmt.Errorf("update status: %v", err)
+		}
+		return fmt.Errorf("start restore: %v", err)
+	}
+
+	cr.Status.State = psmdbv1alpha1.RestoreStateReady
+
+	err = r.updateStatus(cr)
+	if err != nil {
+		return fmt.Errorf("update status: %v", err)
+	}
+
+	return nil
+}
+
 // checkBackup return cluster name if backup exist
 func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) (*psmdbv1alpha1.PerconaServerMongoDBBackup, error) {
 	backup := &psmdbv1alpha1.PerconaServerMongoDBBackup{}
+	if len(cr.Spec.BackupName) == 0 {
+		backup.Status.Destination = cr.Spec.Destination
+		backup.Status.StorageName = cr.Spec.StorageName
+		return backup, nil
+	}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Name:      cr.Spec.BackupName,
 		Namespace: cr.Namespace,
 	}, backup)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
 	if backup.Status.State != psmdbv1alpha1.StateReady {

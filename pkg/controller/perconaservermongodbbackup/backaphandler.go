@@ -2,7 +2,6 @@ package perconaservermongodbbackup
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -51,7 +50,6 @@ func makeUnaryInterceptor(token string) func(ctx context.Context, method string,
 
 func makeStreamInterceptor(token string) func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
 	method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string,
 		streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		md := metadata.Pairs("authorization", "bearer "+token)
@@ -109,9 +107,6 @@ func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.P
 		Time: time.Unix(backup.Metadata.StartTs, 0),
 	}
 	if backup.Metadata.StartTs > 0 {
-		newStatus.State = psmdbv1alpha1.StateRequested
-	}
-	if backup.Metadata.EndTs > 0 {
 		newStatus.CompletedAt = &metav1.Time{
 			Time: time.Now(),
 		}
@@ -136,13 +131,7 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
 		StorageName: cr.Spec.StorageName,
 	}
-	exists, err := b.isStorageExists(cr.Spec.StorageName)
-	if err != nil {
-		return backupStatus, fmt.Errorf("check storage: %v", err)
-	}
-	if !exists {
-		return backupStatus, errors.New("storage is not available")
-	}
+
 	msg := &pbapi.RunBackupParams{
 		BackupType:      pbapi.BackupType_BACKUP_TYPE_LOGICAL,
 		CompressionType: pbapi.CompressionType_COMPRESSION_TYPE_GZIP,
@@ -150,7 +139,8 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 		Description:     cr.Name,
 		StorageName:     cr.Spec.StorageName,
 	}
-	_, err = b.client.RunBackup(context.Background(), msg)
+
+	_, err := b.client.RunBackup(context.Background(), msg)
 	if err != nil {
 		backupStatus.State = psmdbv1alpha1.StateRejected
 		return backupStatus, err
@@ -158,22 +148,4 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 	backupStatus.State = psmdbv1alpha1.StateRequested
 
 	return backupStatus, nil
-}
-
-func (b *BackupHandler) isStorageExists(storageName string) (bool, error) {
-	stream, err := b.client.ListStorages(context.Background(), &pbapi.ListStoragesParams{})
-	if err != nil {
-		return false, fmt.Errorf("list storages: %v", err)
-	}
-	defer stream.CloseSend()
-	for storage, err := stream.Recv(); err != io.EOF; {
-		if err != nil {
-			return false, fmt.Errorf("stream error: %v", err)
-		}
-		if storage.Name == storageName {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
