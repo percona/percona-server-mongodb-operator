@@ -90,12 +90,12 @@ wait_cron() {
 }
 
 wait_backup() {
-    local storage=$1
+    local backup_name=$1
 
     set +o xtrace
     retry=0
-    echo -n $storage
-    until [ "$(kubectl get psmdb-backup backup-$storage -o jsonpath='{.status.state}')" == "ready" ]; do
+    echo -n $backup_name
+    until [ "$(kubectl get psmdb-backup $backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
         sleep 1
         echo -n .
         let retry+=1
@@ -109,16 +109,33 @@ wait_backup() {
             exit 1
         fi
     done
+    echo
     set -o xtrace
 }
 
+run_restore() {
+    local backup_name=$1
+
+    run_mongo \
+        'use myApp\n db.test.insert({ x: 100501 })' \
+        "myApp:myPass@$cluster.$namespace"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
+    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
+
+    cat $test_dir/conf/restore.yml \
+        | $sed -e "s/name:/name: restore-$backup_name/" \
+        | $sed -e "s/backupName:/backupName: $backup_name/" \
+        | kubectl apply -f -
+}
+
 wait_restore() {
-    local storage=$1
+    local backup_name=$1
 
     set +o xtrace
     retry=0
-    echo -n $storage
-    until [ "$(kubectl get psmdb-restore restore-$storage -o jsonpath='{.status.state}')" == "ready" ]; do
+    echo -n $backup_name
+    until [ "$(kubectl get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
         sleep 1
         echo -n .
         let retry+=1
@@ -132,6 +149,7 @@ wait_restore() {
             exit 1
         fi
     done
+    echo
     set -o xtrace
 
     compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
@@ -233,6 +251,7 @@ compare_kubectl() {
         | $sed -e '/^status:$/,+100500d' \
         | $sed -e '/NAMESPACE/,+1d' \
         | $sed -e '/PBM_AGENT_SERVER_ADDRESS/,+1d' \
+        | $sed -e '/name: suffix/,+1d' \
         > ${new_result}
     diff -u ${expected_result} ${new_result}
 }
@@ -382,16 +401,10 @@ desc() {
     set -o xtrace
 }
 
-get_backup_name() {
-    local cluster_short="${1/-rs0*/}"
-    local storage_name="$2"
+get_backup_dest() {
+    local backup_name=$1
 
-    kubectl run -it --rm pbmctl --image=perconalab/percona-server-mongodb-operator:0.4.0-backup --restart=Never -- \
-        pbmctl list backups \
-        --server-address=$cluster_short-backup-coordinator:10001 \
-        2>&1 \
-        | grep backup-$storage_name \
-        | awk '{print$1}' \
+    kubectl get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
         | sed -e 's/.json$//'
 }
 

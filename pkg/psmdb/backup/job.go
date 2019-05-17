@@ -1,7 +1,8 @@
 package backup
 
 import (
-	"strconv"
+	"math/rand"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
@@ -11,6 +12,12 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+const genSymbols = "abcdefghijklmnopqrstuvwxyz1234567890"
 
 func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, imagePullSecrets []corev1.LocalObjectReference, sv *version.ServerVersion) *batchv1b.CronJob {
 	var fsgroup *int64
@@ -28,11 +35,15 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, 
 			{
 				Name:    backupCtlContainerName,
 				Image:   image,
-				Command: []string{"pbmctl"},
+				Command: []string{"sh"},
 				Env: []corev1.EnvVar{
 					{
-						Name:  "PBMCTL_SERVER_ADDRESS",
-						Value: crName + coordinatorSuffix + ":" + strconv.Itoa(coordinatorAPIPort),
+						Name:  "psmdbCluster",
+						Value: crName,
+					},
+					{
+						Name:  "suffix",
+						Value: genRandString(5),
 					},
 				},
 				Args: newBackupCronJobContainerArgs(backup, crName),
@@ -90,17 +101,32 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, 
 
 func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, crName string) []string {
 	args := []string{
-		"run", "backup",
-		"--description=" + crName + "-" + backup.Name,
-		"--storage=" + backup.StorageName,
-	}
-
-	switch backup.CompressionType {
-	case api.BackupCompressionGzip:
-		args = append(args, "--compression-algorithm=gzip")
-	default:
-		args = append(args, "--compression-algorithm=none")
+		"-c",
+		`
+			cat <<-EOF | /usr/bin/kubectl apply -f -
+				apiVersion: psmdb.percona.com/v1alpha1
+				kind: PerconaServerMongoDBBackup
+				metadata:
+				  name: "cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-${suffix}"
+				  labels:
+				    ancestor: "` + backup.Name + `"
+				    cluster: "${psmdbCluster}"
+				    type: "cron"
+				spec:
+				  psmdbCluster: "${psmdbCluster}"
+				  storageName: "` + backup.StorageName + `"
+			EOF
+		`,
 	}
 
 	return args
+}
+
+func genRandString(ln int) string {
+	b := make([]byte, ln)
+	for i := range b {
+		b[i] = genSymbols[rand.Intn(len(genSymbols))]
+	}
+
+	return string(b)
 }

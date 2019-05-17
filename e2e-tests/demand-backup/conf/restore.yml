@@ -1,7 +1,7 @@
 apiVersion: psmdb.percona.com/v1alpha1
 kind: PerconaServerMongoDBRestore
 metadata:
-  name: restore-gcp-cs
+  name:
 spec:
-  psmdbCluster: some-name
-  backupName: backup-gcp-cs
+  clusterName: some-name
+  backupName:

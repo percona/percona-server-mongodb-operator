@@ -12,19 +12,6 @@ run_backup() {
     kubectl apply -f $test_dir/conf/backup-$storage.yml
 }
 
-run_restore() {
-    local storage=$1
-
-    run_mongo \
-        'use myApp\n db.test.insert({ x: 100501 })' \
-        "myApp:myPass@$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
-
-    kubectl apply -f $test_dir/conf/restore-$storage.yml
-}
-
 create_namespace $namespace
 deploy_helm $namespace
 deploy_operator
@@ -83,28 +70,34 @@ run_backup aws-s3
 run_backup minio
 run_backup gcp-cs
 
-wait_backup aws-s3
-wait_backup minio
-wait_backup gcp-cs
+backup_name_aws="backup-aws-s3"
+backup_name_minio="backup-minio"
+backup_name_gcp="backup-gcp-cs"
+wait_backup "$backup_name_aws"
+wait_backup "$backup_name_minio"
+wait_backup "$backup_name_gcp"
 
-backup_name_aws=$(get_backup_name   $cluster aws-s3)
-backup_name_minio=$(get_backup_name $cluster minio)
-backup_name_gcp=$(get_backup_name   $cluster gcp-cs)
+sleep 5
 
-desc 'check backup and restore'
-curl -s "https://s3.amazonaws.com/operator-testing/${backup_name_aws}_rs0.dump.gz" | gunzip > /dev/null
-run_restore aws-s3
-wait_restore aws-s3
+desc 'check backup and restore -- aws-s3'
+backup_dest_aws=$(get_backup_dest   "$backup_name_aws")
+curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip > /dev/null
+run_restore $backup_name_aws
+wait_restore $backup_name_aws
 
+desc 'check backup and restore -- minio'
+backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
     /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_name_minio} \
-        | grep ${backup_name_minio}_rs0.dump.gz
-run_restore minio
-wait_restore minio
+    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
+        | grep ${backup_dest_minio}_rs0.dump.gz
+run_restore $backup_name_minio
+wait_restore $backup_name_minio
 
-curl -s "https://storage.googleapis.com/operator-testing/${backup_name_gcp}_rs0.dump.gz" | gunzip > /dev/null
-run_restore gcp-cs
-wait_restore gcp-cs
+desc 'check backup and restore -- gcp-cs'
+backup_dest_gcp=$(get_backup_dest   "$backup_name_gcp")
+curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip > /dev/null
+run_restore $backup_name_gcp
+wait_restore $backup_name_gcp
 
 destroy $namespace

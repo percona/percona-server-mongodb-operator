@@ -1,7 +1,0 @@
-apiVersion: psmdb.percona.com/v1alpha1
-kind: PerconaServerMongoDBRestore
-metadata:
-  name: restore-minio
-spec:
-  psmdbCluster: some-name
-  backupName: backup-minio
