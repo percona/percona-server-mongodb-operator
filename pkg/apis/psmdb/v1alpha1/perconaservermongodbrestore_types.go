@@ -58,7 +58,7 @@ type PerconaServerMongoDBRestoreList struct {
 
 func (r *PerconaServerMongoDBRestore) CheckFields() error {
 	if len(r.Spec.ClusterName) == 0 {
-		return fmt.Errorf("spec clustereName field is empty")
+		return fmt.Errorf("spec clusterName field is empty")
 	}
 	if len(r.Spec.BackupName) == 0 && (len(r.Spec.StorageName) == 0 || len(r.Spec.Destination) == 0) {
 		return fmt.Errorf("fields backupName or StorageNmae and destination is empty")
