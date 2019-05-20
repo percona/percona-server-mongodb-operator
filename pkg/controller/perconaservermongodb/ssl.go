@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
+	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha1"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
