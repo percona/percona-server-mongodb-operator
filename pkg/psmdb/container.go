@@ -114,6 +114,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 // containerArgs returns the args to pass to the mSpec container
 func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements) []string {
 	mSpec := m.Spec.Mongod
+	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
@@ -122,11 +123,11 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(mSpec.Storage.Engine),
 		"--relaxPermChecks",
+		"--sslAllowInvalidCertificates",
 	}
 
 	if m.Spec.UnsafeConf {
 		args = append(args,
-			"--sslAllowInvalidCertificates",
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)

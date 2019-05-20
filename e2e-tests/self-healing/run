@@ -43,6 +43,7 @@ pumba_pod() {
 
     # check if all 3 Pods started
     wait_for_running $cluster 3
+    sleep 240
 
     desc 'check data consistency for chaosed Pod'
     compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
@@ -66,6 +67,7 @@ pause_pod() {
 
     # check if all 3 Pods started
     wait_for_running $cluster 3
+    sleep 240
 
     desc 'check data consistency for chaosed Pod'
     compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
@@ -106,6 +108,7 @@ recreate() {
     apply_cluster $conf_dir/$cluster.yml
 
     wait_for_running $cluster 3
+    sleep 240
 
     compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
     compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
