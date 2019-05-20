@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64, ikeyName string) corev1.Container {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +46,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource PerconaServerMongoDBBackup
-	err = c.Watch(&source.Kind{Type: &psmdbv1alpha1.PerconaServerMongoDBBackup{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &psmdbv1.PerconaServerMongoDBBackup{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBBackup
 	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &psmdbv1alpha1.PerconaServerMongoDBBackup{},
+		OwnerType:    &psmdbv1.PerconaServerMongoDBBackup{},
 	})
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		RequeueAfter: time.Second * 5,
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
-	instance := &psmdbv1alpha1.PerconaServerMongoDBBackup{}
+	instance := &psmdbv1.PerconaServerMongoDBBackup{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -106,7 +106,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, fmt.Errorf("fields check: %v", err)
 	}
 
-	if instance.Status.State == psmdbv1alpha1.StateReady {
+	if instance.Status.State == psmdbv1.StateReady {
 		return rr, nil
 	}
 
@@ -123,13 +123,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	bh, err := newBackupHandler(cr)
 	if err != nil {
 		return fmt.Errorf("handler creation: %v", err)
 	}
 	if len(cr.Status.State) == 0 {
-		cr.Status = psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
+		cr.Status = psmdbv1.PerconaServerMongoDBBackupStatus{
 			StorageName: cr.Spec.StorageName,
 			StartAt:     &metav1.Time{},
 			CompletedAt: &metav1.Time{},
@@ -156,7 +156,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1alpha1.Perc
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	err := r.client.Status().Update(context.TODO(), cr)
 	if err != nil {
 		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates

@@ -9,7 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -104,7 +104,7 @@ func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, crName string) []
 		"-c",
 		`
 			cat <<-EOF | /usr/bin/kubectl apply -f -
-				apiVersion: psmdb.percona.com/v1alpha1
+				apiVersion: psmdb.percona.com/v1
 				kind: PerconaServerMongoDBBackup
 				metadata:
 				  name: "cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-${suffix}"

@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 // Service returns a core/v1 API Service

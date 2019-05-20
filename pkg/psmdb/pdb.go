@@ -4,7 +4,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 func PodDisruptionBudget(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string) *policyv1beta1.PodDisruptionBudget {

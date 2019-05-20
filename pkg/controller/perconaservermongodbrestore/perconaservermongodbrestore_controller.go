@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,7 +45,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource PerconaServerMongoDBRestore
-	err = c.Watch(&source.Kind{Type: &psmdbv1alpha1.PerconaServerMongoDBRestore{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &psmdbv1.PerconaServerMongoDBRestore{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBRestore
 	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &psmdbv1alpha1.PerconaServerMongoDBRestore{},
+		OwnerType:    &psmdbv1.PerconaServerMongoDBRestore{},
 	})
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ type ReconcilePerconaServerMongoDBRestore struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the PerconaSMDBBackupRestore instance
-	instance := &psmdbv1alpha1.PerconaServerMongoDBRestore{}
+	instance := &psmdbv1.PerconaServerMongoDBRestore{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -100,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		return reconcile.Result{}, fmt.Errorf("fields check: %v", err)
 	}
 
-	if instance.Status.State == psmdbv1alpha1.RestoreStateReady {
+	if instance.Status.State == psmdbv1.RestoreStateReady {
 		return reconcile.Result{}, nil
 	}
 
@@ -112,7 +112,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) error {
+func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.PerconaServerMongoDBRestore) error {
 	backup, err := r.getBackup(cr)
 	if err != nil {
 		return fmt.Errorf("get backup: %v", err)
@@ -125,7 +125,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1alpha
 
 	err = restoreHandler.StartRestore(backup)
 	if err != nil {
-		cr.Status.State = psmdbv1alpha1.RestoreStateRequested
+		cr.Status.State = psmdbv1.RestoreStateRequested
 		err = r.updateStatus(cr)
 		if err != nil {
 			return fmt.Errorf("update status: %v", err)
@@ -133,7 +133,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1alpha
 		return fmt.Errorf("start restore: %v", err)
 	}
 
-	cr.Status.State = psmdbv1alpha1.RestoreStateReady
+	cr.Status.State = psmdbv1.RestoreStateReady
 
 	err = r.updateStatus(cr)
 	if err != nil {
@@ -144,8 +144,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1alpha
 }
 
 // checkBackup return cluster name if backup exist
-func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) (*psmdbv1alpha1.PerconaServerMongoDBBackup, error) {
-	backup := &psmdbv1alpha1.PerconaServerMongoDBBackup{}
+func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServerMongoDBRestore) (*psmdbv1.PerconaServerMongoDBBackup, error) {
+	backup := &psmdbv1.PerconaServerMongoDBBackup{}
 	if len(cr.Spec.BackupName) == 0 {
 		backup.Status.Destination = cr.Spec.Destination
 		backup.Status.StorageName = cr.Spec.StorageName
@@ -158,14 +158,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1alpha1.Perco
 	if err != nil {
 		return nil, err
 	}
-	if backup.Status.State != psmdbv1alpha1.StateReady {
+	if backup.Status.State != psmdbv1.StateReady {
 		return nil, fmt.Errorf("backup not ready")
 	}
 
 	return backup, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1alpha1.PerconaServerMongoDBRestore) error {
+func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1.PerconaServerMongoDBRestore) error {
 	err := r.client.Status().Update(context.TODO(), cr)
 	if err != nil {
 		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
