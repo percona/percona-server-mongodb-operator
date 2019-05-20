@@ -237,7 +237,7 @@ func (r *ReconcilePerconaServerMongoDB) getExtServices(namespace, podName string
 			if k8serrors.IsNotFound(err) {
 				retries += 1
 				time.Sleep(500 * time.Millisecond)
-				log.Info("Service for %s not found. Retry", podName)
+				log.Info(fmt.Sprintf("Service for %s not found. Retry", podName))
 				continue
 			}
 			return nil, fmt.Errorf("failed to fetch service: %v", err)

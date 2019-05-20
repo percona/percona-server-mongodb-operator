@@ -49,6 +49,8 @@ spec:
           prefixCompression: true
   replsets:
   - name: rs0
+    # readinessDelaySec: 40
+    # livenessDelaySec: 120
     affinity:
       antiAffinityTopologyKey: none
     resources:
