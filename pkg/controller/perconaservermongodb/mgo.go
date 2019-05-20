@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
@@ -31,6 +32,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 				return errors.Wrap(err, "handleReplsetInit:")
 			}
 			cr.Status.Replsets[replset.Name].Initialized = true
+			cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+				Status:             api.ConditionTrue,
+				Type:               api.ClusterRSInit,
+				Message:            replset.Name,
+				LastTransitionTime: metav1.NewTime(time.Now()),
+			})
 			return nil
 		}
 		return errors.Wrap(err, "dial:")
