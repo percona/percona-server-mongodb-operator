@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/replset: general
   name: some-name-backup-coordinator
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1alpha1
+  - apiVersion: psmdb.percona.com/v1
     controller: true
     kind: PerconaServerMongoDB
     name: some-name

@@ -4,7 +4,7 @@ metadata:
   generation: 1
   name: hostpath-rs0
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1alpha1
+  - apiVersion: psmdb.percona.com/v1
     controller: true
     kind: PerconaServerMongoDB
     name: hostpath
