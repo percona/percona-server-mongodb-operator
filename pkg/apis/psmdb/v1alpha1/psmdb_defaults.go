@@ -148,7 +148,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Backup.Coordinator.MultiAZ.reconcileOpts()
 	}
 
-	cr.Status.Replsets = make(map[string]*ReplsetStatus)
+	if cr.Status.Replsets == nil {
+		cr.Status.Replsets = make(map[string]*ReplsetStatus)
+	}
 
 	return nil
 }

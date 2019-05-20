@@ -55,9 +55,63 @@ type PerconaServerMongoDBSpec struct {
 	PMM              PMMSpec                       `json:"pmm,omitempty"`
 }
 
+type ReplsetMemberStatus struct {
+	Name    string `json:"name,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
+type ReplsetStatus struct {
+	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
+	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
+
+	Initialized bool     `json:"initialized,omitempty"`
+	Size        int32    `json:"size"`
+	Ready       int32    `json:"ready"`
+	Status      AppState `json:"status,omitempty"`
+	Message     string   `json:"message,omitempty"`
+}
+
+type AppState string
+
+const (
+	AppStatePending AppState = "pending"
+	AppStateInit             = "initializing"
+	AppStateReady            = "ready"
+	AppStateError            = "error"
+)
+
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	Replsets map[string]*ReplsetStatus `json:"replsets,omitempty"`
+	Status     AppState                  `json:"state,omitempty"`
+	Message    string                    `json:"message,omitempty"`
+	Conditions []ClusterCondition        `json:"conditions,omitempty"`
+	Replsets   map[string]*ReplsetStatus `json:"replsets,omitempty"`
+}
+
+type ConditionStatus string
+
+const (
+	ConditionTrue    ConditionStatus = "True"
+	ConditionFalse                   = "False"
+	ConditionUnknown                 = "Unknown"
+)
+
+type ClusterConditionType string
+
+const (
+	ClusterReady   ClusterConditionType = "ClusterReady"
+	ClusterInit                         = "ClusterInitializing"
+	ClusterRSInit                       = "ReplsetInitialized"
+	ClusterRSReady                      = "ReplsetReady"
+	ClusterError                        = "Error"
+)
+
+type ClusterCondition struct {
+	Status             ConditionStatus      `json:"status"`
+	Type               ClusterConditionType `json:"type"`
+	LastTransitionTime metav1.Time          `json:"lastTransitionTime,omitempty"`
+	Reason             string               `json:"reason,omitempty"`
+	Message            string               `json:"message,omitempty"`
 }
 
 type PMMSpec struct {
@@ -127,19 +181,6 @@ type SecretsSpec struct {
 	Users       string `json:"users,omitempty"`
 	SSL         string `json:"ssl,omitempty"`
 	SSLInternal string `json:"sslInternal,omitempty"`
-}
-
-type ReplsetMemberStatus struct {
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
-}
-
-type ReplsetStatus struct {
-	Name        string                 `json:"name,omitempty"`
-	Pods        []string               `json:"pods,omitempty"`
-	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
-	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
-	Initialized bool                   `json:"initialized,omitempty"`
 }
 
 type MongosSpec struct {

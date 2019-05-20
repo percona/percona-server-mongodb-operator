@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -23,7 +25,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -118,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	cr := &api.PerconaServerMongoDB{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, cr)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
@@ -128,39 +129,49 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
+	defer func() {
+		r.updateStatus(cr, err)
+	}()
+
 	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("wrong psmdb options: %v", err)
+		err = errors.Wrap(err, "wrong psmdb options")
+		return reconcile.Result{}, err
 	}
 
 	if !cr.Spec.UnsafeConf {
 		err = r.reconsileSSL(cr)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
+			err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
+			return reconcile.Result{}, err
 		}
 	}
 
 	internalKey := secret.InternalKeyMeta(cr.Name+"-mongodb-keyfile", cr.Namespace)
 	err = setControllerReference(cr, internalKey, r.scheme)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("set owner ref for InternalKey %s: %v", internalKey.Name, err)
+		err = errors.Errorf("set owner ref for InternalKey %s: %v", internalKey.Name, err)
+		return reconcile.Result{}, err
 	}
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-mongodb-keyfile", Namespace: cr.Namespace}, internalKey)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && k8serrors.IsNotFound(err) {
 		reqLogger.Info("Creating a new internal mongo key", "Namespace", cr.Namespace, "Name", internalKey.Name)
 
 		internalKey.Data, err = secret.GenInternalKey()
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("internal mongodb key generation: %v", err)
+			err = errors.Wrap(err, "internal mongodb key generation")
+			return reconcile.Result{}, err
 		}
 
 		err = r.client.Create(context.TODO(), internalKey)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("create internal mongodb key: %v", err)
+			err = errors.Wrap(err, "create internal mongodb key")
+			return reconcile.Result{}, err
 		}
 	} else if err != nil {
-		return reconcile.Result{}, fmt.Errorf("get internal mongodb key: %v", err)
+		err = errors.Wrap(err, "get internal mongodb key")
+		return reconcile.Result{}, err
 	}
 
 	secrets := &corev1.Secret{}
@@ -170,23 +181,27 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		secrets,
 	)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("get mongodb secrets: %v", err)
+		err = errors.Wrap(err, "get mongodb secrets")
+		return reconcile.Result{}, err
 	}
 
 	bcpSfs, err := r.reconcileBackupCoordinator(cr)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("reconcile backup coordinator: %v", err)
+		err = errors.Wrap(err, "reconcile backup coordinator")
+		return reconcile.Result{}, err
 	}
 
 	if cr.Spec.Backup.Enabled {
 		err = r.reconcileBackupStorageConfig(cr, bcpSfs)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("reconcile backup storage config: %v", err)
+			err = errors.Wrap(err, "reconcile backup storage config")
+			return reconcile.Result{}, err
 		}
 
 		err = r.reconcileBackupTasks(cr, bcpSfs)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("reconcile backup tasks: %v", err)
+			err = errors.Wrap(err, "reconcile backup tasks")
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -215,18 +230,21 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			pods,
 		)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("get pods list for replset %s: %v", replset.Name, err)
+			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
+			return reconcile.Result{}, err
 		}
 
 		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey.Name)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
+			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
+			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
 			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey.Name)
 			if err != nil {
-				return reconcile.Result{}, fmt.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
+				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
 			}
 		} else {
 			err := r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
@@ -234,21 +252,24 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				cr.Namespace,
 			))
 
-			if err != nil && !errors.IsNotFound(err) {
-				return reconcile.Result{}, fmt.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+			if err != nil && !k8serrors.IsNotFound(err) {
+				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
 			}
 		}
 
 		err = r.removeOudatedServices(cr, replset, pods)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("failed to remove old services of replset %s: %v", replset.Name, err)
+			err = errors.Errorf("failed to remove old services of replset %s: %v", replset.Name, err)
+			return reconcile.Result{}, err
 		}
 
 		// Create Service
 		if replset.Expose.Enabled {
 			srvs, err := r.ensureExternalServices(cr, replset, pods)
 			if err != nil {
-				return reconcile.Result{}, fmt.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
+				err = errors.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
 			}
 			if replset.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 				lbsvc := srvs[:0]
@@ -264,20 +285,20 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 			err = setControllerReference(cr, service, r.scheme)
 			if err != nil {
-				return reconcile.Result{}, fmt.Errorf("set owner ref for Service %s: %v", service.Name, err)
+				err = errors.Errorf("set owner ref for Service %s: %v", service.Name, err)
+				return reconcile.Result{}, err
 			}
 
 			err = r.client.Create(context.TODO(), service)
-			if err != nil && !errors.IsAlreadyExists(err) {
-				return reconcile.Result{}, fmt.Errorf("failed to create service for replset %s: %v", replset.Name, err)
+			if err != nil && !k8serrors.IsAlreadyExists(err) {
+				err = errors.Errorf("failed to create service for replset %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
 			}
 		}
 
-		var rstatus *api.ReplsetStatus
-		rstatus, ok := cr.Status.Replsets[replset.Name]
-		if !ok || rstatus == nil {
-			rstatus = &api.ReplsetStatus{Name: replset.Name}
-			cr.Status.Replsets[replset.Name] = rstatus
+		_, ok := cr.Status.Replsets[replset.Name]
+		if !ok {
+			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
 		}
 
 		err = r.reconcileCluster(cr, replset, *pods, secrets)
@@ -286,98 +307,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.client.Update(context.TODO(), cr)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("update psmdb status: %v", err)
-	}
-
 	return rr, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoDB) error {
-	secretObj := corev1.Secret{}
-	err := r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      cr.Spec.Secrets.SSL,
-		},
-		&secretObj,
-	)
-	if err == nil {
-		return nil
-	} else if !errors.IsNotFound(err) {
-		return fmt.Errorf("get secret: %v", err)
-	}
-
-	issuerKind := "Issuer"
-	issuerName := cr.Name + "-psmdb-ca"
-	var certificateDNSNames []string
-	for _, replset := range cr.Spec.Replsets {
-		certificateDNSNames = append(certificateDNSNames,
-			cr.Name+"-"+replset.Name,
-			"*."+cr.Name+"-"+replset.Name,
-		)
-	}
-
-	err = r.client.Create(context.TODO(), &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName,
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
-		},
-	})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create issuer: %v", err)
-	}
-
-	err = r.client.Create(context.TODO(), &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-ssl",
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.CertificateSpec{
-			SecretName: cr.Spec.Secrets.SSL,
-			CommonName: cr.Name,
-			DNSNames:   certificateDNSNames,
-			IsCA:       true,
-			IssuerRef: cm.ObjectReference{
-				Name: issuerName,
-				Kind: issuerKind,
-			},
-		},
-	})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create certificate: %v", err)
-	}
-	if cr.Spec.Secrets.SSL == cr.Spec.Secrets.SSLInternal {
-		return nil
-	}
-
-	err = r.client.Create(context.TODO(), &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-ssl-internal",
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.CertificateSpec{
-			SecretName: cr.Spec.Secrets.SSLInternal,
-			CommonName: cr.Name,
-			DNSNames:   certificateDNSNames,
-			IsCA:       true,
-			IssuerRef: cm.ObjectReference{
-				Name: issuerName,
-				Kind: issuerKind,
-			},
-		},
-	})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create internal certificate: %v", err)
-	}
-
-	return nil
 }
 
 // TODO: reduce cyclomatic complexity
@@ -404,7 +334,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
-	if errGet != nil && !errors.IsNotFound(errGet) {
+	if errGet != nil && !k8serrors.IsNotFound(errGet) {
 		return nil, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
 	}
 
@@ -486,10 +416,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		}
 	}
 
-	if errors.IsNotFound(errGet) {
+	if k8serrors.IsNotFound(errGet) {
 		sfs.Spec = sfsSpec
 		err = r.client.Create(context.TODO(), sfs)
-		if err != nil && !errors.IsAlreadyExists(err) {
+		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return nil, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
 		}
 	} else {
@@ -523,7 +453,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudg
 
 	cpdb := &policyv1beta1.PodDisruptionBudget{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pdb.Name, Namespace: namespace}, cpdb)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && k8serrors.IsNotFound(err) {
 		return r.client.Create(context.TODO(), pdb)
 	} else if err != nil {
 		return fmt.Errorf("get: %v", err)
@@ -541,7 +471,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(currentObj runtime.Object
 		types.NamespacedName{Name: name, Namespace: namespace},
 		foundObj)
 
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && k8serrors.IsNotFound(err) {
 		err := r.client.Create(ctx, currentObj)
 		if err != nil {
 			return fmt.Errorf("create: %v", err)
