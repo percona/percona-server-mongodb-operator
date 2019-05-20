@@ -7,6 +7,7 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 cluster="monitoring-rs0"
 
+deploy_cert_manager
 create_namespace $namespace
 deploy_helm $namespace
 deploy_operator
