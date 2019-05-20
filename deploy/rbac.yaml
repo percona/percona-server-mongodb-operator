@@ -7,6 +7,7 @@ rules:
   - psmdb.percona.com
   resources:
   - perconaservermongodbs
+  - perconaservermongodbs/status
   - perconaservermongodbbackups
   - perconaservermongodbbackups/status
   - perconaservermongodbrestores
