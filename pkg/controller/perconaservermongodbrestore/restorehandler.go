@@ -4,7 +4,7 @@ import (
 	"context"
 
 	pbapi "github.com/percona/percona-backup-mongodb/proto/api"
-	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -60,7 +60,7 @@ type RestoreHandler struct {
 }
 
 // StartRestore is for starting new restore
-func (r *RestoreHandler) StartRestore(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) error {
+func (r *RestoreHandler) StartRestore(cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	msg := &pbapi.RunRestoreParams{
 		StorageName:  cr.Spec.StorageName,
 		MetadataFile: cr.Status.Destination,

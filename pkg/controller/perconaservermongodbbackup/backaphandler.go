@@ -8,7 +8,7 @@ import (
 	"time"
 
 	pbapi "github.com/percona/percona-backup-mongodb/proto/api"
-	psmdbv1alpha1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1alpha1"
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -16,7 +16,7 @@ import (
 )
 
 // newBackup creates new Backup
-func newBackupHandler(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (BackupHandler, error) {
+func newBackupHandler(cr *psmdbv1.PerconaServerMongoDBBackup) (BackupHandler, error) {
 	b := BackupHandler{}
 	grpcOpts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(makeUnaryInterceptor("")),
@@ -64,8 +64,8 @@ type BackupHandler struct {
 }
 
 // CheckBackup is for check if backup exist
-func (b *BackupHandler) CheckBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (psmdbv1alpha1.PerconaServerMongoDBBackupStatus, error) {
-	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
+func (b *BackupHandler) CheckBackup(cr *psmdbv1.PerconaServerMongoDBBackup) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
+	backupStatus := psmdbv1.PerconaServerMongoDBBackupStatus{}
 	backup, err := b.getMetaData(cr.Name)
 	if err != nil {
 		return backupStatus, fmt.Errorf("get metadata: %v", err)
@@ -101,8 +101,8 @@ func (b *BackupHandler) getMetaData(name string) (*pbapi.MetadataFile, error) {
 	return backup, nil
 }
 
-func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.PerconaServerMongoDBBackupStatus {
-	newStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{}
+func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1.PerconaServerMongoDBBackupStatus {
+	newStatus := psmdbv1.PerconaServerMongoDBBackupStatus{}
 	newStatus.StartAt = &metav1.Time{
 		Time: time.Unix(backup.Metadata.StartTs, 0),
 	}
@@ -110,7 +110,7 @@ func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.P
 		newStatus.CompletedAt = &metav1.Time{
 			Time: time.Now(),
 		}
-		newStatus.State = psmdbv1alpha1.StateReady
+		newStatus.State = psmdbv1.StateReady
 	}
 	if len(backup.Metadata.StorageName) > 0 {
 		newStatus.StorageName = backup.Metadata.StorageName
@@ -127,8 +127,8 @@ func (b *BackupHandler) getNewStatus(backup *pbapi.MetadataFile) psmdbv1alpha1.P
 }
 
 // StartBackup is for starting new backup
-func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup) (psmdbv1alpha1.PerconaServerMongoDBBackupStatus, error) {
-	backupStatus := psmdbv1alpha1.PerconaServerMongoDBBackupStatus{
+func (b *BackupHandler) StartBackup(cr *psmdbv1.PerconaServerMongoDBBackup) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
+	backupStatus := psmdbv1.PerconaServerMongoDBBackupStatus{
 		StorageName: cr.Spec.StorageName,
 	}
 
@@ -142,10 +142,10 @@ func (b *BackupHandler) StartBackup(cr *psmdbv1alpha1.PerconaServerMongoDBBackup
 
 	_, err := b.client.RunBackup(context.Background(), msg)
 	if err != nil {
-		backupStatus.State = psmdbv1alpha1.StateRejected
+		backupStatus.State = psmdbv1.StateRejected
 		return backupStatus, err
 	}
-	backupStatus.State = psmdbv1alpha1.StateRequested
+	backupStatus.State = psmdbv1.StateRequested
 
 	return backupStatus, nil
 }
