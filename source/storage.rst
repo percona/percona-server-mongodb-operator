@@ -2,20 +2,14 @@ Local Storage support for the Percona Server for MongoDB Operator
 =================================================================
 
 Among the wide rage of volume types, supported by Kubernetes, there are
-two which allow Pod containers to access part of the local filesystem on
-the node. Two such options are *emptyDir* and *hostPath* volumes.
+two volume types which allow Pod containers to access part of the local filesystem on
+the node the *emptyDir* and *hostPath*.
 
 emptyDir
 --------
 
-The name of this option is self-explanatory. When Pod having an
-`emptyDir
-volume <https://kubernetes.io/docs/concepts/storage/volumes/#emptydir>`__
-is assigned to a Node, a directory with the specified name is created on
-this node and exists until this Pod is removed from the node. When the
-Pod have been deleted, the directory is deleted too with all its
-content. All containers in the Pod which have mounted this volume will
-gain read and write access to the correspondent directory.
+A Pod `emptyDir
+volume <https://kubernetes.io/docs/concepts/storage/volumes/#emptydir>`_ is created when the Pod is assigned to a Node. The volume is initially empty and is erased when the Pod is removed from the Node. The containers in the Pod can read and write the files in the emptyDir volume.
 
 The ``emptyDir`` options in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
@@ -30,8 +24,8 @@ hostPath
 
 A `hostPath
 volume <https://kubernetes.io/docs/concepts/storage/volumes/#hostpath>`__
-mounts some existing file or directory from the node’s filesystem into
-the Pod.
+mounts an existing file or directory from the host node’s filesystem into
+the Pod. If the pod is removed, the data persists in the host node's filesystem.
 
 The ``volumeSpec.hostPath`` subsection in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
@@ -46,14 +40,16 @@ something else (e.g. a socket):
         path: /data
         type: Directory
 
-Please note, that hostPath directory is not created automatically! Is
-should be created manually and should have following correct
-attributives: 1. access permissions 2. ownership 3. SELinux security
-context
+Please note, you must created the hostPath manually and should have following
+attributes:
 
-``hostPath`` is useful when you are able to perform manual actions
-during the first run and have strong need in improved disk performance.
-Also, please consider using tolerations to avoid cluster migration to
+    * access permissions
+    * ownership
+    * SELinux security context
+
+The ``hostPath`` volume is useful when you perform manual actions
+during the first run and require improved disk performance.
+Consider using the tolerations settings to avoid a cluster migration to
 different hardware in case of a reboot or a hardware failure.
 
 More details can be found in the `official hostPath Kubernetes

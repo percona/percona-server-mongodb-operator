@@ -1,7 +1,7 @@
 Design overview
 ===============
 
-The design of the operator is highly bound to the Percona Server for
+The design of the operator is tighly bound to the Percona Server for
 MongoDB replica set, which is briefly described in the following
 diagram.
 
@@ -14,11 +14,11 @@ via a driver.
 To provide high availability the Operator uses `node
 affinity <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity>`__
 to run MongoDB instances on separate worker nodes if possible, and the
-database cluster is deployed as a single Replica Set with at least 3
+database cluster is deployed as a single Replica Set with at least three
 nodes. If a node fails, the pod with the mongod process is automatically
 re-created on another node. If the failed node was hosting the primary
-server, the replica set initiates elections to select a new primary. Tf
-the failed node was running the Operator, Kubernetes will restart it
+server, the replica set initiates elections to select a new primary. If
+the failed node was running the Operator, Kubernetes will restart the Operator on
 another node, so normal operation will not be interrupted.
 
 Client applications should use a mongo+srv URI for the connection. This
@@ -30,7 +30,7 @@ dynamically assigned nodes.
 than the default Percona Server for MongoDB setup. The initial
 configuration contains default passwords for all needed user accounts,
 which should be changed in the production environment, as stated in
-the*\ `installation instructions <./psmdb-operator.install.md>`__\ *.*
+the  `installation instructions <./psmdb-operator.install.md>`__.
 
 |PSMDB Operator|\ {: .align-center}
 

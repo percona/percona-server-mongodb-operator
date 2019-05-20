@@ -1,23 +1,20 @@
 Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes
 ====================================================================================
 
-The operator does good job automatically assigning new Pods to nodes
-with sufficient to achieve balanced distribution across the cluster.
-Still there are situations when it worth to ensure that pods will land
-on specific nodes: for example, to get speed advantages of the SSD
-equipped machine, or to reduce costs choosing nodes in a same
+The operator does a good job of automatically assigning new pods to nodes to achieve balanced distribution across the cluster.
+There are situations when you must ensure that pods land
+on specific nodes: for example, for the advantage of speed on an SSD-equipped machine, or reduce costs by choosing nodes in the same
 availability zone.
 
-Appropriate (sub)sections (``replsets``, ``replsets.arbiter``, and
+The appropriate (sub)sections (``replsets``, ``replsets.arbiter``, and
 ``backup``) of the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-file contain keys which can be used to do this, depending on what is the
-best for a particular situation.
+file contain the keys which can be used to do assign pods to nodes.
 
 Node selector
 -------------
 
-``nodeSelector`` contains one or more key-value pairs. If the node is
+The ``nodeSelector`` contains one or more key-value pairs. If the node is
 not labeled with each key-value pair from the Pod’s ``nodeSelector``,
 the Pod will not be able to land on it.
 
@@ -32,13 +29,10 @@ self-explanatory ``disktype: ssd`` label:
 Affinity and anti-affinity
 --------------------------
 
-Affinity makes Pod eligible (or not eligible - so called
-“anti-affinity”) to be scheduled on the node which already has Pods with
-specific labels. Particularly this approach is good to to reduce costs
-making sure several Pods with intensive data exchange will occupy the
-same availability zone or even the same node - or, on the contrary, to
-make them land on different nodes or even different availability zones
-for the high availability and balancing purposes.
+Affinity defines eligible pods that can be scheduled on the node which already has pods with specific labels. Anti-affinity defines pods that are not eligible. This approach is reduces costs by ensuring several pods with intensive data exchange  occupy the
+same availability zone or even the same node or, on the contrary, to
+spread the pods on different nodes or even different availability zones
+for high availability and balancing purposes.
 
 Percona Server for MongoDB Operator provides two approaches for doing
 this:
@@ -73,12 +67,12 @@ occupying the same node:
 Advanced approach - use standard Kubernetes constraints
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Previous way can be used with no special knowledge of the Kubernetes way
-of assigning Pods to specific nodes. Still in some cases more complex
-tuning may be needed. In this case ``advanced`` option placed in the
+The previous method can be used without special knowledge of the Kubernetes way
+of assigning Pods to specific nodes. Still, in some cases, more complex
+tuning may be needed. In this case, the ``advanced`` option placed in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
 file turns off the effect of the ``antiAffinityTopologyKey`` and allows
-to use standard Kubernetes affinity constraints of any complexity:
+the use of the standard Kubernetes affinity constraints of any complexity:
 
 ::
 
@@ -130,18 +124,20 @@ Tolerations
 
 *Tolerations* allow Pods having them to be able to land onto nodes with
 matching *taints*. Toleration is expressed as a ``key`` with and
-``operator``, which is either ``exists`` or ``equal`` (the latter
-variant also requires a ``value`` the key is equal to). Moreover,
-toleration should have a specified ``effect``, which may be a
-self-explanatory ``NoSchedule``, less strict ``PreferNoSchedule``, or
-``NoExecute``. The last variant means that if a *taint* with
-``NoExecute`` is assigned to node, then any Pod not tolerating this
-*taint* will be removed from the node, immediately or after the
-``tolerationSeconds`` interval, like in the following example:
+``operator``, which is either ``exists`` or ``equal`` (the equal
+variant requires a corresponding ``value`` for comparison).
+
+Toleration should have a specified ``effect``, such as the following:
+
+  * ``NoSchedule`` -  less strict
+  * ``PreferNoSchedule``
+  * ``NoExecute``
+
+When a *taint* with the ``NoExecute`` effect is assigned to a node, any pod configured to not tolerating this *taint* is removed from the node. This removal can be immediate or after the ``tolerationSeconds`` interval. The following example defines this effect and the removal interval:
 
 ::
 
-   tolerations: 
+   tolerations:
    - key: "node.alpha.kubernetes.io/unreachable"
      operator: "Exists"
      effect: "NoExecute"
@@ -154,10 +150,10 @@ contains more examples on this topic.
 Priority Classes
 ----------------
 
-Pods may belong to some *priority classes*. This allows scheduler to
-distinguish more and less important Pods to resolve the situation when
-some higher priority Pod cannot be scheduled without evicting a lower
-priority one. This can be done adding one or more PriorityClasses in
+Pods may belong to some *priority classes*. This flexibility allows the scheduler to
+distinguish more and less important Pods when needed, such as the situation when
+a higher priority Pod cannot be scheduled without evicting a lower
+priority one. This ability can be accomplished by adding one or more PriorityClasses in
 your Kubernetes cluster, and specifying the ``PriorityClassName`` in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
 file:
@@ -175,16 +171,15 @@ Pod Disruption Budgets
 
 Creating the `Pod Disruption
 Budget <https://kubernetes.io/docs/concepts/workloads/pods/disruptions/>`__
-is the Kubernetes style to limits the number of Pods of an application
-that can go down simultaneously due to such *voluntary disruptions* as
-cluster administrator’s actions during the update of deployments or
-nodes, etc. By such a way Distribution Budgets allow large applications
-to retain their high availability while maintenance and other
+is the Kubernetes method to limit the number of Pods of an application
+that can go down simultaneously due to  *voluntary disruptions* such as the
+cluster administrator’s actions during a deployment update. Distribution Budgets allow large applications
+to retain their high availability during maintenance and other
 administrative activities. The ``maxUnavailable`` and ``minAvailable``
 options in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
 file can be used to set these limits. The recommended variant is the
-following one:
+following:
 
 ::
 
