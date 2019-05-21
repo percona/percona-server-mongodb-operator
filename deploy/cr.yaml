@@ -5,7 +5,7 @@ metadata:
 spec:
   pause: false
 #  platform: openshift
-  image: percona/percona-server-mongodb-operator:1.0.0-mongod4.0
+  image: percona/percona-server-mongodb-operator:1.0.0-mongod4.0.9
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
