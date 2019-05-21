@@ -96,7 +96,7 @@ spec:
     - name: Cluster
       type: string
       description: Cluster name
-      JSONPath: .spec.psmdbCluster
+      JSONPath: .spec.clusterName
     - name: Status
       type: string
       description: Job status

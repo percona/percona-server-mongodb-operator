@@ -3,5 +3,5 @@ kind: PerconaServerMongoDBRestore
 metadata:
   name: restore1
 spec:
-  psmdbCluster: my-cluster-name
+  clusterName: my-cluster-name
   backupName: backup1
