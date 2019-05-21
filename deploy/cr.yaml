@@ -171,12 +171,12 @@ spec:
 #     nodeSelector:
 #       disktype: ssd
     storages:
-      s3-us-west:
-        type: s3
-        s3:
-          bucket: S3-BACKUP-BUCKET-NAME-HERE
-          credentialsSecret: my-cluster-name-backup-s3
-          region: us-west-2
+#      s3-us-west:
+#        type: s3
+#        s3:
+#          bucket: S3-BACKUP-BUCKET-NAME-HERE
+#          credentialsSecret: my-cluster-name-backup-s3
+#          region: us-west-2
 #      minio:
 #        type: s3
 #        s3:
@@ -185,13 +185,13 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-minio
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
     tasks:
-      - name: daily-s3-us-west
-        enabled: true
-        schedule: "0 0 * * *"
-        storageName: s3-us-west
-        compressionType: gzip
-      - name: weekly-s3-us-west
-        enabled: false
-        schedule: "0 0 * * 0"
-        storageName: s3-us-west
-        compressionType: gzip
+#      - name: daily-s3-us-west
+#        enabled: true
+#        schedule: "0 0 * * *"
+#        storageName: s3-us-west
+#        compressionType: gzip
+#      - name: weekly-s3-us-west
+#        enabled: false
+#        schedule: "0 0 * * 0"
+#        storageName: s3-us-west
+#        compressionType: gzip
