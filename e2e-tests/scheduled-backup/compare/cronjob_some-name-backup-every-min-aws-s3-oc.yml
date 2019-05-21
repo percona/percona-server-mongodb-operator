@@ -32,16 +32,18 @@ spec:
         spec:
           containers:
           - args:
-            - run
-            - backup
-            - --description=some-name-every-min-aws-s3
-            - --storage=aws-s3
-            - --compression-algorithm=gzip
+            - -c
+            - "\n\t\t\tcat <<-EOF | /usr/bin/kubectl apply -f -\n\t\t\t\tapiVersion:
+              psmdb.percona.com/v1\n\t\t\t\tkind: PerconaServerMongoDBBackup\n\t\t\t\tmetadata:\n\t\t\t\t
+              \ name: \"cron-${psmdbCluster:0:16}-$(date -u \"+%Y%m%d%H%M%S\")-${suffix}\"\n\t\t\t\t
+              \ labels:\n\t\t\t\t    ancestor: \"every-min-aws-s3\"\n\t\t\t\t    cluster:
+              \"${psmdbCluster}\"\n\t\t\t\t    type: \"cron\"\n\t\t\t\tspec:\n\t\t\t\t
+              \ psmdbCluster: \"${psmdbCluster}\"\n\t\t\t\t  storageName: \"aws-s3\"\n\t\t\tEOF\n\t\t"
             command:
-            - pbmctl
+            - sh
             env:
-            - name: PBMCTL_SERVER_ADDRESS
-              value: some-name-backup-coordinator:10001
+            - name: psmdbCluster
+              value: some-name
             imagePullPolicy: IfNotPresent
             name: backup-pmbctl
             resources: {}

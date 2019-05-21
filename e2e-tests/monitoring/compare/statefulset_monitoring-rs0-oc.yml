@@ -115,16 +115,6 @@ spec:
             secretKeyRef:
               key: MONGODB_CLUSTER_MONITOR_PASSWORD
               name: some-users
-        - name: PMM_USER
-          valueFrom:
-            secretKeyRef:
-              key: PMM_SERVER_USER
-              name: some-users
-        - name: PMM_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: PMM_SERVER_PASSWORD
-              name: some-users
         - name: DB_ARGS
           value: --uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/
         imagePullPolicy: Always

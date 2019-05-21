@@ -22,7 +22,7 @@ check_cr_config() {
     # wait for convergence
     local arbiter_ip=$(get_service_ip $cluster-arbiter-0)
     local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)"
-    sleep 90
+    sleep 240
 
     run_mongo "rs.conf()" "clusterAdmin:clusterAdmin123456@$URI" "mongodb" ":27017" \
         | grep '"host" :' \

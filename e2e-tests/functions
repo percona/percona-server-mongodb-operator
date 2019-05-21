@@ -58,7 +58,8 @@ wait_pod() {
                 | grep -v 'level=info' \
                 | grep -v 'level=debug' \
                 | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source'
+                | grep -v 'Getting pods from source' \
+                | tail -100
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
         fi
@@ -81,7 +82,8 @@ wait_cron() {
                 | grep -v 'level=info' \
                 | grep -v 'level=debug' \
                 | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source'
+                | grep -v 'Getting pods from source' \
+                | tail -100
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
         fi
@@ -104,7 +106,8 @@ wait_backup() {
                 | grep -v 'level=info' \
                 | grep -v 'level=debug' \
                 | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source'
+                | grep -v 'Getting pods from source' \
+                | tail -100
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
         fi
@@ -144,7 +147,8 @@ wait_restore() {
                 | grep -v 'level=info' \
                 | grep -v 'level=debug' \
                 | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source'
+                | grep -v 'Getting pods from source' \
+                | tail -100
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
         fi
@@ -226,7 +230,8 @@ wait_for_delete() {
                 | grep -v 'level=info' \
                 | grep -v 'level=debug' \
                 | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source'
+                | grep -v 'Getting pods from source' \
+                | tail -100
             echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
             exit 1
         fi
