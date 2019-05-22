@@ -15,21 +15,36 @@ file. This file contains the following spec sections:
       * - platform
         - string
         - ``kubernetes``
-      * - version
+      * - image
         - string
-        - ``3.6.8``
-      * - section
-        - subdoc
-        -
+        - ``percona/percona-server-mongodb-operator:1.0.0-mongod4.0.9``
+      * - imagePullPolicy
+        - string
+        - ``Always``
+      * - imagePullSecrets.name
+        - string
+        - ``private-registry-credentials``
+      * - runUid
+        - string
+        - ``1001``
+      * - allowUnsafeConfigurations
+        - string
+        - ``false``
 
 ``platform`` description:
 Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set openshift on OpenShift 3.11+
 
-``version`` description:
-The Dockerhub tag of `percona/percona-server-mongodb <https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/>`__ to deploy
+``image`` description:
+The image  of `percona/percona-server-mongodb <https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/>`__ to deploy
 
-``section`` description:
-Operator secrets section
+``imagePullPolicy`` description:
+The default pull policy forces a pull if the image exists.
+
+``imagePullSecrets.name`` description: 
+An imagePullSecret is a method to pass a secret that contains an image registry password to allow a private image pull on behalf of the selected pod.
+
+``allowUnsafeConfigurations`` description: 
+An error-proof functionality that prevents users from configuring a cluster with multiple Arbiter nodes or a Replica Set with less than three nodes. 
 
 Secrets section
 ---------------
@@ -56,6 +71,34 @@ The secret name for the `MongoDB Internal Auth Key <https://docs.mongodb.com/man
 
 ``users`` description:
 The secret name for the MongoDB users required to run the operator. This secret is required to run the operator.
+
+  PMM section
+  -----------
+
+The ``pmm`` section in the deploy/cr.yaml file contains configuration options for Percona Monitoring and Management.
+
+  .. list-table::
+     :widths: 20 20 20
+     :header-rows: 1
+
+     * - Key
+       - Value Type
+       - Example
+     * - enabled 
+       - boolean
+       - ``false``
+     * - image
+       - string
+       - ``perconalab/pmm-client:1.17.1``
+     * - serverhost
+       - string
+       - ``monitoring-service``
+
+  ``enabled`` description: Enables or disables `monitoring Percona XtraDB cluster with PMM <https://www.percona.com/doc/percona-xtradb-cluster/5.7/manual/monitoring.html>`_
+
+  ``image`` description:  PMM client Docker image to use.
+
+  ``serverhost`` description:  Address of the PMM Server to collect data from the cluster.
 
 
   Replsets section
