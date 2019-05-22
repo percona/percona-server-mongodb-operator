@@ -111,6 +111,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	for _, replset := range cr.Spec.Replsets {
+		if replset.LivenessInitialDelaySeconds == nil {
+			ld := int32(90)
+			replset.LivenessInitialDelaySeconds = &ld
+		}
+
+		if replset.ReadinessInitialDelaySeconds == nil {
+			rd := int32(10)
+			replset.ReadinessInitialDelaySeconds = &rd
+		}
+
 		if cr.Spec.Pause {
 			replset.Size = 0
 			replset.Arbiter.Enabled = false
@@ -178,16 +188,6 @@ func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) error {
 
 	if !unsafe {
 		rs.setSafeDefauts(log)
-	}
-
-	if rs.LivenessInitialDelaySeconds == nil {
-		ld := int32(90)
-		rs.LivenessInitialDelaySeconds = &ld
-	}
-
-	if rs.ReadinessInitialDelaySeconds == nil {
-		rd := int32(10)
-		rs.ReadinessInitialDelaySeconds = &rd
 	}
 
 	return nil
