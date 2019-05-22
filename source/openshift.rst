@@ -31,7 +31,7 @@ Install Percona server for MongoDB on OpenShift
 
    .. code:: bash
 
-      $ oc create clusterrole psmdb-admin --verb="*" --resource=perconaservermongodbs.psmdb.percona.com
+      $ oc create clusterrole psmdb-admin --verb="*" --resource=perconaservermongodbs.psmdb.percona.com,perconaservermongodbs.psmdb.percona.com/status,perconaservermongodbbackups.psmdb.percona.com,perconaservermongodbbackups.psmdb.percona.com/status,perconaservermongodbrestores.psmdb.percona.com,perconaservermongodbrestores.psmdb.percona.com/status,issuers.certmanager.k8s.io,certificates.certmanager.k8s.io
       $ oc adm policy add-cluster-role-to-user psmdb-admin <some-user>
 
 2. Create a new ``psmdb`` project:
