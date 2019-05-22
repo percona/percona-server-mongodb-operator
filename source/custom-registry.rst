@@ -3,8 +3,8 @@ Use Docker images from a custom registry
 
 Using images from a private Docker registry may required for
 privacy, security or other reasons. In these cases, Percona Server for
-MongoDB Operator allows the use of a custom registry This example of the
-Operator deployed in the OpenShift environment demonstrates the process.
+MongoDB Operator allows the use of a custom registry This following example of the
+Operator deployed in the OpenShift environment demonstrates the process:
 
 1. Log into the OpenShift and create a project.
 
@@ -75,14 +75,10 @@ Operator deployed in the OpenShift environment demonstrates the process.
       NAME                              DOCKER REPO                                                             TAGS             UPDATED
       percona-server-mongodb-operator   docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator  0.2.1-mongod3.6  2 hours ago
 
-7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration
-file with a Docker Repo + Tag string
-   (it should look like
-   ``docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6``)
+7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6``)
 
-
-   Please note, if the registry requires authentication, you can specify the ``imagePullSecrets`` option for
-   all images.
+   **Note** *if the registry requires authentication, you can specify the ``imagePullSecrets`` option for
+   all images.*
 
 8. Repeat steps 3-5 for other images, and update corresponding options
    in the ``deploy/cr.yaml`` file.
@@ -96,24 +92,20 @@ Percona certified images
 Following table presents Percona’s certified images to be used with the
 Percona Server for MongoDB Operator:
 
-0.3.0
-~~~~~
+      .. list-table:: 
+         :widths: 15 30
+         :header-rows: 1
 
-+---------------------------------+------------------------------------+
-| Image                           | Digest                             |
-+=================================+====================================+
-| percona/percona-server-mongodb- | 69d2018790ed14de1a79bef1fd7afc5fb9 |
-| operator:0.3.0                  | 1b57374f1e4ca33e5f48996646bb3e     |
-+---------------------------------+------------------------------------+
-| percona/percona-server-mongodb- | a02a10c9e0bc36fac2b1a7e1215832c581 |
-| operator:0.3.0-mongod3.6.10     | 6abfbbe0018fca61d133835140b4e8     |
-+---------------------------------+------------------------------------+
-| percona/percona-server-mongodb- | 0849fee6073e85414ca36d4f394046342d |
-| operator:0.3.0-mongod4.0.6      | 623292f03e9d3afd5bd5b02e6df812     |
-+---------------------------------+------------------------------------+
-| percona/percona-server-mongodb- | 5a32ddf1194d862b5f6f3826fa85cc4f3c |
-| operator:0.3.0-backup           | 367ccd8e69e501f27b6bf94f7e3917     |
-+---------------------------------+------------------------------------+
-| perconalab/pmm-client:1.17.1    | f762cda2eda9ef17bfd1242ede70ee7259 |
-|                                 | 5611511d8d0c5c46931ecbc968e9af     |
-+---------------------------------+------------------------------------+
+         * - Image
+           - Digest
+         * - percona/percona-server-mongodb-operator:0.3.0  
+           - 69d2018790ed14de1a79bef1fd7afc5fb91b57374f1e4ca33e5f48996646bb3e
+         * - percona/percona-server-mongodb-operator:0.3.0-mongod3.6.10
+           - a02a10c9e0bc36fac2b1a7e1215832c5816abfbbe0018fca61d133835140b4e8
+         * - percona/percona-server-mongodb-operator:0.3.0-mongod4.0.6
+           - 0849fee6073e85414ca36d4f394046342d623292f03e9d3afd5bd5b02e6df812
+         * - percona/percona-server-mongodb-operator:0.3.0-backup
+           - 5a32ddf1194d862b5f6f3826fa85cc4f3c367ccd8e69e501f27b6bf94f7e3917
+         * - perconalab/pmm-client:1.17.1
+           - f762cda2eda9ef17bfd1242ede70ee72595611511d8d0c5c46931ecbc968e9af 
+

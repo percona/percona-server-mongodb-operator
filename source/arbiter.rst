@@ -9,7 +9,7 @@ becomes the primary node. Elections are the reason to avoid an even
 number of nodes in the cluster. The cluster should have
 at least three nodes. Normally, each node stores a complete copy of the data,
 but there is also a possibility, to reduce disk IO and space used by the
-database, to add an `arbiter node <<https://docs.mongodb.com/manual/core/replica-set-arbiter/>`__. An arbiter cannot become a primary and does not have a complete copy of the data. The arbiter does have one election vote and can be the odd number for elections. The arbiter does not demand a persistent volume.
+database, to add an `arbiter node <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`__. An arbiter cannot become a primary and does not have a complete copy of the data. The arbiter does have one election vote and can be the odd number for elections. The arbiter does not demand a persistent volume.
 
 Percona Server for MongoDB Operator has the ability to create Replica Set Arbiter
 nodes if needed. This feature can be configured in the Replica Set

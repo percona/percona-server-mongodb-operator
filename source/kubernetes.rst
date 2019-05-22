@@ -68,10 +68,9 @@ Install Percona server for MongoDB on Kubernetes
 
    .. code:: bash
 
-      $ kubectl apply -f deploy/mongodb-users.yaml
+      $ kubectl apply -f deploy/secrets.yaml
 
-   More details about secrets can be found in a `separate
-   section <../configure/users>`__.
+   More details about secrets can be found in Users.
 
 6. After the operator is started, Percona Server for MongoDB cluster can
    be created with the following command:
