@@ -8,8 +8,10 @@ Install Percona server for MongoDB on Kubernetes
       git clone -b release-0.3.0 https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
-   **Note:** *It is crucial to specify the right branch with ``-b``
-   option while cloning the code on this step. Please be careful.*
+   .. note::
+   
+      It is crucial to specify the right branch with ``-b``
+      option while cloning the code on this step. Please be careful.
 
 1. The Custom Resource Definition for PSMDB should be created from the
    ``deploy/crd.yaml`` file. The Custom Resource Definition extends the
@@ -35,18 +37,21 @@ Install Percona server for MongoDB on Kubernetes
    based on defined roles and the available actions which correspond to
    each role. The role and actions are defined for Kubernetes resources in the yaml file. Further details
    about users and roles can be found in `Kubernetes
-   documentation <https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings>`__).
+   documentation <https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings>`_.
 
    .. code:: bash
 
       $ kubectl apply -f deploy/rbac.yaml
 
-   **Note:** *Setting RBAC requires your user to have cluster-admin role
-   privileges. For example, those using Google Kubernetes Engine can
-   grant user needed privileges with the following command:*
-   ``$ kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=$(gcloud config get-value core/account)``
+   .. note::
+   
+      Setting RBAC requires your user to have cluster-admin role
+      privileges. For example, those using Google Kubernetes Engine can
+      grant user needed privileges with the following command::
+      
+         $ kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=$(gcloud config get-value core/account)
 
-4.  Start the operator within Kubernetes:
+4. Start the operator within Kubernetes:
 
    .. code:: bash
 
@@ -59,9 +64,12 @@ Install Percona server for MongoDB on Kubernetes
    documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`__
    for details).
 
-   **Note:** *the following command can be used to get base64-encoded
-   password from a plain text string:*
-   ``$ echo -n 'plain-text-password' | base64``
+   .. note::
+   
+      The following command can be used to get base64-encoded
+      password from a plain text string::
+   
+        $ echo -n 'plain-text-password' | base64
 
    After editing the yaml file, mongodb-users secrets should be created
    (or updated with the new passwords) using the following command:
@@ -70,7 +78,7 @@ Install Percona server for MongoDB on Kubernetes
 
       $ kubectl apply -f deploy/secrets.yaml
 
-   More details about secrets can be found in Users.
+   More details about secrets can be found in `Users <users.html>`_.
 
 6. After the operator is started, Percona Server for MongoDB cluster can
    be created with the following command:
