@@ -46,24 +46,28 @@ deployment.
 
 .. warning:: These users should not be used to run an application.
 
-  ..list-table::
-    :header-rows:: 1
+.. list-table::
+   :header-rows: 1
 
-    * - User Purpose
-      - Username Secret Key
-      - Password Secret Key
-    * - Backup/Restore
-      - MONGODB_BACKUP_USER
-      - MONGODB_BACKUP_PASSWORD
-    * - Cluster Admin
-      - MONGODB_CLUSTER_ADMIN_USER
-      - MONGODB_CLUSTER_ADMIN_PASSWORD
-    * - Cluster Monitor
-      - MONGODB_CLUSTER_MONITOR_USER
-      - MONGODB_CLUSTER_MONITOR_PASSWORD
-    * - User Admin
-      - MONGODB_USER_ADMIN_USER
-      - MONGODB_USER_ADMIN_PASSWORD
+   * - User Purpose
+     - Username Secret Key
+     - Password Secret Key
+     
+   * - Backup/Restore
+     - MONGODB_BACKUP_USER
+     - MONGODB_BACKUP_PASSWORD
+     
+   * - Cluster Admin
+     - MONGODB_CLUSTER_ADMIN_USER
+     - MONGODB_CLUSTER_ADMIN_PASSWORD
+     
+   * - Cluster Monitor
+     - MONGODB_CLUSTER_MONITOR_USER
+     - MONGODB_CLUSTER_MONITOR_PASSWORD
+     
+   * - User Admin
+     - MONGODB_USER_ADMIN_USER
+     - MONGODB_USER_ADMIN_PASSWORD
 
 `Backup/Restore` - MongoDB Role: `backup <https://docs.mongodb.com/manual/reference/built-in-roles/#backup>`__, `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__, `restore <https://docs.mongodb.com/manual/reference/built-in-roles/#restore>`__   
 
