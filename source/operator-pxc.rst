@@ -6,19 +6,29 @@ The operator is configured via the spec section of the
 file. This file contains the following spec sections to configure three
 main subsystems of the cluster:
 
-
-.. csv-table:: Custom Resource options
-    :header: "Key", "Value Type", "Description"
-    :widths: 15, 15, 40
-    :delim: ,
-
-    "pxc", "subdoc", "Percona XtraDB Cluster general section"
-    "proxysql", "subdoc", "ProxySQL section"
-    "pmm", "subdoc", "Percona Moonitoring and Management section"
-    "backup", "subdoc", "Percona XtraDB Cluster backups section"
-
-
-
+.. list-table:: Custom Resource options
+   :header-rows: 1
+   :widths: 15 15 40
+    
+   * - Key
+     - Value Type
+     - Description
+    
+   * - pxc
+     - subdoc
+     - Percona XtraDB Cluster general section
+      
+   * - proxysql
+     - subdoc
+     - ProxySQL section
+    
+   * - pmm
+     - subdoc
+     - Percona Moonitoring and Management section
+      
+   * - backup
+     - subdoc
+     - Percona XtraDB Cluster backups section
 
 PXC Section
 -----------
