@@ -77,14 +77,15 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
 7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6``)
 
-   **Note** *if the registry requires authentication, you can specify the ``imagePullSecrets`` option for
-   all images.*
+   .. note::
+
+      If the registry requires authentication, you can specify the ``imagePullSecrets`` option for all images.
 
 8. Repeat steps 3-5 for other images, and update corresponding options
    in the ``deploy/cr.yaml`` file.
 
 9. Now follow the standard `Percona Server for MongoDB Operator
-   installation instruction <./openshift>`__.
+   installation instruction <./openshift.html>`__.
 
 Percona certified images
 ------------------------
