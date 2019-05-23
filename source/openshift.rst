@@ -62,7 +62,7 @@ Install Percona server for MongoDB on OpenShift
 
 4. Add the MongoDB Users secrets to OpenShift. These secrets
    should be placed in the data section of the
-   ``deploy/secrects.yaml`` file as login names and base64-encoded
+   ``deploy/secrets.yaml`` file as login names and base64-encoded
    passwords (see `Kubernetes
    documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`_
    for details).
