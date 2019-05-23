@@ -5,11 +5,13 @@
 
 Percona Kubernetes Operator for MongoDB
 ==========================================
-The `Percona Kubernetes Operator for Percona Server for MongoDB <https://github.com/percona/percona-server-mongodb-operator` automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment. The Operator contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.
+
+The `Percona Kubernetes Operator for Percona Server for MongoDB <https://github.com/percona/percona-server-mongodb-operator>`_ automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment. The Operator contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.
 
 The Percona Kubernetes Operators are based on best practices for the configuration of a Percona Server for MongoDB replica set. The Operator provides many benefits but saving time, a consistent environment are the most important.
 
-The operator was developed and tested for the following configurations only:
+*The operator was developed and tested for the following configurations only:*
+
   * Percona Server for MongoDB 3.6 and Percona Server for MongoDB 4.0
   * OpenShift 3.11 and OpenShift 4.0
 
@@ -21,6 +23,7 @@ Also, the current PSMDB on Kubernetes implementation does not support Percona Se
 
 Overview
 ========
+
 .. toctree::
    :maxdepth: 1
 
@@ -30,6 +33,7 @@ Overview
 
 Installation
 ============
+
 .. toctree::
    :maxdepth: 1
 
@@ -41,6 +45,7 @@ Installation
 
 Configuration
 =============
+
 .. toctree::
    :maxdepth: 1
 
