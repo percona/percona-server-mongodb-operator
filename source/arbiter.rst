@@ -17,6 +17,6 @@ section of the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
 file:
 
--  set ‘arbiter.enabled’ option to ‘true’ to allow Arbiter nodes,
--  use ‘arbiter.size’ option to set the desired amount of the Replica
+-  set ``arbiter.enabled`` option to ``true`` to allow Arbiter nodes,
+-  use ``arbiter.size`` option to set the desired amount of the Replica
    Set nodes which should be Arbiter ones instead of containing data.
