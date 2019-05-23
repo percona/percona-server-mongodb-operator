@@ -58,15 +58,15 @@ This example uses Amazon S3 storage for backups:
         compressionType: gzip
      ...
 
-**Note:** *if you use some S3-compatible storage instead of the original
-Amazon S3, one more key is needed in the ``s3`` subsection: the
-``endpointUrl``, which points to the actual cloud used for backups and
-is specific to the cloud provider.*
+.. note:: If you use some S3-compatible storage instead of the original
+   Amazon S3, one more key is needed in the ``s3`` subsection: the
+   ``endpointUrl``, which points to the actual cloud used for backups and
+   is specific to the cloud provider. 
 
-For example, the `Google
-Cloud <https://cloud.google.com>`__ key is the following::
+   For example, the `Google
+   Cloud <https://cloud.google.com>`__ key is the following::
 
-  endpointUrl: https://storage.googleapis.com
+      endpointUrl: https://storage.googleapis.com
 
 
 The options within these three subsections are further explained in the
