@@ -8,7 +8,7 @@ nodes.
 
 Size of the cluster is controlled by a ``size`` key in the Custom
 Resource options configuration, as specified in the `Operator Options
-section <../configure/operator>`__. That’s why scaling the cluster needs
+section <operator.html>`__. That’s why scaling the cluster needs
 nothing more but changing this option and applying the updated
 configuration file. This may be done in a specifically saved config, or
 on the fly, using the following command, which saves the current
