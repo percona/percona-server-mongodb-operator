@@ -1,8 +1,8 @@
 Users
 =====
 
-As it is written in the installation part, the Operator requires
-Kubernetes Secrets to be deployed before it is started. The name of the
+During installation, the Operator requires
+Kubernetes Secrets to be deployed before the Operator is started. The name of the
 required secrets can be set in ``deploy/cr.yaml`` under the
 ``spec.secrets`` section.
 
@@ -44,43 +44,39 @@ MongoDB System Users
 The operator requires system-level MongoDB users to automate the MongoDB
 deployment.
 
-**Warning:** *These users should not be used to run an application.*
+.. warning:: These users should not be used to run an application.
 
-+----------+---------------+------------------+------------------------+
-| User     | Username      | Password Secret  | MongoDB Role           |
-| Purpose  | Secret Key    | Key              |                        |
-+==========+===============+==================+========================+
-| Backup/R | MONGODB_BACKU | MONGODB_BACKUP_P | `backup <https://docs. |
-| estore   | P_USER        | ASSWORD          | mongodb.com/manual/ref |
-|          |               |                  | erence/built-in-roles/ |
-|          |               |                  | #backup>`__,           |
-|          |               |                  | `clusterMonitor <https |
-|          |               |                  | ://docs.mongodb.com/ma |
-|          |               |                  | nual/reference/built-i |
-|          |               |                  | n-roles/#clusterMonito |
-|          |               |                  | r>`__,                 |
-|          |               |                  | `restore <https://docs |
-|          |               |                  | .mongodb.com/manual/re |
-|          |               |                  | ference/built-in-roles |
-|          |               |                  | /#restore>`__          |
-+----------+---------------+------------------+------------------------+
-| Cluster  | MONGODB_CLUST | MONGODB_CLUSTER_ | `clusterAdmin <https:/ |
-| Admin    | ER_ADMIN_USER | ADMIN_PASSWORD   | /docs.mongodb.com/manu |
-|          |               |                  | al/reference/built-in- |
-|          |               |                  | roles/#clusterAdmin>`_ |
-|          |               |                  | _                      |
-+----------+---------------+------------------+------------------------+
-| Cluster  | MONGODB_CLUST | MONGODB_CLUSTER_ | `clusterMonitor <https |
-| Monitor  | ER_MONITOR_US | MONITOR_PASSWORD | ://docs.mongodb.com/ma |
-|          | ER            |                  | nual/reference/built-i |
-|          |               |                  | n-roles/#clusterMonito |
-|          |               |                  | r>`__                  |
-+----------+---------------+------------------+------------------------+
-| User     | MONGODB_USER_ | MONGODB_USER_ADM | `userAdmin <https://do |
-| Admin    | ADMIN_USER    | IN_PASSWORD      | cs.mongodb.com/manual/ |
-|          |               |                  | reference/built-in-rol |
-|          |               |                  | es/#userAdmin>`__      |
-+----------+---------------+------------------+------------------------+
+.. list-table::
+   :header-rows: 1
+
+   * - User Purpose
+     - Username Secret Key
+     - Password Secret Key
+     
+   * - Backup/Restore
+     - MONGODB_BACKUP_USER
+     - MONGODB_BACKUP_PASSWORD
+     
+   * - Cluster Admin
+     - MONGODB_CLUSTER_ADMIN_USER
+     - MONGODB_CLUSTER_ADMIN_PASSWORD
+     
+   * - Cluster Monitor
+     - MONGODB_CLUSTER_MONITOR_USER
+     - MONGODB_CLUSTER_MONITOR_PASSWORD
+     
+   * - User Admin
+     - MONGODB_USER_ADMIN_USER
+     - MONGODB_USER_ADMIN_PASSWORD
+
+`Backup/Restore` - MongoDB Role: `backup <https://docs.mongodb.com/manual/reference/built-in-roles/#backup>`__, `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__, `restore <https://docs.mongodb.com/manual/reference/built-in-roles/#restore>`__   
+
+`Cluster Admin` - MongoDB Role: `clusterAdmin <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin>`__  
+
+`Cluster Monitor` - MongoDB Role: `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__
+
+`User Admin` - MongoDB Role: `userAdmin <https://docs.mongodb.com/manual/reference/built-in-roles/#userAdmin>`__
+
 
 Development Mode
 ----------------
@@ -103,7 +99,7 @@ MONGODB_USER_ADMIN_USER          userAdmin
 MONGODB_USER_ADMIN_PASSWORD      userAdmin123456
 ================================ ====================
 
-**Warning:** *Do not use the default MongoDB Users in production!*
+.. warning:: Do not use the default MongoDB Users in production!
 
 MongoDB Internal Authentication Key (optional)
 ----------------------------------------------

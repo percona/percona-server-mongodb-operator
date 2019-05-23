@@ -1,14 +1,13 @@
 Providing Backups
 =================
 
-Percona Server for MongoDB Operator allows doing cluster backup in two
+Percona Server for MongoDB Operator allows taking cluster backup in two
 ways. *Scheduled backups* are configured in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-file to be executed automatically in proper time. *On-demand backups*
-can be done manually at any moment. Both ways are using the `Percona
+file to be executed automatically at the selected time. *On-demand backups*
+can be done manually at any moment. Both ways use the `Percona
 Backup for
-MongoDB <https://github.com/percona/percona-backup-mongodb>`__ tool to
-do the job.
+MongoDB <https://github.com/percona/percona-backup-mongodb>`__ tool.
 
 The backup process is controlled by the `Backup
 Coordinator <https://github.com/percona/percona-backup-mongodb#coordinator>`__
@@ -27,16 +26,15 @@ the Kubernetes cluster. These keys should be saved to the
 file and applied with the appropriate command,
 e.g. \ ``kubectl apply -f deploy/backup-s3.yaml`` (for Kubernetes).
 
-Backups schedule is defined in the ``backup`` section of the
+A backup schedule is defined in the ``backup`` section of the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-file. This section contains three subsections: \* ``storages``
-subsection contains data needed to access the S3-compatible cloud to
-store backups. \* ``coordinator`` subsection allows to configure
-Kubernetes limits and claims for the Percona Backup for MongoDB
-Coordinator daemon. \* ``tasks`` subsection allows to actually schedule
-backups (the schedule is specified in crontab format).
+file. This section contains three subsections:
 
-Here is an example which uses Amazon S3 storage for backups:
+  * ``storages`` contains data needed to access the S3-compatible cloud to store backups.
+  * ``coordinator`` configures the Kubernetes limits and claims for the Percona Backup for MongoDB Coordinator daemon.
+  * ``tasks`` schedules backups (the schedule is specified in crontab format).
+
+This example uses Amazon S3 storage for backups:
 
 ::
 
@@ -60,28 +58,31 @@ Here is an example which uses Amazon S3 storage for backups:
         compressionType: gzip
      ...
 
-**Note:** *if you use some S3-compatible storage instead of the original
-Amazon S3, one more key is needed in the ``s3`` subsection: the
-``endpointUrl``, which points to the actual cloud used for backups and
-is specific to the cloud provider. For example, using*\ `Google
-Cloud <https://cloud.google.com>`__\ *involves the following one:
-``endpointUrl: https://storage.googleapis.com``.*
+.. note:: If you use some S3-compatible storage instead of the original
+   Amazon S3, one more key is needed in the ``s3`` subsection: the
+   ``endpointUrl``, which points to the actual cloud used for backups and
+   is specific to the cloud provider. 
+
+   For example, the `Google
+   Cloud <https://cloud.google.com>`__ key is the following::
+
+      endpointUrl: https://storage.googleapis.com
+
 
 The options within these three subsections are further explained in the
 `Operator
 Options <https://percona.github.io/percona-xtradb-cluster-operator/configure/operator>`__.
 
-The only option which should be mentioned separately is
+One option which should be mentioned separately is
 ``credentialsSecret`` which is a `Kubernetes
 secret <https://kubernetes.io/docs/concepts/configuration/secret/>`__
-for backups. Sample
+for backups. The Sample
 `backup-s3.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml>`__
-can be used to create this secret object. Check that it contains proper
-``name`` value (equal to the one specified for ``credentialsSecret``,
-i.e. \ ``my-cluster-name-backup-s3`` in the last example), and also
+can be used as a template to create this secret object. Verify that the yaml contains the proper
+``name`` value which must be equal to the one specified for ``credentialsSecret``,
+i.e. \ ``my-cluster-name-backup-s3`` for example, and also
 proper ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY`` keys. After
-editing is finished, secrets object should be created (or updated with
-the new name and/or keys) using the following command:
+editing is finished, secrets object should be created or updated using the following command:
 
 .. code:: bash
 
@@ -90,7 +91,7 @@ the new name and/or keys) using the following command:
 Making on-demand backup
 -----------------------
 
-To make on-demand backup, user should run `the PBM Control
+To make on-demand backup, user should run the `PBM Control
 tool <https://github.com/percona/percona-backup-mongodb#pbm-control-pbmctl>`__
 inside of the coordinator container, supplying it with needed options,
 like in the following example:
@@ -106,28 +107,26 @@ like in the following example:
 
 Don’t forget to specify the name of your cluster instead of the
 ``<cluster-name>`` part of the Backup Coordinator URL (the same cluster
-name which is specified in the
+name is specified in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-file). Also ``<storage>`` should be substituted with the actual storage
-name, which is featured as a subsection inside of the ``backups`` one in
+file). Also the ``<storage>`` placeholder should be substituted with the storage
+name, which is located in the  ``backups\storages`` subsection in
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-file. In the upper example it is ``s3-us-west``.
+file.
 
 Restore the cluster from a previously saved backup
 --------------------------------------------------
 
-To restore a previously saved backup you will need to specify the backup
-name. List of available backups can be obtained from the Backup
-Coordinator as follows (supposedly that you once again use the Backup
-Coordinator’s proper URL and the storage name like you did to make
-on-demand backup):
+To restore a previously saved backup you must specify the backup
+name. A list of the available backups can be obtained from the Backup
+Coordinator as follows (you must use the correct Backup
+Coordinator’s URL and the correct storage name for your environment):
 
 .. code:: bash
 
       kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- list backups --server-address=<cluster-name>-backup-coordinator:10001
 
-Now, restore the backup, using its name instead of the ``backup-name``
-parameter:
+Now, restore the backup, substituting the cluster-name and storage values and using the selected backup name instead of ``backup-name``:
 
 .. code:: bash
 

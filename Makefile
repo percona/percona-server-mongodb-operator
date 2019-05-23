@@ -17,8 +17,8 @@ ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) sou
 help:
 	@echo "Please use \`make <target>' where <target> is one of"
 	@echo "  html       to make standalone HTML files"
-	@echo "  offhtml    to make standalone HTML files without fetching fresh percona-them files"
 	@echo "  dirhtml    to make HTML files named index.html in directories"
+	@echo "  offhtml    to make standalone HTML files without fetching the new theme files"
 	@echo "  singlehtml to make a single large HTML file"
 	@echo "  pickle     to make pickle files"
 	@echo "  json       to make JSON files"

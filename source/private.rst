@@ -3,16 +3,14 @@ Creating a private S3-compatible cloud for backups
 
 As it is mentioned in
 `backups <https://percona.github.io/percona-server-mongodb-operator/configure/backups>`__
-any cloud storage which implements the S3 API can be used for backups -
-as third-party one, so your own. The most simple way to setup and use
-such storage on Kubernetes or OpenShift is
+any cloud storage which implements the S3 API can be used for backups. The one way to setup and implement the S3 API storage on Kubernetes or OpenShift is
 `Minio <https://www.minio.io/>`__ - the S3-compatible object storage
 server deployed via Docker on your own infrastructure.
 
 Setting up Minio to be used with Percona Server for MongoDB Operator
 backups involves following steps:
 
-1. First of all, install Minio in your Kubernetes or OpenShift
+1. Install Minio in your Kubernetes or OpenShift
    environment and create the correspondent Kubernetes Service as
    follows:
 
@@ -30,17 +28,16 @@ backups involves following steps:
            stable/minio
 
    Don’t forget to substitute default ``some-access-key`` and
-   ``some-secret-key`` strings in this command with some actual unique
-   key values which can be used later for the access control.
-   ``storageClass`` option is needed if you are going to use special
+   ``some-secret-key`` strings in this command with actual unique
+   key values. The values can be used later for access control. The ``storageClass`` option is needed if you are using the special
    `Kubernetes Storage
    Class <https://kubernetes.io/docs/concepts/storage/storage-classes/>`__
-   for backups. Otherwise it may be omitted. You may also notice
-   ``MINIO_REGION`` value which is not of much sense within the private
-   cloud. Just use the same region value here and on later steps
+   for backups. Otherwise, this setting may be omitted. You may also notice the
+   ``MINIO_REGION`` value which is may not be used within a private
+   cloud. Use the same region value here and on later steps
    (``us-east-1`` is a good default choice).
 
-2. The next thing to do is to create an S3 bucket for backups:
+2. Create an S3 bucket for backups:
 
    .. code:: bash
 
@@ -49,7 +46,7 @@ backups involves following steps:
           /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
 
    This command creates the bucket named ``operator-testing`` with
-   already chosen access and secret keys (substitute ``some-access-key``
+   the selected access and secret keys (substitute ``some-access-key``
    and ``some-secret-key`` with the values used on the previous step).
 
 3. Now edit the backup section of the
@@ -81,19 +78,18 @@ backups involves following steps:
    secret <https://kubernetes.io/docs/concepts/configuration/secret/>`__
    for backups. Sample
    `backup-s3.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml>`__
-   can be used to create this secret object. Check that it contains
-   proper ``name`` value (equal to the one specified for
+   can be used to create this secret object. Check that the object contains the
+   proper ``name`` value and is equal to the one specified for
    ``credentialsSecret``, i.e. \ ``my-cluster-name-backup-s3`` in the
-   last example), and also proper ``AWS_ACCESS_KEY_ID`` and
-   ``AWS_SECRET_ACCESS_KEY`` keys. After editing is finished, secrets
-   object should be created (or updated with the new name and/or keys)
-   using the following command:
+   backup to Minio example, and also contains the proper ``AWS_ACCESS_KEY_ID`` and
+   ``AWS_SECRET_ACCESS_KEY`` keys. After you have finished editing the file, the secrets
+   object are created or updated when you run the following command:
 
    .. code:: bash
 
       $ kubectl apply -f deploy/backup-s3.yaml
 
-4. When the setup process is over, making backup is rather simple.
+4. When the setup process is completed, making the backup is based on a script.
    Following example illustrates how to make an on-demand backup:
 
    .. code:: bash
@@ -106,26 +102,23 @@ backups involves following steps:
             --description=my-backup```
 
    Don’t forget to specify the name of your cluster instead of the
-   ``<cluster-name>`` part of the Backup Coordinator URL (the same
-   cluster name which is specified in the
+   ``<cluster-name>`` part of the Backup Coordinator URL (the
+   cluster name is specified in the
    `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-   file). Also ``<storage>`` should be substituted with the actual
-   storage name, which is featured as a subsection inside of the
-   ``backups`` one in
+   file). Also substitute ``<storage>`` with the actual
+   storage name located in a subsection inside of the
+   ``backups`` in the
    `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-   file. In the upper example it is ``minio``.
+   file. In the earlier example this value is ``minio``.
 
-5. To restore a previously saved backup you will need to specify the
-   backup name. List of available backups can be obtained from the
-   Backup Coordinator as follows (supposedly that you once again use the
-   Backup Coordinator’s proper URL and the storage name like you did in
-   previous step):
+5. To restore a previously saved backup you must specify the
+   backup name. With the proper Backup Coordinator URL and storage name, you can obtain a list of the available backups:
 
    .. code:: bash
 
          kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- list backups --server-address=<cluster-name>-backup-coordinator:10001
 
-   Now, restore the backup, using its name instead of the
+   Now, restore the backup, using backup name instead of the
    ``backup-name`` parameter:
 
    .. code:: bash
