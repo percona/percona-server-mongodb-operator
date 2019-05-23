@@ -44,10 +44,9 @@ MongoDB System Users
 The operator requires system-level MongoDB users to automate the MongoDB
 deployment.
 
-**Warning:** *These users should not be used to run an application.*
+.. warning:: These users should not be used to run an application.
 
-
-  ..list-tables::
+  ..list-table::
     :header-rows:: 1
 
     * - User Purpose
@@ -65,8 +64,6 @@ deployment.
     * - User Admin
       - MONGODB_USER_ADMIN_USER
       - MONGODB_USER_ADMIN_PASSWORD
-  
-     
 
 `Backup/Restore` - MongoDB Role: `backup <https://docs.mongodb.com/manual/reference/built-in-roles/#backup>`__, `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__, `restore <https://docs.mongodb.com/manual/reference/built-in-roles/#restore>`__   
 
@@ -98,7 +95,7 @@ MONGODB_USER_ADMIN_USER          userAdmin
 MONGODB_USER_ADMIN_PASSWORD      userAdmin123456
 ================================ ====================
 
-**Warning:** *Do not use the default MongoDB Users in production!*
+.. warning:: Do not use the default MongoDB Users in production!
 
 MongoDB Internal Authentication Key (optional)
 ----------------------------------------------
