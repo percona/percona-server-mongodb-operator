@@ -27,8 +27,8 @@ Overview
 .. toctree::
    :maxdepth: 1
 
-   System-Requirements 
    architecture
+   System-Requirements 
 
 
 Installation
