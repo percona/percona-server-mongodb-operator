@@ -31,11 +31,13 @@ allows the drivers (3.6 and up) to retrieve the list of replica set
 members from DNS SRV entries without having to list hostnames for the
 dynamically assigned nodes.
 
-**Note:** *The Operator uses security settings which are more secure
-than the default Percona Server for MongoDB setup. The initial
-configuration contains default passwords for all needed user accounts,
-which should be changed in the production environment, as stated in
-the  `installation instructions <./psmdb-operator.install.md>`__.*
+.. note::
+
+   The Operator uses security settings which are more secure
+   than the default Percona Server for MongoDB setup. The initial
+   configuration contains default passwords for all needed user accounts,
+   which should be changed in the production environment, as stated in
+   the  `installation instructions <./psmdb-operator.install.md>`_.
 
     .. image:: operator.png
        :width: 250px
