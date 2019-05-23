@@ -1,4 +1,4 @@
-SYSTEM REQUIREMENTS
+System requirements
 +++++++++++++++++++
 
 The following platforms are supported:
