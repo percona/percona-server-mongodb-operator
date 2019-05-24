@@ -1,99 +1,103 @@
 Install Percona server for MongoDB on OpenShift
 ===============================================
 
-0. First of all, clone the percona-server-mongodb-operator repository:
+0. Clone the percona-server-mongodb-operator repository:
 
    .. code:: bash
 
       git clone -b release-0.3.0 https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
-   **Note:** *It is crucial to specify the right branch with ``-b``
-   option while cloning the code on this step. Please be careful.*
+   .. note::
 
-1. Now Custom Resource Definition for PSMDB should be created from the
-   ``deploy/crd.yaml`` file. Custom Resource Definition extends the
+      It is crucial to specify the right branch with ``-b``
+      option while cloning the code on this step. Please be careful.
+
+1. The Custom Resource Definition for PSMDB should be created from the
+   ``deploy/crd.yaml`` file. The Custom Resource Definition extends the
    standard set of resources which Kubernetes “knows” about with the new
-   items (in our case ones which are the core of the operator).
+   items, in our case these items are the core of the operator.
 
-   This step should be done only once; it does not need to be repeated
-   with the next Operator deployments, etc.
+   This step should be done only once; it does not need to be repeated with other deployments.
 
    .. code:: bash
 
       $ oc apply -f deploy/crd.yaml
 
-   **Note:** *Setting Custom Resource Definition requires your user to
-   have cluster-admin role privileges.*
+   .. note::
 
-   An extra action is needed if you want to manage PSMDB cluster from a
-   non-privileged user. Necessary permissions can be granted by applying
-   the next clusterrole:
+      Setting Custom Resource Definition requires your user to
+      have cluster-admin role privileges.
+
+   An extra action is required if you want to manage PSMDB cluster with a
+   non-privileged user. The necessary permissions can be granted by applying
+   the clusterrole:
 
    .. code:: bash
 
       $ oc create clusterrole psmdb-admin --verb="*" --resource=perconaservermongodbs.psmdb.percona.com
       $ oc adm policy add-cluster-role-to-user psmdb-admin <some-user>
 
-2. The next thing to do is to create a new ``psmdb`` project:
+2. Create a new ``psmdb`` project:
 
    .. code:: bash
 
       $ oc new-project psmdb
 
-3. Now RBAC (role-based access control) for PSMDB should be set up from
-   the ``deploy/rbac.yaml`` file. Briefly speaking, role-based access is
-   based on specifically defined roles and actions corresponding to
-   them, allowed to be done on specific Kubernetes resources (details
+3. Add role-based access control (RBAC) for PSMDB is configured with
+   the ``deploy/rbac.yaml`` file. RBAC is
+   based on clearly defined roles and corresponding allowed actions. These actions are allowed on specific Kubernetes resources. The details
    about users and roles can be found in `OpenShift
-   documentation <https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html>`__).
+   documentation <https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html>`_.
 
    .. code:: bash
 
       $ oc apply -f deploy/rbac.yaml
 
-   Finally, it’s time to start the Operator within OpenShift:
+4. Start the Operator within OpenShift:
 
    .. code:: bash
 
       $ oc apply -f deploy/operator.yaml
 
-4. Now that’s time to add the MongoDB Users secrets to OpenShift. They
+4. Add the MongoDB Users secrets to OpenShift. These secrets
    should be placed in the data section of the
-   ``deploy/mongodb-users.yaml`` file as base64-encoded logins and
-   passwords for the user accounts (see `Kubernetes
-   documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`__
+   ``deploy/secrets.yaml`` file as login names and base64-encoded
+   passwords (see `Kubernetes
+   documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`_
    for details).
 
-   **Note:** *the following command can be used to get base64-encoded
-   password from a plain text string:*
-   ``$ echo -n 'plain-text-password' | base64``
+   .. note::
 
-   After editing is finished, users secrets should be created (or
-   updated with the new passwords) using the following command:
+      The following command can be used to return a base64-encoded
+      password from a plain text string::
+      
+        $ echo -n 'plain-text-password' | base64
+
+   When you have completed adding the additional information, the secrets should be created or
+   updated with the following command:
 
    .. code:: bash
 
-      $ oc apply -f deploy/mongodb-users.yaml
+      $ oc apply -f deploy/secrets.yaml
 
-   More details about secrets can be found in a `separate
-   section <../configure/users>`__.
+   More details about secrets can be found in Users.
 
-5. After the operator is started, Percona Server for MongoDB cluster can
+5. Percona Server for MongoDB cluster can
    be created at any time with the following two steps:
 
-   a. Uncomment the ``deploy/cr.yaml`` field ``#platform:`` and set it
+   a. Uncomment the ``deploy/cr.yaml`` field ``#platform:`` and edit the field
       to ``platform: openshift``. The result should be like this:
 
-   .. code:: yaml
+      .. code:: yaml
 
-      apiVersion: psmdb.percona.com/v1alpha1
-      kind: PerconaServerMongoDB
-      metadata:
-        name: my-cluster-name
-      spec:
-        platform: openshift
-      ...
+         apiVersion: psmdb.percona.com/v1alpha1
+         kind: PerconaServerMongoDB
+         metadata:
+           name: my-cluster-name
+         spec:
+           platform: openshift
+         ...
 
    b. Create/apply the CR file:
 
@@ -101,8 +105,8 @@ Install Percona server for MongoDB on OpenShift
 
          $ oc apply -f deploy/cr.yaml
 
-   Creation process will take some time. The process is over when both
-   operator and replica set pod have reached their Running status:
+   The creation process will take time. The process is complete when both the
+   operator and the replica set pod have reached their Running status:
 
    .. code:: bash
 
