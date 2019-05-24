@@ -71,7 +71,7 @@ Install Percona server for MongoDB on OpenShift
 
       The following command can be used to return a base64-encoded
       password from a plain text string::
-      
+
         $ echo -n 'plain-text-password' | base64
 
    When you have completed adding the additional information, the secrets should be created or
@@ -83,7 +83,13 @@ Install Percona server for MongoDB on OpenShift
 
    More details about secrets can be found in Users.
 
-5. Percona Server for MongoDB cluster can
+5. The following command applies pre-generated certificates:
+
+  .. code:: bash
+
+      $ kubectl apply -f deploy/ssl-secrets.yaml
+
+7. Percona Server for MongoDB cluster can
    be created at any time with the following two steps:
 
    a. Uncomment the ``deploy/cr.yaml`` field ``#platform:`` and edit the field

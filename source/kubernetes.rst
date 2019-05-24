@@ -9,7 +9,7 @@ Install Percona server for MongoDB on Kubernetes
       cd percona-server-mongodb-operator
 
    .. note::
-   
+
       It is crucial to specify the right branch with ``-b``
       option while cloning the code on this step. Please be careful.
 
@@ -44,11 +44,11 @@ Install Percona server for MongoDB on Kubernetes
       $ kubectl apply -f deploy/rbac.yaml
 
    .. note::
-   
+
       Setting RBAC requires your user to have cluster-admin role
       privileges. For example, those using Google Kubernetes Engine can
       grant user needed privileges with the following command::
-      
+
          $ kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=$(gcloud config get-value core/account)
 
 4. Start the operator within Kubernetes:
@@ -65,10 +65,10 @@ Install Percona server for MongoDB on Kubernetes
    for details).
 
    .. note::
-   
+
       The following command can be used to get base64-encoded
       password from a plain text string::
-   
+
         $ echo -n 'plain-text-password' | base64
 
    After editing the yaml file, mongodb-users secrets should be created
@@ -80,7 +80,13 @@ Install Percona server for MongoDB on Kubernetes
 
    More details about secrets can be found in `Users <users.html>`_.
 
-6. After the operator is started, Percona Server for MongoDB cluster can
+6. The following command applies pre-generated certificates:
+
+  .. code:: bash
+
+      $ kubectl apply -f deploy/ssl-secrets.yaml
+
+7. After the operator is started, Percona Server for MongoDB cluster can
    be created with the following command:
 
    .. code:: bash
