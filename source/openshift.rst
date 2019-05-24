@@ -87,7 +87,7 @@ Install Percona server for MongoDB on OpenShift
 
   .. code:: bash
 
-      $ kubectl apply -f deploy/ssl-secrets.yaml
+      $ oc apply -f deploy/ssl-secrets.yaml
 
 7. Percona Server for MongoDB cluster can
    be created at any time with the following two steps:
