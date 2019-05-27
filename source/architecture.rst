@@ -5,11 +5,11 @@ The design of the operator is tighly bound to the Percona Server for
 MongoDB replica set, which is briefly described in the following
 diagram.
 
-    .. image:: replication.png
-       :width: 250px
-       :align: center
-       :height: 250px
-       :alt: PSMDB Replication
+.. image:: replication.png
+   :width: 250px
+   :align: center
+   :height: 250px
+   :alt: PSMDB Replication
 
 
 A replica set consists of one primary server and several secondary ones
@@ -39,11 +39,11 @@ dynamically assigned nodes.
    which should be changed in the production environment, as stated in
    the  `installation instructions <openshift.html>`_.
 
-    .. image:: operator.png
-       :width: 250px
-       :align: center
-       :height: 250px
-       :alt: PSMDB Operator
+.. image:: operator.png
+   :width: 250px
+   :align: center
+   :height: 250px
+   :alt: PSMDB Operator
 
 To provide data storage for stateful applications, Kubernetes uses
 Persistent Volumes. A *PersistentVolumeClaim* (PVC) is used to implement
