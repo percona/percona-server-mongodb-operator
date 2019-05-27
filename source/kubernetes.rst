@@ -80,11 +80,13 @@ Install Percona server for MongoDB on Kubernetes
 
    More details about secrets can be found in `Users <users.html>`_.
 
-6. The following command applies pre-generated certificates:
+6. Now you need to `prepare certificates for TLS security <TLS.html>`_ and apply them with the following command:
 
-  .. code:: bash
+   .. code:: bash
 
-      $ kubectl apply -f deploy/ssl-secrets.yaml
+      $ kubectl apply -f <secrets file>
+      
+   Pre-generated certificates are awailable in the ``deploy/ssl-secrets.yaml`` secrets file for test purposes, but we strongly recommend avoiding their usage on any production system.
 
 7. After the operator is started, Percona Server for MongoDB cluster can
    be created with the following command:
