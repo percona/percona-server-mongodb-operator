@@ -58,4 +58,5 @@ Configuration
    expose
    constraints
    storage
+   TLS
 
