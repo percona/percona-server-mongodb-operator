@@ -63,5 +63,3 @@ until docker ps;
     do sleep 1;
 done
 build_operator
-build_mongod40
-build_mongod36
