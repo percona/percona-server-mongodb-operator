@@ -70,8 +70,7 @@ This example uses Amazon S3 storage for backups:
 
 
 The options within these three subsections are further explained in the
-`Operator
-Options <https://percona.github.io/percona-xtradb-cluster-operator/configure/operator>`__.
+`Operator Options <operator.html>`_.
 
 One option which should be mentioned separately is
 ``credentialsSecret`` which is a `Kubernetes
