@@ -6,9 +6,9 @@
 A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) based on the [Operator SDK](https://github.com/operator-framework/operator-sdk).
 
 # Documentation
-See the [Official Documentation](https://percona.github.io/percona-server-mongodb-operator/) for more information.
+See the [Official Documentation](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/) for more information.
 
-[![Official Documentation](https://via.placeholder.com/260x60/419bdc/FFFFFF/?text=Documentation)](https://percona.github.io/percona-server-mongodb-operator/)
+[![Official Documentation](https://via.placeholder.com/260x60/419bdc/FFFFFF/?text=Documentation)](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/)
 
 # DISCLAIMER
 
