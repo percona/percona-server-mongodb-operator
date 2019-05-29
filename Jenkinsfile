@@ -7,12 +7,14 @@ pipeline {
             steps {
                  withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
                     sh '''
-                        DOCKER_TAG=perconalab/percona-server-mongodb-operator:${GIT_BRANCH}
+                        GIT_SHORT_COMMIT=\${GIT_COMMIT:0:7}
+                        DOCKER_TAG=perconalab/percona-xtradb-cluster-operator:${GIT_BRANCH}-${GIT_SHORT_COMMIT}
                         docker_tag_file='./results/docker/TAG'
                         mkdir -p $(dirname ${docker_tag_file})
                         echo ${DOCKER_TAG} > "${docker_tag_file}"
                         sg docker -c "
                             docker login -u '${USER}' -p '${PASS}'
+                            export IMAGE=\$DOCKER_TAG
                             ./e2e-tests/build
                             docker logout
                         "
@@ -28,7 +30,7 @@ pipeline {
             script {
                 if (currentBuild.result == null || currentBuild.result == 'SUCCESS') {
                     unstash 'IMAGE'
-                    def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG | tr '[:upper:]' '[:lower:]'").trim()
+                    def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                     if (env.CHANGE_URL) {
                         withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_API_TOKEN')]) {
                             sh """
