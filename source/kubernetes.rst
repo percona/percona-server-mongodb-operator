@@ -5,7 +5,7 @@ Install Percona server for MongoDB on Kubernetes
 
    .. code:: bash
 
-      git clone -b release-0.3.0 https://github.com/percona/percona-server-mongodb-operator
+      git clone -b release-1.0.0 https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
    .. note::
@@ -85,7 +85,7 @@ Install Percona server for MongoDB on Kubernetes
    .. code:: bash
 
       $ kubectl apply -f <secrets file>
-      
+
    Pre-generated certificates are awailable in the ``deploy/ssl-secrets.yaml`` secrets file for test purposes, but we strongly recommend avoiding their usage on any production system.
 
 7. After the operator is started, Percona Server for MongoDB cluster can
