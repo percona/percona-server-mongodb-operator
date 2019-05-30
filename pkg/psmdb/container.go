@@ -15,6 +15,38 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 	fvar := false
 	tvar := true
 
+	volumes := []corev1.VolumeMount{
+		{
+			Name:      MongodDataVolClaimName,
+			MountPath: MongodContainerDataDir,
+		},
+		{
+			Name:      ikeyName,
+			MountPath: mongodSecretsDir,
+			ReadOnly:  true,
+		},
+		{
+			Name:      "ssl",
+			MountPath: sslDir,
+			ReadOnly:  true,
+		},
+		{
+			Name:      "ssl-internal",
+			MountPath: sslInternalDir,
+			ReadOnly:  true,
+		},
+	}
+
+	if *m.Spec.Mongod.Security.EnableEncryption {
+		volumes = append(volumes,
+			corev1.VolumeMount{
+				Name:      m.Spec.Mongod.Security.EncryptionKeySecret,
+				MountPath: mongodRESTencryptDir,
+				ReadOnly:  true,
+			},
+		)
+	}
+
 	return corev1.Container{
 		Name:            name,
 		Image:           m.Spec.Image,
@@ -87,27 +119,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 			RunAsNonRoot: &tvar,
 			RunAsUser:    runUID,
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      MongodDataVolClaimName,
-				MountPath: MongodContainerDataDir,
-			},
-			{
-				Name:      ikeyName,
-				MountPath: mongodSecretsDir,
-				ReadOnly:  true,
-			},
-			{
-				Name:      "ssl",
-				MountPath: sslDir,
-				ReadOnly:  true,
-			},
-			{
-				Name:      "ssl-internal",
-				MountPath: sslInternalDir,
-				ReadOnly:  true,
-			},
-		},
+		VolumeMounts: volumes,
 	}
 }
 
@@ -166,6 +178,17 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	if mSpec.Storage != nil {
 		switch mSpec.Storage.Engine {
 		case api.StorageEngineWiredTiger:
+			if *m.Spec.Mongod.Security.EnableEncryption {
+				args = append(args,
+					"--enableEncryption",
+					"--encryptionKeyFile="+mongodRESTencryptDir+"/"+m.Spec.Mongod.Security.EncryptionKeyName,
+				)
+				if m.Spec.Mongod.Security.EncryptionCipherMode != api.MongodChiperModeUnset {
+					args = append(args,
+						"--encryptionCipherMode="+string(m.Spec.Mongod.Security.EncryptionCipherMode),
+					)
+				}
+			}
 			if limit, ok := resources.Limits[corev1.ResourceCPU]; ok && !limit.IsZero() {
 				args = append(args, fmt.Sprintf(
 					"--wiredTigerCacheSizeGB=%.2f",

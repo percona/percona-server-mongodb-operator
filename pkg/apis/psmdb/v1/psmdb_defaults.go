@@ -57,6 +57,21 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Mongod.Storage.Engine == "" {
 		cr.Spec.Mongod.Storage.Engine = defaultStorageEngine
 	}
+	if cr.Spec.Mongod.Security == nil {
+		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
+	}
+	if cr.Spec.Mongod.Security.EnableEncryption == nil {
+		t := true
+		cr.Spec.Mongod.Security.EnableEncryption = &t
+	}
+	if *cr.Spec.Mongod.Security.EnableEncryption {
+		if cr.Spec.Mongod.Security.EncryptionKeySecret == "" {
+			cr.Spec.Mongod.Security.EncryptionKeySecret = cr.Name + "-mongo-rest-key"
+		}
+		if cr.Spec.Mongod.Security.EncryptionKeyName == "" {
+			cr.Spec.Mongod.Security.EncryptionKeyName = "rest-key"
+		}
+	}
 
 	if cr.Spec.Secrets.SSL == "" {
 		cr.Spec.Secrets.SSL = cr.Name + "-ssl"
