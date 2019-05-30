@@ -239,7 +239,7 @@ htmlhelp_basename = 'PSMDBOperator'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes for Percona Server for Mongo Documentation',
+  ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes for Percona Server for MongoDB Documentation',
    u'Percona LLC and/or its affiliates 2009-2019', 'manual'),
 ]
 
@@ -273,6 +273,6 @@ latex_toplevel_sectioning = 'part'
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes for Percona Server for Mongo Documentation',
+    ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes for Percona Server for MongoDB Documentation',
      [u'Percona LLC and/or its affiliates 2009-2019'], 1)
 ]
