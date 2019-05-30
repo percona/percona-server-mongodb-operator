@@ -208,8 +208,21 @@ type MongodSpecReplication struct {
 	OplogSizeMB int `json:"oplogSizeMB,omitempty"`
 }
 
+// MongodChiperMode is a cipher mode used by Data-at-Rest Encryption
+type MongodChiperMode string
+
+const (
+	MongodChiperModeUnset MongodChiperMode = ""
+	MongodChiperModeCBC                    = "AES256-CBC"
+	MongodChiperModeGCM                    = "AES256-GCM"
+)
+
 type MongodSpecSecurity struct {
-	RedactClientLogData bool `json:"redactClientLogData,omitempty"`
+	RedactClientLogData  bool             `json:"redactClientLogData,omitempty"`
+	EnableEncryption     *bool            `json:"enableEncryption,omitempty"`
+	EncryptionKeySecret  string           `json:"encryptionKeySecret,omitempty"`
+	EncryptionKeyName    string           `json:"encryptionKeyName,omitempty"`
+	EncryptionCipherMode MongodChiperMode `json:"encryptionCipherMode,omitempty"`
 }
 
 type MongodSpecSetParameter struct {

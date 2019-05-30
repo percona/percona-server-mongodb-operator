@@ -147,31 +147,25 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	internalKey := secret.InternalKeyMeta(cr.Name+"-mongodb-keyfile", cr.Namespace)
-	err = setControllerReference(cr, internalKey, r.scheme)
+	internalKey := cr.Name + "-mongodb-keyfile"
+	ikCreated, err := r.ensureSecurityKey(cr, internalKey, "mongodb-key", 768)
 	if err != nil {
-		err = errors.Errorf("set owner ref for InternalKey %s: %v", internalKey.Name, err)
+		err = errors.Wrapf(err, "ensure mongo Key %s", internalKey)
 		return reconcile.Result{}, err
 	}
+	if ikCreated {
+		reqLogger.Info("Created a new mongo key", "KeyName", internalKey)
+	}
 
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-mongodb-keyfile", Namespace: cr.Namespace}, internalKey)
-	if err != nil && k8serrors.IsNotFound(err) {
-		reqLogger.Info("Creating a new internal mongo key", "Namespace", cr.Namespace, "Name", internalKey.Name)
-
-		internalKey.Data, err = secret.GenInternalKey()
+	if *cr.Spec.Mongod.Security.EnableEncryption {
+		created, err := r.ensureSecurityKey(cr, cr.Spec.Mongod.Security.EncryptionKeySecret, cr.Spec.Mongod.Security.EncryptionKeyName, 32)
 		if err != nil {
-			err = errors.Wrap(err, "internal mongodb key generation")
+			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Mongod.Security.EncryptionKeySecret)
 			return reconcile.Result{}, err
 		}
-
-		err = r.client.Create(context.TODO(), internalKey)
-		if err != nil {
-			err = errors.Wrap(err, "create internal mongodb key")
-			return reconcile.Result{}, err
+		if created {
+			reqLogger.Info("Created a new mongo key", "KeyName", cr.Spec.Mongod.Security.EncryptionKeySecret)
 		}
-	} else if err != nil {
-		err = errors.Wrap(err, "get internal mongodb key")
-		return reconcile.Result{}, err
 	}
 
 	secrets := &corev1.Secret{}
@@ -234,14 +228,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, err
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey.Name)
+		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey.Name)
+			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -308,6 +302,43 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerMongoDB, secretName, keyName string, keyLen int) (created bool, err error) {
+	key := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: cr.Namespace,
+		},
+	}
+
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, key)
+	if err != nil && k8serrors.IsNotFound(err) {
+		created = true
+		err = setControllerReference(cr, key, r.scheme)
+		if err != nil {
+			return false, errors.Wrap(err, "set owner ref")
+		}
+
+		key.Data = make(map[string][]byte)
+		key.Data[keyName], err = secret.GenerateKey1024(keyLen)
+		if err != nil {
+			return false, errors.Wrap(err, "key generation")
+		}
+
+		err = r.client.Create(context.TODO(), key)
+		if err != nil {
+			return false, errors.Wrap(err, "create key")
+		}
+	} else if err != nil {
+		return false, errors.Wrap(err, "get key")
+	}
+
+	return created, nil
 }
 
 // TODO: reduce cyclomatic complexity

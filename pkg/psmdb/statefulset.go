@@ -49,6 +49,33 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 			ls[k] = v
 		}
 	}
+	volumes := []corev1.Volume{
+		{
+			Name: ikeyName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &secretFileMode,
+					SecretName:  ikeyName,
+					Optional:    &fvar,
+				},
+			},
+		},
+	}
+
+	if *m.Spec.Mongod.Security.EnableEncryption {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: m.Spec.Mongod.Security.EncryptionKeySecret,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &secretFileMode,
+						SecretName:  m.Spec.Mongod.Security.EncryptionKeySecret,
+						Optional:    &fvar,
+					},
+				},
+			},
+		)
+	}
 
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
@@ -74,18 +101,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				SecurityContext: &corev1.PodSecurityContext{
 					FSGroup: fsgroup,
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: ikeyName,
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								DefaultMode: &secretFileMode,
-								SecretName:  ikeyName,
-								Optional:    &fvar,
-							},
-						},
-					},
-				},
+				Volumes: volumes,
 			},
 		},
 	}, nil

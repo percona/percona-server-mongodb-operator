@@ -9,8 +9,9 @@ const (
 	// MongodContainerDataDir is a mondo data path in container
 	MongodContainerDataDir = "/data/db"
 
-	sslDir           = "/etc/mongodb-ssl"
-	sslInternalDir   = "/etc/mongodb-ssl-internal"
-	mongodSecretsDir = "/etc/mongodb-secrets"
-	mongodPortName   = "mongodb"
+	sslDir               = "/etc/mongodb-ssl"
+	sslInternalDir       = "/etc/mongodb-ssl-internal"
+	mongodSecretsDir     = "/etc/mongodb-secrets"
+	mongodRESTencryptDir = "/etc/mongodb-rest-encrypt"
+	mongodPortName       = "mongodb"
 )
