@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Percona Kubernetes Operator for MongoDB
-==========================================
+Percona Kubernetes Operator for Percona Server for MongoDB
+==========================================================
 
 The `Percona Kubernetes Operator for Percona Server for MongoDB <https://github.com/percona/percona-server-mongodb-operator>`_ automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment. The Operator contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.
 
@@ -27,9 +27,9 @@ Overview
 .. toctree::
    :maxdepth: 1
 
-   system-requirements 
+   system-requirements
    architecture
-   System-Requirements 
+   System-Requirements
 
 
 Installation
@@ -60,3 +60,10 @@ Configuration
    storage
    TLS
 
+Reference
+=========
+
+.. toctree::
+  :maxdepth: 1
+
+  Release Notes <RN/index.rst>
