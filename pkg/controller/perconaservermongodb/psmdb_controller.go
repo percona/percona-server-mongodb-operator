@@ -458,7 +458,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		if err != nil {
 			return nil, fmt.Errorf("PodDisruptionBudget for %s: %v", sfs.Name, err)
 		}
-
+		sfs.Spec = sfsSpec
 		sfs.Spec.Replicas = &size
 		sfs.Spec.Template.Spec.Containers = sfsSpec.Template.Spec.Containers
 		sfs.Spec.Template.Spec.Volumes = sfsSpec.Template.Spec.Volumes
