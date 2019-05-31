@@ -101,9 +101,8 @@ spec:
     security:
       redactClientLogData: false
       enableEncryption: true
-      encryptionKeyName: rest-key
-      encryptionKeySecret: my-cluster-name-mongodb-restkey
-      encryptionCipherMode: AES256-GCM
+      encryptionKeySecret: my-cluster-name-mongodb-encryption-key
+      encryptionCipherMode: AES256-CBC
     setParameter:
       ttlMonitorSleepSecs: 60
       wiredTigerConcurrentReadTransactions: 128
