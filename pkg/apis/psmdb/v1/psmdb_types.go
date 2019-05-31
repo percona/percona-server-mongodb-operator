@@ -221,7 +221,6 @@ type MongodSpecSecurity struct {
 	RedactClientLogData  bool             `json:"redactClientLogData,omitempty"`
 	EnableEncryption     *bool            `json:"enableEncryption,omitempty"`
 	EncryptionKeySecret  string           `json:"encryptionKeySecret,omitempty"`
-	EncryptionKeyName    string           `json:"encryptionKeyName,omitempty"`
 	EncryptionCipherMode MongodChiperMode `json:"encryptionCipherMode,omitempty"`
 }
 

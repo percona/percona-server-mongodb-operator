@@ -158,7 +158,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption {
-		created, err := r.ensureSecurityKey(cr, cr.Spec.Mongod.Security.EncryptionKeySecret, cr.Spec.Mongod.Security.EncryptionKeyName, 32)
+		created, err := r.ensureSecurityKey(cr, cr.Spec.Mongod.Security.EncryptionKeySecret, psmdb.EncryptionKeyName, 32)
 		if err != nil {
 			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Mongod.Security.EncryptionKeySecret)
 			return reconcile.Result{}, err

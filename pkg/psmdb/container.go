@@ -181,7 +181,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 			if *m.Spec.Mongod.Security.EnableEncryption {
 				args = append(args,
 					"--enableEncryption",
-					"--encryptionKeyFile="+mongodRESTencryptDir+"/"+m.Spec.Mongod.Security.EncryptionKeyName,
+					"--encryptionKeyFile="+mongodRESTencryptDir+"/"+EncryptionKeyName,
 				)
 				if m.Spec.Mongod.Security.EncryptionCipherMode != api.MongodChiperModeUnset {
 					args = append(args,
