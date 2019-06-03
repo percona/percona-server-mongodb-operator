@@ -446,9 +446,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			)
 		}
 	}
-
+	sfs.Spec = sfsSpec
 	if k8serrors.IsNotFound(errGet) {
-		sfs.Spec = sfsSpec
 		err = r.client.Create(context.TODO(), sfs)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return nil, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
@@ -458,10 +457,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		if err != nil {
 			return nil, fmt.Errorf("PodDisruptionBudget for %s: %v", sfs.Name, err)
 		}
-		sfs.Spec = sfsSpec
 		sfs.Spec.Replicas = &size
-		sfs.Spec.Template.Spec.Containers = sfsSpec.Template.Spec.Containers
-		sfs.Spec.Template.Spec.Volumes = sfsSpec.Template.Spec.Volumes
 		err = r.client.Update(context.TODO(), sfs)
 		if err != nil {
 			return nil, fmt.Errorf("update StatefulSet %s: %v", sfs.Name, err)
