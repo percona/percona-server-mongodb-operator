@@ -138,7 +138,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
 	}
-	err = r.reconcileSecrets(cr)
+	err = r.reconcileUsersSecret(cr)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile secrets: %v", err)
 	}
