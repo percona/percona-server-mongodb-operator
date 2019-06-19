@@ -2,13 +2,11 @@ package perconaservermongodb
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	mrand "math/rand"
-	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,22 +30,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 
 	data := make(map[string][]byte)
 	data["MONGODB_BACKUP_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("backup")))
-	data["MONGODB_BACKUP_PASSWORD"], err = generatePass()
+	data["MONGODB_BACKUP_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create backup users pass: %v", err)
 	}
 	data["MONGODB_CLUSTER_ADMIN_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("clusterAdmin")))
-	data["MONGODB_CLUSTER_ADMIN_PASSWORD"], err = generatePass()
+	data["MONGODB_CLUSTER_ADMIN_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create cluster admin users pass: %v", err)
 	}
 	data["MONGODB_CLUSTER_MONITOR_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("clusterMonitor")))
-	data["MONGODB_CLUSTER_MONITOR_PASSWORD"], err = generatePass()
+	data["MONGODB_CLUSTER_MONITOR_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create cluster monitor users pass: %v", err)
 	}
 	data["MONGODB_USER_ADMIN_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("userAdmin")))
-	data["MONGODB_USER_ADMIN_PASSWORD"], err = generatePass()
+	data["MONGODB_USER_ADMIN_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create admin users pass: %v", err)
 	}
@@ -66,21 +64,4 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	}
 
 	return nil
-}
-
-func generatePass() ([]byte, error) {
-	mrand.Seed(time.Now().UnixNano())
-	max := 20
-	min := 16
-	ln := mrand.Intn(max-min) + min
-	b := make([]byte, ln)
-	_, err := rand.Read(b)
-	if err != nil {
-		return nil, err
-	}
-	s := base64.URLEncoding.EncodeToString(b)
-	buf := make([]byte, base64.StdEncoding.EncodedLen(len(s)))
-	base64.StdEncoding.Encode(buf, []byte(s))
-
-	return buf, nil
 }
