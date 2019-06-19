@@ -19,7 +19,7 @@ func init() {
 
 const genSymbols = "abcdefghijklmnopqrstuvwxyz1234567890"
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, imagePullSecrets []corev1.LocalObjectReference, sv *version.ServerVersion) *batchv1b.CronJob {
+func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image, serviceAccountName string, imagePullSecrets []corev1.LocalObjectReference, sv *version.ServerVersion) *batchv1b.CronJob {
 	var fsgroup *int64
 	if sv.Platform == api.PlatformKubernetes {
 		var tp int64 = 1001
@@ -29,8 +29,9 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image string, 
 	trueVar := true
 
 	backupPod := corev1.PodSpec{
-		RestartPolicy:    corev1.RestartPolicyNever,
-		ImagePullSecrets: imagePullSecrets,
+		RestartPolicy:      corev1.RestartPolicyNever,
+		ImagePullSecrets:   imagePullSecrets,
+		ServiceAccountName: serviceAccountName,
 		Containers: []corev1.Container{
 			{
 				Name:    backupCtlContainerName,

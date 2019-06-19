@@ -166,6 +166,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			ld := int32(5)
 			cr.Spec.Backup.Coordinator.LivenessInitialDelaySeconds = &ld
 		}
+		if len(cr.Spec.Backup.ServiceAccountName) == 0 {
+			cr.Spec.Backup.ServiceAccountName = "percona-server-mongodb-operator"
+		}
 		cr.Spec.Backup.Coordinator.MultiAZ.reconcileOpts()
 	}
 
