@@ -9,8 +9,11 @@ import (
 )
 
 const (
-	max = 20
-	min = 16
+	passwordMaxLen = 20
+	passwordMinLen = 16
+	passSymbols    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+		"abcdefghijklmnopqrstuvwxyz" +
+		"0123456789"
 )
 
 // GenerateKey1024 generates a mongodb key
@@ -29,10 +32,7 @@ func GenerateKey1024(ln int) ([]byte, error) {
 // GeneratePassword generate password
 func GeneratePassword() ([]byte, error) {
 	mrand.Seed(time.Now().UnixNano())
-	passSymbols := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-		"abcdefghijklmnopqrstuvwxyz" +
-		"0123456789"
-	ln := mrand.Intn(max-min) + min
+	ln := mrand.Intn(passwordMaxLen-passwordMinLen) + passwordMinLen
 	b := make([]byte, ln)
 	for i := 0; i < ln; i++ {
 		randInt, err := rand.Int(rand.Reader, big.NewInt(int64(len(passSymbols))))
