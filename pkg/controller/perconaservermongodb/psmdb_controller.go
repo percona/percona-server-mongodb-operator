@@ -140,7 +140,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("reconcile secrets: %v", err)
+		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
 
 	if !cr.Spec.UnsafeConf {

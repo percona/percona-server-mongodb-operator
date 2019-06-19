@@ -27,7 +27,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	if err == nil {
 		return nil
 	} else if !errors.IsNotFound(err) {
-		return fmt.Errorf("get secret: %v", err)
+		return fmt.Errorf("get users secret: %v", err)
 	}
 
 	data := make(map[string][]byte)
@@ -51,11 +51,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	if err != nil {
 		return fmt.Errorf("create admin users pass: %v", err)
 	}
-	data["PMM_SERVER_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("pmm")))
-	data["PMM_SERVER_PASSWORD"], err = generatePass()
-	if err != nil {
-		return fmt.Errorf("create pmm server pass: %v", err)
-	}
+
 	secretObj = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Spec.Secrets.Users,
@@ -82,8 +78,9 @@ func generatePass() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	buf := make([]byte, base64.StdEncoding.EncodedLen(len(b)))
-	base64.StdEncoding.Encode(buf, b)
+	s := base64.URLEncoding.EncodeToString(b)
+	buf := make([]byte, base64.StdEncoding.EncodedLen(len(s)))
+	base64.StdEncoding.Encode(buf, []byte(s))
 
 	return buf, nil
 }
