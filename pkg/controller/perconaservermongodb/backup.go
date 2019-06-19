@@ -75,7 +75,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	ctasks := make(map[string]struct{})
 	ls := make(map[string]string)
 	for _, task := range cr.Spec.Backup.Tasks {
-		cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup.Image, cr.Spec.ImagePullSecrets, r.serverVersion)
+		cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup.Image, cr.Spec.Backup.ServiceAccountName, cr.Spec.ImagePullSecrets, r.serverVersion)
 		ls = cjob.ObjectMeta.Labels
 		if task.Enabled {
 			ctasks[cjob.Name] = struct{}{}

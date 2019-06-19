@@ -367,13 +367,14 @@ type BackupStorageSpec struct {
 }
 
 type BackupSpec struct {
-	Enabled          bool                         `json:"enabled"`
-	Debug            bool                         `json:"debug"`
-	RestartOnFailure *bool                        `json:"restartOnFailure,omitempty"`
-	Coordinator      BackupCoordinatorSpec        `json:"coordinator,omitempty"`
-	Storages         map[string]BackupStorageSpec `json:"storages,omitempty"`
-	Image            string                       `json:"image,omitempty"`
-	Tasks            []BackupTaskSpec             `json:"tasks,omitempty"`
+	Enabled            bool                         `json:"enabled"`
+	Debug              bool                         `json:"debug"`
+	RestartOnFailure   *bool                        `json:"restartOnFailure,omitempty"`
+	Coordinator        BackupCoordinatorSpec        `json:"coordinator,omitempty"`
+	Storages           map[string]BackupStorageSpec `json:"storages,omitempty"`
+	Image              string                       `json:"image,omitempty"`
+	Tasks              []BackupTaskSpec             `json:"tasks,omitempty"`
+	ServiceAccountName string                       `json:"serviceAccountName,omitempty"`
 }
 
 type Arbiter struct {
