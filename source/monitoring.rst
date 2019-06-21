@@ -40,12 +40,12 @@ OpenShift.
       part of the command corresponds to a
       ``monitoring-service`` value of the ``serverHost`` key.
    -  ``credentials.username`` should correspond to the
-      ``MONGODB_CLUSTER_MONITOR_USER`` key in the the
-      `deploy/mongodb-users.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/mongodb-users.yaml>`__
+      ``MONGODB_CLUSTER_MONITOR_USER`` base64 decoded value of key in the the
+      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`__
       file.
    -  ``credentials.password`` should correspond to a value of the
-      ``MONGODB_CLUSTER_MONITOR_PASSWORD`` key specified in
-      `deploy/mongodb-users.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/mongodb-users.yaml>`__
+      ``MONGODB_CLUSTER_MONITOR_PASSWORD`` base64 decoded value of key specified in
+      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`__
       secrets file. Note - the password specified in this example is the
       default development mode password and is not intended to be used on
       production systems.
@@ -61,11 +61,11 @@ OpenShift.
       for the ``name`` parameter on the previous step, but with an added
       additional ``-service`` suffix.
    -  make sure the ``PMM_USER`` and ``PMM_PASSWORD`` keys in the
-      `deploy/mongodb-users.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/mongodb-users.yaml>`__
-      secrets file are the same as values specified for the
+      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`__
+      secrets file are the same as base64 decoded equivalent values specified for the
       ``credentials.username`` and ``credentials.password`` parameters
       on the previous step (if not, fix the value and apply with the
-      ``kubectl apply -f deploy/mongodb-users.yaml`` command).
+      ``kubectl apply -f deploy/secrets.yaml`` command).
 
    When done, apply the edited ``deploy/cr.yaml`` file:
 
