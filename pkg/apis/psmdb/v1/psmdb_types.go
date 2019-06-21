@@ -1,6 +1,7 @@
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,18 +42,19 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Pause            bool                          `json:"pause,omitempty"`
-	Platform         *version.Platform             `json:"platform,omitempty"`
-	Image            string                        `json:"image,omitempty"`
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	RunUID           int64                         `json:"runUid,omitempty"`
-	UnsafeConf       bool                          `json:"allowUnsafeConfigurations"`
-	Mongod           *MongodSpec                   `json:"mongod,omitempty"`
-	Replsets         []*ReplsetSpec                `json:"replsets,omitempty"`
-	Secrets          *SecretsSpec                  `json:"secrets,omitempty"`
-	Backup           BackupSpec                    `json:"backup,omitempty"`
-	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
-	PMM              PMMSpec                       `json:"pmm,omitempty"`
+	Pause            bool                                 `json:"pause,omitempty"`
+	Platform         *version.Platform                    `json:"platform,omitempty"`
+	Image            string                               `json:"image,omitempty"`
+	ImagePullSecrets []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
+	RunUID           int64                                `json:"runUid,omitempty"`
+	UnsafeConf       bool                                 `json:"allowUnsafeConfigurations"`
+	Mongod           *MongodSpec                          `json:"mongod,omitempty"`
+	Replsets         []*ReplsetSpec                       `json:"replsets,omitempty"`
+	Secrets          *SecretsSpec                         `json:"secrets,omitempty"`
+	Backup           BackupSpec                           `json:"backup,omitempty"`
+	ImagePullPolicy  corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
+	PMM              PMMSpec                              `json:"pmm,omitempty"`
+	UpdateStrategy   appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
 }
 
 type ReplsetMemberStatus struct {

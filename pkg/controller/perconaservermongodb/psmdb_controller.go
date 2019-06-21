@@ -450,6 +450,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			)
 		}
 	}
+
+	sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
 	sfs.Spec = sfsSpec
 	if k8serrors.IsNotFound(errGet) {
 		err = r.client.Create(context.TODO(), sfs)
