@@ -21,10 +21,9 @@ backups involves following steps:
            --set accessKey=some-access-key \
            --set secretKey=some-secret-key \
            --set service.type=ClusterIP \
-           --set configPath=/tmp/.minio/ \
+           --set configPath='~/.minio' \
            --set persistence.size=2G \
-           --set persistence.storageClass=aws-io1 \
-           --set environment.MINIO_REGION=us-east-1 \
+           --set environment.MINIO_REGION=us-west-1 \
            stable/minio
 
    Don’t forget to substitute default ``some-access-key`` and
@@ -35,15 +34,19 @@ backups involves following steps:
    for backups. Otherwise, this setting may be omitted. You may also notice the
    ``MINIO_REGION`` value which is may not be used within a private
    cloud. Use the same region value here and on later steps
-   (``us-east-1`` is a good default choice).
+   (``us-west-1`` is a good default choice).
 
 2. Create an S3 bucket for backups:
 
    .. code:: bash
 
          kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-          /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-          /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
+          bash -c 'AWS_ACCESS_KEY_ID=some-access-key \
+          AWS_SECRET_ACCESS_KEY=some-secret-key \
+          AWS_DEFAULT_REGION=us-west-1 \
+           /usr/bin/aws \
+           --endpoint-url http://minio-service:9000 \
+           s3 mb s3://operator-testing'
 
    This command creates the bucket named ``operator-testing`` with
    the selected access and secret keys (substitute ``some-access-key``
@@ -80,7 +83,7 @@ backups involves following steps:
    `backup-s3.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml>`__
    can be used to create this secret object. Check that the object contains the
    proper ``name`` value and is equal to the one specified for
-   ``credentialsSecret``, i.e. \ ``my-cluster-name-backup-s3`` in the
+   ``credentialsSecret``, i.e. \ ``my-cluster-name-backup-minio`` in the
    backup to Minio example, and also contains the proper ``AWS_ACCESS_KEY_ID`` and
    ``AWS_SECRET_ACCESS_KEY`` keys. After you have finished editing the file, the secrets
    object are created or updated when you run the following command:

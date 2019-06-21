@@ -30,7 +30,7 @@ Install Percona server for MongoDB on OpenShift
       have cluster-admin role privileges.
 
    An extra action is required if you want to manage PSMDB cluster with a
-   non-privileged user. The necessary permissions can be granted by applying
+   non-privileged user. Please make shure that `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ is already installed. The necessary permissions can be granted by applying
    the clusterrole:
 
    .. code:: bash
@@ -83,7 +83,7 @@ Install Percona server for MongoDB on OpenShift
 
    More details about secrets can be found in Users.
 
-5. Now you need to `prepare certificates for TLS security <TLS.html>`_ and apply them with the following command:
+5. Install `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ if it is not up and running yet and apply certificates as openshift secrets with the following command:
 
    .. code:: bash
 
@@ -107,7 +107,15 @@ Install Percona server for MongoDB on OpenShift
            platform: openshift
          ...
 
-   b. Create/apply the CR file:
+   b (optional). In you're using minishift, please adjust antiaffinity policy to ``none``
+      
+       .. code:: yaml
+
+            affinity:
+              antiAffinityTopologyKey: "none"
+         ...
+
+   c. Create/apply the CR file:
 
       .. code:: bash
 
@@ -125,7 +133,7 @@ Install Percona server for MongoDB on OpenShift
       my-cluster-name-rs0-2                              1/1     Running   0          7m
       percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
 
-7. Check connectivity to newly created cluster
+7. Check connectivity to newly created cluster. Please note that mongo client command shall be executed inside the container manually.
 
    .. code:: bash
 

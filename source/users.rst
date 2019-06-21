@@ -21,7 +21,11 @@ default. If you need general purpose users, please run commands below:
        pwd: "myAppPassword",
        roles: [
          { db: "myApp", role: "readWrite" }
+       ],
+       mechanisms: [
+          "SCRAM-SHA-1"
        ]
+
    })
 
 Now check the newly created user:

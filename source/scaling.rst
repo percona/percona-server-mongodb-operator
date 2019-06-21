@@ -16,7 +16,7 @@ configuration, updates it and applies the changed version:
 
 .. code:: bash
 
-   $ kubectl get psmdb/my-cluster -o yaml | sed -e 's/size: 3/size: 5/' | kubectl apply -f -
+   $ kubectl get psmdb/my-cluster-name -o yaml | sed -e 's/size: 3/size: 5/' | kubectl apply -f -
 
 In this example we have changed the size of the Percona Server for
 MongoDB from ``3``, which is a minimum recommended value, to ``5``

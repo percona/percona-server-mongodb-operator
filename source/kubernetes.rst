@@ -80,7 +80,7 @@ Install Percona server for MongoDB on Kubernetes
 
    More details about secrets can be found in `Users <users.html>`_.
 
-6. Now you need to `prepare certificates for TLS security <TLS.html>`_ and apply them with the following command:
+6. Install `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/kubernetes.html>`_ if it is not up and running yet and apply ssl secrets with the following command:
 
    .. code:: bash
 
