@@ -102,7 +102,7 @@ backups involves following steps:
             --server-address=<cluster-name>-backup-coordinator:10001 \
             --storage <storage> \
             --compression-algorithm=gzip \
-            --description=my-backup```
+            --description=my-backup
 
    Don’t forget to specify the name of your cluster instead of the
    ``<cluster-name>`` part of the Backup Coordinator URL (the
