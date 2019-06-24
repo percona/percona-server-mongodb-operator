@@ -51,8 +51,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 
 	err := r.client.Create(context.TODO(), &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName,
-			Namespace: cr.Namespace,
+			Name:            issuerName,
+			Namespace:       cr.Namespace,
+			OwnerReferences: cr.OwnerReferences,
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
@@ -66,8 +67,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 
 	err = r.client.Create(context.TODO(), &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-ssl",
-			Namespace: cr.Namespace,
+			Name:            cr.Name + "-ssl",
+			Namespace:       cr.Namespace,
+			OwnerReferences: cr.OwnerReferences,
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.Secrets.SSL,
@@ -89,8 +91,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 
 	err = r.client.Create(context.TODO(), &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-ssl-internal",
-			Namespace: cr.Namespace,
+			Name:            cr.Name + "-ssl-internal",
+			Namespace:       cr.Namespace,
+			OwnerReferences: cr.OwnerReferences,
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.Secrets.SSLInternal,
@@ -127,8 +130,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 	data["tls.key"] = key
 	secretObj := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.Secrets.SSL,
-			Namespace: cr.Namespace,
+			Name:            cr.Spec.Secrets.SSL,
+			Namespace:       cr.Namespace,
+			OwnerReferences: cr.OwnerReferences,
 		},
 		Data: data,
 		Type: corev1.SecretTypeTLS,
@@ -147,8 +151,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 	data["tls.key"] = key
 	secretObjInternal := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.Secrets.SSLInternal,
-			Namespace: cr.Namespace,
+			Name:            cr.Spec.Secrets.SSLInternal,
+			Namespace:       cr.Namespace,
+			OwnerReferences: cr.OwnerReferences,
 		},
 		Data: data,
 		Type: corev1.SecretTypeTLS,
