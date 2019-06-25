@@ -57,6 +57,8 @@ spec:
           schedulerName: default-scheduler
           securityContext:
             fsGroup: 1001
+          serviceAccount: percona-server-mongodb-operator
+          serviceAccountName: percona-server-mongodb-operator
           terminationGracePeriodSeconds: 30
   schedule: '* * * * *'
   successfulJobsHistoryLimit: 3
