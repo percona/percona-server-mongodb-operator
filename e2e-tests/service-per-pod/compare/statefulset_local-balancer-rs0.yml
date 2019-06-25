@@ -45,6 +45,8 @@ spec:
         - --clusterAuthMode=x509
         - --slowms=0
         - --profile=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerIndexPrefixCompression=true
         env:
         - name: SERVICE_NAME
@@ -100,6 +102,9 @@ spec:
         - mountPath: /etc/mongodb-ssl-internal
           name: ssl-internal
           readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: local-balancer-mongodb-encryption-key
+          readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -113,6 +118,11 @@ spec:
           defaultMode: 288
           optional: false
           secretName: local-balancer-mongodb-keyfile
+      - name: local-balancer-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: local-balancer-mongodb-encryption-key
       - name: ssl
         secret:
           defaultMode: 288
