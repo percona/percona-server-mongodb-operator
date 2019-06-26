@@ -23,7 +23,7 @@ backups involves following steps:
            --set service.type=ClusterIP \
            --set configPath='~/.minio' \
            --set persistence.size=2G \
-           --set environment.MINIO_REGION=us-west-1 \
+           --set environment.MINIO_REGION=us-east-1 \
            stable/minio
 
    Don’t forget to substitute default ``some-access-key`` and
@@ -34,7 +34,7 @@ backups involves following steps:
    for backups. Otherwise, this setting may be omitted. You may also notice the
    ``MINIO_REGION`` value which is may not be used within a private
    cloud. Use the same region value here and on later steps
-   (``us-west-1`` is a good default choice).
+   (``us-east-1`` is a good default choice).
 
 2. Create an S3 bucket for backups:
 
@@ -43,7 +43,7 @@ backups involves following steps:
          kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
           bash -c 'AWS_ACCESS_KEY_ID=some-access-key \
           AWS_SECRET_ACCESS_KEY=some-secret-key \
-          AWS_DEFAULT_REGION=us-west-1 \
+          AWS_DEFAULT_REGION=us-east-1 \
            /usr/bin/aws \
            --endpoint-url http://minio-service:9000 \
            s3 mb s3://operator-testing'
@@ -71,7 +71,7 @@ backups involves following steps:
             type: s3
             s3:
               bucket: operator-testing
-              region: us-west-1
+              region: us-east-1
               credentialsSecret: my-cluster-name-backup-minio
               endpointUrl: http://minio-service:9000
         ...
