@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"time"
 
@@ -452,6 +453,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
+
+	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
+	if err != nil {
+		return nil, fmt.Errorf("get secret hash error: %v", err)
+	}
+	sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
+	sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return nil, fmt.Errorf("get secret hash error: %v", err)
+	} else if err == nil {
+		sfsSpec.Template.Annotations["percona.com/ssl-internal-hash"] = sslInternalHash
+	}
+
 	sfs.Spec = sfsSpec
 	if k8serrors.IsNotFound(errGet) {
 		err = r.client.Create(context.TODO(), sfs)
@@ -471,6 +485,27 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	return sfs, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getTLSHash(cr *api.PerconaServerMongoDB, secretName string) (string, error) {
+	if cr.Spec.UnsafeConf {
+		return "", nil
+	}
+	secretObj := corev1.Secret{}
+	err := r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      secretName,
+		},
+		&secretObj,
+	)
+	if err != nil {
+		return "", err
+	}
+	secretString := fmt.Sprintln(secretObj)
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
+
+	return hash, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner runtime.Object) error {
