@@ -21,7 +21,7 @@ backups involves following steps:
            --set accessKey=some-access-key \
            --set secretKey=some-secret-key \
            --set service.type=ClusterIP \
-           --set configPath='~/.minio' \
+           --set configPath=/tmp/.minio/ \
            --set persistence.size=2G \
            --set environment.MINIO_REGION=us-east-1 \
            stable/minio
