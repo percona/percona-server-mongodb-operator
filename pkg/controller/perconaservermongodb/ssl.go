@@ -42,18 +42,23 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 	issuerKind := "Issuer"
 	issuerName := cr.Name + "-psmdb-ca"
 	certificateDNSNames := []string{"localhost"}
+
 	for _, replset := range cr.Spec.Replsets {
 		certificateDNSNames = append(certificateDNSNames,
 			cr.Name+"-"+replset.Name,
 			"*."+cr.Name+"-"+replset.Name,
 		)
 	}
-
-	err := r.client.Create(context.TODO(), &cm.Issuer{
+	owner, err := OwnerRef(cr, r.scheme)
+	if err != nil {
+		return err
+	}
+	ownerReferences := []metav1.OwnerReference{owner}
+	err = r.client.Create(context.TODO(), &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            issuerName,
 			Namespace:       cr.Namespace,
-			OwnerReferences: cr.OwnerReferences,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
@@ -69,7 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Name + "-ssl",
 			Namespace:       cr.Namespace,
-			OwnerReferences: cr.OwnerReferences,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.Secrets.SSL,
@@ -93,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Name + "-ssl-internal",
 			Namespace:       cr.Namespace,
-			OwnerReferences: cr.OwnerReferences,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.Secrets.SSLInternal,
@@ -128,11 +133,18 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 	data["ca.crt"] = caCert
 	data["tls.crt"] = tlsCert
 	data["tls.key"] = key
+
+	owner, err := OwnerRef(cr, r.scheme)
+	if err != nil {
+		return err
+	}
+	ownerReferences := []metav1.OwnerReference{owner}
+
 	secretObj := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Spec.Secrets.SSL,
 			Namespace:       cr.Namespace,
-			OwnerReferences: cr.OwnerReferences,
+			OwnerReferences: ownerReferences,
 		},
 		Data: data,
 		Type: corev1.SecretTypeTLS,
@@ -153,7 +165,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Spec.Secrets.SSLInternal,
 			Namespace:       cr.Namespace,
-			OwnerReferences: cr.OwnerReferences,
+			OwnerReferences: ownerReferences,
 		},
 		Data: data,
 		Type: corev1.SecretTypeTLS,
