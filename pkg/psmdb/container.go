@@ -129,6 +129,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	if m.Spec.UnsafeConf {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
+			"--sslMode=disabled",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)
 	} else {
