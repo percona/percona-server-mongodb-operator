@@ -87,13 +87,18 @@ rules:
   - delete
   - deletecollection
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: percona-server-mongodb-operator
+---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: default-account-percona-server-mongodb-operator
+  name: service-account-percona-server-mongodb-operator
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: percona-server-mongodb-operator
 roleRef:
   kind: Role
   name: percona-server-mongodb-operator

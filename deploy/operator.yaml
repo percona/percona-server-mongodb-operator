@@ -12,6 +12,7 @@ spec:
       labels:
         name: percona-server-mongodb-operator
     spec:
+      serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
           image: percona/percona-server-mongodb-operator:1.0.0
