@@ -225,8 +225,8 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		done
 	fi
 
+	mongodHackedArgs=( "$@" )
 	if [ -n "$shouldPerformInitdb" ]; then
-		mongodHackedArgs=( "$@" )
 		if _parse_config "$@"; then
 			_mongod_hack_ensure_arg_val --config "$tempConfigFile" "${mongodHackedArgs[@]}"
 		fi
@@ -240,9 +240,6 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		if [ "$MONGO_INITDB_ROOT_USERNAME" ] && [ "$MONGO_INITDB_ROOT_PASSWORD" ]; then
 			_mongod_hack_ensure_no_arg_val --replSet "${mongodHackedArgs[@]}"
 		fi
-
-		sslMode="$(_mongod_hack_have_arg '--sslPEMKeyFile' "$@" && echo 'preferSSL' || echo 'disabled')" # "BadValue: need sslPEMKeyFile when SSL is enabled" vs "BadValue: need to enable SSL via the sslMode flag when using SSL configuration parameters"
-		_mongod_hack_ensure_arg_val --sslMode "$sslMode" "${mongodHackedArgs[@]}"
 
 		if stat "/proc/$$/fd/1" > /dev/null && [ -w "/proc/$$/fd/1" ]; then
 			# https://github.com/mongodb/mongo/blob/38c0eb538d0fd390c6cb9ce9ae9894153f6e8ef5/src/mongo/db/initialize_server_global_state.cpp#L237-L251
@@ -328,6 +325,11 @@ if [ "$originalArgOne" = 'mongod' ]; then
 	if [ -f ${MONGO_SSL_DIR}/ca.crt ]; then
 		CA=${MONGO_SSL_DIR}/ca.crt
 	fi
+
+	sslMode="$(_mongod_hack_have_arg '--sslPEMKeyFile' "$@" && echo 'preferSSL' || echo 'disabled')" # "BadValue: need sslPEMKeyFile when SSL is enabled" vs "BadValue: need to enable SSL via the sslMode flag when using SSL configuration parameters"
+	_mongod_hack_ensure_arg_val --sslMode "$sslMode" "${mongodHackedArgs[@]}"
+	set -- "${mongodHackedArgs[@]}"
+
 	if [ -f ${MONGO_SSL_DIR}/tls.key -a -f ${MONGO_SSL_DIR}/tls.crt ]; then
 		cat ${MONGO_SSL_DIR}/tls.key ${MONGO_SSL_DIR}/tls.crt > /tmp/tls.pem
 		_mongod_hack_ensure_arg_val --sslPEMKeyFile /tmp/tls.pem "$@"
