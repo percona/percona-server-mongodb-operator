@@ -24,7 +24,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 				service = psmdb.ExternalService(cr, replset, pod.Name)
 				err = setControllerReference(cr, service, r.scheme)
 				if err != nil {
-					return nil, fmt.Errorf("set owner ref for InternalKey %s: %v", service.Name, err)
+					return nil, fmt.Errorf("set owner ref for Service %s: %v", service.Name, err)
 				}
 
 				err = r.client.Create(context.TODO(), service)

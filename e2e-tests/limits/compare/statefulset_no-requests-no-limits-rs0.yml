@@ -57,6 +57,8 @@ spec:
         - --slowms=100
         - --profile=1
         - --rateLimit=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerCollectionBlockCompressor=snappy
         - --wiredTigerJournalCompressor=snappy
         - --wiredTigerIndexPrefixCompression=true
@@ -120,6 +122,9 @@ spec:
         - mountPath: /etc/mongodb-ssl-internal
           name: ssl-internal
           readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: no-requests-no-limits-mongodb-encryption-key
+          readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -133,6 +138,11 @@ spec:
           defaultMode: 288
           optional: false
           secretName: no-requests-no-limits-mongodb-keyfile
+      - name: no-requests-no-limits-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: no-requests-no-limits-mongodb-encryption-key
       - name: ssl
         secret:
           defaultMode: 288

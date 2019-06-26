@@ -139,6 +139,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
 	}
+	err = r.reconcileUsersSecret(cr)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
+	}
 
 	if !cr.Spec.UnsafeConf {
 		err = r.reconsileSSL(cr)
@@ -447,6 +451,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			)
 		}
 	}
+
+	sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
 
 	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
 	if err != nil {
