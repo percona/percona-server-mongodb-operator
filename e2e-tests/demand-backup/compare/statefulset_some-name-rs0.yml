@@ -125,7 +125,7 @@ spec:
       - command:
         - pbm-agent
         env:
-        - name: PBM_AGENT_STORAGES_CONFIG
+        - name: PBM_AGENT_STORAGE_CONFIG
           value: /etc/percona-backup-mongodb/storages.yml
         - name: PBM_AGENT_MONGODB_PORT
           value: "27017"
