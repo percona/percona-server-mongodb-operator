@@ -3,9 +3,7 @@
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_MONGOD36=${IMAGE_MONGOD36:-"perconalab/percona-server-mongodb-operator:1.0.0-mongod3.6.12"}
-IMAGE_MONGOD40=${IMAGE_MONGOD40:-"perconalab/percona-server-mongodb-operator:1.0.0-mongod4.0.9"}
-IMAGE_MONGOD=$IMAGE_MONGOD40
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:master-mongod4.0"}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)

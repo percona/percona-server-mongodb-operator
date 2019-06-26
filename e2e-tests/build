@@ -45,20 +45,6 @@ build_operator() {
     docker push ${IMAGE}
 }
 
-build_mongod36() {
-    pushd ${src_dir}
-        docker build -t ${IMAGE_MONGOD36} -f build/Dockerfile.mongod36 .
-    popd
-    docker push ${IMAGE_MONGOD36}
-}
-
-build_mongod40() {
-    pushd ${src_dir}
-        docker build -t ${IMAGE_MONGOD40} -f build/Dockerfile.mongod40 .
-    popd
-    docker push ${IMAGE_MONGOD40}
-}
-
 until docker ps;
     do sleep 1;
 done
