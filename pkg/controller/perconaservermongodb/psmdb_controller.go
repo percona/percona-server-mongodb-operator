@@ -287,10 +287,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				return reconcile.Result{}, err
 			}
 
-			err = r.client.Create(context.TODO(), service)
-			if err != nil && !k8serrors.IsAlreadyExists(err) {
-				err = errors.Errorf("failed to create service for replset %s: %v", replset.Name, err)
-				return reconcile.Result{}, err
+			err = r.client.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, &corev1.Service{})
+			if err != nil && k8serrors.IsNotFound(err) {
+				err := r.client.Create(context.TODO(), service)
+				if err != nil {
+					return reconcile.Result{}, errors.Errorf("failed to create service for replset %s: %v", replset.Name, err)
+				}
+			} else if err != nil {
+				return reconcile.Result{}, errors.Errorf("failed to check service for replset %s: %v", replset.Name, err)
 			}
 		}
 
