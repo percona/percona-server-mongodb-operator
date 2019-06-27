@@ -7,16 +7,10 @@ test_dir="$(dirname $0)"
 src_dir="$(realpath $test_dir/..)"
 
 $test_dir/build
-create_namespace run-$GIT_BRANCH
+create_namespace run-$GIT_BRANCH-$RANDOM
 deploy_operator
 
 desc 'create PSMDB cluster'
-kubectl apply -f $src_dir/deploy/secrets.yaml
-
-platform=(kubernetes openshift)
-cat $src_dir/deploy/cr.yaml \
-    | $sed -e "s^image:.*^image: $IMAGE_MONGOD^" \
-    | $sed "s/#platform: .*/platform: ${platform[${OPENSHIFT:-0}]}/" \
-    | kubectl apply -f -
+apply_cluster $src_dir/deploy/cr.yaml
 
 wait_for_running my-cluster-name-rs0 3

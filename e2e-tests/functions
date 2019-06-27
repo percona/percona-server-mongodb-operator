@@ -4,6 +4,7 @@ GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:master-mongod4.0"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:master-backup"}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -161,14 +162,14 @@ wait_restore() {
 
 deploy_operator() {
     desc 'start operator'
-    sed -e "s^image: .*^image: ${IMAGE}^" \
-        ${src_dir}/deploy/operator.yaml \
-        > ${tmp_dir}/operator.yml
 
     kubectl apply -f ${src_dir}/deploy/crd.yaml || :
-    kubectl apply \
-        -f ${src_dir}/deploy/rbac.yaml \
-        -f ${tmp_dir}/operator.yml
+    kubectl apply -f ${src_dir}/deploy/rbac.yaml
+
+    cat ${src_dir}/deploy/operator.yaml \
+        | sed -e "s^image: .*^image: ${IMAGE}^" \
+        | kubectl apply -f -
+
     sleep 2
 
     wait_pod $(get_operator_pod)
@@ -467,5 +468,8 @@ get_qan_values() {
 apply_cluster() {
     local file=$1
 
-    $sed -e "s#image:\$#image: $IMAGE_MONGOD#" "$file" | kubectl apply -f -
+    $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" "$file" \
+        | $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
+        | $sed -e "s#image: .*-backup.*\$#image: $IMAGE_BACKUP#" \
+        | kubectl apply -f -
 }
