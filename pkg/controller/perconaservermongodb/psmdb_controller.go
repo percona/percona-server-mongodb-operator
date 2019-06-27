@@ -462,6 +462,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, fmt.Errorf("get secret hash error: %v", err)
 	}
+	if len(sfsSpec.Template.Annotations) == 0 {
+		sfsSpec.Template.Annotations = make(map[string]string)
+	}
 	sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
 	sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
 	if err != nil && !k8serrors.IsNotFound(err) {
