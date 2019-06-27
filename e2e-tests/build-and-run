@@ -11,7 +11,7 @@ create_namespace run-$GIT_BRANCH
 deploy_operator
 
 desc 'create PSMDB cluster'
-kubectl apply -f $src_dir/deploy/mongodb-users.yaml
+kubectl apply -f $src_dir/deploy/secrets.yaml
 
 platform=(kubernetes openshift)
 cat $src_dir/deploy/cr.yaml \
