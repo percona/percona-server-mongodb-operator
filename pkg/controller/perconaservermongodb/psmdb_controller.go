@@ -509,7 +509,7 @@ func (r *ReconcilePerconaServerMongoDB) getTLSHash(cr *api.PerconaServerMongoDB,
 	if err != nil {
 		return "", err
 	}
-	secretString := fmt.Sprintln(secretObj)
+	secretString := fmt.Sprintln(secretObj.Data)
 	hash := fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
 
 	return hash, nil
