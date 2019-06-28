@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -29,22 +28,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	}
 
 	data := make(map[string][]byte)
-	data["MONGODB_BACKUP_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("backup")))
+	data["MONGODB_BACKUP_USER"] = []byte("backup")
 	data["MONGODB_BACKUP_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create backup users pass: %v", err)
 	}
-	data["MONGODB_CLUSTER_ADMIN_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("clusterAdmin")))
+	data["MONGODB_CLUSTER_ADMIN_USER"] = []byte("clusterAdmin")
 	data["MONGODB_CLUSTER_ADMIN_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create cluster admin users pass: %v", err)
 	}
-	data["MONGODB_CLUSTER_MONITOR_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("clusterMonitor")))
+	data["MONGODB_CLUSTER_MONITOR_USER"] = []byte("clusterMonitor")
 	data["MONGODB_CLUSTER_MONITOR_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create cluster monitor users pass: %v", err)
 	}
-	data["MONGODB_USER_ADMIN_USER"] = []byte(base64.StdEncoding.EncodeToString([]byte("userAdmin")))
+	data["MONGODB_USER_ADMIN_USER"] = []byte("userAdmin")
 	data["MONGODB_USER_ADMIN_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create admin users pass: %v", err)
