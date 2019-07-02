@@ -23,6 +23,7 @@ spec:
   serviceName: cluster-ip-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: cluster-ip

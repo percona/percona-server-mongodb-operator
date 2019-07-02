@@ -13,7 +13,7 @@ test_name=$(basename $test_dir)
 namespace="${test_name}-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
-if oc version | grep -q openshift; then
+if oc projects 2>&1 | egrep -q 'You have access to the following projects|You are not a member of any projects|You have one project on this server'; then
     OPENSHIFT=1
 fi
 
@@ -50,7 +50,7 @@ wait_pod() {
         sleep 1
         echo -n .
         let retry+=1
-        if [ $retry -ge 60 ]; then
+        if [ $retry -ge 120 ]; then
             kubectl describe pod/$pod
             kubectl logs $pod
             kubectl logs $(get_operator_pod) \
@@ -179,9 +179,10 @@ deploy_helm() {
     local namespace="$1"
     if [ "$OPENSHIFT" == 1 ]; then
         export TILLER_NAMESPACE=tiller
+        HELM_VERSION=$(helm version -c | $sed -re 's/.*SemVer:"([^"]+)".*/\1/')
         oc new-project tiller || :
         oc project tiller
-        oc process -f https://github.com/openshift/origin/raw/master/examples/helm/tiller-template.yaml -p TILLER_NAMESPACE="tiller" -p HELM_VERSION=v2.13.1 | oc apply -f -
+        oc process -f https://github.com/openshift/origin/raw/master/examples/helm/tiller-template.yaml -p TILLER_NAMESPACE="tiller" -p HELM_VERSION=$HELM_VERSION | oc apply -f -
     else
         kubectl --namespace kube-system create sa tiller || :
         kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller || :
@@ -206,7 +207,7 @@ deploy_helm() {
 
 wait_for_running() {
     local name="$1"
-    let last_pod="$2-1" || :
+    let last_pod="$(($2-1))" || :
 
     for i in $(seq 0 $last_pod); do
         wait_pod ${name}-${i}
@@ -250,8 +251,9 @@ compare_kubectl() {
 
     kubectl get -o yaml ${resource} \
         | egrep -v "namespace:|uid:|resourceVersion:|selfLink:|creationTimestamp:|image:|clusterIP:|dataSource:|procMount:" \
-        | egrep -v "^  storageClassName:|finalizers:|kubernetes.io/pvc-protection|volumeName:|storage-provisioner:" \
-        | egrep -v "healthCheckNodePort:|nodePort:|volumeMode:" \
+        | egrep -v "^  storageClassName:|finalizers:|kubernetes.io/pvc-protection|volumeName:|storage-provisioner:|status: \{\}|volumeMode: Filesystem" \
+        | egrep -v "percona.com/.*-hash:|control-plane.alpha.kubernetes.io/leader:|volume.kubernetes.io/selected-node:" \
+        | egrep -v "healthCheckNodePort:|nodePort:" \
         | $sed -e '/^status:$/,+100500d' \
         | $sed -e '/NAMESPACE/,+1d' \
         | $sed -e '/PBM_AGENT_SERVER_ADDRESS/,+1d' \
@@ -333,7 +335,7 @@ compare_mongo_user() {
     local user=$(echo $uri | cut -d : -f 1)
     local expected_result=${test_dir}/compare/$user.json
 
-    if [ "$IMAGE_MONGOD" == "$IMAGE_MONGOD40" -a -f ${test_dir}/compare/$user-40.json ]; then
+    if [[ "$IMAGE_MONGOD" =~ 4\.0$ ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
         expected_result=${test_dir}/compare/$user-40.json
     fi
 
