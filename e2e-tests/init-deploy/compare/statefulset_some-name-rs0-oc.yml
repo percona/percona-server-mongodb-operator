@@ -23,6 +23,7 @@ spec:
   serviceName: some-name-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: some-name
@@ -103,7 +104,6 @@ spec:
             memory: 100M
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:

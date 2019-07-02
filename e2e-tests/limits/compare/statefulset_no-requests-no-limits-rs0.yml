@@ -23,6 +23,7 @@ spec:
   serviceName: no-requests-no-limits-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: no-requests-no-limits

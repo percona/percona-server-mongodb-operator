@@ -23,6 +23,7 @@ spec:
   serviceName: monitoring-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: monitoring
@@ -45,6 +46,8 @@ spec:
         - --clusterAuthMode=x509
         - --profile=2
         - --rateLimit=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerIndexPrefixCompression=true
         env:
         - name: SERVICE_NAME
@@ -100,6 +103,9 @@ spec:
         - mountPath: /etc/mongodb-ssl-internal
           name: ssl-internal
           readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: monitoring-mongodb-encryption-key
+          readOnly: true
         workingDir: /data/db
       - env:
         - name: PMM_SERVER
@@ -135,6 +141,11 @@ spec:
           defaultMode: 288
           optional: false
           secretName: monitoring-mongodb-keyfile
+      - name: monitoring-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: monitoring-mongodb-encryption-key
       - name: ssl
         secret:
           defaultMode: 288

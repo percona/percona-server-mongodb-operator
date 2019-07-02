@@ -23,6 +23,7 @@ spec:
   serviceName: no-requests-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: no-requests

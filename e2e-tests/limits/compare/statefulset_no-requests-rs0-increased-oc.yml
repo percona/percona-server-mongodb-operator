@@ -23,6 +23,7 @@ spec:
   serviceName: no-requests-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: no-requests
@@ -57,6 +58,8 @@ spec:
         - --slowms=100
         - --profile=1
         - --rateLimit=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerCacheSizeGB=0.25
         - --wiredTigerCollectionBlockCompressor=snappy
         - --wiredTigerJournalCompressor=snappy
@@ -123,6 +126,9 @@ spec:
         - mountPath: /etc/mongodb-ssl-internal
           name: ssl-internal
           readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: no-requests-mongodb-encryption-key
+          readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -135,6 +141,11 @@ spec:
           defaultMode: 288
           optional: false
           secretName: no-requests-mongodb-keyfile
+      - name: no-requests-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: no-requests-mongodb-encryption-key
       - name: ssl
         secret:
           defaultMode: 288
