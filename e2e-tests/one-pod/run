@@ -1,0 +1,88 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+spinup_psmdb() {
+    local cluster=$1
+    local config=$2
+    local size="${3:-3}"
+
+    desc 'create first PSMDB cluster'
+    kubectl apply \
+        -f $conf_dir/secrets.yml \
+        -f $conf_dir/client.yml \
+        -f $config
+
+    desc 'check if all 3 Pods started'
+    wait_for_running "$cluster-rs0" "$size"
+    sleep 20
+
+    desc 'write data'
+
+    run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+              "userAdmin:userAdmin123456@one-pod-rs0.${namespace}"
+
+    run_mongo 'use myApp\n db.test.insert({ x: 1 })' "myApp:myPass@one-pod-rs0.${namespace}"
+}
+
+run_backup() {
+    local cluster=$1
+    local backup1=$2
+
+    desc 'make backup'
+    kubectl apply \
+        -f $test_dir/conf/$backup1.yml
+    wait_backup $backup1
+}
+
+run_recovery_check() {
+    local cluster=$1
+    local backup1=$2
+
+    desc 'write data after backup'
+
+    compare_mongo_cmd "find" "myApp:myPass@one-pod-rs0.${namespace}"    
+
+    run_mongo 'use myApp\n db.test.insert({ x: 2 })' "myApp:myPass@one-pod-rs0.${namespace}"
+
+    desc 'recover backup'
+    kubectl apply -f "$test_dir/conf/${backup1}.yaml"
+
+    wait_restore_object ${backup1}
+
+    compare_mongo_cmd "find" "myApp:myPass@one-pod-rs0.${namespace}"    
+
+    kubectl logs pod/one-pod-backup-coordinator-0
+    kubectl delete -f "$test_dir/conf/${backup1}.yaml"
+    wait_for_running "$cluster-rs0" 1
+
+    desc 'check data after backup'
+    compare_mongo_cmd "find" "myApp:myPass@one-pod-rs0.${namespace}"
+}
+
+main() {
+    create_namespace $namespace
+    deploy_operator
+    kubectl apply \
+        -f $conf_dir/cloud-secret.yml
+
+    cluster="one-pod"
+
+    kubectl apply -f "$test_dir/conf/s3-secrets.yml"
+
+    deploy_helm $namespace
+    deploy_local_s3
+
+    spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
+
+    run_backup         "$cluster" "on-demand-backup-s3"
+    run_recovery_check "$cluster" "on-demand-restore-s3"
+
+    destroy $namespace
+}
+
+main

@@ -1,0 +1,7 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBBackup
+metadata:
+  name: on-demand-backup-s3
+spec:
+  psmdbCluster: one-pod
+  storageName: s3
