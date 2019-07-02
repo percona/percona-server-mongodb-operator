@@ -23,6 +23,7 @@ spec:
   serviceName: emptydir-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: emptydir
@@ -39,8 +40,14 @@ spec:
         - --port=27017
         - --replSet=rs0
         - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslAllowInvalidCertificates
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
         - --slowms=0
         - --profile=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerIndexPrefixCompression=true
         env:
         - name: SERVICE_NAME
@@ -90,6 +97,15 @@ spec:
         - mountPath: /etc/mongodb-secrets
           name: emptydir-mongodb-keyfile
           readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
+          readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: emptydir-mongodb-encryption-key
+          readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -100,9 +116,24 @@ spec:
       volumes:
       - name: emptydir-mongodb-keyfile
         secret:
-          defaultMode: 48
+          defaultMode: 288
           optional: false
           secretName: emptydir-mongodb-keyfile
+      - name: emptydir-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: emptydir-mongodb-encryption-key
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: emptydir-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: emptydir-ssl-internal
       - emptyDir: {}
         name: mongod-data
   updateStrategy:

@@ -45,7 +45,7 @@ main() {
         -f $test_dir/conf/hostpath-helper.yml
 
     desc 'check emptydir'
-    #check_cr_config "emptydir-rs0"
+    check_cr_config "emptydir-rs0"
 
     desc 'check hostpath'
     check_cr_config "hostpath-rs0"

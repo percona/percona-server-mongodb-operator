@@ -55,6 +55,8 @@ spec:
           restartPolicy: Never
           schedulerName: default-scheduler
           securityContext: {}
+          serviceAccount: percona-server-mongodb-operator
+          serviceAccountName: percona-server-mongodb-operator
           terminationGracePeriodSeconds: 30
   schedule: '* * * * *'
   successfulJobsHistoryLimit: 3

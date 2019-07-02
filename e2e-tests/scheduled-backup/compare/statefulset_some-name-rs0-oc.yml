@@ -23,6 +23,7 @@ spec:
   serviceName: some-name-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: some-name
@@ -46,6 +47,8 @@ spec:
         - --slowms=100
         - --profile=1
         - --rateLimit=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerCacheSizeGB=0.25
         - --wiredTigerCollectionBlockCompressor=snappy
         - --wiredTigerJournalCompressor=snappy
@@ -115,11 +118,14 @@ spec:
         - mountPath: /etc/mongodb-ssl-internal
           name: ssl-internal
           readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: some-name-mongodb-encryption-key
+          readOnly: true
         workingDir: /data/db
       - command:
         - pbm-agent
         env:
-        - name: PBM_AGENT_STORAGES_CONFIG
+        - name: PBM_AGENT_STORAGE_CONFIG
           value: /etc/percona-backup-mongodb/storages.yml
         - name: PBM_AGENT_MONGODB_PORT
           value: "27017"
@@ -159,6 +165,11 @@ spec:
           defaultMode: 288
           optional: false
           secretName: some-name-mongodb-keyfile
+      - name: some-name-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-mongodb-encryption-key
       - name: ssl
         secret:
           defaultMode: 288
