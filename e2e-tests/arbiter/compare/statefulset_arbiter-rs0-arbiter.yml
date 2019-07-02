@@ -23,6 +23,7 @@ spec:
   serviceName: arbiter-rs0
   template:
     metadata:
+      annotations:
       labels:
         app.kubernetes.io/component: arbiter
         app.kubernetes.io/instance: arbiter
