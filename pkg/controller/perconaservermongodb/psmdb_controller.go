@@ -153,7 +153,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	internalKey := cr.Name + "-mongodb-keyfile"
-	ikCreated, err := r.ensureSecurityKey(cr, internalKey, "mongodb-key", 768)
+	ikCreated, err := r.ensureSecurityKey(cr, internalKey, "mongodb-key", 768, true)
 	if err != nil {
 		err = errors.Wrapf(err, "ensure mongo Key %s", internalKey)
 		return reconcile.Result{}, err
@@ -163,7 +163,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption {
-		created, err := r.ensureSecurityKey(cr, cr.Spec.Mongod.Security.EncryptionKeySecret, psmdb.EncryptionKeyName, 32)
+		created, err := r.ensureSecurityKey(cr, cr.Spec.Mongod.Security.EncryptionKeySecret, psmdb.EncryptionKeyName, 32, false)
 		if err != nil {
 			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Mongod.Security.EncryptionKeySecret)
 			return reconcile.Result{}, err
@@ -313,7 +313,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerMongoDB, secretName, keyName string, keyLen int) (created bool, err error) {
+func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerMongoDB, secretName, keyName string, keyLen int, setOwner bool) (created bool, err error) {
 	key := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -328,9 +328,11 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, key)
 	if err != nil && k8serrors.IsNotFound(err) {
 		created = true
-		err = setControllerReference(cr, key, r.scheme)
-		if err != nil {
-			return false, errors.Wrap(err, "set owner ref")
+		if setOwner {
+			err = setControllerReference(cr, key, r.scheme)
+			if err != nil {
+				return false, errors.Wrap(err, "set owner ref")
+			}
 		}
 
 		key.Data = make(map[string][]byte)
