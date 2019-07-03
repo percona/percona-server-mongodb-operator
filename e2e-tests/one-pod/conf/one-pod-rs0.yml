@@ -46,7 +46,7 @@ spec:
       hostPort: 0
     security:
       redactClientLogData: false
-      # enableEncryption: false
+      enableEncryption: false
     setParameter:
       ttlMonitorSleepSecs: 60
       wiredTigerConcurrentReadTransactions: 128
