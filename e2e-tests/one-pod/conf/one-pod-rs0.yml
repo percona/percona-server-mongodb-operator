@@ -8,7 +8,7 @@ spec:
   imagePullPolicy: Always
   allowUnsafeConfigurations: true
   secrets:
-    users: one-pod-secrets
+    users: some-users
   pmm:
     enabled: false
     image: perconalab/pmm-client:1.17.1
@@ -46,6 +46,7 @@ spec:
       hostPort: 0
     security:
       redactClientLogData: false
+      # enableEncryption: false
     setParameter:
       ttlMonitorSleepSecs: 60
       wiredTigerConcurrentReadTransactions: 128
@@ -89,10 +90,10 @@ spec:
       affinity:
        antiAffinityTopologyKey: "kubernetes.io/hostname"
     storages:
-     s3:
+     minio:
        type: s3
        s3:
          bucket: operator-testing
-         credentialsSecret: one-pod-backup-s3
+         credentialsSecret: minio-secret
          region: us-east-1
          endpointUrl: http://minio-service:9000/

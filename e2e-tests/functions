@@ -117,13 +117,15 @@ wait_backup() {
 
 run_restore() {
     local backup_name=$1
+    let last_pod="$2-1" || :
 
     run_mongo \
         'use myApp\n db.test.insert({ x: 100501 })' \
         "myApp:myPass@$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
+
+    for i in $(seq 0 $last_pod); do
+        compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
+    done
 
     cat $test_dir/conf/restore.yml \
         | $sed -e "s/name:/name: restore-$backup_name/" \
@@ -133,12 +135,13 @@ run_restore() {
 
 wait_restore() {
     wait_restore_object "${1}"
+    let last_pod="$2-1" || :
     echo
     set -o xtrace
 
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+    for i in $(seq 0 $last_pod); do
+        compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace"
+    done
 }
 
 wait_restore_object() {
@@ -209,7 +212,7 @@ deploy_helm() {
     fi
 }
 
-deploy_local_s3() {
+deploy_minio() {
     desc 'install Minio'
     helm del --purge minio-service || :
     # kubectl delete pvc minio-service --force
