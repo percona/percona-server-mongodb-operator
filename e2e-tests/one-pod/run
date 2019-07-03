@@ -18,10 +18,14 @@ spinup_psmdb() {
     wait_for_running "${cluster}" "$size"
     sleep 20
 
+    compare_kubectl "statefulset/${cluster}"
+
     desc 'write data'
 
     run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
               "userAdmin:userAdmin123456@${cluster}.${namespace}"
+
+    run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
 }
 
 run_backup() {

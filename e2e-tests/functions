@@ -135,7 +135,6 @@ run_restore() {
 
 wait_restore() {
     wait_restore_object "${1}"
-<<<<<<< HEAD
     let last_pod="$2-1" || :
     echo
     set -o xtrace
@@ -143,14 +142,6 @@ wait_restore() {
     for i in $(seq 0 $last_pod); do
         compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace"
     done
-=======
-    echo
-    set -o xtrace
-
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
->>>>>>> CLOUD-220 One-pod test
 }
 
 wait_restore_object() {
@@ -221,11 +212,7 @@ deploy_helm() {
     fi
 }
 
-<<<<<<< HEAD
 deploy_minio() {
-=======
-deploy_local_s3() {
->>>>>>> CLOUD-220 One-pod test
     desc 'install Minio'
     helm del --purge minio-service || :
     # kubectl delete pvc minio-service --force
