@@ -24,8 +24,6 @@ spec:
   template:
     metadata:
       annotations:
-        percona.com/ssl-hash: ""
-        percona.com/ssl-internal-hash: ""
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: one-pod
