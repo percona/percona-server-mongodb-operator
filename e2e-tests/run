@@ -9,7 +9,7 @@ $dir/init-deploy/run
 $dir/limits/run
 $dir/scaling/run
 $dir/monitoring/run
-$dir/monitoring/one-pod/run
+$dir/one-pod/run
 $dir/service-per-pod/run
 $dir/arbiter/run
 $dir/demand-backup/run
