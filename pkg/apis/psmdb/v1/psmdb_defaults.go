@@ -61,7 +61,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
-		t := true
+		t := false
 		cr.Spec.Mongod.Security.EnableEncryption = &t
 	}
 	if *cr.Spec.Mongod.Security.EnableEncryption &&
