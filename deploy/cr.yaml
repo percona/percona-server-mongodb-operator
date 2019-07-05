@@ -138,7 +138,7 @@ spec:
     debug: true
     restartOnFailure: true
     image: percona/percona-server-mongodb-operator:1.1.0-backup
-#    serviceAccountName: "percona-server-mongodb-operator"
+    serviceAccountName: percona-server-mongodb-operator
     coordinator:
       enableClientsLogging: true
       resources:
