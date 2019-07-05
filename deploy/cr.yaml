@@ -12,6 +12,10 @@ spec:
   allowUnsafeConfigurations: false
   secrets:
     users: my-cluster-name-secrets
+#  updateStrategy:
+#    rollingUpdate:
+#      partition: 0
+#    type: RollingUpdate
   pmm:
     enabled: false
     image: perconalab/pmm-client:1.17.1
@@ -137,6 +141,7 @@ spec:
     debug: true
     restartOnFailure: true
     image: percona/percona-server-mongodb-operator:1.0.0-backup
+#    serviceAccountName: "percona-server-mongodb-operator"
     coordinator:
       enableClientsLogging: true
       resources:
@@ -197,5 +202,3 @@ spec:
 #        schedule: "0 0 * * 0"
 #        storageName: s3-us-west
 #        compressionType: gzip
-#    serviceAccountName: default
-#  updateStrategy: default
