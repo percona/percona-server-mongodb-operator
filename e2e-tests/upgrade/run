@@ -6,34 +6,104 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-CLUSTER='upgrade-rs0'
+CLUSTER='upgrade'
 CLUSTER_SIZE=3
 IMAGE_TO_UPDATE=${IMAGE}
 IMAGE_MONGOD_TO_UPDATE=${IMAGE_MONGOD}
 IMAGE_BACKUP_TO_UPDATE=${IMAGE_BACKUP}
 OPERATOR_NAME='percona-server-mongodb-operator'
 
-IMAGE='percona/percona-server-mongodb-operator:1.0.0'
+IMAGE='perconalab/percona-server-mongodb-operator:cloud-235'
 IMAGE_MONGOD='percona/percona-server-mongodb-operator:1.0.0-mongod4.0.9'
-IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.0.0-backup'
+IMAGE_BACKUP='perconalab/percona-server-mongodb-operator:1.1.0-backup'
+
+compare_generation() {
+    generation=$1
+    resource=${2:-statefulset}
+    name=${3}
+    if [[ ${generation} != $(kubectl get "${resource}" "${name}" -o jsonpath='{.metadata.generation}') ]]; then
+        echo "Resource ${name} has not been updated"
+        exit 1
+    fi
+}
+
+wait_cluster_consistency() {
+    cluster_name=$1
+    cluster_size=$2
+    until [[ "$(kubectl get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" \
+             && "$(kubectl get psmdb "${cluster_name}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${cluster_size}" ]]; do
+        echo 'waiting for cluster readyness'
+        sleep 20
+    done
+}
 
 main() {
 	create_namespace $namespace
     deploy_operator
 
     kubectl apply -f "${conf_dir}/client.yml" \
-                  -f "${conf_dir}/secrets.yml"
+                  -f "${conf_dir}/secrets.yml" \
+                  -f "${conf_dir}/minio-secret.yml"
 
-    spinup_psmdb "${CLUSTER}" "$test_dir/conf/${CLUSTER}.yml" "${CLUSTER_SIZE}"
+    spinup_psmdb "${CLUSTER}"-rs0 "$test_dir/conf/${CLUSTER}-rs0.yml" "${CLUSTER_SIZE}"
+
+    compare_generation 1 statefulset "${CLUSTER}-rs0"
 
     kubectl patch deployment "${OPERATOR_NAME}" \
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${IMAGE_TO_UPDATE}"'"}]}}}}'
     kubectl rollout status deployment/"${OPERATOR_NAME}"
 
-    sleep 10
-    wait_for_running "${CLUSTER}" "${CLUSTER_SIZE}"
+    until [[ $(kubectl get pods --selector=name="${OPERATOR_NAME}" \
+                                -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image' \
+                                | grep -v 'NAME' | wc -l | awk '{print $1}') -eq 1 ]]; do
+        sleep 5
+    done
 
-    # destroy $namespace
+    if [[ "${IMAGE_TO_UPDATE}" == $(kubectl get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
+          && "${IMAGE_MONGOD}" == $(kubectl get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+        : Operator image has been updated correctly
+    else
+        echo 'Operator image has not been updated'
+        exit 1
+    fi
+    
+    compare_generation 2 statefulset "${CLUSTER}-rs0"
+
+    sleep 10
+    wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
+
+    IMAGE="${IMAGE_TO_UPDATE}"
+    IMAGE_MONGOD="${IMAGE_MONGOD_TO_UPDATE}"
+    IMAGE_BACKUP="${IMAGE_BACKUP_TO_UPDATE}"
+    kubectl patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {
+            "image": "'"$IMAGE_MONGOD_TO_UPDATE"'"
+        }}'
+
+    sleep 10
+    compare_generation "2" psmdb "${CLUSTER}"
+
+    if [[ "${IMAGE_TO_UPDATE}" == $(kubectl get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
+          && "${IMAGE_MONGOD_TO_UPDATE}" == $(kubectl get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+        : Operator image has been updated correctly
+    else
+        echo 'Operator image has not been updated'
+        exit 1
+    fi
+    
+    sleep 10
+
+    wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
+    sleep 10
+    wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
+    sleep 10 
+    wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
+
+    wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
+
+    sleep 300
+    simple_data_check "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
+    destroy $namespace
 }
 
 main

@@ -135,12 +135,17 @@ run_restore() {
 
 wait_restore() {
     wait_restore_object "${1}"
-    let last_pod="$2-1" || :
     echo
     set -o xtrace
 
+    simple_data_check "${cluster}" "${2}"
+}
+
+simple_data_check() {
+    cluster_name=${1}
+    let last_pod="$2-1" || :
     for i in $(seq 0 $last_pod); do
-        compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace"
+        compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
     done
 }
 
