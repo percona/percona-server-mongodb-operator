@@ -7,14 +7,31 @@ spec:
   image:
   imagePullPolicy: Always
   allowUnsafeConfigurations: true
-  backup:
-    enabled: false
-    coordinator:
-      resources:
-        requests:
-          storage: 1Gi
-    storages:
-    tasks:
+  # backup:
+  #   enabled: true
+  #   debug: true
+  #   restartOnFailure: true
+  #   image: perconalab/percona-server-mongodb-operator:master-backup
+  #   coordinator:
+  #     enableClientsLogging: true
+  #     resources:
+  #       limits:
+  #         cpu: "100m"
+  #         memory: "0.2G"
+  #       requests:
+  #         cpu: "100m"
+  #         memory: "0.1G"
+  #         storage: "1Gi"
+  #     affinity:
+  #      antiAffinityTopologyKey: "kubernetes.io/hostname"
+  #   storages:
+  #    minio:
+  #      type: s3
+  #      s3:
+  #        bucket: operator-testing
+  #        credentialsSecret: minio-secret
+  #        region: us-east-1
+  #        endpointUrl: http://minio-service:9000/
   mongod:
     net:
       hostPort: 0
@@ -48,21 +65,30 @@ spec:
           prefixCompression: true
   replsets:
   - name: rs0
+    size: 3
     affinity:
-      antiAffinityTopologyKey: none
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+    podDisruptionBudget:
+      maxUnavailable: 1
+    expose:
+      enabled: false
+      exposeType: LoadBalancer
+    arbiter:
+      enabled: false
+      size: 1
+      affinity:
+       antiAffinityTopologyKey: "kubernetes.io/hostname"
     resources:
       limits:
-        cpu: 500m
-        memory: 0.5G
+        cpu: "500m"
+        memory: "0.5G"
       requests:
-        cpu: 100m
-        memory: 0.1G
+        cpu: "300m"
+        memory: "0.5G"
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 1Gi
-    size: 3
+            storage: 3Gi
   secrets:
-    key: some-key
     users: some-users
