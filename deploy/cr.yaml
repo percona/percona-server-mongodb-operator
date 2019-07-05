@@ -10,12 +10,9 @@ spec:
 #    - name: private-registry-credentials
 #  runUid: 1001
   allowUnsafeConfigurations: false
+#  updateStrategy: RollingUpdate
   secrets:
     users: my-cluster-name-secrets
-#  updateStrategy:
-#    rollingUpdate:
-#      partition: 0
-#    type: RollingUpdate
   pmm:
     enabled: false
     image: perconalab/pmm-client:1.17.1
