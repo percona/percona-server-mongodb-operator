@@ -197,3 +197,5 @@ spec:
 #        schedule: "0 0 * * 0"
 #        storageName: s3-us-west
 #        compressionType: gzip
+#    serviceAccountName: default
+#  updateStrategy: default
