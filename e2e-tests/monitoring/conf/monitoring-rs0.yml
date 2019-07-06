@@ -9,6 +9,8 @@ spec:
     operationProfiling:
       mode: all
       rateLimit: 1
+    security:
+      enableEncryption: true
   replsets:
   - name: rs0
     affinity:
