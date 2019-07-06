@@ -37,6 +37,10 @@ func AgentContainer(cr *api.PerconaServerMongoDB, sv *version.ServerVersion) cor
 				Value: cr.Name + coordinatorSuffix + ":" + strconv.Itoa(coordinatorRPCPort),
 			},
 			{
+				Name:  "PBM_AGENT_STORAGES_CONFIG", /* needed for backward compatibility with 1.0.0 */
+				Value: agentConfigDir + "/" + agentStoragesConfigFile,
+			},
+			{
 				Name:  "PBM_AGENT_STORAGE_CONFIG",
 				Value: agentConfigDir + "/" + agentStoragesConfigFile,
 			},

@@ -101,7 +101,6 @@ spec:
             memory: 100M
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -143,7 +142,6 @@ spec:
         resources: {}
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -153,8 +151,7 @@ spec:
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
       - name: upgrade-mongodb-keyfile

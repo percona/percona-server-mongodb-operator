@@ -6,32 +6,29 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
-  allowUnsafeConfigurations: true
-  # backup:
-  #   enabled: true
-  #   debug: true
-  #   restartOnFailure: true
-  #   image: perconalab/percona-server-mongodb-operator:master-backup
-  #   coordinator:
-  #     enableClientsLogging: true
-  #     resources:
-  #       limits:
-  #         cpu: "100m"
-  #         memory: "0.2G"
-  #       requests:
-  #         cpu: "100m"
-  #         memory: "0.1G"
-  #         storage: "1Gi"
-  #     affinity:
-  #      antiAffinityTopologyKey: "kubernetes.io/hostname"
-  #   storages:
-  #    minio:
-  #      type: s3
-  #      s3:
-  #        bucket: operator-testing
-  #        credentialsSecret: minio-secret
-  #        region: us-east-1
-  #        endpointUrl: http://minio-service:9000/
+  backup:
+    enabled: true
+    debug: true
+    restartOnFailure: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    coordinator:
+      enableClientsLogging: true
+      resources:
+        limits:
+          cpu: 100m
+          memory: 0.2G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+          storage: 1Gi
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
   mongod:
     net:
       hostPort: 0
@@ -41,6 +38,7 @@ spec:
       rateLimit: 1
       slowOpThresholdMs: 100
     security:
+      enableEncryption: false
       redactClientLogData: false
     setParameter:
       ttlMonitorSleepSecs: 60
@@ -65,30 +63,22 @@ spec:
           prefixCompression: true
   replsets:
   - name: rs0
-    size: 3
     affinity:
-      antiAffinityTopologyKey: "kubernetes.io/hostname"
-    podDisruptionBudget:
-      maxUnavailable: 1
-    expose:
-      enabled: false
-      exposeType: LoadBalancer
-    arbiter:
-      enabled: false
-      size: 1
-      affinity:
-       antiAffinityTopologyKey: "kubernetes.io/hostname"
+      antiAffinityTopologyKey: none
     resources:
       limits:
-        cpu: "500m"
-        memory: "0.5G"
+        cpu: 500m
+        memory: 1G
       requests:
-        cpu: "300m"
-        memory: "0.5G"
+        cpu: 100m
+        memory: 0.1G
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 3Gi
+            storage: 1Gi
+    size: 3
   secrets:
+    key: some-key
     users: some-users
+    ssl: some-name-ssl

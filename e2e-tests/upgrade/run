@@ -13,9 +13,9 @@ IMAGE_MONGOD_TO_UPDATE=${IMAGE_MONGOD}
 IMAGE_BACKUP_TO_UPDATE=${IMAGE_BACKUP}
 OPERATOR_NAME='percona-server-mongodb-operator'
 
-IMAGE='perconalab/percona-server-mongodb-operator:cloud-235'
+IMAGE='percona/percona-server-mongodb-operator:1.0.0'
 IMAGE_MONGOD='percona/percona-server-mongodb-operator:1.0.0-mongod4.0.9'
-IMAGE_BACKUP='perconalab/percona-server-mongodb-operator:1.1.0-backup'
+IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.0.0-backup'
 
 compare_generation() {
     generation=$1
@@ -40,6 +40,9 @@ wait_cluster_consistency() {
 main() {
 	create_namespace $namespace
     deploy_operator
+
+    deploy_helm $namespace
+    deploy_minio
 
     kubectl apply -f "${conf_dir}/client.yml" \
                   -f "${conf_dir}/secrets.yml" \
@@ -72,12 +75,10 @@ main() {
     sleep 10
     wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
 
-    IMAGE="${IMAGE_TO_UPDATE}"
-    IMAGE_MONGOD="${IMAGE_MONGOD_TO_UPDATE}"
-    IMAGE_BACKUP="${IMAGE_BACKUP_TO_UPDATE}"
     kubectl patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {
-            "image": "'"$IMAGE_MONGOD_TO_UPDATE"'"
+            "image": "'"$IMAGE_MONGOD_TO_UPDATE"'",
+            "backup": { "image": "'"$IMAGE_BACKUP_TO_UPDATE"'" }
         }}'
 
     sleep 10
@@ -101,7 +102,6 @@ main() {
 
     wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
 
-    sleep 300
     simple_data_check "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
     destroy $namespace
 }
