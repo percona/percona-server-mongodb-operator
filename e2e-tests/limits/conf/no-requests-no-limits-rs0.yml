@@ -23,6 +23,7 @@ spec:
       rateLimit: 1
       slowOpThresholdMs: 100
     security:
+      enableEncryption: true
       redactClientLogData: false
     setParameter:
       ttlMonitorSleepSecs: 60
