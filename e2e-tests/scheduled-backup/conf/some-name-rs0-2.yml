@@ -10,7 +10,7 @@ spec:
     enabled: true
     debug: true
     restartOnFailure: true
-    image: perconalab/percona-server-mongodb-operator:0.4.0-backup
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     coordinator:
       enableClientsLogging: true
       resources:
@@ -72,6 +72,7 @@ spec:
       rateLimit: 1
       slowOpThresholdMs: 100
     security:
+      enableEncryption: true
       redactClientLogData: false
     setParameter:
       ttlMonitorSleepSecs: 60
