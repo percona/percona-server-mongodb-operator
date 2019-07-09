@@ -333,6 +333,23 @@ configuration options.
         - ``false``
         - Enables/disables `PSMDB Log Redaction <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html>`_
 
+      * - security.enableEncryption
+        - bool
+        - ``true``
+        - Enables/disables `PSMDB data at rest encryption <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/data_at_rest_encryption.html>`_
+
+      * - security.encryptionCipherMode
+        - string
+        - ``AES256-CBC``
+        - Sets `PSMDB encryption cipher mode
+   <https://docs.mongodb.com/manual/reference/program/mongod/#cmdoption-mongod-encryptionciphermode>`_
+
+      * - security.encryptionKeySecret
+        - string
+        - ``my-cluster-name-mongodb-encryption-key``
+        - Specifies a secret object with the
+   `encryption key <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_
+
       * - setParameter.ttlMonitorSleepSecs
         - int
         - ``60``

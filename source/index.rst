@@ -58,6 +58,7 @@ Configuration
    constraints
    storage
    TLS
+   encryption
 
 Reference
 =========
