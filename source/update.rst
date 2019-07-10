@@ -21,10 +21,10 @@ Semi-automatic update
      kubectl patch deployment percona-server-mongodb-operator \
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.1.0"}]}}}}'
 
-     kubectl patch default my-cluster-name --type=merge --patch '{
-        "spec": {"replsets":{ "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0" },
-            "mongod": { "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0" },
-            "backup":   { "image": "percona/percona-server-mongodb-operator:1.1.0-backup" }
+     kubectl patch psmdb my-cluster-name --type=merge --patch '{
+        "spec": {
+            "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0",
+            "backup": { "image": "percona/percona-server-mongodb-operator:1.1.0-backup" }
         }}'
 
 #. The deployment rollout will be automatically triggered by the applied patch.
@@ -47,7 +47,7 @@ Manual update
      kubectl patch deployment percona-server-mongodb-operator \
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.1.0"}]}}}}'
 
-     kubectl patch default my-cluster-name --type=merge --patch '{
+     kubectl patch psmdb my-cluster-name --type=merge --patch '{
         "spec": {"replsets":{ "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0" },
             "mongod": { "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0" },
             "backup":   { "image": "percona/percona-server-mongodb-operator:1.1.0-backup" }
