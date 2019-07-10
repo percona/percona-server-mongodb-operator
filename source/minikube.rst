@@ -1,14 +1,14 @@
-Install Percona Server for MongoDB on minikube
+Install Percona Server for MongoDB on Minikube
 ==============================================
 
-Installing PSMDB Operator on `minikube <https://github.com/kubernetes/minikube>`_
+Installing the PSMDB Operator on `Minikube <https://github.com/kubernetes/minikube>`_
 is the easiest way to try it locally without a cloud provider. Minikube runs
 Kubernetes on GNU/Linux, Windows, or macOS system using a system-wide
 hypervisor, such as VirtualBox, KVM/QEMU, VMware Fusion or Hyper-V. Using it is
 a popular way to test Kubernetes application locally prior to deploying it on a
 cloud.
 
-Following steps are needed to run PSMDB Operator on minikube:
+The following steps are needed to run PSMDB Operator on minikube:
 
 0. `Install minikube <https://kubernetes.io/docs/tasks/tools/install-minikube/>`_, using a way recommended for your system. This includes the installation of the following three components:
    #. kubectl tool,
@@ -16,7 +16,7 @@ Following steps are needed to run PSMDB Operator on minikube:
    #. actual minikube package
 
    After the installation running ``minikube start`` should download needed
-   virtualized images, initialize and run the cluster. After minikube is
+   virtualized images, then initialize and run the cluster. After Minikube is
    successfully started, you can optionally run Kubernetes dashboard, which
    visually represents the state of your cluster. Executing
    ``minikube dashboard`` will start the dashboard and open it in your
@@ -46,11 +46,11 @@ Following steps are needed to run PSMDB Operator on minikube:
 
 5. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
    including the password for the admin user, which you will need to access the
-   cluster. Use ``kubectl get secrets`` to see the list of secrets objects (by
-   default secrets object you are interested in has ``my-cluster-name-secrets``
-   name). Then ``kubectl get secret my-cluster-name-secrets -o yaml`` will bring
+   cluster. Use ``kubectl get secrets`` to see the list of Secrets objects (by
+   default Secrets object you are interested in has ``my-cluster-name-secrets``
+   name). Then ``kubectl get secret my-cluster-name-secrets -o yaml`` will return
    the YAML file with generated secrets, including the ``MONGODB_USER_ADMIN``
-   and ``MONGODB_USER_ADMIN_PASSWORD`` strings, which would look as follows::
+   and ``MONGODB_USER_ADMIN_PASSWORD`` strings, which should look as follows::
 
      ...
      data:
@@ -58,7 +58,7 @@ Following steps are needed to run PSMDB Operator on minikube:
        MONGODB_USER_ADMIN_PASSWORD: aDAzQ0pCY3NSWEZ2ZUIzS1I=
        MONGODB_USER_ADMIN_USER: dXNlckFkbWlu
 
-   Here actual login name and password are base64-encoded, and
+   Here the actual login name and password are base64-encoded, and
    ``echo 'aDAzQ0pCY3NSWEZ2ZUIzS1I=' | base64 --decode`` will bring it back to a
    human-readable form.
 
