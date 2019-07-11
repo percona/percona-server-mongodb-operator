@@ -2,10 +2,9 @@ Update Percona Server for MongoDB Operator
 ===========================================
 
 Starting from the version 1.1.0 Percona Kubernetes Operator for MongoDB allows
-upgrades to newer versions. This upgrade can be done either in semi-automatic
-or in manual mode.
+upgrades to newer versions. The upgrade can be either semi-automatic or manual.
 
-.. note:: Manual update mode is the recomended way for a production cluster.
+.. note:: Manual update mode is the recommended way for a production cluster.
 
 Semi-automatic update
 ---------------------
@@ -28,7 +27,7 @@ Semi-automatic update
         }}'
 
 #. The deployment rollout will be automatically triggered by the applied patch.
-   You can track the rolluot process in real time with the
+   You can track the rollout process in real time using the
    ``kubectl rollout status`` command with the name of your cluster::
 
      kubectl rollout status sts cluster1-pxc
@@ -55,7 +54,7 @@ Manual update
 
 #. Pod with the newer Percona Server for MongoDB image will start after you
    delete it. Delete targeted Pods manually one by one to make them restart in
-   desired order:
+   the desired order:
 
    #. Delete the Pod using its name with the command like the following one::
 
