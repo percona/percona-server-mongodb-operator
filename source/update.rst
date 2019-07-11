@@ -1,7 +1,7 @@
 Update Percona Server for MongoDB Operator
 ===========================================
 
-Starting from the version 1.1.0 Percona Kubernetes Operator for MongoDB allows
+Starting from the version 1.1.0 the Percona Kubernetes Operator for MongoDB allows
 upgrades to newer versions. The upgrade can be either semi-automatic or manual.
 
 .. note:: Manual update mode is the recommended way for a production cluster.
@@ -15,7 +15,7 @@ Semi-automatic update
 #. Now you should `apply a patch <https://kubernetes.io/docs/tasks/run-application/update-api-object-kubectl-patch/>`_ to your
    deployment, supplying necessary image names with a newer version tag. This
    is done with the ``kubectl patch deployment`` command. For example, updating
-   to ``1.1.0`` version should look as follows::
+   to the ``1.1.0`` version should look as follows::
 
      kubectl patch deployment percona-server-mongodb-operator \
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.1.0"}]}}}}'
@@ -41,7 +41,7 @@ Manual update
 #. Now you should `apply a patch <https://kubernetes.io/docs/tasks/run-application/update-api-object-kubectl-patch/>`_ to your
    deployment, supplying necessary image names with a newer version tag. This
    is done with the ``kubectl patch deployment`` command. For example, updating
-   to ``1.1.0`` version should look as follows::
+   to the ``1.1.0`` version should look as follows::
 
      kubectl patch deployment percona-server-mongodb-operator \
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.1.0"}]}}}}'
