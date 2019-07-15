@@ -40,6 +40,7 @@ Installation
    kubernetes
    openshift
    scaling
+   update
    monitoring
    custom-registry
 
