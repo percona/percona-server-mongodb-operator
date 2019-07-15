@@ -1,9 +1,9 @@
 .. rn:: 1.0.0
 
-Percona Kubernetes Operator for Percona Server for MongoDB
-==============================================
+Percona Kubernetes Operator for Percona Server for MongoDB 1.0.0
+================================================================
 
-Percona announces the general availability of |Percona Kubernetes Operator for Percona Server for MongoDB| 1.0.0 on May 29, 2019. This release is now the current GA release in the 1.0 series. `Install the Kubernetes Operator for Percona Server for MongoDB by following the instructions <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/kubernetes.html>`__. Please see the `GA release announcement <https://www.percona.com/blog/2019/05/29/percona-kubernetes-operators/>`__. All of Percona's software is open-source and free.
+Percona announces the general availability of *Percona Kubernetes Operator for Percona Server for MongoDB* 1.0.0 on May 29, 2019. This release is now the current GA release in the 1.0 series. `Install the Kubernetes Operator for Percona Server for MongoDB by following the instructions <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/kubernetes.html>`__. Please see the `GA release announcement <https://www.percona.com/blog/2019/05/29/percona-kubernetes-operators/>`__. All of Percona's software is open-source and free.
 
 The Percona Kubernetes Operator for Percona Server for MongoDB automates the lifecycle of your Percona Server for MongoDB environment. The Operator can be used to create a Percona Server for MongoDB replica set, or scale an existing replica set.
 
