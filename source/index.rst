@@ -39,6 +39,7 @@ Installation
 
    kubernetes
    openshift
+   minikube
    scaling
    update
    monitoring
