@@ -43,7 +43,7 @@ check_cr_config() {
 
     desc 'kill Primary Pod, check reelection, check data'
     initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$URI" "$cluster")
-    kubectl delete pods $initial_primary
+    kubectl_bin delete pods $initial_primary
     sleep 10
     changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$URI" "$cluster")
     [ "$initial_primary" != "$changed_primary" ]
@@ -52,7 +52,7 @@ check_cr_config() {
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 
     # delete cluster
-    kubectl delete \
+    kubectl_bin delete \
         -f $test_dir/conf/$cluster.yml
 }
 
@@ -60,7 +60,7 @@ main() {
     deploy_cert_manager
     create_namespace $namespace
     deploy_operator
-    kubectl apply \
+    kubectl_bin apply \
         -f $conf_dir/client.yml \
         -f $conf_dir/secrets.yml
 

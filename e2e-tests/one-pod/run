@@ -33,7 +33,7 @@ run_backup() {
     local backup1=$2
 
     desc 'make backup'
-    kubectl apply \
+    kubectl_bin apply \
         -f $test_dir/conf/$backup1.yml
     wait_backup $backup1
 }
@@ -49,8 +49,8 @@ run_recovery_check() {
 
     wait_restore ${backup1} 1
 
-    kubectl logs pod/one-pod-backup-coordinator-0
-    kubectl delete -f "$test_dir/conf/${backup1}.yml"
+    kubectl_bin logs pod/one-pod-backup-coordinator-0
+    kubectl_bin delete -f "$test_dir/conf/${backup1}.yml"
     wait_for_running "${cluster}" 1
 }
 
@@ -60,7 +60,7 @@ main() {
 
     cluster="one-pod-rs0"
 
-    kubectl apply -f "${conf_dir}/client.yml" \
+    kubectl_bin apply -f "${conf_dir}/client.yml" \
                   -f "${conf_dir}/secrets.yml" \
                   -f "${conf_dir}/minio-secret.yml"
 

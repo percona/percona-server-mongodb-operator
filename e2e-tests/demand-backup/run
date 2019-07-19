@@ -9,7 +9,7 @@ test_dir=$(realpath $(dirname $0))
 run_backup() {
     local storage=$1
 
-    kubectl apply -f $test_dir/conf/backup-$storage.yml
+    kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
 }
 
 create_namespace $namespace
@@ -28,17 +28,17 @@ helm install \
     --set environment.MINIO_REGION=us-east-1 \
     --set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
     stable/minio
-MINIO_POD=$(kubectl get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
+MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
 wait_pod $MINIO_POD
 
 # create bucket
-kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
     /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
     /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
 
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
-kubectl apply \
+kubectl_bin apply \
     -f $conf_dir/cloud-secret.yml \
     -f $conf_dir/minio-secret.yml \
     -f $conf_dir/secrets.yml \
@@ -87,7 +87,7 @@ wait_restore $backup_name_aws 3
 
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
     /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
     /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
         | grep ${backup_dest_minio}_rs0.dump.gz

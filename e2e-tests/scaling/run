@@ -11,7 +11,7 @@ create_namespace $namespace
 deploy_operator
 
 desc 'create PSMDB cluster'
-kubectl apply \
+kubectl_bin apply \
     -f $conf_dir/secrets.yml \
     -f $conf_dir/client.yml
 apply_cluster $conf_dir/$cluster.yml
@@ -31,9 +31,9 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 desc 'scale up from 3 to 5'
-kubectl get psmdb -o yaml ${cluster%%-rs0} \
+kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
     | sed -e 's/size: 3/size: 5/' \
-    | kubectl apply -f-
+    | kubectl_bin apply -f-
 
 desc 'check if all 5 Pods started'
 wait_for_running $cluster 5
@@ -47,9 +47,9 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-3.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-4.$cluster.$namespace"
 
 desc 'scale down from 5 to 3'
-kubectl get psmdb -o yaml ${cluster%%-rs0} \
+kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
     | sed -e 's/size: 5/size: 3/' \
-    | kubectl apply -f-
+    | kubectl_bin apply -f-
 
 desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-3

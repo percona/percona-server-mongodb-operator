@@ -21,7 +21,7 @@ helm del --purge monitoring || :
 helm install --name monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-1.17.1.tgz
 
 desc 'create PSMDB cluster'
-kubectl apply \
+kubectl_bin apply \
     -f $conf_dir/secrets.yml \
     -f $conf_dir/client.yml
 

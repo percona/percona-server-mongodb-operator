@@ -21,7 +21,7 @@ compare_generation() {
     generation=$1
     resource=${2:-statefulset}
     name=${3}
-    if [[ ${generation} != $(kubectl get "${resource}" "${name}" -o jsonpath='{.metadata.generation}') ]]; then
+    if [[ ${generation} != $(kubectl_bin get "${resource}" "${name}" -o jsonpath='{.metadata.generation}') ]]; then
         echo "Resource ${name} has not been updated"
         exit 1
     fi
@@ -30,8 +30,8 @@ compare_generation() {
 wait_cluster_consistency() {
     cluster_name=$1
     cluster_size=$2
-    until [[ "$(kubectl get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" \
-             && "$(kubectl get psmdb "${cluster_name}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${cluster_size}" ]]; do
+    until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" \
+             && "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${cluster_size}" ]]; do
         echo 'waiting for cluster readyness'
         sleep 20
     done
@@ -44,7 +44,7 @@ main() {
     deploy_helm $namespace
     deploy_minio
 
-    kubectl apply -f "${conf_dir}/client.yml" \
+    kubectl_bin apply -f "${conf_dir}/client.yml" \
                   -f "${conf_dir}/secrets.yml" \
                   -f "${conf_dir}/minio-secret.yml"
 
@@ -52,18 +52,18 @@ main() {
 
     compare_generation 1 statefulset "${CLUSTER}-rs0"
 
-    kubectl patch deployment "${OPERATOR_NAME}" \
+    kubectl_bin patch deployment "${OPERATOR_NAME}" \
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${IMAGE_TO_UPDATE}"'"}]}}}}'
-    kubectl rollout status deployment/"${OPERATOR_NAME}"
+    kubectl_bin rollout status deployment/"${OPERATOR_NAME}"
 
-    until [[ $(kubectl get pods --selector=name="${OPERATOR_NAME}" \
+    until [[ $(kubectl_bin get pods --selector=name="${OPERATOR_NAME}" \
                                 -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image' \
                                 | grep -v 'NAME' | wc -l | awk '{print $1}') -eq 1 ]]; do
         sleep 5
     done
 
-    if [[ "${IMAGE_TO_UPDATE}" == $(kubectl get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
-          && "${IMAGE_MONGOD}" == $(kubectl get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+    if [[ "${IMAGE_TO_UPDATE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
+          && "${IMAGE_MONGOD}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
         : Operator image has been updated correctly
     else
         echo 'Operator image has not been updated'
@@ -75,7 +75,7 @@ main() {
     sleep 10
     wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
 
-    kubectl patch psmdb "${CLUSTER}" --type=merge --patch '{
+    kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {
             "image": "'"$IMAGE_MONGOD_TO_UPDATE"'",
             "backup": { "image": "'"$IMAGE_BACKUP_TO_UPDATE"'" }
@@ -84,8 +84,8 @@ main() {
     sleep 10
     compare_generation "2" psmdb "${CLUSTER}"
 
-    if [[ "${IMAGE_TO_UPDATE}" == $(kubectl get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
-          && "${IMAGE_MONGOD_TO_UPDATE}" == $(kubectl get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+    if [[ "${IMAGE_TO_UPDATE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
+          && "${IMAGE_MONGOD_TO_UPDATE}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
         : Operator image has been updated correctly
     else
         echo 'Operator image has not been updated'

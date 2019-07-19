@@ -10,7 +10,7 @@ cluster="some-name-rs0"
 
 setup_cluster() {
     # create cluster
-    kubectl apply \
+    kubectl_bin apply \
         -f $conf_dir/secrets.yml \
         -f $conf_dir/pumba.yml \
         -f $conf_dir/client.yml
@@ -52,7 +52,7 @@ pause_pod() {
     local pod=$1
 
     # run chaos for Pod
-    kubectl exec -it "$(get_pumba)" -- /pumba -l info pause --duration 1m "re2:$pod" &
+    kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info pause --duration 1m "re2:$pod" &
     pid=$!
     sleep 10
 
@@ -75,7 +75,7 @@ netem_pod() {
     local pod=$1
 
     # run chaos for Pod
-    kubectl exec -it "$(get_pumba)" -- /pumba -l info netem --tc-image 'gaiadocker/iproute2' --duration 1m loss --percent 100 --correlation 100 "re2:$pod" &
+    kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info netem --tc-image 'gaiadocker/iproute2' --duration 1m loss --percent 100 --correlation 100 "re2:$pod" &
     pid=$!
     sleep 10
 
@@ -96,7 +96,7 @@ netem_pod() {
 
 recreate() {
     # delete cluster
-    kubectl delete \
+    kubectl_bin delete \
         -f $conf_dir/$cluster.yml
     wait_for_delete pod/$cluster-2
     wait_for_delete pod/$cluster-1
