@@ -11,7 +11,7 @@ deploy_operator
 
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
-kubectl apply \
+kubectl_bin apply \
     -f $conf_dir/secrets.yml \
     -f $conf_dir/client.yml
 
@@ -46,7 +46,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 desc 'kill Primary Pod, check reelection, check data'
 initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$cluster.$namespace" "$cluster")
-kubectl delete pods --grace-period=0 --force $initial_primary
+kubectl_bin delete pods --grace-period=0 --force $initial_primary
 wait_for_running $cluster 3
 changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$cluster.$namespace" "$cluster")
 [ "$initial_primary" != "$changed_primary" ]
