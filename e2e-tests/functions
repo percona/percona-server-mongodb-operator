@@ -534,7 +534,7 @@ spinup_psmdb() {
 }
 
 kubectl_bin() {
-
+    set +o errexit
     timeout=4
     redirect_item=('2>&1')
     redirect_stderr=$(printf '%s\n' "${@}" | grep -o '2>&1' || true)
@@ -546,7 +546,6 @@ kubectl_bin() {
         else
             output=$(kubectl "$@")
         fi
-
         exit_status="$?"
 
         if [[ ${exit_status} != 0 ]]; then
@@ -557,5 +556,6 @@ kubectl_bin() {
         fi
     done
     echo "${output}"
+    set -o errexit
     return ${exit_status}
 }
