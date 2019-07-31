@@ -1,5 +1,8 @@
 #!/bin/bash
 
+exec 5>&2
+BASH_XTRACEFD="5"
+
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
@@ -29,7 +32,7 @@ create_namespace() {
        kubectl_bin delete namespace "$namespace" || :
         wait_for_delete "namespace/$namespace"
         kubectl_bin create namespace "$namespace"
-        kubectl_bin config set-context $(kubectl config current-context) --namespace="$namespace"
+        kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
     fi
 }
 
@@ -96,7 +99,7 @@ wait_backup() {
     set +o xtrace
     retry=0
     echo -n $backup_name
-    until [ "$(kubectl get psmdb-backup $backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
+    until [ "$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
         sleep 1
         echo -n .
         let retry+=1
@@ -155,7 +158,7 @@ wait_restore_object() {
     set +o xtrace
     retry=0
     echo -n $backup_name
-    until [ "$(kubectl get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
+    until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
         sleep 1
         echo -n .
         let retry+=1
@@ -199,7 +202,7 @@ deploy_helm() {
         kubectl_bin --namespace kube-system create sa tiller || :
         kubectl_bin create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller || :
         helm init --service-account tiller
-        kubectl_bin config set-context $(kubectl config current-context) --namespace="kube-system"
+        kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="kube-system"
     fi
 
     tiller_pod=$(
@@ -213,7 +216,7 @@ deploy_helm() {
         oc project "$namespace"
         oc policy add-role-to-user edit "system:serviceaccount:tiller:tiller"
     else
-        kubectl_bin config set-context $(kubectl config current-context) --namespace="$namespace"
+        kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
     fi
 }
 
@@ -231,7 +234,7 @@ deploy_minio() {
         --set environment.MINIO_REGION=us-east-1 \
         --set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
         stable/minio
-    MINIO_POD=$(kubectl get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
+    MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
     wait_pod $MINIO_POD
 
     # create bucket
@@ -256,7 +259,7 @@ wait_for_delete() {
     set +o xtrace
     echo -n "$res - "
     retry=0
-    until (kubectl get $res || :) 2>&1 | grep NotFound; do
+    until (kubectl_bin get $res || :) 2>&1 | grep NotFound; do
         sleep 1
         echo -n .
         let retry+=1
@@ -302,7 +305,7 @@ run_mongo() {
     local uri="$2"
     local driver=${3:-mongodb+srv}
     local suffix=${4:-.svc.cluster.local}
-    local client_container=$(kubectl get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+    local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
     kubectl_bin exec ${client_container} -- \
         bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0"
@@ -310,14 +313,14 @@ run_mongo() {
 
 get_service_ip() {
     local service=$1
-    if [ "$(kubectl get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
+    if [ "$(kubectl_bin get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
         echo -n $service.${service/-rs0*/}-rs0
         return
     fi
-    while (kubectl get service/$service -o 'jsonpath={.spec.type}' 2>&1 || : ) | grep -q NotFound; do
+    while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || : ) | grep -q NotFound; do
         sleep 1
     done
-    if [ "$(kubectl get service/$service -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
+    if [ "$(kubectl_bin get service/$service -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
         kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
         return
     fi
