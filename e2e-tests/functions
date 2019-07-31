@@ -534,28 +534,25 @@ spinup_psmdb() {
 }
 
 kubectl_bin() {
-    set +o errexit
-    timeout=4
-    redirect_item=('2>&1')
-    redirect_stderr=$(printf '%s\n' "${@}" | grep -o '2>&1' || true)
-
-    for (( i = 0; i < 3; i++ )); do
-        output=''
-        if [[ -n ${redirect_stderr} ]]; then
-            output=$(kubectl "${@/$redirect_item}" 2>&1)
-        else
-            output=$(kubectl "$@")
-        fi
-        exit_status="$?"
-
+    local LAST_OUT="$(mktemp)"
+    local LAST_ERR="$(mktemp)"
+    local exit_status=0
+    for i in $(seq 0 2); do
+        kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
+        exit_status=$?
+        [[ ${-/x} != $- ]] && echo "--- $i stdout" | cat - "$LAST_OUT" >&$BASH_XTRACEFD
+        [[ ${-/x} != $- ]] && echo "--- $i stderr" | cat - "$LAST_ERR" >&$BASH_XTRACEFD
         if [[ ${exit_status} != 0 ]]; then
             sleep "$((timeout * i))"
         else
-            echo "${output}"
+            cat "$LAST_OUT"
+            cat "$LAST_ERR" >&2
+            rm "$LAST_OUT" "$LAST_ERR"
             return ${exit_status}
         fi
     done
-    echo "${output}"
-    set -o errexit
+    cat "$LAST_OUT"
+    cat "$LAST_ERR" >&2
+    rm "$LAST_OUT" "$LAST_ERR"
     return ${exit_status}
 }
