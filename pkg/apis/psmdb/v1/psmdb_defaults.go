@@ -27,6 +27,11 @@ var (
 	defaultBackupS3SecretName    = "percona-server-mongodb-backup-s3"
 )
 
+const (
+	apiVersionOne       = "psmdb.percona.com/v1"
+	apiVersionOneDotTwo = "psmdb.percona.com/v1.2.0"
+)
+
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
 func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
@@ -59,6 +64,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 	if cr.Spec.Mongod.Security == nil {
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
+	}
+	if cr.APIVersion == apiVersionOne {
+		f := false
+		cr.Spec.Mongod.Security.EnableEncryption = &f
+	}
+	if cr.APIVersion == apiVersionOneDotTwo {
+		t := true
+		cr.Spec.Mongod.Security.EnableEncryption = &t
 	}
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
 		t := false
