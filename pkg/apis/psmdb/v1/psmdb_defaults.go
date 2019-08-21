@@ -2,6 +2,8 @@ package v1
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -65,18 +67,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Mongod.Security == nil {
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
-	if cr.APIVersion == apiVersionOne {
-		f := false
-		cr.Spec.Mongod.Security.EnableEncryption = &f
-	}
-	if cr.APIVersion == apiVersionOneDotTwo {
-		t := true
-		cr.Spec.Mongod.Security.EnableEncryption = &t
-	}
+
+	log.Info("APIVersion: " + cr.APIVersion)
+
+	cr.Spec.Mongod.Security.EnableEncryption = cr.encryptionByVersion()
+
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
 		t := false
 		cr.Spec.Mongod.Security.EnableEncryption = &t
 	}
+	fmt.Println(*cr.Spec.Mongod.Security.EnableEncryption)
 	if *cr.Spec.Mongod.Security.EnableEncryption &&
 		cr.Spec.Mongod.Security.EncryptionKeySecret == "" {
 		cr.Spec.Mongod.Security.EncryptionKeySecret = cr.Name + "-mongodb-encryption-key"
@@ -190,6 +190,49 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	return nil
+}
+
+func (cr *PerconaServerMongoDB) encryptionByVersion() *bool {
+	encryption := true
+	versionSlice := strings.Split(strings.TrimLeft(cr.APIVersion, "psmdb.percona.com/v"), ".")
+	checkVersion := []int{
+		0: 1,
+		1: 2,
+	}
+
+	for k, v := range versionSlice {
+		switch k {
+		case 0:
+			i, err := strconv.Atoi(v)
+			if err != nil {
+				encryption = false
+				return &encryption
+			}
+			if i < checkVersion[k] {
+				encryption = false
+				return &encryption
+			}
+			if len(versionSlice) <= 1 && i < 2 {
+				encryption = false
+				return &encryption
+			}
+			if i > 1 {
+				encryption = true
+				return &encryption
+			}
+		case 1:
+			i, err := strconv.Atoi(v)
+			if err != nil {
+				encryption = false
+				return &encryption
+			}
+			if i < checkVersion[k] {
+				encryption = false
+				return &encryption
+			}
+		}
+	}
+	return &encryption
 }
 
 // SetDefauts set default options for the replset
