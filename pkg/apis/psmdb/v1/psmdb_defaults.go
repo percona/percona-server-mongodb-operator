@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -27,11 +28,6 @@ var (
 
 	defaultBackupDestinationType = BackupDestinationS3
 	defaultBackupS3SecretName    = "percona-server-mongodb-backup-s3"
-)
-
-const (
-	apiVersionOne       = "psmdb.percona.com/v1"
-	apiVersionOneDotTwo = "psmdb.percona.com/v1.2.0"
 )
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
@@ -67,13 +63,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Mongod.Security == nil {
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
-
-	cr.Spec.Mongod.Security.EnableEncryption = cr.encryptionByVersion()
-
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
-		t := false
-		cr.Spec.Mongod.Security.EnableEncryption = &t
+		cr.Spec.Mongod.Security.EnableEncryption = cr.encryptionByVersion()
 	}
+
 	if *cr.Spec.Mongod.Security.EnableEncryption &&
 		cr.Spec.Mongod.Security.EncryptionKeySecret == "" {
 		cr.Spec.Mongod.Security.EncryptionKeySecret = cr.Name + "-mongodb-encryption-key"
@@ -191,7 +184,18 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 func (cr *PerconaServerMongoDB) encryptionByVersion() *bool {
 	encryption := true
-	versionSlice := strings.Split(strings.TrimLeft(cr.APIVersion, "psmdb.percona.com/v"), ".")
+	apiVersion := cr.APIVersion
+	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
+		var newCR PerconaServerMongoDB
+		err := json.Unmarshal([]byte(lastCR), &newCR)
+		if err != nil {
+			encryption := false
+			return &encryption
+		}
+		apiVersion = newCR.APIVersion
+	}
+
+	versionSlice := strings.Split(strings.TrimLeft(apiVersion, "psmdb.percona.com/v"), "-")
 	checkVersion := []int{
 		0: 1,
 		1: 2,
