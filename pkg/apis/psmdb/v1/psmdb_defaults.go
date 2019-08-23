@@ -64,7 +64,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
-		cr.Spec.Mongod.Security.EnableEncryption = cr.encryptionByVersion()
+		cr.Spec.Mongod.Security.EnableEncryption = cr.EncryptionByVersion()
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption &&
@@ -182,7 +182,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	return nil
 }
 
-func (cr *PerconaServerMongoDB) encryptionByVersion() *bool {
+func (cr *PerconaServerMongoDB) EncryptionByVersion() *bool {
 	encryption := true
 	apiVersion := cr.APIVersion
 	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
