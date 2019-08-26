@@ -3,10 +3,11 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
+	"log"
 	"strings"
 
 	"github.com/go-logr/logr"
+	v "github.com/hashicorp/go-version"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -194,45 +195,23 @@ func (cr *PerconaServerMongoDB) EncryptionByVersion() *bool {
 		}
 		apiVersion = newCR.APIVersion
 	}
-
-	versionSlice := strings.Split(strings.TrimLeft(apiVersion, "psmdb.percona.com/v"), "-")
-	checkVersion := []int{
-		0: 1,
-		1: 2,
+	crVersion := strings.Replace(strings.TrimLeft(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
+	checkVersion, err := v.NewVersion("1.2.0")
+	if err != nil {
+		encryption = false
+		return &encryption
+	}
+	currentVersion, err := v.NewVersion(crVersion)
+	if err != nil {
+		encryption = false
+		return &encryption
+	}
+	log.Println(currentVersion.String())
+	if currentVersion.LessThan(checkVersion) {
+		encryption = false
+		return &encryption
 	}
 
-	for k, v := range versionSlice {
-		switch k {
-		case 0:
-			i, err := strconv.Atoi(v)
-			if err != nil {
-				encryption = false
-				return &encryption
-			}
-			if i < checkVersion[k] {
-				encryption = false
-				return &encryption
-			}
-			if len(versionSlice) <= 1 && i < 2 {
-				encryption = false
-				return &encryption
-			}
-			if i > 1 {
-				encryption = true
-				return &encryption
-			}
-		case 1:
-			i, err := strconv.Atoi(v)
-			if err != nil {
-				encryption = false
-				return &encryption
-			}
-			if i < checkVersion[k] {
-				encryption = false
-				return &encryption
-			}
-		}
-	}
 	return &encryption
 }
 
