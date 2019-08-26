@@ -3,7 +3,6 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -206,7 +205,6 @@ func (cr *PerconaServerMongoDB) EncryptionByVersion() *bool {
 		encryption = false
 		return &encryption
 	}
-	log.Println(currentVersion.String())
 	if currentVersion.LessThan(checkVersion) {
 		encryption = false
 		return &encryption
