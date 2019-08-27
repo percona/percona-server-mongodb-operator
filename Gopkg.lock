@@ -235,6 +235,14 @@
   revision = "3befbb6ad0cc97d4c25d851e9528915809e1a22f"
 
 [[projects]]
+  digest = "1:53a4ebb0e1eb24a4644a3eec9457ba6ead5476a9ea5af43bf2c8b8b1a8ce47f2"
+  name = "github.com/hashicorp/go-version"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "ac23dc3fea5d1a983c43f6a0f6e2c13f0195d8bd"
+  version = "v1.2.0"
+
+[[projects]]
   digest = "1:52094d0f8bdf831d1a2401e9b6fee5795fdc0b2a2d1f8bb1980834c289e79129"
   name = "github.com/hashicorp/golang-lru"
   packages = [
@@ -958,6 +966,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/go-logr/logr",
+    "github.com/hashicorp/go-version",
     "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha1",
     "github.com/jetstack/cert-manager/pkg/client/clientset/versioned/scheme",
     "github.com/operator-framework/operator-sdk/pkg/k8sutil",

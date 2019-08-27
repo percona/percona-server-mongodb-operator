@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -201,6 +202,72 @@ func TestSetSafeDefault(t *testing.T) {
 			if test.replset.Arbiter.Enabled {
 				assert.Equal(t, test.expected.Arbiter.Size, test.replset.Arbiter.Size)
 			}
+		})
+	}
+}
+
+func TestEncryptionByVersion(t *testing.T) {
+	type test struct {
+		cr       api.PerconaServerMongoDB
+		expected bool
+	}
+
+	tests := map[string]test{
+		"v1": test{
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"psmdb.percona.com/v1"}`,
+					},
+				},
+			},
+			expected: false,
+		},
+		"v0-2-0": test{
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"psmdb.percona.com/v0-2-0"}`,
+					},
+				},
+			},
+			expected: false,
+		},
+		"v1-2-0": test{
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"psmdb.percona.com/v1-2-0"}`,
+					},
+				},
+			},
+			expected: true,
+		},
+		"v1-2": test{
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"psmdb.percona.com/v1-2"}`,
+					},
+				},
+			},
+			expected: true,
+		},
+		"v3": test{
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"psmdb.percona.com/v3"}`,
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			encrypted := test.cr.EncryptionByVersion()
+			assert.Equal(t, test.expected, *encrypted)
 		})
 	}
 }
