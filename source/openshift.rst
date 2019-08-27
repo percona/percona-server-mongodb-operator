@@ -81,7 +81,7 @@ Install Percona server for MongoDB on OpenShift
 
       $ oc apply -f deploy/secrets.yaml
 
-   More details about secrets can be found in Users.
+   More details about secrets can be found in `Users <users.html>`_.
 
 5. Install `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ if it is not up and running yet then generate and apply certificates as secrets according to `TLS document <TLS.html>`:
 
