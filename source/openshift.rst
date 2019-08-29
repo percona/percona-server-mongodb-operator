@@ -74,7 +74,7 @@ Install Percona server for MongoDB on OpenShift
 
         $ echo -n 'plain-text-password' | base64
 
-   When you have completed adding the additional information, the secrets should be created or
+   After editing the yaml file, the secrets should be created or
    updated with the following command:
 
    .. code:: bash
