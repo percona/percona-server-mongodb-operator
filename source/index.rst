@@ -44,6 +44,7 @@ Installation
    update
    monitoring
    custom-registry
+   broker
 
 Configuration
 =============
