@@ -57,9 +57,9 @@ Install Percona server for MongoDB on Kubernetes
 
       $ kubectl apply -f deploy/operator.yaml
 
-5. Add the MongoDB Users secrets to Kubernetes. Additional names
+5. Add the MongoDB Users secrets to Kubernetes. These secrets
    should be placed in the data section of the
-   ``deploy/mongodb-users.yaml`` file as login name and the base64-encoded
+   ``deploy/secrets.yaml`` file as login name and the base64-encoded
    passwords for the user accounts (see `Kubernetes
    documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`__
    for details).
@@ -71,7 +71,7 @@ Install Percona server for MongoDB on Kubernetes
 
         $ echo -n 'plain-text-password' | base64
 
-   After editing the yaml file, mongodb-users secrets should be created
+   After editing the yaml file, MongoDB Users secrets should be created
    (or updated with the new passwords) using the following command:
 
    .. code:: bash
