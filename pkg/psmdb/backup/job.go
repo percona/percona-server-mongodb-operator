@@ -67,28 +67,14 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image, service
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      crName + "-backup-" + backup.Name,
 			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   crName,
-				"app.kubernetes.io/replset":    "general",
-				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-				"app.kubernetes.io/component":  "backup-schedule",
-				"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			},
+			Labels:    NewBackupCronJobLabels(crName),
 		},
 		Spec: batchv1b.CronJobSpec{
 			Schedule:          backup.Schedule,
 			ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 			JobTemplate: batchv1b.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/instance":   crName,
-						"app.kubernetes.io/replset":    "general",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/component":  "backup-schedule",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-					},
+					Labels: NewBackupCronJobLabels(crName),
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
@@ -97,6 +83,17 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image, service
 				},
 			},
 		},
+	}
+}
+
+func NewBackupCronJobLabels(crName string) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   crName,
+		"app.kubernetes.io/replset":    "general",
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/component":  "backup-schedule",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 }
 
