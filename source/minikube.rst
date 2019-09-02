@@ -24,7 +24,7 @@ The following steps are needed to run PSMDB Operator on minikube:
 
 1. Clone the percona-server-mongodb-operator repository::
 
-     git clone -b release-1.1.0 https://github.com/percona/percona-server-mongodb-operator
+     git clone -b release-{{release}} https://github.com/percona/percona-server-mongodb-operator
      cd percona-server-mongodb-operator
 
 2. Deploy the operator with the following command::
