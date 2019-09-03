@@ -73,9 +73,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupService(cr *api.PerconaSe
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServerMongoDB, owner runtime.Object) error {
 	ctasks := make(map[string]struct{})
-	ls := make(map[string]string)
-	ls = backup.NewBackupCronJobLabels(cr.Name)
-	delete(ls, "app.kubernetes.io/instance")
+	ls := backup.NewBackupCronJobLabels(cr.Name)
 
 	for _, task := range cr.Spec.Backup.Tasks {
 		cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup.Image, cr.Spec.Backup.ServiceAccountName, cr.Spec.ImagePullSecrets, r.serverVersion)
@@ -112,7 +110,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	if err != nil {
 		return fmt.Errorf("get backup list: %v", err)
 	}
-	fmt.Printf("ls", ls)
 
 	for _, t := range tasksList.Items {
 		if _, ok := ctasks[t.Name]; !ok {
@@ -120,7 +117,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 			if err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("delete backup task %s: %v", t.Name, err)
 			}
-			fmt.Printf("deleted backup task %s: %v", t.Name, err)
 		}
 	}
 
