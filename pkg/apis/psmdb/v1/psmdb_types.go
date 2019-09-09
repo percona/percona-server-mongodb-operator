@@ -59,6 +59,7 @@ type PerconaServerMongoDBSpec struct {
 	ImagePullPolicy  corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
 	PMM              PMMSpec                              `json:"pmm,omitempty"`
 	UpdateStrategy   appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	SchedulerName    string                               `json:"schedulerName,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
