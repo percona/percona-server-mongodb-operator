@@ -8,9 +8,12 @@ import (
 	"github.com/pkg/errors"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-xtradb-cluster-operator/pkg/pxc/app"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -88,7 +91,30 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Status = api.AppStateReady
 	}
 
+	err := r.setUpgradeInProgress(cr)
+	if err != nil {
+		return errors.Wrapf(err, "set upgradeInProgres")
+	}
+
+	if cr.Status.UpgradeInProgress {
+		cr.Status.Status = api.AppStateInit
+	}
 	return r.writeStatus(cr)
+}
+
+func (r *ReconcilePerconaServerMongoDB) setUpgradeInProgress(cr *api.PerconaServerMongoDB) error {
+	sfsObj := &appsv1.StatefulSet{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + app.Name, Namespace: cr.Namespace}, sfsObj)
+	if err != nil {
+		return err
+	}
+
+	cr.Status.UpgradeInProgress = false
+	if sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas {
+		cr.Status.UpgradeInProgress = true
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB) error {
