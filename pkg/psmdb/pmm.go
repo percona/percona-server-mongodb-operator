@@ -12,7 +12,12 @@ const (
 )
 
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool) corev1.Container {
+func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string) corev1.Container {
+	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
+
+	for i := 30100; i <= 30200; i++ {
+		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(i)})
+	}
 	pmm := corev1.Container{
 		Name:            "pmm-client",
 		Image:           spec.Image,
@@ -27,7 +32,7 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool) corev1.Con
 				Value: "mongodb",
 			},
 			{
-				Name: "MONGODB_USER",
+				Name: "DB_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key: "MONGODB_CLUSTER_MONITOR_USER",
@@ -38,7 +43,7 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool) corev1.Con
 				},
 			},
 			{
-				Name: "MONGODB_PASSWORD",
+				Name: "DB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
@@ -50,9 +55,22 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool) corev1.Con
 			},
 			{
 				Name:  "DB_ARGS",
-				Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
+				Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/ --use-profiler",
+			},
+			{
+				Name:  "DB_HOST",
+				Value: "localhost",
+			},
+			{
+				Name:  "DB_CLUSTER",
+				Value: clusterName,
+			},
+			{
+				Name:  "DB_PORT",
+				Value: "27017",
 			},
 		},
+		Ports: ports,
 	}
 
 	if customLogin {

@@ -48,6 +48,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	if err != nil {
 		return fmt.Errorf("create admin users pass: %v", err)
 	}
+	if len(cr.Spec.PMM.ServerUser) > 0 && len(cr.Spec.PMM.ServerPassword) > 0 {
+		data["PMM_SERVER_USER"] = []byte(cr.Spec.PMM.ServerUser)
+		data["PMM_SERVER_PASSWORD"] = []byte(cr.Spec.PMM.ServerPassword)
+
+	}
 
 	secretObj = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
