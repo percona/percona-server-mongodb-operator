@@ -450,7 +450,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 			_, okl := pmmsec.Data[psmdb.PMMUserKey]
 			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
-			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp)
+			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp, cr.Name)
 			if !cr.VersionLessThan120() {
 				res, err := psmdb.CreateResources(cr.Spec.PMM.Resources)
 				if err != nil {
