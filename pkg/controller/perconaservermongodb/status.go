@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-xtradb-cluster-operator/pkg/pxc/app"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,6 +75,11 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Replsets[rs.Name] = &status
+		err = r.setUpgradeInProgress(cr, rs.Name)
+		if err != nil {
+			return errors.Wrapf(err, "set upgradeInProgres")
+		}
+
 	}
 
 	if len(cr.Status.Conditions) == 0 || cr.Status.Conditions[0].Type == api.ClusterError {
@@ -91,20 +95,15 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Status = api.AppStateReady
 	}
 
-	err := r.setUpgradeInProgress(cr)
-	if err != nil {
-		return errors.Wrapf(err, "set upgradeInProgres")
-	}
-
 	if cr.Status.UpgradeInProgress {
 		cr.Status.Status = api.AppStateInit
 	}
 	return r.writeStatus(cr)
 }
 
-func (r *ReconcilePerconaServerMongoDB) setUpgradeInProgress(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) setUpgradeInProgress(cr *api.PerconaServerMongoDB, rsName string) error {
 	sfsObj := &appsv1.StatefulSet{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + app.Name, Namespace: cr.Namespace}, sfsObj)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}, sfsObj)
 	if err != nil {
 		return err
 	}
