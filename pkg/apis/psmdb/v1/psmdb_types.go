@@ -84,11 +84,10 @@ const (
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	Status            AppState                  `json:"state,omitempty"`
-	Message           string                    `json:"message,omitempty"`
-	Conditions        []ClusterCondition        `json:"conditions,omitempty"`
-	Replsets          map[string]*ReplsetStatus `json:"replsets,omitempty"`
-	UpgradeInProgress bool                      `json:"upgradeInProgress"`
+	Status     AppState                  `json:"state,omitempty"`
+	Message    string                    `json:"message,omitempty"`
+	Conditions []ClusterCondition        `json:"conditions,omitempty"`
+	Replsets   map[string]*ReplsetStatus `json:"replsets,omitempty"`
 }
 
 type ConditionStatus string

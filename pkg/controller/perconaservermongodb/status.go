@@ -37,6 +37,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.Message = ""
 
 	replsetsReady := 0
+	inProgress := false
 	for _, rs := range cr.Spec.Replsets {
 		status, err := r.rsStatus(rs, cr.Name, cr.Namespace)
 		if err != nil {
@@ -75,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Replsets[rs.Name] = &status
-		err = r.setUpgradeInProgress(cr, rs.Name)
+		inProgress, err = r.upgradeInProgress(cr, rs.Name)
 		if err != nil {
 			return errors.Wrapf(err, "set upgradeInProgres")
 		}
@@ -95,25 +96,21 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Status = api.AppStateReady
 	}
 
-	if cr.Status.UpgradeInProgress {
+	if inProgress {
 		cr.Status.Status = api.AppStateInit
 	}
+
 	return r.writeStatus(cr)
 }
 
-func (r *ReconcilePerconaServerMongoDB) setUpgradeInProgress(cr *api.PerconaServerMongoDB, rsName string) error {
+func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(cr *api.PerconaServerMongoDB, rsName string) (bool, error) {
 	sfsObj := &appsv1.StatefulSet{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}, sfsObj)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	cr.Status.UpgradeInProgress = false
-	if sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas {
-		cr.Status.UpgradeInProgress = true
-	}
-
-	return nil
+	return sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB) error {
