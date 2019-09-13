@@ -8,9 +8,11 @@ import (
 	"github.com/pkg/errors"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,6 +37,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.Message = ""
 
 	replsetsReady := 0
+	inProgress := false
 	for _, rs := range cr.Spec.Replsets {
 		status, err := r.rsStatus(rs, cr.Name, cr.Namespace)
 		if err != nil {
@@ -73,6 +76,12 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Replsets[rs.Name] = &status
+		if !inProgress {
+			inProgress, err = r.upgradeInProgress(cr, rs.Name)
+			if err != nil {
+				return errors.Wrapf(err, "set upgradeInProgres")
+			}
+		}
 	}
 
 	if len(cr.Status.Conditions) == 0 || cr.Status.Conditions[0].Type == api.ClusterError {
@@ -88,7 +97,21 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Status = api.AppStateReady
 	}
 
+	if inProgress {
+		cr.Status.Status = api.AppStateInit
+	}
+
 	return r.writeStatus(cr)
+}
+
+func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(cr *api.PerconaServerMongoDB, rsName string) (bool, error) {
+	sfsObj := &appsv1.StatefulSet{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}, sfsObj)
+	if err != nil {
+		return false, err
+	}
+
+	return sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB) error {
