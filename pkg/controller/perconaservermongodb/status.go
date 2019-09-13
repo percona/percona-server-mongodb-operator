@@ -76,11 +76,12 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Replsets[rs.Name] = &status
-		inProgress, err = r.upgradeInProgress(cr, rs.Name)
-		if err != nil {
-			return errors.Wrapf(err, "set upgradeInProgres")
+		if !inProgress {
+			inProgress, err = r.upgradeInProgress(cr, rs.Name)
+			if err != nil {
+				return errors.Wrapf(err, "set upgradeInProgres")
+			}
 		}
-
 	}
 
 	if len(cr.Status.Conditions) == 0 || cr.Status.Conditions[0].Type == api.ClusterError {
