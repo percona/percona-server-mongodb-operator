@@ -450,10 +450,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 			_, okl := pmmsec.Data[psmdb.PMMUserKey]
 			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
-
+			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp)
+			if !cr.VersionLessThan120() {
+				res, err := psmdb.CreateResources(cr.Spec.PMM.Resources)
+				if err != nil {
+					return nil, fmt.Errorf("pmm container error: create resources error: %v", err)
+				}
+				pmmC.Resources = res
+			}
 			sfsSpec.Template.Spec.Containers = append(
 				sfsSpec.Template.Spec.Containers,
-				psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp),
+				pmmC,
 			)
 		}
 	}
