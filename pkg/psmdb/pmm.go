@@ -21,11 +21,55 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 
 	dbArgsEnv := []corev1.EnvVar{
 		{
+			Name: "MONGODB_USER",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "MONGODB_CLUSTER_MONITOR_USER",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secrets,
+					},
+				},
+			},
+		},
+		{
+			Name: "MONGODB_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secrets,
+					},
+				},
+			},
+		},
+		{
 			Name:  "DB_ARGS",
 			Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/ --use-profiler",
 		},
 	}
 	dbEnv := []corev1.EnvVar{
+		{
+			Name: "DB_USER",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "MONGODB_CLUSTER_MONITOR_USER",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secrets,
+					},
+				},
+			},
+		},
+		{
+			Name: "DB_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secrets,
+					},
+				},
+			},
+		},
 		{
 			Name:  "DB_HOST",
 			Value: "localhost",
@@ -59,28 +103,6 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 			{
 				Name:  "DB_TYPE",
 				Value: "mongodb",
-			},
-			{
-				Name: "DB_USER",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_CLUSTER_MONITOR_USER",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secrets,
-						},
-					},
-				},
-			},
-			{
-				Name: "DB_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secrets,
-						},
-					},
-				},
 			},
 		},
 		Ports: ports,
