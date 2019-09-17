@@ -104,6 +104,48 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 				Name:  "DB_TYPE",
 				Value: "mongodb",
 			},
+			{
+				Name: "DB_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "MONGODB_CLUSTER_MONITOR_USER",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secrets,
+						},
+					},
+				},
+			},
+			{
+				Name: "DB_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secrets,
+						},
+					},
+				},
+			},
+			{
+				Name:  "DB_ARGS",
+				Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/ --use-profiler",
+			},
+			{
+				Name:  "DB_HOST",
+				Value: "localhost",
+			},
+			{
+				Name:  "DB_CLUSTER",
+				Value: clusterName,
+			},
+			{
+				Name:  "DB_PORT",
+				Value: "27017",
+			},
+			{
+				Name:  "DEBUG",
+				Value: "true",
+			},
 		},
 		Ports: ports,
 	}
