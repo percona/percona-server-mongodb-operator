@@ -1,6 +1,9 @@
 package v1
 
 import (
+	"encoding/json"
+	"strings"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -9,6 +12,7 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -117,9 +121,10 @@ type ClusterCondition struct {
 }
 
 type PMMSpec struct {
-	Enabled    bool   `json:"enabled,omitempty"`
-	ServerHost string `json:"serverHost,omitempty"`
-	Image      string `json:"image,omitempty"`
+	Enabled    bool           `json:"enabled,omitempty"`
+	ServerHost string         `json:"serverHost,omitempty"`
+	Image      string         `json:"image,omitempty"`
+	Resources  *ResourcesSpec `json:"resources,omitempty"`
 }
 
 type MultiAZ struct {
@@ -420,4 +425,26 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 		UID:        cr.GetUID(),
 		Controller: &trueVar,
 	}, nil
+}
+
+func (cr *PerconaServerMongoDB) VersionLessThan120() bool {
+	apiVersion := cr.APIVersion
+	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
+		var newCR PerconaServerMongoDB
+		err := json.Unmarshal([]byte(lastCR), &newCR)
+		if err != nil {
+			return false
+		}
+		apiVersion = newCR.APIVersion
+	}
+	crVersion := strings.Replace(strings.TrimLeft(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
+	checkVersion, err := v.NewVersion("1.2.0")
+	if err != nil {
+		return false
+	}
+	currentVersion, err := v.NewVersion(crVersion)
+	if err != nil {
+		return false
+	}
+	return currentVersion.LessThan(checkVersion)
 }
