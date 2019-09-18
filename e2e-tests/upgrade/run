@@ -8,14 +8,19 @@ test_dir=$(realpath $(dirname $0))
 
 CLUSTER='upgrade'
 CLUSTER_SIZE=3
+API_TO_UPDATE=${API}
 IMAGE_TO_UPDATE=${IMAGE}
+IMAGE_PMM_TO_UPDATE=${IMAGE_PMM}
 IMAGE_MONGOD_TO_UPDATE=${IMAGE_MONGOD}
 IMAGE_BACKUP_TO_UPDATE=${IMAGE_BACKUP}
 OPERATOR_NAME='percona-server-mongodb-operator'
 
-IMAGE='percona/percona-server-mongodb-operator:1.0.0'
-IMAGE_MONGOD='percona/percona-server-mongodb-operator:1.0.0-mongod4.0.9'
-IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.0.0-backup'
+MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | gsed -r 's/.*([0-9].[0-9])$/\1/')
+API='psmdb.percona.com/v1'
+IMAGE='percona/percona-server-mongodb-operator:1.1.0'
+IMAGE_PMM='percona/percona-server-mongodb-operator:1.1.0-pmm'
+IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod$MONGO_VER"
+IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.1.0-backup'
 
 compare_generation() {
     generation=$1
@@ -70,19 +75,22 @@ main() {
         exit 1
     fi
     
-    compare_generation 2 statefulset "${CLUSTER}-rs0"
+    compare_generation 1 statefulset "${CLUSTER}-rs0"
 
     sleep 10
     wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
 
     kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"'"$API_TO_UPDATE"'\"}" }},
         "spec": {
             "image": "'"$IMAGE_MONGOD_TO_UPDATE"'",
+            "pmm": { "image": "'"$IMAGE_PMM_TO_UPDATE"'" },
             "backup": { "image": "'"$IMAGE_BACKUP_TO_UPDATE"'" }
         }}'
 
     sleep 10
-    compare_generation "2" psmdb "${CLUSTER}"
+    compare_generation 2 statefulset "${CLUSTER}-rs0"
+    compare_generation 2 psmdb "${CLUSTER}"
 
     if [[ "${IMAGE_TO_UPDATE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
           && "${IMAGE_MONGOD_TO_UPDATE}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
