@@ -44,7 +44,7 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 		},
 		{
 			Name:  "DB_ARGS",
-			Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/ --use-profiler",
+			Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
 		},
 	}
 	dbEnv := []corev1.EnvVar{
