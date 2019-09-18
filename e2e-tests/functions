@@ -5,6 +5,7 @@ BASH_XTRACEFD="5"
 
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
+API="psmdb.percona.com/v1-2-0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:master-mongod4.0"}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:master-backup"}
@@ -505,12 +506,16 @@ get_qan_values() {
         | jq '.Query[].Fingerprint'
 }
 
-apply_cluster() {
-    local file=$1
-
-    $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" "$file" \
+cat_config() {
+    cat "$1" \
+        | $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
         | $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-        | $sed -e "s#image: .*-backup.*\$#image: $IMAGE_BACKUP#" \
+        | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
+        | $sed -e "s#image: .*-backup.*\$#image: $IMAGE_BACKUP#"
+}
+
+apply_cluster() {
+    cat_config "$1" \
         | kubectl_bin apply -f -
 }
 
