@@ -112,20 +112,43 @@ spec:
           value: monitoring-service
         - name: DB_TYPE
           value: mongodb
-        - name: MONGODB_USER
+        - name: DB_USER
           valueFrom:
             secretKeyRef:
               key: MONGODB_CLUSTER_MONITOR_USER
               name: some-users
-        - name: MONGODB_PASSWORD
+        - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               key: MONGODB_CLUSTER_MONITOR_PASSWORD
               name: some-users
-        - name: DB_ARGS
-          value: --uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/
+        - name: DB_HOST
+          value: localhost
+        - name: DB_CLUSTER
+          value: monitoring
+        - name: DB_PORT
+          value: "27017"
+        - name: DB_PORT_MIN
+          value: "30100"
+        - name: DB_PORT_MAX
+          value: "30105"
         imagePullPolicy: Always
         name: pmm-client
+        ports:
+        - containerPort: 7777
+          protocol: TCP
+        - containerPort: 30100
+          protocol: TCP
+        - containerPort: 30101
+          protocol: TCP
+        - containerPort: 30102
+          protocol: TCP
+        - containerPort: 30103
+          protocol: TCP
+        - containerPort: 30104
+          protocol: TCP
+        - containerPort: 30105
+          protocol: TCP
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
