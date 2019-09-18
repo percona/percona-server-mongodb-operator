@@ -23,7 +23,7 @@ spec:
     size: 3
   pmm:
     enabled: true
-    image: perconalab/pmm-client:1.17.1
+    image: -pmm
     serverHost: monitoring-service
   secrets:
     users: some-users
