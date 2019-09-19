@@ -6,6 +6,11 @@ upgrades to newer versions. The upgrade can be either semi-automatic or manual.
 
 .. note:: Manual update mode is the recommended way for a production cluster.
 
+.. note:: Only the incremental update to a nearest minor version is supported
+   (for example, update from 1.1.0 to 1.2.0).
+   To update to a newer version, which differs from the current version by more
+   than one, make several incremental updates sequentially.
+
 Semi-automatic update
 ---------------------
 
@@ -15,15 +20,17 @@ Semi-automatic update
 #. Now you should `apply a patch <https://kubernetes.io/docs/tasks/run-application/update-api-object-kubectl-patch/>`_ to your
    deployment, supplying necessary image names with a newer version tag. This
    is done with the ``kubectl patch deployment`` command. For example, updating
-   to the ``1.1.0`` version should look as follows::
+   to the ``1.2.0`` version should look as follows::
 
      kubectl patch deployment percona-server-mongodb-operator \
-        -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.1.0"}]}}}}'
+        -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.2.0"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
+        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v1-2-0\"}" }},
         "spec": {
-            "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0",
-            "backup": { "image": "percona/percona-server-mongodb-operator:1.1.0-backup" }
+            "image": "percona/percona-server-mongodb-operator:1.2.0-mongod4.0",
+            "backup": { "image": "percona/percona-server-mongodb-operator:1.2.0-backup" },
+            "pmm": { "image": "percona/percona-server-mongodb-operator:1.2.0-pmm" }
         }}'
 
 #. The deployment rollout will be automatically triggered by the applied patch.
@@ -41,15 +48,17 @@ Manual update
 #. Now you should `apply a patch <https://kubernetes.io/docs/tasks/run-application/update-api-object-kubectl-patch/>`_ to your
    deployment, supplying necessary image names with a newer version tag. This
    is done with the ``kubectl patch deployment`` command. For example, updating
-   to the ``1.1.0`` version should look as follows::
+   to the ``1.2.0`` version should look as follows::
 
      kubectl patch deployment percona-server-mongodb-operator \
-        -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.1.0"}]}}}}'
+        -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:1.2.0"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "spec": {"replsets":{ "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0" },
-            "mongod": { "image": "percona/percona-server-mongodb-operator:1.1.0-mongod4.0" },
-            "backup":   { "image": "percona/percona-server-mongodb-operator:1.1.0-backup" }
+        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v1-2-0\"}" }},
+        "spec": {"replsets":{ "image": "percona/percona-server-mongodb-operator:1.2.0-mongod4.0" },
+            "mongod": { "image": "percona/percona-server-mongodb-operator:1.2.0-mongod4.0" },
+            "backup":   { "image": "percona/percona-server-mongodb-operator:1.2.0-backup" },
+            "pmm": { "image": "percona/percona-server-mongodb-operator:1.2.0-pmm" }
         }}'
 
 #. Pod with the newer Percona Server for MongoDB image will start after you
