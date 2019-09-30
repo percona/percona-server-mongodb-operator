@@ -51,11 +51,11 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
    .. code:: bash
 
-      $ docker pull docker.io/perconalab/percona-server-mongodb-operator@sha256:69c935ac93d448db76f257965470367683202f725f50d6054eae1c3d2e731b9a
+      $ docker pull docker.io/perconalab/percona-server-mongodb-operator@sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
       Trying to pull repository docker.io/perconalab/percona-server-mongodb-operator ...
-      sha256:69c935ac93d448db76f257965470367683202f725f50d6054eae1c3d2e731b9a: Pulling from docker.io/perconalab/percona-server-mongodb-operator
-      Digest: sha256:69c935ac93d448db76f257965470367683202f725f50d6054eae1c3d2e731b9a
-      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb-operator@sha256:69c935ac93d448db76f257965470367683202f725f50d6054eae1c3d2e731b9a
+      sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf: Pulling from docker.io/perconalab/percona-server-mongodb-operator
+      Digest: sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
+      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb-operator@sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
 
 5. The following method can push an image to the custom registry
    for the example OpenShift PSMDB project:
@@ -63,9 +63,9 @@ Operator deployed in the OpenShift environment demonstrates the process:
    .. code:: bash
 
       $ docker tag \
-          docker.io/perconalab/percona-server-mongodb-operator@sha256:69c935ac93d448db76f257965470367683202f725f50d6054eae1c3d2e731b9a \
-          172.30.162.173:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6
-      $ docker push 172.30.162.173:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6
+          docker.io/perconalab/percona-server-mongodb-operator@sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf \
+          172.30.162.173:5000/psmdb/percona-server-mongodb-operator:1.2.0-mongod3.6
+      $ docker push 172.30.162.173:5000/psmdb/percona-server-mongodb-operator:1.2.0-mongod3.6
 
 6. Verify the image is available in the OpenShift registry with the following command:
 
@@ -73,7 +73,7 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
       $ oc get is
       NAME                              DOCKER REPO                                                             TAGS             UPDATED
-      percona-server-mongodb-operator   docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator  0.2.1-mongod3.6  2 hours ago
+      percona-server-mongodb-operator   docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator  1.2.0-mongod3.6  2 hours ago
 
 7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6``)
 
@@ -99,14 +99,30 @@ Percona Server for MongoDB Operator:
 
          * - Image
            - Digest
-         * - percona/percona-server-mongodb-operator:0.3.0  
-           - 69d2018790ed14de1a79bef1fd7afc5fb91b57374f1e4ca33e5f48996646bb3e
-         * - percona/percona-server-mongodb-operator:0.3.0-mongod3.6.10
-           - a02a10c9e0bc36fac2b1a7e1215832c5816abfbbe0018fca61d133835140b4e8
-         * - percona/percona-server-mongodb-operator:0.3.0-mongod4.0.6
-           - 0849fee6073e85414ca36d4f394046342d623292f03e9d3afd5bd5b02e6df812
-         * - percona/percona-server-mongodb-operator:0.3.0-backup
-           - 5a32ddf1194d862b5f6f3826fa85cc4f3c367ccd8e69e501f27b6bf94f7e3917
-         * - perconalab/pmm-client:1.17.1
-           - f762cda2eda9ef17bfd1242ede70ee72595611511d8d0c5c46931ecbc968e9af 
+         * - percona/percona-server-mongodb-operator:1.2.0
+           - fe8699da9ec2f5a2461ecc0e0ff70913ce4c9f053f86992e5a0236597871187b
+         * - percona/percona-server-mongodb-operator:1.2.0-mongod3.6
+           - eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
+         * - percona/percona-server-mongodb-operator:1.2.0-mongod4.0
+           - baf07ebf9774832999238c03d3c713cca17e7e91d68aeefd93c04a90c5bf8619
+         * - percona/percona-server-mongodb-operator:1.2.0-backup
+           - 1c79e370edf0391e7cba0b0d63d94a8cfc4bb699018e3508a2140a2c198c83c5
+         * - percona/percona-server-mongodb-operator:1.2.0-pmm
+           - 28bbb6693689a15c407c85053755334cd25d864e632ef7fed890bc85726cfb68
+         * - percona/percona-server-mongodb-operator:1.1.0
+           - d5155898cd19bb70a4d100bb60bfb39d8c9de82c33a908d30fd7caeca1385fc3
+         * - percona/percona-server-mongodb-operator:1.1.0-mongod3.6
+           - b3a653b5143a7a60b624c825da8190af6e2e15dd3bc1baee24a7baaeaa455719
+         * - percona/percona-server-mongodb-operator:1.1.0-mongod4.0
+           - 6af85917a86a838c0ef14b923336f8b150e31a85978b537157d71fed857ae723
+         * - percona/percona-server-mongodb-operator:1.1.0-backup
+           - 1c79e370edf0391e7cba0b0d63d94a8cfc4bb699018e3508a2140a2c198c83c5
+         * - percona/percona-server-mongodb-operator:1.0.0
+           - 10a545afc94b7d0040bdbfeed5f64b332861dad190639baecc2989c94284efd1
+         * - percona/percona-server-mongodb-operator:1.0.0-mongod3.6.12
+           - 31a06ecdd74746d4ff7fe48ae06fd76b461f2a7730de3bd17d7ee4f9d0d2d1e5
+         * - percona/percona-server-mongodb-operator:1.0.0-mongod4.0.9
+           - 6743dc153c073477fc64db0ccf9a63939d2d949ca37d5bc2848bbc3e5ccd8a7a
+         * - percona/percona-server-mongodb-operator:1.0.0-backup
+           - c799d3efcb0b42cdf50c47aea8b726e3bbd8199547f438cffd70be6e2722feec
 
