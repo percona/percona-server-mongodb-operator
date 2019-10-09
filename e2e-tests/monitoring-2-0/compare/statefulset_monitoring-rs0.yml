@@ -1,0 +1,206 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: monitoring-rs0
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: monitoring
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: monitoring
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
+  serviceName: monitoring-rs0
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: monitoring
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
+    spec:
+      containers:
+      - args:
+        - --bind_ip_all
+        - --auth
+        - --dbpath=/data/db
+        - --port=27017
+        - --replSet=rs0
+        - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslAllowInvalidCertificates
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
+        - --profile=2
+        - --rateLimit=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+        - --wiredTigerIndexPrefixCompression=true
+        env:
+        - name: SERVICE_NAME
+          value: monitoring
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_REPLSET
+          value: rs0
+        envFrom:
+        - secretRef:
+            name: some-users
+            optional: false
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - mongodb-healthcheck
+            - k8s
+            - liveness
+          failureThreshold: 12
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: mongod
+        ports:
+        - containerPort: 27017
+          name: mongodb
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 8
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          tcpSocket:
+            port: 27017
+          timeoutSeconds: 2
+        resources: {}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: monitoring-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
+          readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: monitoring-mongodb-encryption-key
+          readOnly: true
+        workingDir: /data/db
+      - env:
+        - name: PMM_SERVER
+          value: monitoring-service
+        - name: DB_TYPE
+          value: mongodb
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_CLUSTER_MONITOR_USER
+              name: some-users
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_CLUSTER_MONITOR_PASSWORD
+              name: some-users
+        - name: DB_HOST
+          value: localhost
+        - name: DB_CLUSTER
+          value: monitoring
+        - name: DB_PORT
+          value: "27017"
+        - name: DB_PORT_MIN
+          value: "30100"
+        - name: DB_PORT_MAX
+          value: "30105"
+        - name: PMM_USER
+          valueFrom:
+            secretKeyRef:
+              key: PMM_SERVER_USER
+              name: some-users
+        - name: PMM_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: PMM_SERVER_PASSWORD
+              name: some-users
+        imagePullPolicy: Always
+        name: pmm-client
+        ports:
+        - containerPort: 7777
+          protocol: TCP
+        - containerPort: 30100
+          protocol: TCP
+        - containerPort: 30101
+          protocol: TCP
+        - containerPort: 30102
+          protocol: TCP
+        - containerPort: 30103
+          protocol: TCP
+        - containerPort: 30104
+          protocol: TCP
+        - containerPort: 30105
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: monitoring-mongodb-keyfile
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: monitoring-mongodb-keyfile
+      - name: monitoring-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: monitoring-mongodb-encryption-key
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: monitoring-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: monitoring-ssl-internal
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: mongod-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+    status:
+      phase: Pending
