@@ -10,10 +10,6 @@ See the [Official Documentation](https://www.percona.com/doc/kubernetes-operator
 
 [![Official Documentation](https://via.placeholder.com/260x60/419bdc/FFFFFF/?text=Documentation)](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/)
 
-# DISCLAIMER
-
-**This code is incomplete, expect major issues and changes until this repo has stabilised!**
-
 ## Submitting Bug Reports
 
 If you find a bug in Percona Docker Images or in one of the related projects, please submit a report to that project's [JIRA](https://jira.percona.com) issue tracker.
