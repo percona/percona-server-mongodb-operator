@@ -31,7 +31,7 @@ create_namespace() {
         oc project "$namespace"
         oc adm policy add-scc-to-user hostaccess -z default || :
     else
-       kubectl_bin delete namespace "$namespace" || :
+        kubectl_bin delete namespace "$namespace" || :
         wait_for_delete "namespace/$namespace"
         kubectl_bin create namespace "$namespace"
         kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
