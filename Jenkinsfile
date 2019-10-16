@@ -155,8 +155,9 @@ pipeline {
                     steps {
                         CreateCluster('basic')
                         runTest('storage', 'basic')
-                        runTest('monitoring', 'basic')
-                        runTest('monitoring-2-0', 'basic')
+                        // disable unstable test CLOUD-423
+                        // runTest('monitoring', 'basic')
+                        // runTest('monitoring-2-0', 'basic')
                         runTest('arbiter', 'basic')
                         runTest('service-per-pod', 'basic')
                     }
