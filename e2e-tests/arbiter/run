@@ -67,8 +67,9 @@ main() {
     desc 'check arbiter without service-per-pod'
     check_cr_config "arbiter-rs0"
 
-    desc 'check arbiter with ClusterIP'
-    check_cr_config "arbiter-clusterip-rs0"
+    # disable unstable "arbiter with ClusterIP" test
+    #desc 'check arbiter with ClusterIP'
+    #check_cr_config "arbiter-clusterip-rs0"
 
     destroy $namespace
 }
