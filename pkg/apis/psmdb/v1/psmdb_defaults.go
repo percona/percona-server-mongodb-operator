@@ -179,6 +179,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Status.Replsets = make(map[string]*ReplsetStatus)
 	}
 
+	if len(cr.Spec.ClusterServiceDNSSuffix) == 0 {
+		cr.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
+	}
+
 	return nil
 }
 
