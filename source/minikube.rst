@@ -31,14 +31,18 @@ The following steps are needed to run PSMDB Operator on minikube:
 
      kubectl apply -f deploy/bundle.yaml
 
-3. Edit the ``deploy/cr.yaml`` file to change the following keys in
-   ``replsets`` section, which would otherwise prevent running
-   Percona Server for MongoDB on your local Kubernetes installation:
+3. Because minikube runs locally, the default ``deploy/cr.yaml`` file should
+   be edited to adapt the Operator for the the local installation with limited
+   resources. Change the following keys in the ``replsets`` section:
 
-   #. comment ``resources.requests.memory`` and ``resources.requests.cpu`` keys 
-   #. set ``affinity.antiAffinityTopologyKey`` key to ``"none"``
+   #. comment ``resources.requests.memory`` and ``resources.requests.cpu`` keys
+      (this will fit the Operator in minikube default limitations)
+   #. set ``affinity.antiAffinityTopologyKey`` key to ``"none"`` (the Operator
+      will be unable to spread the cluster on several nodes)
 
-   Also, switch ``allowUnsafeConfigurations`` key to ``true``. 
+   Also, switch ``allowUnsafeConfigurations`` key to ``true`` (this option turns
+   off the Operator’s control over the cluster size, making it possible to
+   deploy Percona Server for MongoDB as a one-node cluster).
 
 4. Now apply the ``deploy/cr.yaml`` file with the following command::
 
