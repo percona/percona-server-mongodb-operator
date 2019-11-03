@@ -341,14 +341,12 @@ configuration options.
       * - security.encryptionCipherMode
         - string
         - ``AES256-CBC``
-        - Sets `PSMDB encryption cipher mode
-   <https://docs.mongodb.com/manual/reference/program/mongod/#cmdoption-mongod-encryptionciphermode>`_
+        - Sets `PSMDB encryption cipher mode <https://docs.mongodb.com/manual/reference/program/mongod/#cmdoption-mongod-encryptionciphermode>`_
 
       * - security.encryptionKeySecret
         - string
         - ``my-cluster-name-mongodb-encryption-key``
-        - Specifies a secret object with the
-   `encryption key <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_
+        - Specifies a secret object with the `encryption key <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_
 
       * - setParameter.ttlMonitorSleepSecs
         - int
