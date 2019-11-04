@@ -248,12 +248,12 @@ The replsets section controls the MongoDB Replica Set.
        - ``Directory``
        - The `Kubernetes hostPath volume type <https://kubernetes.io/docs/concepts/storage/volumes/#hostpath>`_
 
-     * - volumeSpec.persistentVolumeClaim.storageClassName
+     * - volumeSpec.persistentVolumeClaim. storageClassName
        - string
        - ``standard``
        - The `Kubernetes Storage Class <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_ to use with the MongoDB container `Persistent Volume Claim <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_
 
-     * - volumeSpec.persistentVolumeClaim.accessModes
+     * - volumeSpec.persistentVolumeClaim. accessModes
        - array
        - ``[ "ReadWriteOnce" ]``
        - The `Kubernetes Persistent Volume <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ access modes for the MongoDB container
@@ -263,14 +263,12 @@ The replsets section controls the MongoDB Replica Set.
        - ``3Gi``
        - The `Kubernetes Persistent Volume <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ size for the MongoDB container
 
-
-
      * - storageClass
        - string
        -
        - Set the `Kubernetes Storage Class <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_ to use with the MongoDB `Persistent Volume Claim <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_
 
-    * - resources.limits.storage
+     * - resources.limits.storage
        - string
        -
        - `Kubernetes Storage limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_  for `Persistent Volume Claim <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_
@@ -365,12 +363,12 @@ configuration options.
         - ``60``
         - Sets the PSMDB `ttlMonitorSleepSecs` option
 
-      * - setParameter.wiredTigerConcurrentReadTransactions
+      * - setParameter. wiredTigerConcurrentReadTransactions
         - int
         - ``128``
         - Sets the `wiredTigerConcurrentReadTransactions option <https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions>`_
 
-      * - setParameter.wiredTigerConcurrentWriteTransactions
+      * - setParameter. wiredTigerConcurrentWriteTransactions
         - int
         - ``128``
         - Sets the `wiredTigerConcurrentWriteTransactions option <https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions>`_
@@ -380,7 +378,7 @@ configuration options.
         - ``wiredTiger``
         - Sets the `storage.engine option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine>`_
 
-      * - storage.inMemory.engineConfig.inMemorySizeRatio
+      * - storage.inMemory.engineConfig. inMemorySizeRatio
         - float
         - ``0.9``
         - The ratio used to compute the `storage.engine.inMemory.inMemorySizeGb option <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html#--inMemorySizeGB>`_
@@ -395,27 +393,27 @@ configuration options.
         - ``false``
         - Sets the `storage.mmapv1.smallfiles option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.smallFiles>`_
 
-      * - storage.wiredTiger.engineConfig.cacheSizeRatio
+      * - storage.wiredTiger.engineConfig. cacheSizeRatio
         - float
         - ``0.5``
         - The ratio used to compute the `storage.wiredTiger.engineConfig.cacheSizeGB option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB>`_
 
-      * - storage.wiredTiger.engineConfig.directoryForIndexes
+      * - storage.wiredTiger.engineConfig. directoryForIndexes
         - bool
         - ``false``
         - Sets the `storage.wiredTiger.engineConfig.directoryForIndexes option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.directoryForIndexes>`_
 
-      * - storage.wiredTiger.engineConfig.journalCompressor
+      * - storage.wiredTiger.engineConfig. journalCompressor
         - string
         - ``snappy``
         - Sets the `storage.wiredTiger.engineConfig.journalCompressor option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.journalCompressor>`_
 
-      * - storage.wiredTiger.collectionConfig.blockCompressor
+      * - storage.wiredTiger.collectionConfig. blockCompressor
         - string
         - ``snappy``
         - Sets the `storage.wiredTiger.collectionConfig.blockCompressor option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.collectionConfig.blockCompressor>`_
 
-      * - storage.wiredTiger.indexConfig.prefixCompression
+      * - storage.wiredTiger.indexConfig. prefixCompression
         - bool
         - ``true``
         - Sets the `storage.wiredTiger.indexConfig.prefixCompression option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.indexConfig.prefixCompression>`_
@@ -507,15 +505,15 @@ Percona Server for MongoDB backups.
         - ``0.2G``
         - `Kubernetes Memory limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`__ for the MongoDB Coordinator container
 
-     * - coordinator.resources.requests.cpu
-       - string
-       - ``100m``
-       - The `Kubernetes CPU requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container
+      * - coordinator.resources.requests.cpu
+        - string
+        - ``100m``
+        - The `Kubernetes CPU requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container
 
-     * - coordinator.resources.requests.memory
-       - string
-       - ``0.1G``
-       - The `Kubernetes Memory requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container
+      * - coordinator.resources.requests.memory
+        - string
+        - ``0.1G``
+        - The `Kubernetes Memory requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container
 
       * - coordinator.resources.requests.storage
         - string
