@@ -128,6 +128,11 @@ The replsets section controls the MongoDB Replica Set.
        - ``6000``
        - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ time limit  for the Replica Set nodes
 
+     * - priorityClassName
+       - string
+       - ``high priority``
+       - The `Kuberentes Pod priority class <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass>`_  for the Replica Set nodes
+
      * - annotations.iam.amazonaws.com/role
        - string
        - ``role-arn``
