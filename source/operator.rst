@@ -233,6 +233,16 @@ The replsets section controls the MongoDB Replica Set.
        - ``0.5G``
        - `Kubernetes Memory limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`__ for MongoDB container
 
+     * - resources.requests.cpu
+       - string
+       -
+       - The `Kubernetes CPU requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container
+
+     * - resources.requests.memory
+       - string
+       -
+       - The `Kubernetes Memory requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container
+
      * - volumeSpec.emptyDir
        - string
        - ``{}``
@@ -258,31 +268,10 @@ The replsets section controls the MongoDB Replica Set.
        - ``[ "ReadWriteOnce" ]``
        - The `Kubernetes Persistent Volume <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ access modes for the MongoDB container
 
-     * - volumeSpec.resources.requests.storage
+     * - volumeSpec.persistentVolumeClaim. resources.requests.storage
        - string
        - ``3Gi``
        - The `Kubernetes Persistent Volume <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ size for the MongoDB container
-
-     * - storageClass
-       - string
-       -
-       - Set the `Kubernetes Storage Class <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_ to use with the MongoDB `Persistent Volume Claim <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_
-
-     * - resources.limits.storage
-       - string
-       -
-       - `Kubernetes Storage limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_  for `Persistent Volume Claim <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_
-
-     * - resources.requests.cpu
-       - string
-       -
-       - The `Kubernetes CPU requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container
-
-     * - resources.requests.memory
-       - string
-       -
-       - The `Kubernetes Memory requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container
-
 
 PMM Section
 -----------
