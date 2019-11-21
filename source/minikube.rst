@@ -41,7 +41,7 @@ The following steps are needed to run PSMDB Operator on minikube:
       will be unable to spread the cluster on several nodes)
 
    Also, switch ``allowUnsafeConfigurations`` key to ``true`` (this option turns
-   off the Operator’s control over the cluster size, making it possible to
+   off the Operator’s control over the cluster configuration, making it possible to
    deploy Percona Server for MongoDB as a one-node cluster).
 
 4. Now apply the ``deploy/cr.yaml`` file with the following command::
@@ -81,4 +81,3 @@ The following steps are needed to run PSMDB Operator on minikube:
    .. code:: bash
 
       mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.default.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
-
