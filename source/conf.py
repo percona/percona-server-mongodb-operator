@@ -139,9 +139,9 @@ extlinks = {'bug':
 'wsrepbug':
 ('https://github.com/codership/mysql-wsrep/issues/%s',
                       '#'),
-'pmmbug':
-('https://jira.percona.com/browse/PMM-%s',
-                      'PMM-')}
+''cloudbug':
+('https://jira.percona.com/browse/CLOUD-%s',
+                      'CLOUD-')}
 
 # A list of ignored prefixes for module index sorting.
 #modindex_common_prefix = []
