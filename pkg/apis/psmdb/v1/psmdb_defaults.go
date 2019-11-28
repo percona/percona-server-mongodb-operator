@@ -1,12 +1,9 @@
 package v1
 
 import (
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
-	v "github.com/hashicorp/go-version"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -64,7 +61,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
-		cr.Spec.Mongod.Security.EnableEncryption = cr.EncryptionByVersion()
+		is120, err := cr.VersionGreaterThanOrEqual("1.2.0")
+		if err != nil {
+			return fmt.Errorf("check version error: %v", err)
+		}
+		cr.Spec.Mongod.Security.EnableEncryption = &is120
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption &&
@@ -184,37 +185,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	return nil
-}
-
-func (cr *PerconaServerMongoDB) EncryptionByVersion() *bool {
-	encryption := true
-	apiVersion := cr.APIVersion
-	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
-		var newCR PerconaServerMongoDB
-		err := json.Unmarshal([]byte(lastCR), &newCR)
-		if err != nil {
-			encryption := false
-			return &encryption
-		}
-		apiVersion = newCR.APIVersion
-	}
-	crVersion := strings.Replace(strings.TrimLeft(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
-	checkVersion, err := v.NewVersion("1.2.0")
-	if err != nil {
-		encryption = false
-		return &encryption
-	}
-	currentVersion, err := v.NewVersion(crVersion)
-	if err != nil {
-		encryption = false
-		return &encryption
-	}
-	if currentVersion.LessThan(checkVersion) {
-		encryption = false
-		return &encryption
-	}
-
-	return &encryption
 }
 
 // SetDefauts set default options for the replset
