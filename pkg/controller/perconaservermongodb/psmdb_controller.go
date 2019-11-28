@@ -450,8 +450,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 			_, okl := pmmsec.Data[psmdb.PMMUserKey]
 			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
-			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp, cr.Name, !cr.VersionLessThan120())
-			if !cr.VersionLessThan120() {
+			is120, err := cr.VersionGreaterThanOrEqual("1.2.0")
+			if err != nil {
+				return nil, fmt.Errorf("check version error: %v", err)
+			}
+
+			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp, cr.Name, is120)
+			if is120 {
 				res, err := psmdb.CreateResources(cr.Spec.PMM.Resources)
 				if err != nil {
 					return nil, fmt.Errorf("pmm container error: create resources error: %v", err)
@@ -474,12 +479,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if len(sfsSpec.Template.Annotations) == 0 {
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
-	sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
+	is110, err := cr.VersionGreaterThanOrEqual("1.1.0")
+	if err != nil {
+		return nil, fmt.Errorf("detect version error: %v", err)
+	}
+	if is110 {
+		sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
+	}
 	sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return nil, fmt.Errorf("get secret hash error: %v", err)
 	} else if err == nil {
-		sfsSpec.Template.Annotations["percona.com/ssl-internal-hash"] = sslInternalHash
+		if is110 {
+			sfsSpec.Template.Annotations["percona.com/ssl-internal-hash"] = sslInternalHash
+		}
 	}
 
 	sfs.Spec = sfsSpec
