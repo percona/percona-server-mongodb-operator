@@ -174,6 +174,7 @@ pipeline {
                         CreateCluster('backups')
                         runTest('demand-backup', 'backups')
                         runTest('scheduled-backup', 'backups')
+                        runTest('upgrade-consistency', 'backups')
                     }
                 }
             }
