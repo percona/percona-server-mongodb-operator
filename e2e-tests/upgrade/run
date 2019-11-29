@@ -16,7 +16,7 @@ IMAGE_BACKUP_TO_UPDATE=${IMAGE_BACKUP}
 OPERATOR_NAME='percona-server-mongodb-operator'
 
 MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-API='psmdb.percona.com/v1'
+API='psmdb.percona.com/v1-1-0'
 IMAGE='percona/percona-server-mongodb-operator:1.1.0'
 IMAGE_PMM='percona/percona-server-mongodb-operator:1.1.0-pmm'
 IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod$MONGO_VER"
@@ -94,9 +94,9 @@ main() {
 
     if [[ "${IMAGE_TO_UPDATE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
           && "${IMAGE_MONGOD_TO_UPDATE}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
-        : Operator image has been updated correctly
+        : MongoDB image has been updated correctly
     else
-        echo 'Operator image has not been updated'
+        echo 'MongoDB image has not been updated'
         exit 1
     fi
     
