@@ -1,10 +1,3 @@
-void installRpms() {
-    sh '''
-        sudo yum install -y https://repo.percona.com/yum/percona-release-latest.noarch.rpm || true
-        sudo percona-release enable-only tools
-        sudo yum install -y  percona-xtrabackup-80 jq | true
-    '''
-}
 void CreateCluster(String CLUSTER_PREFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
@@ -46,25 +39,34 @@ void makeReport() {
 }
 
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
+    FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"
     testsReportMap[TEST_NAME] = 'failed'
-    popArtifactFile("$GIT_BRANCH-$GIT_SHORT_COMMIT-$TEST_NAME")
+    popArtifactFile(FILE_NAME)
     sh """
-        if [ -f "$GIT_BRANCH-$GIT_SHORT_COMMIT-$TEST_NAME" ]; then
+        if [ -f "$FILE_NAME" ]; then
             echo Skip $TEST_NAME test
         else
             export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
             source $HOME/google-cloud-sdk/path.bash.inc
             ./e2e-tests/$TEST_NAME/run
-            touch $GIT_BRANCH-$GIT_SHORT_COMMIT-$TEST_NAME
+            touch $FILE_NAME
         fi
     """
     testsReportMap[TEST_NAME] = 'passed'
-    pushArtifactFile("$GIT_BRANCH-$GIT_SHORT_COMMIT-$TEST_NAME")
+    pushArtifactFile(FILE_NAME)
 
     sh """
-        rm -rf $GIT_BRANCH-$GIT_SHORT_COMMIT-$TEST_NAME
+        rm -rf $FILE_NAME
     """
 }
+void installRpms() {
+    sh '''
+        sudo yum install -y https://repo.percona.com/yum/percona-release-latest.noarch.rpm || true
+        sudo percona-release enable-only tools
+        sudo yum install -y percona-xtrabackup-80 jq | true
+    '''
+}
+
 def skipBranchBulds = true
 if ( env.CHANGE_URL ) {
     skipBranchBulds = false
@@ -96,10 +98,10 @@ pipeline {
                     fi
 
                     source $HOME/google-cloud-sdk/path.bash.inc
-                    gcloud components update kubectl
-                    gcloud version
+                    gcloud components install alpha
+                    gcloud components install kubectl
 
-                    curl -s https://storage.googleapis.com/kubernetes-helm/helm-v2.12.1-linux-amd64.tar.gz \
+                    curl -s https://storage.googleapis.com/kubernetes-helm/helm-v2.16.1-linux-amd64.tar.gz \
                         | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
                     curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
                         | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
@@ -118,18 +120,20 @@ pipeline {
                 }
             }
             steps {
-                 withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
                     sh '''
                         DOCKER_TAG=perconalab/percona-server-mongodb-operator:$VERSION
                         docker_tag_file='./results/docker/TAG'
                         mkdir -p $(dirname ${docker_tag_file})
                         echo ${DOCKER_TAG} > "${docker_tag_file}"
-                        sg docker -c "
-                            docker login -u '${USER}' -p '${PASS}'
-                            export IMAGE=\$DOCKER_TAG
-                            ./e2e-tests/build
-                            docker logout
-                        "
+
+                            sg docker -c "
+                                docker login -u '${USER}' -p '${PASS}'
+                                export IMAGE=\$DOCKER_TAG
+                                ./e2e-tests/build
+                                docker logout
+                            "
+                            sudo rm -rf ./build
                     '''
                 }
                 stash includes: 'results/docker/TAG', name: 'IMAGE'
@@ -192,7 +196,7 @@ pipeline {
                             sh """
                                 curl -v -X POST \
                                     -H "Authorization: token ${GITHUB_API_TOKEN}" \
-                                    -d "{\\"body\\":\\"PSMDB operator docker  - ${IMAGE}\\"}" \
+                                    -d "{\\"body\\":\\"PSMDB operator docker - ${IMAGE}\\"}" \
                                     "https://api.github.com/repos/\$(echo $CHANGE_URL | cut -d '/' -f 4-5)/issues/${CHANGE_ID}/comments"
                             """
                         }
@@ -225,7 +229,9 @@ pipeline {
                 }
             }
             sh '''
+                sudo docker rmi -f \$(sudo docker images -q) || true
                 sudo rm -rf ./*
+                sudo rm -rf $HOME/google-cloud-sdk
             '''
             deleteDir()
         }
