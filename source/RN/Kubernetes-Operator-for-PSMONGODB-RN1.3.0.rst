@@ -26,13 +26,6 @@ All of Percona’s software is open-source and free.
   dependencies and modules.
 * :cloudbug:`390`: Helm chart for PMM 2.0 have been provided
 
-**Fixed bugs:**
-
-* Oscillations of the cluster status between "initializing" and "ready" took
-  place after an update.
-* The Operator was removing other cron jobs in case of the enabled backups
-  without defined tasks (contributed by `Marcel Heers <https://github.com/mheers>`_).
-
 `Percona Server for MongoDB <https://www.percona.com/software/mongo-database/percona-server-for-mongodb>`_
 is an enhanced, open source and highly-scalable database that is a
 fully-compatible, drop-in replacement for MongoDB Community Edition. It supports
