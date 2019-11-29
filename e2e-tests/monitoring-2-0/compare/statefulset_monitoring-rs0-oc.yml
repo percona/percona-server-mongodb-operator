@@ -131,6 +131,16 @@ spec:
           value: "30100"
         - name: DB_PORT_MAX
           value: "30105"
+        - name: PMM_USER
+          valueFrom:
+            secretKeyRef:
+              key: PMM_SERVER_USER
+              name: some-users
+        - name: PMM_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: PMM_SERVER_PASSWORD
+              name: some-users
         imagePullPolicy: Always
         name: pmm-client
         ports:
