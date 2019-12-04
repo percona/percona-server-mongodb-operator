@@ -17,6 +17,7 @@ deploy_helm $namespace
 deploy_operator
 
 desc 'install Minio'
+helm repo update
 helm del --purge minio-service || :
 helm install \
     --name minio-service \
