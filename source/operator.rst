@@ -476,7 +476,7 @@ Percona Server for MongoDB backups.
 
       * - image
         - string
-        - ``percona/percona-server-mongodb-operator:1.2.0-backup``
+        - ``percona/percona-server-mongodb-operator:1.3.0-backup``
         - The Percona Server for MongoDB Docker image to use for the backup
   
       * - serviceAccountName
