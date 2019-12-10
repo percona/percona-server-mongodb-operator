@@ -73,9 +73,9 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
       $ oc get is
       NAME                              DOCKER REPO                                                             TAGS             UPDATED
-      percona-server-mongodb-operator   docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator  1.3.0-mongod3.6  2 hours ago
+      percona-server-mongodb-operator   docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator  {{{release}}}-mongod3.6  2 hours ago
 
-7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6``)
+7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator:{{{release}}}-mongod3.6``)
 
    .. note::
 
