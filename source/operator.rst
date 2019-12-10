@@ -24,6 +24,12 @@ file. This file contains the following spec sections:
      - ``3.6.8``
      - The Dockerhub tag of `percona/percona-server-mongodb <https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/>`_ to deploy
 
+   * - ClusterServiceDNSSuffix
+     - string
+     - ``svc.cluster.local``
+     - The (non-standard) cluster domain to be used as a suffix of the Service
+       name.
+
    * - secrets
      - subdoc
      -
