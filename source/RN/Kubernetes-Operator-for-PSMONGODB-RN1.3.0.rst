@@ -18,13 +18,11 @@ The Operator source code is available `in our Github repository <https://github.
 All of Percona’s software is open-source and free.
 
 **New features and improvements:**
-* :cloudbug:`415`: Non-default cluster domain can now be specified with the new
+* :cloudjira:`415`: Non-default cluster domain can now be specified with the new
   ``ClusterServiceDNSSuffix`` operator option.
-* :cloudbug:`411`: Now user is able to to adjust securityContext, thus replacing
-  the automatically generated securityContext with the customized one.
-* :cloudbug:`395`: Decrease PSMDB images size by half, removing non-necessary
+* :cloudjira:`395`: Decrease PSMDB images size by half, removing non-necessary
   dependencies and modules.
-* :cloudbug:`390`: Helm chart for PMM 2.0 have been provided
+* :cloudjira:`390`: Helm chart for PMM 2.0 have been provided
 
 `Percona Server for MongoDB <https://www.percona.com/software/mongo-database/percona-server-for-mongodb>`_
 is an enhanced, open source and highly-scalable database that is a
