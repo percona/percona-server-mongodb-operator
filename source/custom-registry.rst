@@ -51,11 +51,11 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
    .. code:: bash
 
-      $ docker pull docker.io/perconalab/percona-server-mongodb-operator@sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
+      $ docker pull docker.io/perconalab/percona-server-mongodb-operator@sha256:4b41c7149d6968a6b61c11e7af7cfea2d67057179716e2c08ba9f7f12459c902
       Trying to pull repository docker.io/perconalab/percona-server-mongodb-operator ...
-      sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf: Pulling from docker.io/perconalab/percona-server-mongodb-operator
-      Digest: sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
-      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb-operator@sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
+      sha256:4b41c7149d6968a6b61c11e7af7cfea2d67057179716e2c08ba9f7f12459c902: Pulling from docker.io/perconalab/percona-server-mongodb-operator
+      Digest: sha256:4b41c7149d6968a6b61c11e7af7cfea2d67057179716e2c08ba9f7f12459c902
+      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb-operator@sha256:4b41c7149d6968a6b61c11e7af7cfea2d67057179716e2c08ba9f7f12459c902
 
 5. The following method can push an image to the custom registry
    for the example OpenShift PSMDB project:
@@ -63,9 +63,9 @@ Operator deployed in the OpenShift environment demonstrates the process:
    .. code:: bash
 
       $ docker tag \
-          docker.io/perconalab/percona-server-mongodb-operator@sha256:eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf \
-          172.30.162.173:5000/psmdb/percona-server-mongodb-operator:1.2.0-mongod3.6
-      $ docker push 172.30.162.173:5000/psmdb/percona-server-mongodb-operator:1.2.0-mongod3.6
+          docker.io/perconalab/percona-server-mongodb-operator@sha256:4b41c7149d6968a6b61c11e7af7cfea2d67057179716e2c08ba9f7f12459c902 \
+          172.30.162.173:5000/psmdb/percona-server-mongodb-operator:1.3.0-mongod3.6
+      $ docker push 172.30.162.173:5000/psmdb/percona-server-mongodb-operator:1.3.0-mongod3.6
 
 6. Verify the image is available in the OpenShift registry with the following command:
 
@@ -73,7 +73,7 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
       $ oc get is
       NAME                              DOCKER REPO                                                             TAGS             UPDATED
-      percona-server-mongodb-operator   docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator  1.2.0-mongod3.6  2 hours ago
+      percona-server-mongodb-operator   docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator  1.3.0-mongod3.6  2 hours ago
 
 7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb-operator:0.2.1-mongod3.6``)
 
@@ -99,6 +99,16 @@ Percona Server for MongoDB Operator:
 
          * - Image
            - Digest
+         * - percona/percona-server-mongodb-operator:1.3.0
+           - d6abd625833fe3f3cae49721b7600bab5eeeaba78129df4796218a7ce170260d
+         * - percona/percona-server-mongodb-operator:1.3.0-mongod3.6
+           - 4b41c7149d6968a6b61c11e7af7cfea2d67057179716e2c08ba9f7f12459c902
+         * - percona/percona-server-mongodb-operator:1.3.0-mongod4.0
+           - cbe42483639e15b0c3f916f237664b63d552d7a15090025a3c130e62aa2f04b7
+         * - percona/percona-server-mongodb-operator:1.3.0-backup
+           - 1c79e370edf0391e7cba0b0d63d94a8cfc4bb699018e3508a2140a2c198c83c5
+         * - percona/percona-server-mongodb-operator:1.3.0-pmm
+           - 28bbb6693689a15c407c85053755334cd25d864e632ef7fed890bc85726cfb68
          * - percona/percona-server-mongodb-operator:1.2.0
            - fe8699da9ec2f5a2461ecc0e0ff70913ce4c9f053f86992e5a0236597871187b
          * - percona/percona-server-mongodb-operator:1.2.0-mongod3.6
