@@ -94,45 +94,45 @@ Following table presents Percona’s certified images to be used with the
 Percona Server for MongoDB Operator:
 
       .. list-table:: 
-         :widths: 15 30
+         :widths: 35 65
          :header-rows: 1
 
          * - Image
            - Digest
-         * - percona/percona-server-mongodb-operator:1.3.0
+         * - percona/ percona-server-mongodb-operator: 1.3.0
            - d6abd625833fe3f3cae49721b7600bab5eeeaba78129df4796218a7ce170260d
-         * - percona/percona-server-mongodb-operator:1.3.0-mongod3.6
+         * - percona/ percona-server-mongodb-operator:1.3.0-mongod3.6
            - 4b41c7149d6968a6b61c11e7af7cfea2d67057179716e2c08ba9f7f12459c902
-         * - percona/percona-server-mongodb-operator:1.3.0-mongod4.0
+         * - percona/ percona-server-mongodb-operator:1.3.0-mongod4.0
            - cbe42483639e15b0c3f916f237664b63d552d7a15090025a3c130e62aa2f04b7
-         * - percona/percona-server-mongodb-operator:1.3.0-backup
+         * - percona/ percona-server-mongodb-operator:1.3.0-backup
            - 1c79e370edf0391e7cba0b0d63d94a8cfc4bb699018e3508a2140a2c198c83c5
-         * - percona/percona-server-mongodb-operator:1.3.0-pmm
+         * - percona/ percona-server-mongodb-operator:1.3.0-pmm
            - 28bbb6693689a15c407c85053755334cd25d864e632ef7fed890bc85726cfb68
-         * - percona/percona-server-mongodb-operator:1.2.0
+         * - percona/ percona-server-mongodb-operator: 1.2.0
            - fe8699da9ec2f5a2461ecc0e0ff70913ce4c9f053f86992e5a0236597871187b
-         * - percona/percona-server-mongodb-operator:1.2.0-mongod3.6
+         * - percona/ percona-server-mongodb-operator:1.2.0-mongod3.6
            - eccbfe8682db0b88656a0db59df773172f232f8f65bd8a203782de625a4b32bf
-         * - percona/percona-server-mongodb-operator:1.2.0-mongod4.0
+         * - percona/ percona-server-mongodb-operator:1.2.0-mongod4.0
            - baf07ebf9774832999238c03d3c713cca17e7e91d68aeefd93c04a90c5bf8619
-         * - percona/percona-server-mongodb-operator:1.2.0-backup
+         * - percona/ percona-server-mongodb-operator:1.2.0-backup
            - 1c79e370edf0391e7cba0b0d63d94a8cfc4bb699018e3508a2140a2c198c83c5
-         * - percona/percona-server-mongodb-operator:1.2.0-pmm
+         * - percona/ percona-server-mongodb-operator:1.2.0-pmm
            - 28bbb6693689a15c407c85053755334cd25d864e632ef7fed890bc85726cfb68
-         * - percona/percona-server-mongodb-operator:1.1.0
+         * - percona/ percona-server-mongodb-operator: 1.1.0
            - d5155898cd19bb70a4d100bb60bfb39d8c9de82c33a908d30fd7caeca1385fc3
-         * - percona/percona-server-mongodb-operator:1.1.0-mongod3.6
+         * - percona/ percona-server-mongodb-operator:1.1.0-mongod3.6
            - b3a653b5143a7a60b624c825da8190af6e2e15dd3bc1baee24a7baaeaa455719
-         * - percona/percona-server-mongodb-operator:1.1.0-mongod4.0
+         * - percona/ percona-server-mongodb-operator:1.1.0-mongod4.0
            - 6af85917a86a838c0ef14b923336f8b150e31a85978b537157d71fed857ae723
-         * - percona/percona-server-mongodb-operator:1.1.0-backup
+         * - percona/ percona-server-mongodb-operator:1.1.0-backup
            - 1c79e370edf0391e7cba0b0d63d94a8cfc4bb699018e3508a2140a2c198c83c5
-         * - percona/percona-server-mongodb-operator:1.0.0
+         * - percona/ percona-server-mongodb-operator: 1.0.0
            - 10a545afc94b7d0040bdbfeed5f64b332861dad190639baecc2989c94284efd1
-         * - percona/percona-server-mongodb-operator:1.0.0-mongod3.6.12
+         * - percona/ percona-server-mongodb-operator:1.0.0-mongod3.6.12
            - 31a06ecdd74746d4ff7fe48ae06fd76b461f2a7730de3bd17d7ee4f9d0d2d1e5
-         * - percona/percona-server-mongodb-operator:1.0.0-mongod4.0.9
+         * - percona/ percona-server-mongodb-operator:1.0.0-mongod4.0.9
            - 6743dc153c073477fc64db0ccf9a63939d2d949ca37d5bc2848bbc3e5ccd8a7a
-         * - percona/percona-server-mongodb-operator:1.0.0-backup
+         * - percona/ percona-server-mongodb-operator:1.0.0-backup
            - c799d3efcb0b42cdf50c47aea8b726e3bbd8199547f438cffd70be6e2722feec
 
