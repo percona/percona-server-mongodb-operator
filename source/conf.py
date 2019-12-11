@@ -139,10 +139,10 @@ extlinks = {'bug':
 'wsrepbug':
 ('https://github.com/codership/mysql-wsrep/issues/%s',
                       '#'),
-''pmmbug':
+'pmmbug':
 ('https://jira.percona.com/browse/PMM-%s',
                       'CLOUD-')}
-''cloudjira':
+'cloudjira':
 ('https://jira.percona.com/browse/CLOUD-%s',
                       'CLOUD-')}
 
