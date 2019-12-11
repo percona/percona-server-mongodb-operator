@@ -4,7 +4,7 @@ Percona Kubernetes Operator for Percona Server for MongoDB 1.3.0
 ================================================================
 
 Percona announces the *Percona Kubernetes Operator for Percona Server for
-MongoDB* 1.3.0 release on December 24, 2019. This release is now the current
+MongoDB* 1.3.0 release on December 11, 2019. This release is now the current
 GA release in the 1.3 series. `Install the Kubernetes Operator for Percona
 Server for MongoDB by following the instructions <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/kubernetes.html>`_.
 
@@ -18,6 +18,7 @@ The Operator source code is available `in our Github repository <https://github.
 All of Percona’s software is open-source and free.
 
 **New features and improvements:**
+
 * :cloudjira:`415`: Non-default cluster domain can now be specified with the new
   ``ClusterServiceDNSSuffix`` operator option.
 * :cloudjira:`395`: Decrease PSMDB images size by half, removing non-necessary

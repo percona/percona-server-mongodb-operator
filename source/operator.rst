@@ -291,7 +291,7 @@ The ``pmm`` section in the deploy/cr.yaml file contains configuration
 options for Percona Monitoring and Management.
 
 .. list-table::
-      :widths: 15 15 20 60
+      :widths: 10 10 20 60
       :header-rows: 1
 
       * - Key
@@ -350,7 +350,7 @@ configuration options.
 
       * - security.encryptionKeySecret
         - string
-        - ``my-cluster-name-mongodb-encryption-key``
+        - ``my-cluster-name-`` ``mongodb-`` ``encryption-key``
         - Specifies a secret object with the `encryption key <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_
 
       * - security.encryptionCipherMode
@@ -459,6 +459,7 @@ Percona Server for MongoDB backups.
 
 .. list-table::
       :header-rows: 1
+      :widths: 25 15 20 30
 
       * - Key
         - Value Type
@@ -482,12 +483,12 @@ Percona Server for MongoDB backups.
 
       * - image
         - string
-        - ``percona/percona-server-mongodb-operator:{{{release}}}-backup``
+        - ``percona/`` ``percona-server-`` ``mongodb-operator:`` ``{{{release}}}-backup``
         - The Percona Server for MongoDB Docker image to use for the backup
   
       * - serviceAccountName
         - string
-        - ``percona-server-mongodb-operator``
+        - ``percona-server-`` ``mongodb-operator``
         - name of the separate privileged service account used by the Operator
 
       * - coordinator.enableClientsLogging
