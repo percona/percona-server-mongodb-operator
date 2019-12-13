@@ -20,10 +20,12 @@ All of Percona’s software is open-source and free.
 **New features and improvements:**
 
 * :cloudjira:`415`: Non-default cluster domain can now be specified with the new
-  ``ClusterServiceDNSSuffix`` operator option.
-* :cloudjira:`395`: Decrease PSMDB images size by half, removing non-necessary
-  dependencies and modules.
-* :cloudjira:`390`: Helm chart for PMM 2.0 have been provided
+  ``ClusterServiceDNSSuffix`` Operator option.
+* :cloudjira:`395`: The Percona Server for MongoDB images size decrease by 42%
+  was achieved by removing unnecessary dependencies and modules to reduce the
+  cluster deployment time.
+* :cloudjira:`390`: Helm chart for Percona Monitoring and Management (PMM) 2.0
+  have been provided.
 
 `Percona Server for MongoDB <https://www.percona.com/software/mongo-database/percona-server-for-mongodb>`_
 is an enhanced, open source and highly-scalable database that is a
