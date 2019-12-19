@@ -30,12 +30,6 @@ var secretFileMode int32 = 288
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
-	var fsgroup *int64
-	if sv.Platform == api.PlatformKubernetes {
-		var tp int64 = 1001
-		fsgroup = &tp
-	}
-
 	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
@@ -89,6 +83,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Annotations: multiAZ.Annotations,
 			},
 			Spec: corev1.PodSpec{
+				SecurityContext:   replset.PodSecurityContext,
 				Affinity:          PodAffinity(multiAZ.Affinity, ls),
 				NodeSelector:      multiAZ.NodeSelector,
 				Tolerations:       multiAZ.Tolerations,
@@ -96,10 +91,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				RestartPolicy:     corev1.RestartPolicyAlways,
 				ImagePullSecrets:  m.Spec.ImagePullSecrets,
 				Containers: []corev1.Container{
-					container(m, replset, containerName, resources, fsgroup, ikeyName),
-				},
-				SecurityContext: &corev1.PodSecurityContext{
-					FSGroup: fsgroup,
+					container(m, replset, containerName, resources, ikeyName),
 				},
 				Volumes: volumes,
 			},

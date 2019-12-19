@@ -141,7 +141,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.Arbiter.Enabled = false
 			continue
 		}
-		err := replset.SetDefauts(cr.Spec.UnsafeConf, log)
+		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
 		if err != nil {
 			return err
 		}
@@ -188,7 +188,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 }
 
 // SetDefauts set default options for the replset
-func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) error {
+func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log logr.Logger) error {
 	if rs.VolumeSpec == nil {
 		return fmt.Errorf("replset %s: volumeSpec should be specified", rs.Name)
 	}
@@ -210,6 +210,25 @@ func (rs *ReplsetSpec) SetDefauts(unsafe bool, log logr.Logger) error {
 
 	if !unsafe {
 		rs.setSafeDefauts(log)
+	}
+
+	var fsgroup *int64
+	if platform == PlatformKubernetes {
+		var tp int64 = 1001
+		fsgroup = &tp
+	}
+
+	if rs.ContainerSecurityContext == nil {
+		tvar := true
+		rs.ContainerSecurityContext = &corev1.SecurityContext{
+			RunAsNonRoot: &tvar,
+			RunAsUser:    fsgroup,
+		}
+	}
+	if rs.PodSecurityContext == nil {
+		rs.PodSecurityContext = &corev1.PodSecurityContext{
+			FSGroup: fsgroup,
+		}
 	}
 
 	return nil
