@@ -174,6 +174,25 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Backup.ServiceAccountName = "percona-server-mongodb-operator"
 		}
 		cr.Spec.Backup.Coordinator.MultiAZ.reconcileOpts()
+
+		var fsgroup *int64
+		if platform == PlatformKubernetes {
+			var tp int64 = 1001
+			fsgroup = &tp
+		}
+
+		if cr.Spec.Backup.ContainerSecurityContext == nil {
+			tvar := true
+			cr.Spec.Backup.ContainerSecurityContext = &corev1.SecurityContext{
+				RunAsNonRoot: &tvar,
+				RunAsUser:    fsgroup,
+			}
+		}
+		if cr.Spec.Backup.PodSecurityContext == nil {
+			cr.Spec.Backup.PodSecurityContext = &corev1.PodSecurityContext{
+				FSGroup: fsgroup,
+			}
+		}
 	}
 
 	if cr.Status.Replsets == nil {

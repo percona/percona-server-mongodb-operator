@@ -19,23 +19,15 @@ func init() {
 
 const genSymbols = "abcdefghijklmnopqrstuvwxyz1234567890"
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image, serviceAccountName string, imagePullSecrets []corev1.LocalObjectReference, sv *version.ServerVersion) *batchv1b.CronJob {
-	var fsgroup *int64
-	if sv.Platform == api.PlatformKubernetes {
-		var tp int64 = 1001
-		fsgroup = &tp
-	}
-
-	trueVar := true
-
+func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference, sv *version.ServerVersion) *batchv1b.CronJob {
 	backupPod := corev1.PodSpec{
 		RestartPolicy:      corev1.RestartPolicyNever,
 		ImagePullSecrets:   imagePullSecrets,
-		ServiceAccountName: serviceAccountName,
+		ServiceAccountName: backupSpec.ServiceAccountName,
 		Containers: []corev1.Container{
 			{
 				Name:    backupCtlContainerName,
-				Image:   image,
+				Image:   backupSpec.Image,
 				Command: []string{"sh"},
 				Env: []corev1.EnvVar{
 					{
@@ -47,16 +39,11 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace, image, service
 						Value: genRandString(5),
 					},
 				},
-				Args: newBackupCronJobContainerArgs(backup, crName),
-				SecurityContext: &corev1.SecurityContext{
-					RunAsNonRoot: &trueVar,
-					RunAsUser:    fsgroup,
-				},
+				Args:            newBackupCronJobContainerArgs(backup, crName),
+				SecurityContext: backupSpec.ContainerSecurityContext,
 			},
 		},
-		SecurityContext: &corev1.PodSecurityContext{
-			FSGroup: fsgroup,
-		},
+		SecurityContext: backupSpec.PodSecurityContext,
 	}
 
 	return &batchv1b.CronJob{

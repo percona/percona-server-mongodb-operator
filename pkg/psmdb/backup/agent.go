@@ -17,13 +17,6 @@ import (
 )
 
 func AgentContainer(cr *api.PerconaServerMongoDB, sv *version.ServerVersion) corev1.Container {
-	var fsgroup *int64
-	if sv.Platform == api.PlatformKubernetes {
-		var tp int64 = 1001
-		fsgroup = &tp
-	}
-
-	tvar := true
 	fvar := false
 
 	return corev1.Container{
@@ -77,10 +70,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, sv *version.ServerVersion) cor
 				},
 			},
 		},
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: &tvar,
-			RunAsUser:    fsgroup,
-		},
+		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      cr.Name + "-backup-agent-config",
