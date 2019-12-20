@@ -1,0 +1,170 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: sec-context-rs0
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: sec-context
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: sec-context
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
+  serviceName: sec-context-rs0
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: sec-context
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
+    spec:
+      containers:
+      - args:
+        - --bind_ip_all
+        - --auth
+        - --dbpath=/data/db
+        - --port=27017
+        - --replSet=rs0
+        - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslAllowInvalidCertificates
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
+        - --slowms=100
+        - --profile=1
+        - --rateLimit=1
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+        - --wiredTigerCacheSizeGB=0.25
+        - --wiredTigerCollectionBlockCompressor=snappy
+        - --wiredTigerJournalCompressor=snappy
+        - --wiredTigerIndexPrefixCompression=true
+        - --setParameter
+        - ttlMonitorSleepSecs=60
+        - --setParameter
+        - wiredTigerConcurrentReadTransactions=128
+        - --setParameter
+        - wiredTigerConcurrentWriteTransactions=128
+        env:
+        - name: SERVICE_NAME
+          value: sec-context
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_REPLSET
+          value: rs0
+        envFrom:
+        - secretRef:
+            name: some-users
+            optional: false
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - mongodb-healthcheck
+            - k8s
+            - liveness
+          failureThreshold: 12
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: mongod
+        ports:
+        - containerPort: 27017
+          name: mongodb
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 8
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          tcpSocket:
+            port: 27017
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 500m
+            memory: 500M
+          requests:
+            cpu: 100m
+            memory: 100M
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: sec-context-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
+          readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: sec-context-mongodb-encryption-key
+          readOnly: true
+        workingDir: /data/db
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+        supplementalGroups:
+        - 1001
+        - 1002
+        - 1003
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: sec-context-mongodb-keyfile
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: sec-context-mongodb-keyfile
+      - name: sec-context-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: sec-context-mongodb-encryption-key
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: sec-context-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: sec-context-ssl-internal
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: mongod-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+    status:
+      phase: Pending

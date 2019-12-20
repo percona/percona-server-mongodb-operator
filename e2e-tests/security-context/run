@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+create_namespace $namespace
+deploy_operator
+
+kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+cluster="sec-context-rs0"
+
+desc 'create first PSMDB cluster'
+spinup_psmdb $cluster $test_dir/conf/$cluster.yml
+compare_kubectl "statefulset/${cluster}"
+
+desc 'change security context'
+postfix="-changed"
+apply_cluster $test_dir/conf/$cluster$postfix.yml
+sleep 10
+wait_for_running "${cluster}" "3"
+compare_kubectl "statefulset/${cluster}" $postfix
