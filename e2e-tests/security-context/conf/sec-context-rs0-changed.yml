@@ -68,6 +68,9 @@ spec:
       privileged: false
       runAsNonRoot: true
       runAsUser: 1001
+    podSecurityContext:
+      fsGroup: 1001
+      supplementalGroups: [1001, 1002, 1003]
     enabled: true
     debug: true
     restartOnFailure: true
@@ -91,7 +94,8 @@ spec:
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
     tasks:
-      - name: each-hour-pvc
+      - name: each-hour
+        enabled: true
         schedule: "0 */1 * * *"
-        keep: 30
         storageName: minio
+        compressionType: gzip

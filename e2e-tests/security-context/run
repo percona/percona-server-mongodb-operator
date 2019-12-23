@@ -10,11 +10,11 @@ create_namespace $namespace
 deploy_operator
 
 kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/minio-secret.yml
-cluster="sec-context-rs0"
+cluster="sec-context"
 
 desc 'create first PSMDB cluster'
-spinup_psmdb $cluster $test_dir/conf/$cluster.yml
-compare_kubectl "statefulset/${cluster}"
+spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
+compare_kubectl "statefulset/${cluster}-rs0"
 
 desc 'install Minio'
 helm del --purge minio-service || :
@@ -36,7 +36,8 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 
 desc 'change security context'
 postfix="-changed"
-apply_cluster $test_dir/conf/$cluster$postfix.yml
+apply_cluster $test_dir/conf/${cluster}-rs0$postfix.yml
 sleep 20
-wait_for_running "${cluster}" "3"
-compare_kubectl "statefulset/${cluster}" $postfix
+wait_for_running "${cluster}-rs0" "3"
+compare_kubectl "statefulset/${cluster}-rs0" $postfix
+compare_kubectl "cronjob.batch/${cluster}-backup-each-hour"
