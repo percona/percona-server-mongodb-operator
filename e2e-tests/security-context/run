@@ -9,16 +9,34 @@ test_dir=$(realpath $(dirname $0))
 create_namespace $namespace
 deploy_operator
 
-kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/minio-secret.yml
 cluster="sec-context-rs0"
 
 desc 'create first PSMDB cluster'
 spinup_psmdb $cluster $test_dir/conf/$cluster.yml
 compare_kubectl "statefulset/${cluster}"
 
+desc 'install Minio'
+helm del --purge minio-service || :
+helm install \
+    --name minio-service \
+    --set accessKey=some-access-key \
+    --set secretKey=some-secret-key \
+    --set service.type=ClusterIP \
+    --set configPath=/tmp/.minio/ \
+    --set persistence.size=2G \
+    --set environment.MINIO_REGION=us-east-1 \
+    --set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
+    stable/minio
+MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
+wait_pod $MINIO_POD
+kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+    /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
+
 desc 'change security context'
 postfix="-changed"
 apply_cluster $test_dir/conf/$cluster$postfix.yml
-sleep 10
+sleep 20
 wait_for_running "${cluster}" "3"
 compare_kubectl "statefulset/${cluster}" $postfix
