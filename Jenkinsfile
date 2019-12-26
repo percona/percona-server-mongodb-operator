@@ -170,6 +170,7 @@ pipeline {
                         runTest('monitoring-2-0', 'basic')
                         runTest('arbiter', 'basic')
                         runTest('service-per-pod', 'basic')
+                        runTest('security-context', 'basic')
                     }
                 }
                 stage('E2E SelfHealing') {
