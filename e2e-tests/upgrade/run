@@ -19,7 +19,7 @@ MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
 API='psmdb.percona.com/v1-1-0'
 IMAGE='percona/percona-server-mongodb-operator:1.1.0'
 IMAGE_PMM='percona/percona-server-mongodb-operator:1.1.0-pmm'
-IMAGE_MONGOD="perconalab/percona-server-mongodb-operator:master-mongod4.2"
+IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod$MONGO_VER"
 IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.1.0-backup'
 
 compare_generation() {
