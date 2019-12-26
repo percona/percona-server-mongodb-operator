@@ -21,6 +21,7 @@
         "actions": [
           "collStats",
           "dbStats",
+          "getDatabaseVersion",
           "getShardVersion",
           "indexStats"
         ]
@@ -45,6 +46,7 @@
           "dbHash",
           "dbStats",
           "find",
+          "getDatabaseVersion",
           "getShardVersion",
           "indexStats",
           "killCursors",
@@ -56,41 +58,7 @@
       {
         "resource": {
           "db": "config",
-          "collection": "system.indexes"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "config",
           "collection": "system.js"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "config",
-          "collection": "system.namespaces"
         },
         "actions": [
           "changeStream",
@@ -115,6 +83,7 @@
           "dbHash",
           "dbStats",
           "find",
+          "getDatabaseVersion",
           "getShardVersion",
           "indexStats",
           "killCursors",
@@ -126,41 +95,7 @@
       {
         "resource": {
           "db": "local",
-          "collection": "system.indexes"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "local",
           "collection": "system.js"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "local",
-          "collection": "system.namespaces"
         },
         "actions": [
           "changeStream",
@@ -188,6 +123,7 @@
           "cluster": true
         },
         "actions": [
+          "checkFreeMonitoringStatus",
           "connPoolStats",
           "getCmdLineOpts",
           "getLog",
@@ -195,7 +131,6 @@
           "getShardMap",
           "hostInfo",
           "inprog",
-          "listCursors",
           "listDatabases",
           "listSessions",
           "listShards",

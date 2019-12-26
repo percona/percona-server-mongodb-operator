@@ -42,6 +42,7 @@
           "dropRole",
           "dropUser",
           "find",
+          "getDatabaseVersion",
           "getShardVersion",
           "grantRole",
           "indexStats",
@@ -51,15 +52,6 @@
           "startBackup",
           "viewRole",
           "viewUser"
-        ]
-      },
-      {
-        "resource": {
-          "db": "",
-          "collection": "system.indexes"
-        },
-        "actions": [
-          "find"
         ]
       },
       {
@@ -76,15 +68,6 @@
           "dropCollection",
           "find",
           "insert"
-        ]
-      },
-      {
-        "resource": {
-          "db": "",
-          "collection": "system.namespaces"
-        },
-        "actions": [
-          "find"
         ]
       },
       {
@@ -207,6 +190,7 @@
           "dbStats",
           "dropCollection",
           "find",
+          "getDatabaseVersion",
           "getShardVersion",
           "indexStats",
           "insert",
@@ -230,41 +214,7 @@
       {
         "resource": {
           "db": "config",
-          "collection": "system.indexes"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "config",
           "collection": "system.js"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "config",
-          "collection": "system.namespaces"
         },
         "actions": [
           "changeStream",
@@ -295,6 +245,7 @@
           "dbStats",
           "dropCollection",
           "find",
+          "getDatabaseVersion",
           "getShardVersion",
           "indexStats",
           "insert",
@@ -307,41 +258,7 @@
       {
         "resource": {
           "db": "local",
-          "collection": "system.indexes"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "local",
           "collection": "system.js"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "local",
-          "collection": "system.namespaces"
         },
         "actions": [
           "changeStream",
@@ -370,6 +287,7 @@
         },
         "actions": [
           "appendOplogNote",
+          "checkFreeMonitoringStatus",
           "connPoolStats",
           "forceUUID",
           "getCmdLineOpts",
@@ -378,7 +296,6 @@
           "getShardMap",
           "hostInfo",
           "inprog",
-          "listCursors",
           "listDatabases",
           "listSessions",
           "listShards",
