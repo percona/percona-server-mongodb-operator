@@ -29,7 +29,7 @@ var secretFileMode int32 = 288
 
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
+func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string) (appsv1.StatefulSetSpec, error) {
 	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
