@@ -2,13 +2,13 @@
   "authInfo": {
     "authenticatedUsers": [
       {
-        "user": "clusterMonitor",
+        "user": "clusterAdmin",
         "db": "admin"
       }
     ],
     "authenticatedUserRoles": [
       {
-        "role": "clusterMonitor",
+        "role": "clusterAdmin",
         "db": "admin"
       }
     ],
@@ -21,8 +21,15 @@
         "actions": [
           "collStats",
           "dbStats",
+          "dropDatabase",
+          "enableSharding",
+          "getDatabaseVersion",
           "getShardVersion",
-          "indexStats"
+          "indexStats",
+          "killCursors",
+          "moveChunk",
+          "splitChunk",
+          "splitVector"
         ]
       },
       {
@@ -44,53 +51,27 @@
           "collStats",
           "dbHash",
           "dbStats",
+          "enableSharding",
           "find",
+          "getDatabaseVersion",
           "getShardVersion",
           "indexStats",
+          "insert",
           "killCursors",
           "listCollections",
           "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "config",
-          "collection": "system.indexes"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
+          "moveChunk",
+          "planCacheRead",
+          "remove",
+          "splitChunk",
+          "splitVector",
+          "update"
         ]
       },
       {
         "resource": {
           "db": "config",
           "collection": "system.js"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "config",
-          "collection": "system.namespaces"
         },
         "actions": [
           "changeStream",
@@ -114,30 +95,21 @@
           "collStats",
           "dbHash",
           "dbStats",
+          "enableSharding",
           "find",
+          "getDatabaseVersion",
           "getShardVersion",
           "indexStats",
+          "insert",
           "killCursors",
           "listCollections",
           "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "local",
-          "collection": "system.indexes"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
+          "moveChunk",
+          "planCacheRead",
+          "remove",
+          "splitChunk",
+          "splitVector",
+          "update"
         ]
       },
       {
@@ -160,7 +132,7 @@
       {
         "resource": {
           "db": "local",
-          "collection": "system.namespaces"
+          "collection": "system.replset"
         },
         "actions": [
           "changeStream",
@@ -176,35 +148,52 @@
       },
       {
         "resource": {
-          "db": "local",
-          "collection": "system.replset"
-        },
-        "actions": [
-          "find"
-        ]
-      },
-      {
-        "resource": {
           "cluster": true
         },
         "actions": [
+          "addShard",
+          "appendOplogNote",
+          "applicationMessage",
+          "checkFreeMonitoringStatus",
+          "cleanupOrphaned",
           "connPoolStats",
+          "connPoolSync",
+          "cpuProfiler",
+          "dropConnections",
+          "flushRouterConfig",
+          "fsync",
           "getCmdLineOpts",
           "getLog",
           "getParameter",
           "getShardMap",
           "hostInfo",
           "inprog",
-          "listCursors",
+          "invalidateUserCache",
+          "killAnyCursor",
+          "killAnySession",
+          "killop",
           "listDatabases",
           "listSessions",
           "listShards",
+          "logRotate",
           "netstat",
+          "removeShard",
+          "replSetConfigure",
           "replSetGetConfig",
           "replSetGetStatus",
+          "replSetResizeOplog",
+          "replSetStateChange",
+          "resync",
           "serverStatus",
+          "setFeatureCompatibilityVersion",
+          "setFreeMonitoring",
+          "setParameter",
           "shardingState",
+          "shutdown",
           "top",
+          "touch",
+          "trafficRecord",
+          "unlock",
           "useUUID"
         ]
       }

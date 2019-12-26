@@ -6,10 +6,10 @@ BASH_XTRACEFD="5"
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 API="psmdb.percona.com/v1-4-0"
-IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
+IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:master"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/percona-server-mongodb-operator:master-pmm"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:master-mongod4.0"}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:master-backup"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"percona/percona-server-mongodb-operator:1.2.0-backup"}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -378,13 +378,18 @@ compare_mongo_user() {
     if [[ "$IMAGE_MONGOD" =~ 4\.0$ ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
         expected_result=${test_dir}/compare/$user-40.json
     fi
+    if [[ "$IMAGE_MONGOD" =~ 4\.2$ ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
+        expected_result=${test_dir}/compare/$user-42.json
+    fi
 
     run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
         | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
         | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
         | $sed -e '/"ok" : 1/,+4d' \
+        | sed -e '$s/,$/}/' \
+        | jq '.authInfo.authenticatedUserPrivileges|=sort_by(.resource.anyResource, .resource.cluster, .resource.db, .resource.collection)|.authInfo.authenticatedUserRoles|=sort_by(.role)' \
         > $tmp_dir/$user.json
-    diff $expected_result $tmp_dir/$user.json
+    diff -u $expected_result $tmp_dir/$user.json
 }
 
 start_gke() {
