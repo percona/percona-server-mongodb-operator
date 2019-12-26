@@ -16,7 +16,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
-func AgentContainer(cr *api.PerconaServerMongoDB, sv *version.ServerVersion) corev1.Container {
+func AgentContainer(cr *api.PerconaServerMongoDB) corev1.Container {
 	fvar := false
 
 	return corev1.Container{
