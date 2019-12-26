@@ -19,7 +19,7 @@ func init() {
 
 const genSymbols = "abcdefghijklmnopqrstuvwxyz1234567890"
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference, sv *version.ServerVersion) *batchv1b.CronJob {
+func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) *batchv1b.CronJob {
 	backupPod := corev1.PodSpec{
 		RestartPolicy:      corev1.RestartPolicyNever,
 		ImagePullSecrets:   imagePullSecrets,
