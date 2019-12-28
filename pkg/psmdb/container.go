@@ -86,22 +86,8 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 				},
 			},
 		},
-		WorkingDir: MongodContainerDataDir,
-		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"mongodb-healthcheck",
-						"k8s",
-						"liveness",
-					},
-				},
-			},
-			InitialDelaySeconds: *replset.LivenessInitialDelaySeconds,
-			TimeoutSeconds:      int32(5),
-			PeriodSeconds:       int32(10),
-			FailureThreshold:    int32(12),
-		},
+		WorkingDir:     MongodContainerDataDir,
+		LivenessProbe:  replset.LivenessProbe,
 		ReadinessProbe: replset.ReadinessProbe,
 		Resources:      resources,
 		SecurityContext: &corev1.SecurityContext{

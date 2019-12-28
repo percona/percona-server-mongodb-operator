@@ -126,9 +126,30 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	for _, replset := range cr.Spec.Replsets {
-		if replset.LivenessInitialDelaySeconds == nil {
-			ld := int32(90)
-			replset.LivenessInitialDelaySeconds = &ld
+		if replset.LivenessProbe == nil {
+			replset.LivenessProbe = &corev1.Probe{
+				Handler: corev1.Handler{
+					Exec: &corev1.ExecAction{
+						Command: []string{
+							"mongodb-healthcheck",
+							"k8s",
+							"liveness",
+						},
+					},
+				},
+			}
+		}
+		if replset.LivenessProbe.InitialDelaySeconds == 0 {
+			replset.LivenessProbe.InitialDelaySeconds = int32(90)
+		}
+		if replset.LivenessProbe.TimeoutSeconds == 0 {
+			replset.LivenessProbe.TimeoutSeconds = int32(5)
+		}
+		if replset.LivenessProbe.PeriodSeconds == 0 {
+			replset.LivenessProbe.PeriodSeconds = int32(10)
+		}
+		if replset.LivenessProbe.FailureThreshold == 0 {
+			replset.LivenessProbe.FailureThreshold = int32(12)
 		}
 
 		if replset.ReadinessProbe == nil {

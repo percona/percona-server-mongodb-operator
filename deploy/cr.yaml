@@ -97,9 +97,10 @@ spec:
         resources:
           requests:
             storage: 3Gi
-    readinessProbe:
+    livenessProbe:
       initialDelaySeconds: 30
       failureThreshold: 3
+      periodSeconds: 60
       exec:
         command:
         - /bin/bash

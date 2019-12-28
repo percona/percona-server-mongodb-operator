@@ -1037,9 +1037,9 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		*out = new(v1.Probe)
 		**out = **in
 	}
-	if in.LivenessInitialDelaySeconds != nil {
-		in, out := &in.LivenessInitialDelaySeconds, &out.LivenessInitialDelaySeconds
-		*out = new(int32)
+	if in.LivenessProbe != nil {
+		in, out := &in.LivenessProbe, &out.LivenessProbe
+		*out = new(v1.Probe)
 		**out = **in
 	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)

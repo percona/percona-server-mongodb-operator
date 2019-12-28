@@ -150,15 +150,15 @@ type PodAffinity struct {
 }
 
 type ReplsetSpec struct {
-	Resources                   *ResourcesSpec `json:"resources,omitempty"`
-	Name                        string         `json:"name"`
-	Size                        int32          `json:"size"`
-	ClusterRole                 ClusterRole    `json:"clusterRole,omitempty"`
-	Arbiter                     Arbiter        `json:"arbiter,omitempty"`
-	Expose                      Expose         `json:"expose,omitempty"`
-	VolumeSpec                  *VolumeSpec    `json:"volumeSpec,omitempty"`
-	LivenessInitialDelaySeconds *int32         `json:"livenessDelaySec,omitempty"`
-	ReadinessProbe              *corev1.Probe  `json:"readinessProbe,omitempty"`
+	Resources      *ResourcesSpec `json:"resources,omitempty"`
+	Name           string         `json:"name"`
+	Size           int32          `json:"size"`
+	ClusterRole    ClusterRole    `json:"clusterRole,omitempty"`
+	Arbiter        Arbiter        `json:"arbiter,omitempty"`
+	Expose         Expose         `json:"expose,omitempty"`
+	VolumeSpec     *VolumeSpec    `json:"volumeSpec,omitempty"`
+	ReadinessProbe *corev1.Probe  `json:"readinessProbe,omitempty"`
+	LivenessProbe  *corev1.Probe  `json:"livenessProbe,omitempty"`
 	MultiAZ
 }
 
