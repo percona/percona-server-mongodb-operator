@@ -98,6 +98,8 @@ spec:
           requests:
             storage: 3Gi
     readinessProbe:
+      initialDelaySeconds: 30
+      failureThreshold: 3
       exec:
         command:
         - /bin/bash
