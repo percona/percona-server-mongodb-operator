@@ -1032,9 +1032,9 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		*out = new(VolumeSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ReadinessInitialDelaySeconds != nil {
-		in, out := &in.ReadinessInitialDelaySeconds, &out.ReadinessInitialDelaySeconds
-		*out = new(int32)
+	if in.ReadinessProbe != nil {
+		in, out := &in.ReadinessProbe, &out.ReadinessProbe
+		*out = new(v1.Probe)
 		**out = **in
 	}
 	if in.LivenessInitialDelaySeconds != nil {

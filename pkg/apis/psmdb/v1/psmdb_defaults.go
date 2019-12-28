@@ -131,9 +131,26 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.LivenessInitialDelaySeconds = &ld
 		}
 
-		if replset.ReadinessInitialDelaySeconds == nil {
-			rd := int32(10)
-			replset.ReadinessInitialDelaySeconds = &rd
+		if replset.ReadinessProbe == nil {
+			replset.ReadinessProbe = &corev1.Probe{
+				Handler: corev1.Handler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(cr.Spec.Mongod.Net.Port)),
+					},
+				},
+			}
+		}
+		if replset.ReadinessProbe.InitialDelaySeconds == 0 {
+			replset.ReadinessProbe.InitialDelaySeconds = int32(10)
+		}
+		if replset.ReadinessProbe.TimeoutSeconds == 0 {
+			replset.ReadinessProbe.TimeoutSeconds = int32(2)
+		}
+		if replset.ReadinessProbe.PeriodSeconds == 0 {
+			replset.ReadinessProbe.PeriodSeconds = int32(3)
+		}
+		if replset.ReadinessProbe.FailureThreshold == 0 {
+			replset.ReadinessProbe.FailureThreshold = int32(8)
 		}
 
 		if cr.Spec.Pause {

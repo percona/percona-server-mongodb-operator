@@ -97,6 +97,12 @@ spec:
         resources:
           requests:
             storage: 3Gi
+    readinessProbe:
+      exec:
+        command:
+        - /bin/bash
+        - -c
+        - /readiness.sh
   mongod:
     net:
       port: 27017
