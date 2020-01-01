@@ -140,16 +140,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 		if replset.LivenessProbe.InitialDelaySeconds == 0 {
-			replset.LivenessProbe.InitialDelaySeconds = int32(90)
+			replset.LivenessProbe.InitialDelaySeconds = int32(300)
 		}
 		if replset.LivenessProbe.TimeoutSeconds == 0 {
-			replset.LivenessProbe.TimeoutSeconds = int32(5)
+			replset.LivenessProbe.TimeoutSeconds = int32(30)
 		}
 		if replset.LivenessProbe.PeriodSeconds == 0 {
-			replset.LivenessProbe.PeriodSeconds = int32(10)
+			replset.LivenessProbe.PeriodSeconds = int32(30)
 		}
 		if replset.LivenessProbe.FailureThreshold == 0 {
-			replset.LivenessProbe.FailureThreshold = int32(12)
+			replset.LivenessProbe.FailureThreshold = int32(2)
 		}
 
 		if replset.ReadinessProbe == nil {

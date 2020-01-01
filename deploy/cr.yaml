@@ -97,15 +97,6 @@ spec:
         resources:
           requests:
             storage: 3Gi
-    livenessProbe:
-      initialDelaySeconds: 30
-      failureThreshold: 3
-      periodSeconds: 60
-      exec:
-        command:
-        - /bin/bash
-        - -c
-        - /readiness.sh
   mongod:
     net:
       port: 27017
