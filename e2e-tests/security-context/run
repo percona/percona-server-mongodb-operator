@@ -8,6 +8,7 @@ test_dir=$(realpath $(dirname $0))
 
 create_namespace $namespace
 deploy_operator
+deploy_helm $namespace
 
 kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/minio-secret.yml
 cluster="sec-context"
