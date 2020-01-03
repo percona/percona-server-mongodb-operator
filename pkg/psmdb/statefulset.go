@@ -8,7 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // NewStatefulSet returns a StatefulSet object configured for a name
@@ -29,13 +28,7 @@ var secretFileMode int32 = 288
 
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string, sv *version.ServerVersion) (appsv1.StatefulSetSpec, error) {
-	var fsgroup *int64
-	if sv.Platform == api.PlatformKubernetes {
-		var tp int64 = 1001
-		fsgroup = &tp
-	}
-
+func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string) (appsv1.StatefulSetSpec, error) {
 	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
@@ -89,6 +82,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Annotations: multiAZ.Annotations,
 			},
 			Spec: corev1.PodSpec{
+				SecurityContext:   replset.PodSecurityContext,
 				Affinity:          PodAffinity(multiAZ.Affinity, ls),
 				NodeSelector:      multiAZ.NodeSelector,
 				Tolerations:       multiAZ.Tolerations,
@@ -96,10 +90,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				RestartPolicy:     corev1.RestartPolicyAlways,
 				ImagePullSecrets:  m.Spec.ImagePullSecrets,
 				Containers: []corev1.Container{
-					container(m, replset, containerName, resources, fsgroup, ikeyName),
-				},
-				SecurityContext: &corev1.PodSecurityContext{
-					FSGroup: fsgroup,
+					container(m, replset, containerName, resources, ikeyName),
 				},
 				Volumes: volumes,
 			},

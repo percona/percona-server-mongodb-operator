@@ -191,6 +191,7 @@ pipeline {
                         runTest('monitoring-2-0', 'basic')
                         runTest('arbiter', 'basic')
                         runTest('service-per-pod', 'basic')
+                        runTest('security-context', 'basic')
                         ShutdownCluster('basic')
                     }
                 }

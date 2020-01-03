@@ -226,7 +226,7 @@ deploy_minio() {
     desc 'install Minio'
     helm del --purge minio-service || :
     # kubectl_bin delete pvc minio-service --force
-    helm install \
+    retry 10 60 helm install \
         --name minio-service \
         --set accessKey=some-access-key \
         --set secretKey=some-secret-key \
@@ -243,6 +243,22 @@ deploy_minio() {
     kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
         bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+}
+
+retry() {
+    local max=$1
+    local delay=$2
+    shift 2 # cut delay and max args
+    local n=1
+
+    until "$@"; do
+        if [[ $n -ge $max ]]; then
+            echo "The command '$@' has failed after $n attempts."
+            exit 1
+        fi
+        ((n++))
+        sleep $delay
+    done
 }
 
 wait_for_running() {
@@ -378,13 +394,18 @@ compare_mongo_user() {
     if [[ "$IMAGE_MONGOD" =~ 4\.0$ ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
         expected_result=${test_dir}/compare/$user-40.json
     fi
+    if [[ "$IMAGE_MONGOD" =~ 4\.2$ ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
+        expected_result=${test_dir}/compare/$user-42.json
+    fi
 
     run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
         | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
         | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
         | $sed -e '/"ok" : 1/,+4d' \
+        | sed -e '$s/,$/}/' \
+        | jq '.authInfo.authenticatedUserPrivileges|=sort_by(.resource.anyResource, .resource.cluster, .resource.db, .resource.collection)|.authInfo.authenticatedUserRoles|=sort_by(.role)' \
         > $tmp_dir/$user.json
-    diff $expected_result $tmp_dir/$user.json
+    diff -u $expected_result $tmp_dir/$user.json
 }
 
 start_gke() {
