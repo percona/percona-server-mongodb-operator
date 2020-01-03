@@ -17,6 +17,7 @@ $dir/demand-backup/run
 $dir/scheduled-backup/run
 $dir/upgrade/run
 $dir/upgrade-consistency/run
+$dir/security-context/run
 
 $dir/storage/run
 $dir/self-healing/run

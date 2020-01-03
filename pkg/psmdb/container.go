@@ -11,9 +11,8 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, runUID *int64, ikeyName string) corev1.Container {
+func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, ikeyName string) corev1.Container {
 	fvar := false
-	tvar := true
 
 	volumes := []corev1.VolumeMount{
 		{
@@ -114,12 +113,9 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 			PeriodSeconds:       int32(3),
 			FailureThreshold:    int32(8),
 		},
-		Resources: resources,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: &tvar,
-			RunAsUser:    runUID,
-		},
-		VolumeMounts: volumes,
+		Resources:       resources,
+		SecurityContext: replset.ContainerSecurityContext,
+		VolumeMounts:    volumes,
 	}
 }
 

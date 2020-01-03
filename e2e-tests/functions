@@ -226,7 +226,7 @@ deploy_minio() {
     desc 'install Minio'
     helm del --purge minio-service || :
     # kubectl_bin delete pvc minio-service --force
-    helm install \
+    retry 10 60 helm install \
         --name minio-service \
         --set accessKey=some-access-key \
         --set secretKey=some-secret-key \
@@ -243,6 +243,22 @@ deploy_minio() {
     kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
         bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+}
+
+retry() {
+    local max=$1
+    local delay=$2
+    shift 2 # cut delay and max args
+    local n=1
+
+    until "$@"; do
+        if [[ $n -ge $max ]]; then
+            echo "The command '$@' has failed after $n attempts."
+            exit 1
+        fi
+        ((n++))
+        sleep $delay
+    done
 }
 
 wait_for_running() {

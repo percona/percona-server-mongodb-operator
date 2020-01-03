@@ -150,15 +150,17 @@ type PodAffinity struct {
 }
 
 type ReplsetSpec struct {
-	Resources                    *ResourcesSpec `json:"resources,omitempty"`
-	Name                         string         `json:"name"`
-	Size                         int32          `json:"size"`
-	ClusterRole                  ClusterRole    `json:"clusterRole,omitempty"`
-	Arbiter                      Arbiter        `json:"arbiter,omitempty"`
-	Expose                       Expose         `json:"expose,omitempty"`
-	VolumeSpec                   *VolumeSpec    `json:"volumeSpec,omitempty"`
-	ReadinessInitialDelaySeconds *int32         `json:"readinessDelaySec,omitempty"`
-	LivenessInitialDelaySeconds  *int32         `json:"livenessDelaySec,omitempty"`
+	Resources                    *ResourcesSpec             `json:"resources,omitempty"`
+	Name                         string                     `json:"name"`
+	Size                         int32                      `json:"size"`
+	ClusterRole                  ClusterRole                `json:"clusterRole,omitempty"`
+	Arbiter                      Arbiter                    `json:"arbiter,omitempty"`
+	Expose                       Expose                     `json:"expose,omitempty"`
+	VolumeSpec                   *VolumeSpec                `json:"volumeSpec,omitempty"`
+	ReadinessInitialDelaySeconds *int32                     `json:"readinessDelaySec,omitempty"`
+	LivenessInitialDelaySeconds  *int32                     `json:"livenessDelaySec,omitempty"`
+	PodSecurityContext           *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext     *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	MultiAZ
 }
 
@@ -376,14 +378,16 @@ type BackupStorageSpec struct {
 }
 
 type BackupSpec struct {
-	Enabled            bool                         `json:"enabled"`
-	Debug              bool                         `json:"debug"`
-	RestartOnFailure   *bool                        `json:"restartOnFailure,omitempty"`
-	Coordinator        BackupCoordinatorSpec        `json:"coordinator,omitempty"`
-	Storages           map[string]BackupStorageSpec `json:"storages,omitempty"`
-	Image              string                       `json:"image,omitempty"`
-	Tasks              []BackupTaskSpec             `json:"tasks,omitempty"`
-	ServiceAccountName string                       `json:"serviceAccountName,omitempty"`
+	Enabled                  bool                         `json:"enabled"`
+	Debug                    bool                         `json:"debug"`
+	RestartOnFailure         *bool                        `json:"restartOnFailure,omitempty"`
+	Coordinator              BackupCoordinatorSpec        `json:"coordinator,omitempty"`
+	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
+	Image                    string                       `json:"image,omitempty"`
+	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`
+	ServiceAccountName       string                       `json:"serviceAccountName,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 }
 
 type Arbiter struct {
