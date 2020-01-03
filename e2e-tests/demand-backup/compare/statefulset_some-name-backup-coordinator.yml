@@ -60,7 +60,7 @@ spec:
         livenessProbe:
           failureThreshold: 3
           initialDelaySeconds: 5
-          periodSeconds: 10
+          periodSeconds: 30
           successThreshold: 1
           tcpSocket:
             port: 10000
