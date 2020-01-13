@@ -85,204 +85,459 @@ Replsets section
 
 The replsets section controls the MongoDB Replica Set.
 
-.. list-table::
-     :header-rows: 1
-     :widths: 10 10 10 60
- 
-     * - Key
-       - Value Type
-       - Example
-       - Description   
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
-     * - name
-       - string
-       - ``rs 0``
-       - The name of the `MongoDB Replica Set <https://docs.mongodb.com/manual/replication/>`_
-
-     * - size
-       - int
-       - 3
-       - The size of the MongoDB Replica Set, must be >= 3 for `High-Availability <https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability>`_
-
-     * - affinity.antiAffinityTopologyKey
-       - string
-       - ``kubernetes.io/hostname``
-       - The `Kubernetes topologyKey <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature>`_ node affinity constraint for the Replica Set nodes
-
-     * - affinity.advanced
-       - subdoc
-       -
-       - In cases where the pods require complex tuning the `advanced` option turns off the `topologykey` effect. This setting allows the standard Kubernetes affinity constraints of any complexity to be used
-
-     * - tolerations.key
-       - string
-       - ``node.alpha.kubernetes.io/unreachable``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ key for the Replica Set nodes
-
-     * - tolerations.operator
-       - string
-       - ``Exists``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ operator  for the Replica Set nodes
-
-     * - tolerations.effect
-       - string
-       - ``NoExecute``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ effect  for the Replica Set nodes
-
-     * - tolerations.tolerationSeconds
-       - int
-       - ``6000``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ time limit  for the Replica Set nodes
-
-     * - priorityClassName
-       - string
-       - ``high priority``
-       - The `Kuberentes Pod priority class <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass>`_  for the Replica Set nodes
-
-     * - annotations.iam.amazonaws.com/role
-       - string
-       - ``role-arn``
-       - The `AWS IAM role <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_  for the Replica Set nodes
-
-     * - labels
-       - label
-       - ``rack: rack-22``
-       - The `Kubernetes affinity labels <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/>`_  for the Replica Set nodes
-
-     * - nodeSelector
-       - label
-       - ``disktype: ssd``
-       - The `Kubernetes nodeSelector <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_ affinity constraint  for the Replica Set nodes
-
-     * - podDisruptionBudget.maxUnavailable
-       - int
-       - ``1``
-       - The `Kubernetes Pod distribution budget <https://kubernetes.io/docs/concepts/workloads/pods/disruptions/>`_ limit specifying the maximum value for unavailable Pods
-
-     * - podDisruptionBudget.minAvailable
-       - int
-       - ``1``
-       - The `Kubernetes Pod distribution budget <https://kubernetes.io/docs/concepts/workloads/pods/disruptions/>`_ limit specifying the minimum value for available Pods
-
-     * - expose.enabled
-       - boolean
-       - ``false``
-       - Enable or disable exposing `MongoDB Replica Set <https://docs.mongodb.com/manual/replication/>`_ nodes with dedicated IP addresses
-
-     * - expose.exposeType
-       - string
-       - ``ClusterIP``
-       - the `IP address type <./expose>`_ to be exposed
-
-     * - arbiter.enabled
-       - boolean
-       - ``false``
-       - Enable or disable creation of `Replica Set Arbiter <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`_ nodes within the cluster
-
-     * - arbiter.size
-       - int
-       - 1
-       - The number of `Replica Set Arbiter <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`_  nodes within the cluster
-
-     * - arbiter.afinity.antiAffinityTopologyKey
-       - string
-       - ``kubernetes.io/hostname``
-       - The `Kubernetes topologyKey <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature>`_  node affinity constraint for the Arbiter
-
-     * - arbiter.affinity.advanced
-       - subdoc
-       -
-       - In cases where the pods require complex tuning the `advanced` option turns off the `topologykey` effect. This setting allows the standard Kubernetes affinity constraints of any complexity to be used
-
-     * - arbiter.tolerations.key
-       - string
-       - ``node.alpha.kubernetes.io/unreachable``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ key for the Arbiter nodes
-
-     * - arbiter.tolerations.operator
-       - string
-       - ``Exists``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ operator for the Arbiter nodes
-
-     * - arbiter.tolerations.effect
-       - string
-       - ``NoExecute``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ effect for the Arbiter nodes
-
-     * - arbiter.tolerations.tolerationSeconds
-       - int
-       - ``6000``
-       - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ time limit for the Arbiter nodes
-
-     * - arbiter.priorityClassName
-       - string
-       - ``high priority``
-       - The `Kuberentes Pod priority class <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass>`_  for the Arbiter nodes
-
-     * - arbiter.annotations.iam.amazonaws.com/role
-       - string
-       - ``role-arn``
-       - The `AWS IAM role <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_ for the Arbiter nodes
-
-     * - arbiter.labels
-       - label
-       - ``rack: rack-22``
-       - The `Kubernetes affinity labels <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/>`_ for the Arbiter nodes
-
-     * - arbiter.nodeSelector
-       - label
-       - ``disktype: ssd``
-       - The `Kubernetes nodeSelector <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_ affinity constraint for the Arbiter nodes
-
-     * - resources.limits.cpu
-       - string
-       - ``300m``
-       - `Kubernetes CPU limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container
-
-     * - resources.limits.memory
-       - string
-       - ``0.5G``
-       - `Kubernetes Memory limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`__ for MongoDB container
-
-     * - resources.requests.cpu
-       - string
-       -
-       - The `Kubernetes CPU requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container
-
-     * - resources.requests.memory
-       - string
-       -
-       - The `Kubernetes Memory requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container
-
-     * - volumeSpec.emptyDir
-       - string
-       - ``{}``
-       - The `Kubernetes emptyDir volume <https://kubernetes.io/docs/concepts/storage/volumes/#emptydir>`_, i.e. the directory which will be created on a node, and will be accessible to the MongoDB Pod containers
-
-     * - volumeSpec.hostPath.path
-       - string
-       - ``/data``
-       - `Kubernetes hostPath volume <https://kubernetes.io/docs/concepts/storage/volumes/#hostpath>`_, i.e. the file or directory of a node that will be accessible to the MongoDB Pod containers
-
-     * - volumeSpec.hostPath.type
-       - string
-       - ``Directory``
-       - The `Kubernetes hostPath volume type <https://kubernetes.io/docs/concepts/storage/volumes/#hostpath>`_
-
-     * - volumeSpec.persistentVolumeClaim. storageClassName
-       - string
-       - ``standard``
-       - The `Kubernetes Storage Class <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_ to use with the MongoDB container `Persistent Volume Claim <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_
-
-     * - volumeSpec.persistentVolumeClaim. accessModes
-       - array
-       - ``[ "ReadWriteOnce" ]``
-       - The `Kubernetes Persistent Volume <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ access modes for the MongoDB container
-
-     * - volumeSpec.persistentVolumeClaim. resources.requests.storage
-       - string
-       - ``3Gi``
-       - The `Kubernetes Persistent Volume <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ size for the MongoDB container
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | name											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``rs 0``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The name of the `MongoDB Replica Set <https://docs.mongodb.com/manual/replication/>`_ 	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | size											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | 3												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The size of the MongoDB Replica Set, must be >= 3 for `High-Availability			|
+|                 | <https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | affinity.antiAffinityTopologyKey								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``kubernetes.io/hostname``									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes topologyKey 								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
+|                 | #inter-pod-affinity-and-anti-affinity-beta-feature>`_ node affinity constraint for the	|
+|                 |  Replica Set nodes										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | affinity.advanced										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | subdoc											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     |												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | In cases where the pods require complex tuning the `advanced` option turns off the		|
+|                 | `topologykey` effect. This setting allows the standard Kubernetes affinity constraints of	|												|
+|                 | any complexity to be used									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tolerations.key										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``node.alpha.kubernetes.io/unreachable``							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ key	|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tolerations.operator									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``Exists``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ 	|													|
+|                 | operator  for the Replica Set nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tolerations.effect										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``NoExecute``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations 								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ effect	|
+|                 | for the Replica Set nodes									|												
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tolerations.tolerationSeconds								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int	 											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``6000``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations 								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ time	|
+|                 | limit  for the Replica Set nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | priorityClassName										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``high priority``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kuberentes Pod priority class								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/			|
+|                 | #priorityclass>`_  for the Replica Set nodes						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | annotations.iam.amazonaws.com/role								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``role-arn``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `AWS IAM role 										|
+|                 | <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_  for the	|
+|                 | Replica Set nodes										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | labels											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | label											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``rack: rack-22``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes affinity labels								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | nodeSelector										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | label											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``disktype: ssd``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes nodeSelector								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_		|
+|                 | affinity constraint  for the Replica Set nodes						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | podDisruptionBudget.maxUnavailable								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod distribution budget							|
+|                 | <https://kubernetes.io/docs/concepts/workloads/pods/disruptions/>`_				|
+|                 | limit specifying the maximum value for unavailable Pods					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | podDisruptionBudget.minAvailable								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod distribution budget							|
+|                 | <https://kubernetes.io/docs/concepts/workloads/pods/disruptions/>`_				|
+|                 | limit specifying the minimum value for available Pods					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | expose.enabled										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enable or disable exposing `MongoDB Replica Set						|
+|                 | <https://docs.mongodb.com/manual/replication/>`_ nodes with dedicated IP addresses		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | expose.exposeType										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``ClusterIP``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `IP address type <https://kubernetes.io/docs/concepts/services-networking/service/	|
+|                 | #publishing-services-service-types>`_ to be exposed						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.enabled										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enable or disable creation of `Replica Set Arbiter						|
+|                 | <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`_ nodes within the cluster	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.size										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The number of `Replica Set Arbiter								|
+|                 | <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`_  nodes			|
+|                 | within the cluster										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.afinity.antiAffinityTopologyKey							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``kubernetes.io/hostname``									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes topologyKey									|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
+|                 | #inter-pod-affinity-and-anti-affinity-beta-feature>`_					|
+|                 | node affinity constraint for the Arbiter							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.affinity.advanced									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | subdoc											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     |												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | In cases where the pods require complex tuning the `advanced` option turns off		|
+|                 | the `topologykey` effect. This setting allows the standard Kubernetes affinity constraints	|
+|                 | of any complexity to be used								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.tolerations.key									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``node.alpha.kubernetes.io/unreachable``							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_	|
+|                 | key for the Arbiter nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.tolerations.operator								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``Exists``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_	|
+|                 | operator for the Arbiter nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.tolerations.effect									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``NoExecute``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_	|
+|                 | effect for the Arbiter nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.tolerations.tolerationSeconds							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``6000``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_	|
+|                 | time limit for the Arbiter nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.priorityClassName									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``high priority``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kuberentes Pod priority class								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/			|
+|                 | #priorityclass>`_ for the Arbiter nodes							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.annotations.iam.amazonaws.com/role							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``role-arn``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `AWS IAM role										|
+|                 | <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_		|
+|                 | for the Arbiter nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.labels										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | label											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``rack: rack-22``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes affinity labels								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/>`_			|
+|                 | for the Arbiter nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | arbiter.nodeSelector									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | label											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``disktype: ssd``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes nodeSelector								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
+|                 | #nodeselector>`_ affinity constraint for the Arbiter nodes					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | resources.limits.cpu									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``300m``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes CPU limit									|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | resources.limits.memory									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.5G``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes Memory limit 									|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`__ for MongoDB container		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | resources.requests.cpu									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     |												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes CPU requests								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | resources.requests.memory									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     |												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Memory requests								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for MongoDB container			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | volumeSpec.emptyDir										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``{}``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes emptyDir volume <https://kubernetes.io/docs/concepts/storage/volumes/	|
+|                 | #emptydir>`_, i.e. the directory which will be created on a node, and will be accessible to	|
+|                 | the MongoDB Pod containers									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | volumeSpec.hostPath.path									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``/data``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes hostPath volume <https://kubernetes.io/docs/concepts/storage/volumes/		|
+|                 | #hostpath>`_, i.e. the file or directory of a node that will be accessible to the MongoDB	|
+|                 | Pod containers										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | volumeSpec.hostPath.type									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``Directory``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes hostPath volume type							|
+|                 | <https://kubernetes.io/docs/concepts/storage/volumes/#hostpath>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | volumeSpec.persistentVolumeClaim.storageClassName						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``standard``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Storage Class								|
+|                 | <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_				|
+|                 | to use with the MongoDB container `Persistent Volume Claim 					|
+|                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | volumeSpec.persistentVolumeClaim.accessModes						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | array											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``[ "ReadWriteOnce" ]``									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Persistent Volume								|
+|                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_				|
+|                 | access modes for the MongoDB container							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | volumeSpec.persistentVolumeClaim.resources.requests.storage					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``3Gi``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Persistent Volume								|
+|                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_				|
+|                 | size for the MongoDB container								|
++-----------------+---------------------------------------------------------------------------------------------+
 
 PMM Section
 -----------
@@ -290,29 +545,39 @@ PMM Section
 The ``pmm`` section in the deploy/cr.yaml file contains configuration
 options for Percona Monitoring and Management.
 
-.. list-table::
-      :widths: 10 10 20 60
-      :header-rows: 1
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
-      * - Key
-        - Value Type
-        - Example
-        - Description
-
-      * - enabled
-        - boolean
-        - ``false``
-        - Enables or disables monitoring Percona Server for MongoDB with `PMM <https://www.percona.com/doc/percona-monitoring-and-management/index.metrics-monitor.dashboard.html>`_
-
-      * - image
-        - string
-        - ``perconalab/pmm-client:1.17.1``
-        - PMM Client docker image to use
-
-      * - serverHost
-        - string
-        - ``monitoring-service``
-        - Address of the PMM Server to collect data from the Cluster
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | enabled											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables or disables monitoring Percona Server for MongoDB with `PMM 			|
+|                 | <https://www.percona.com/doc/percona-monitoring-and-management/				|
+|                 | index.metrics-monitor.dashboard.html>`_							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | image											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``perconalab/pmm-client:1.17.1``								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | PMM Client docker image to use								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | serverHost											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``monitoring-service``									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Address of the PMM Server to collect data from the Cluster					|
++-----------------+---------------------------------------------------------------------------------------------+
 
 Mongod Section
 --------------
@@ -320,134 +585,285 @@ Mongod Section
 The largest section in the deploy/cr.yaml file contains the Mongod
 configuration options.
 
-.. list-table::
-      :header-rows: 1
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
-      * - Key
-        - Value Type
-        - Example
-        - Description
-
-      * - net.port
-        - int
-        - ``27017``
-        - Sets the MongoDB `net.port option <https://docs.mongodb.com/manual/reference/configuration-options/#net.port>`_
-
-      * - net.hostPort
-        - int
-        - ``0``
-        - Sets the Kubernetes `hostPort option <https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#support-hostport>`_
-
-      * - security.redactClientLogData
-        - bool
-        - ``false``
-        - Enables/disables `PSMDB Log Redaction <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html>`_
-
-      * - security.enableEncryption
-        - bool
-        - ``true``
-        - Enables/disables `PSMDB data at rest encryption <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/data_at_rest_encryption.html>`_
-
-      * - security.encryptionKeySecret
-        - string
-        - ``my-cluster-name-mongodb-encryption-key``
-        - Specifies a secret object with the `encryption key <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_
-
-      * - security.encryptionCipherMode
-        - string
-        - ``AES256-CBC``
-        - Sets `PSMDB encryption cipher mode <https://docs.mongodb.com/manual/reference/program/mongod/#cmdoption-mongod-encryptionciphermode>`_
-
-      * - setParameter.ttlMonitorSleepSecs
-        - int
-        - ``60``
-        - Sets the PSMDB `ttlMonitorSleepSecs` option
-
-      * - setParameter. wiredTigerConcurrentReadTransactions
-        - int
-        - ``128``
-        - Sets the `wiredTigerConcurrentReadTransactions option <https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions>`_
-
-      * - setParameter. wiredTigerConcurrentWriteTransactions
-        - int
-        - ``128``
-        - Sets the `wiredTigerConcurrentWriteTransactions option <https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions>`_
-
-      * - storage.engine
-        - string
-        - ``wiredTiger``
-        - Sets the `storage.engine option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine>`_
-
-      * - storage.inMemory.engineConfig. inMemorySizeRatio
-        - float
-        - ``0.9``
-        - The ratio used to compute the `storage.engine.inMemory.inMemorySizeGb option <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html#--inMemorySizeGB>`_
-
-      * - storage.mmapv1.nsSize
-        - int
-        - ``16``
-        - Sets the `storage.mmapv1.nsSize option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.nsSize>`_
-
-      * - storage.mmapv1.smallfiles
-        - bool
-        - ``false``
-        - Sets the `storage.mmapv1.smallfiles option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.smallFiles>`_
-
-      * - storage.wiredTiger.engineConfig. cacheSizeRatio
-        - float
-        - ``0.5``
-        - The ratio used to compute the `storage.wiredTiger.engineConfig.cacheSizeGB option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB>`_
-
-      * - storage.wiredTiger.engineConfig. directoryForIndexes
-        - bool
-        - ``false``
-        - Sets the `storage.wiredTiger.engineConfig.directoryForIndexes option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.directoryForIndexes>`_
-
-      * - storage.wiredTiger.engineConfig. journalCompressor
-        - string
-        - ``snappy``
-        - Sets the `storage.wiredTiger.engineConfig.journalCompressor option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.journalCompressor>`_
-
-      * - storage.wiredTiger.collectionConfig. blockCompressor
-        - string
-        - ``snappy``
-        - Sets the `storage.wiredTiger.collectionConfig.blockCompressor option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.collectionConfig.blockCompressor>`_
-
-      * - storage.wiredTiger.indexConfig. prefixCompression
-        - bool
-        - ``true``
-        - Sets the `storage.wiredTiger.indexConfig.prefixCompression option <https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.indexConfig.prefixCompression>`_
-
-      * - operationProfiling.mode
-        - string
-        - ``slowOp``
-        - Sets the `operationProfiling.mode option <https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.mode>`_
-
-      * - operationProfiling.slowOpThresholdMs
-        - int
-        - ``100``
-        - Sets the `operationProfiling.slowOpThresholdMs <https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.slowOpThresholdMs>`_ option
-
-      * - operationProfiling.rateLimit
-        - int
-        - ``1``
-        - Sets the `operationProfiling.rateLimit option <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html>`_
-
-      * - auditLog.destination
-        - string
-        -
-        - Sets the `auditLog.destination option <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_
-
-      * - auditLog.format
-        - string
-        - ``BSON``
-        - Sets the `auditLog.format option <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_
-
-      * - auditLog.filter
-        - string
-        - ``{}``
-        - Sets the `auditLog.filter option <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_
-
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | net.port											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``27017``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the MongoDB `net.port option					 			|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/#net.port>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | net.hostPort										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the Kubernetes `hostPort option							|
+|                 | <https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/ |
+|                 | #support-hostport>`_									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | security.redactClientLogData								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables/disables `PSMDB Log Redaction							|
+|                 |  <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html>`_	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | security.enableEncryption									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables/disables `PSMDB data at rest encryption						|
+|                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/				|
+|                 | data_at_rest_encryption.html>`_								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | security.encryptionKeySecret								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``my-cluster-name-mongodb-encryption-key``							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Specifies a secret object with the `encryption key 						|
+|                 | <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | security.encryptionCipherMode								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``AES256-CBC``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets											|
+|                 | `PSMDB encryption cipher mode <https://docs.mongodb.com/manual/reference/program/mongod/	|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
+|                 | #cmdoption-mongod-encryptionciphermode>`_							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | setParameter.ttlMonitorSleepSecs								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``60``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the PSMDB `ttlMonitorSleepSecs` option							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | setParameter.wiredTigerConcurrentReadTransactions						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``128``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `wiredTigerConcurrentReadTransactions option					|
+|                 | <https://docs.mongodb.com/manual/reference/parameters/					|
+|                 | #param.wiredTigerConcurrentReadTransactions>`_						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | setParameter.wiredTigerConcurrentWriteTransactions						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``128``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `wiredTigerConcurrentWriteTransactions option					|
+|                 | <https://docs.mongodb.com/manual/reference/parameters/					|
+|                 | #param.wiredTigerConcurrentWriteTransactions>`_						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.engine										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``wiredTiger``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.engine option								|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.inMemory.engineConfig.inMemorySizeRatio						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | float											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.9``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The ratio used to compute the `storage.engine.inMemory.inMemorySizeGb option		|
+|                 |  <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html		|
+|                 | #--inMemorySizeGB>`_									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.mmapv1.nsSize									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``16``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.mmapv1.nsSize option							|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.nsSize>`_	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.mmapv1.smallfiles									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.mmapv1.smallfiles option							|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #storage.mmapv1.smallFiles>`_								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.wiredTiger.engineConfig.cacheSizeRatio						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | float											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.5``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The ratio used to compute the `storage.wiredTiger.engineConfig.cacheSizeGB option		|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #storage.wiredTiger.engineConfig.cacheSizeGB>`_						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.wiredTiger.engineConfig.directoryForIndexes						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.engineConfig.directoryForIndexes option			|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #storage.wiredTiger.engineConfig.directoryForIndexes>`_                                     |
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.wiredTiger.engineConfig.journalCompressor						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``snappy``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.engineConfig.journalCompressor option				|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #storage.wiredTiger.engineConfig.journalCompressor>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.wiredTiger.collectionConfig.blockCompressor						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``snappy``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.collectionConfig.blockCompressor option			|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #storage.wiredTiger.collectionConfig.blockCompressor>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | storage.wiredTiger.indexConfig.prefixCompression						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.indexConfig.prefixCompression option				|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #storage.wiredTiger.indexConfig.prefixCompression>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | operationProfiling.mode									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``slowOp``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `operationProfiling.mode option 							|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #operationProfiling.mode>`_									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | operationProfiling.slowOpThresholdMs							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``100``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `operationProfiling.slowOpThresholdMs						|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
+|                 | #operationProfiling.slowOpThresholdMs>`_ option						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | operationProfiling.rateLimit								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `operationProfiling.rateLimit option						|
+|                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | auditLog.destination									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     |												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `auditLog.destination option							|
+|                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | auditLog.format										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``BSON``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `auditLog.format option								|
+|                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | auditLog.filter										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``{}``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `auditLog.filter option								|
+|                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
++-----------------+---------------------------------------------------------------------------------------------+
 
 backup section
 --------------
@@ -457,150 +873,308 @@ The ``backup`` section in the
 file contains the following configuration options for the regular
 Percona Server for MongoDB backups.
 
-.. list-table::
-      :header-rows: 1
-      :widths: 25 15 20 30
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
-      * - Key
-        - Value Type
-        - Example
-        - Description
-
-      * - enabled
-        - boolean
-        - ``true``
-        - Enables or disables making backups
-
-      * - debug
-        - boolean
-        - ``true``
-        - Enables or disables debug mode for bakups
-
-      * - restartOnFailure
-        - boolean
-        - ``true``
-        - Enables or disables restarting the previously failed backup process
-
-      * - image
-        - string
-        - ``percona/percona-server-mongodb-operator:{{{release}}}-backup``
-        - The Percona Server for MongoDB Docker image to use for the backup
-  
-      * - serviceAccountName
-        - string
-        - ``percona-server-mongodb-operator``
-        - name of the separate privileged service account used by the Operator
-
-      * - coordinator.enableClientsLogging
-        - boolean
-        - ``true``
-        - Enables or disables backups-related client logging
-
-      * - coordinator.resources.limits.cpu
-        - string
-        - ``100m``
-        - `Kubernetes CPU limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container
-
-      * - coordinator.resources.limits.memory
-        - string
-        - ``0.2G``
-        - `Kubernetes Memory limit <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`__ for the MongoDB Coordinator container
-
-      * - coordinator.resources.requests.cpu
-        - string
-        - ``100m``
-        - The `Kubernetes CPU requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container
-
-      * - coordinator.resources.requests.memory
-        - string
-        - ``0.1G``
-        - The `Kubernetes Memory requests <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container
-
-      * - coordinator.resources.requests.storage
-        - string
-        - ``1Gi``
-        - The `Kubernetes Persistent Volume <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ size for the MongoDB Coordinator container
-
-      * - coordinator.storageClass
-        - string
-        - ``aws-gp2``
-        - Sets the `Kubernetes Storage Class <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_ to use with the MongoDB Coordinator container
-
-      * - coordinator.afinity.antiAffinityTopologyKey
-        - string
-        - ``kubernetes.io/hostname``
-        - The `Kubernetes topologyKey <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature>`_  node affinity constraint for the backups
-
-      * - coordinator.affinity.advanced
-        - subdoc
-        -
-        - In cases where the pods require complex tuning the `advanced` option turns off the `topologykey` effect. This setting allows the standard Kubernetes affinity constraints of any complexity to be used
-
-      * - coordinator.tolerations.key
-        - string
-        - ``node.alpha.kubernetes.io/unreachable``
-        - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ key for the backups nodes
-
-      * - coordinator.tolerations.operator
-        - string
-        - ``Exists``
-        - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ operator for the backups nodes
-
-      * - coordinator.tolerations.effect
-        - string
-        - ``NoExecute``
-        - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ effect for the backups nodes
-
-      * - coordinator.tolerations.tolerationSeconds
-        - int
-        - ``6000``
-        - The `Kubernetes Pod tolerations <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ time limit for the backups nodes
-
-      * - coordinator.priorityClassName
-        - string
-        - ``high priority``
-        - The `Kuberentes Pod priority class <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass>`_  for the backups nodes
-
-      * - coordinator.annotations.iam.amazonaws.com/role
-        - string
-        - ``role-arn``
-        - The `AWS IAM role <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_  for the backup storage nodes
-
-      * - coordinator.labels
-        - label
-        - ``rack: rack-22``
-        - The `Kubernetes affinity labels <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/>`_  for the backup storage nodes
-
-      * - coordinator.nodeSelector
-        - label
-        - ``disktype: ssd``
-        - The `Kubernetes nodeSelector <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_ affinity constraint  for the backup storage nodes
-
-      * - tasks.name
-        - string
-        - ``sat-night-backup``
-        - The backup name
-
-      * - tasks.enabled
-        - boolean
-        - ``true``
-        - Enables or disables this exact backup
-
-      * - tasks.schedule
-        - string
-        - ``0 0 * * 6``
-        - The scheduled time to make a backup, specified in the `crontab format <https://en.wikipedia.org/wiki/Cron>`_
-
-      * - tasks.storageName
-        - string
-        - ``st-us-west``
-        - The name of the S3-compatible storage for backups, configured in the `storages` subsection
-
-      * - tasks.compressionType
-        - string
-        - ``gzip``
-        - The backup compression format
-
-
-
-
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | enabled											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables or disables making backups					 			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | debug											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables or disables debug mode for bakups							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | restartOnFailure										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables or disables restarting the previously failed backup process				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | image											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``percona/percona-server-mongodb-operator:{{{release}}}-backup``				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The Percona Server for MongoDB Docker image to use for the backup				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | serviceAccountName										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``percona-server-mongodb-operator``								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Nname of the separate privileged service account used by the Operator			|
++-----------------+---------------------------------------------------------------------------------------------+  
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.enableClientsLogging								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables or disables backups-related client logging			 			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.resources.limits.cpu								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``100m``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes CPU limit									|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.resources.limits.memory								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.2G``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes Memory limit									|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.resources.requests.cpu								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``100m``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes CPU requests 								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.resources.requests.memory							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.1G``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Memory requests								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for the MongoDB Coordinator container	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.resources.requests.storage							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1Gi``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Persistent Volume								|
+|                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ 			|
+|                 | size for the MongoDB Coordinator container							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.storageClass									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``aws-gp2``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `Kubernetes Storage Class								|
+|                 | <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_				|
+|                 | to use with the MongoDB Coordinator container						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.afinity.antiAffinityTopologyKey							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``kubernetes.io/hostname``									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes topologyKey									|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
+|                 | #inter-pod-affinity-and-anti-affinity-beta-feature>`_ node affinity constraint for the 	|
+|                 | backups											|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.affinity.advanced								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | sudbdoc											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | In cases where the pods require complex tuning the `advanced` option turns off the		|
+|                 | `topologykey` effect. This setting allows the standard Kubernetes affinity constraints 	|
+|                 | of any complexity to be used								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.tolerations.key									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``node.alpha.kubernetes.io/unreachable``							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ 	|
+|                 | key for the backups nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.tolerations.operator								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``Exists``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ 	|
+|                 | operator for the backups nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.tolerations.effect								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``NoExecute``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod tolerations 								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_ 	|
+|                 | effect for the backups nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.tolerations.tolerationSeconds							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``6000``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** |  The `Kubernetes Pod tolerations								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts>`_	|
+|                 | time limit for the backups nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.priorityClassName								|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``high priority``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kuberentes Pod priority class								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass>`_|
+|                 | for the backups nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.annotations.iam.amazonaws.com/role						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``role-arn``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `AWS IAM role										|
+|                 | <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_		|
+|                 | for the backup storage nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.labels										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | label											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``rack: rack-22``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes affinity labels								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/>`_ 			|
+|                 | for the backup storage nodes								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | coordinator.nodeSelector									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | label											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``disktype: ssd``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes nodeSelector								|
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_		|
+|                 | affinity constraint for the backup storage nodes						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tasks.name											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``sat-night-backup``									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The backup name										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tasks.enabled										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Enables or disables this exact backup							|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tasks.schedule										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0 0 * * 6``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The scheduled time to make a backup, specified in the 					|
+|                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tasks.storageName										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``st-us-west``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The name of the S3-compatible storage for backups, configured in the `storages` subsection	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Key**         | tasks.compressionType									|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``gzip``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The backup compression format								|
++-----------------+---------------------------------------------------------------------------------------------+
