@@ -608,6 +608,7 @@ kubectl_bin() {
     local LAST_OUT="$(mktemp)"
     local LAST_ERR="$(mktemp)"
     local exit_status=0
+    local timeout=4
     for i in $(seq 0 2); do
         kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
         exit_status=$?
