@@ -42,6 +42,16 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 
 label_node
 
+cat - <<-EOF | kubectl apply -f -
+        apiVersion: scheduling.k8s.io/v1beta1
+        kind: PriorityClass
+        metadata:
+            name: high-priority
+        value: 1000000
+        globalDefault: false
+        description: "This priority class should be used for backup service pods only."
+EOF
+
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl_bin apply \
