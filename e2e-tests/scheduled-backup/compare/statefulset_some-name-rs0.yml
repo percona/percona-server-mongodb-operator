@@ -49,7 +49,7 @@ spec:
         - --rateLimit=1
         - --enableEncryption
         - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-        - --wiredTigerCacheSizeGB=0.25
+        - --wiredTigerCacheSizeGB=0.50
         - --wiredTigerCollectionBlockCompressor=snappy
         - --wiredTigerJournalCompressor=snappy
         - --wiredTigerIndexPrefixCompression=true
@@ -97,11 +97,11 @@ spec:
           timeoutSeconds: 2
         resources:
           limits:
-            cpu: 500m
-            memory: 1G
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 100m
-            memory: 100M
+            cpu: 250m
+            memory: 1Gi
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001

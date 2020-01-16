@@ -12,6 +12,28 @@ spec:
     restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     coordinator:
+      affinity:
+        advanced:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: backupWorker
+                  operator: In
+                  values:
+                  - 'True'
+      tolerations: 
+      - key: "backupWorker"
+        operator: "Equal"
+        value: "True"
+        effect: "NoSchedule"
+      priorityClassName: high-priority
+      annotations:
+        iam.amazonaws.com/role: role-arn
+      labels:
+        backupWorker: 'True'
+      nodeSelector:
+        backupWorker: 'True'
       enableClientsLogging: true
       resources:
         limits:
@@ -101,11 +123,11 @@ spec:
       antiAffinityTopologyKey: none
     resources:
       limits:
-        cpu: 500m
-        memory: 1G
+        cpu: "1"
+        memory: 2Gi
       requests:
-        cpu: 100m
-        memory: 0.1G
+        cpu: 250m
+        memory: 1Gi
     volumeSpec:
       persistentVolumeClaim:
         resources:
