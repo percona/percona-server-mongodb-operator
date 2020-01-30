@@ -101,6 +101,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Status = api.AppStateInit
 	}
 
+	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
+
 	return r.writeStatus(cr)
 }
 
