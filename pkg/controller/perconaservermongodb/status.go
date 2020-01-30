@@ -16,16 +16,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const maxStatusesQuantity = 20
+
 func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error) error {
+	clusterCondition := api.ClusterCondition{
+		Status:             api.ConditionTrue,
+		Type:               api.ClusterInit,
+		LastTransitionTime: metav1.NewTime(time.Now()),
+	}
 	if reconcileErr != nil {
 		if cr.Status.Status != api.ClusterError {
-			cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+			clusterCondition = api.ClusterCondition{
 				Status:             api.ConditionTrue,
 				Type:               api.ClusterError,
 				Message:            reconcileErr.Error(),
 				Reason:             "ErrorReconcile",
 				LastTransitionTime: metav1.NewTime(time.Now()),
-			})
+			}
+			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
 		}
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
@@ -57,24 +65,24 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 
 		if status.Status != currentRSstatus.Status {
 			if status.Status == api.AppStateReady && currentRSstatus.Initialized {
-				cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+				clusterCondition = api.ClusterCondition{
 					Status:             api.ConditionTrue,
 					Type:               api.ClusterRSReady,
 					LastTransitionTime: metav1.NewTime(time.Now()),
-				})
+				}
 			}
 
 			if status.Status == api.AppStateError {
-				cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+				clusterCondition = api.ClusterCondition{
 					Status:             api.ConditionTrue,
 					Message:            rs.Name + ": " + status.Message,
 					Reason:             "ErrorRS",
 					Type:               api.ClusterError,
 					LastTransitionTime: metav1.NewTime(time.Now()),
-				})
+				}
 			}
+			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
 		}
-
 		cr.Status.Replsets[rs.Name] = &status
 		if !inProgress {
 			inProgress, err = r.upgradeInProgress(cr, rs.Name)
@@ -84,17 +92,37 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
-	if len(cr.Status.Conditions) == 0 || cr.Status.Conditions[0].Type == api.ClusterError {
-		cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterInit,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		})
-	}
-
 	cr.Status.Status = api.AppStateInit
 	if replsetsReady == len(cr.Spec.Replsets) {
+		clusterCondition = api.ClusterCondition{
+			Status:             api.ConditionTrue,
+			Type:               api.ClusterReady,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		}
 		cr.Status.Status = api.AppStateReady
+	} else {
+		clusterCondition = api.ClusterCondition{
+			Status:             api.ConditionTrue,
+			Type:               api.ClusterError,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		}
+		cr.Status.Status = api.ClusterError
+	}
+
+	if len(cr.Status.Conditions) == 0 {
+		cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+	} else {
+		lastClusterCondition := cr.Status.Conditions[len(cr.Status.Conditions)-1]
+		switch {
+		case lastClusterCondition.Type != clusterCondition.Type:
+			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+		default:
+			cr.Status.Conditions[len(cr.Status.Conditions)-1] = lastClusterCondition
+		}
+	}
+
+	if len(cr.Status.Conditions) > maxStatusesQuantity {
+		cr.Status.Conditions = cr.Status.Conditions[len(cr.Status.Conditions)-maxStatusesQuantity:]
 	}
 
 	if inProgress {
