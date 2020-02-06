@@ -138,6 +138,12 @@ pipeline {
                         | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
                     curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
                         | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
+                    
+                    curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
+                        | sudo tar -C /usr/local/bin --wildcards -zxvpf -
+                    curl -s -L https://github.com/src-d/go-license-detector/releases/latest/download/license-detector.linux_amd64.gz \
+                        | gunzip | sudo tee /usr/local/bin/license-detector > /dev/null
+                    sudo chmod +x /usr/local/bin/license-detector 
                 '''
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''
@@ -173,7 +179,55 @@ pipeline {
                 archiveArtifacts 'results/docker/TAG'
             }
         }
-        stage('Run Tests') {
+        stage('GoLicenseDetector test') {
+            when {
+                expression {
+                    !skipBranchBulds
+                }
+            }
+            steps {
+               sh """
+                   license-detector ${WORKSPACE} | awk '{print \$2}' | awk 'NF > 0' > license-detector-new || true
+                   diff -u e2e-tests/license/compare/license-detector license-detector-new
+               """
+            }
+        }
+        stage('GoLicense test') {
+            when {
+                expression {
+                    !skipBranchBulds
+                }
+            }
+            steps {
+                sh '''
+                    mkdir -p $WORKSPACE/src/github.com/percona
+                    ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator
+                    sg docker -c "
+                        docker run \
+                            --rm \
+                            -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
+                            -w /go/src/github.com/percona/percona-server-mongodb-operator \
+                            -e GO111MODULE=on \
+                            golang:1.13 sh -c '
+                                go mod init \
+                                && go build ./... \
+                                && rm -rf Gopkg.lock Gopkg.toml vendor \
+                                && go build -v ./... \
+                                && go build -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager
+                            '
+                    "
+                '''
+
+                sh """
+                    golicense ./percona-server-mongodb-operator \
+                        | grep -v 'license not found' \
+                        | awk '{print \$2}' | sort | uniq > golicense-new || true
+
+                    diff -u e2e-tests/license/compare/golicense golicense-new
+                """
+            }
+        }
+        stage('Run tests for operator') {
             when {
                 expression {
                     !skipBranchBulds
