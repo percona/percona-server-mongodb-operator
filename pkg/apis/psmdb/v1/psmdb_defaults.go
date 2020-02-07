@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -125,31 +126,46 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
+	startupDelaySeconds := 2 * 60 * 60
+	startupDelaySecondsFlag := "--startupDelaySeconds"
 	for _, replset := range cr.Spec.Replsets {
 		if replset.LivenessProbe == nil {
-			replset.LivenessProbe = &corev1.Probe{
-				Handler: corev1.Handler{
-					Exec: &corev1.ExecAction{
-						Command: []string{
-							"mongodb-healthcheck",
-							"k8s",
-							"liveness",
+			replset.LivenessProbe = &LivenessProbeExtended{
+				Probe: corev1.Probe{
+					Handler: corev1.Handler{
+						Exec: &corev1.ExecAction{
+							Command: []string{
+								"mongodb-healthcheck",
+								"k8s",
+								"liveness",
+								startupDelaySecondsFlag,
+								strconv.Itoa(startupDelaySeconds),
+							},
 						},
 					},
 				},
+				StartupDelaySeconds: startupDelaySeconds,
 			}
 		}
+
 		if replset.LivenessProbe.InitialDelaySeconds == 0 {
-			replset.LivenessProbe.InitialDelaySeconds = int32(300)
+			replset.LivenessProbe.InitialDelaySeconds = int32(60)
 		}
 		if replset.LivenessProbe.TimeoutSeconds == 0 {
-			replset.LivenessProbe.TimeoutSeconds = int32(30)
+			replset.LivenessProbe.TimeoutSeconds = int32(5)
 		}
 		if replset.LivenessProbe.PeriodSeconds == 0 {
 			replset.LivenessProbe.PeriodSeconds = int32(30)
 		}
 		if replset.LivenessProbe.FailureThreshold == 0 {
-			replset.LivenessProbe.FailureThreshold = int32(2)
+			replset.LivenessProbe.FailureThreshold = int32(4)
+		}
+		if replset.LivenessProbe.StartupDelaySeconds == 0 {
+			replset.LivenessProbe.StartupDelaySeconds = startupDelaySeconds
+		}
+		if !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+			replset.LivenessProbe.Handler.Exec.Command = append(
+				replset.LivenessProbe.Handler.Exec.Command, startupDelaySecondsFlag, strconv.Itoa(startupDelaySeconds))
 		}
 
 		if replset.ReadinessProbe == nil {

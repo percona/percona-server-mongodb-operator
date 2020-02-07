@@ -86,7 +86,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 			},
 		},
 		WorkingDir:      MongodContainerDataDir,
-		LivenessProbe:   replset.LivenessProbe,
+		LivenessProbe:   &replset.LivenessProbe.Probe,
 		ReadinessProbe:  replset.ReadinessProbe,
 		Resources:       resources,
 		SecurityContext: replset.ContainerSecurityContext,

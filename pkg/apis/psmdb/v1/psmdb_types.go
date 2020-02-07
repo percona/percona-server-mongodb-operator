@@ -158,10 +158,25 @@ type ReplsetSpec struct {
 	Expose                   Expose                     `json:"expose,omitempty"`
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
-	LivenessProbe            *corev1.Probe              `json:"livenessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	MultiAZ
+}
+
+type LivenessProbeExtended struct {
+	corev1.Probe        `json:",inline"`
+	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
+}
+
+func (l LivenessProbeExtended) CommandHas(flag string) bool {
+	for _, v := range l.Handler.Exec.Command {
+		if v == flag {
+			return true
+		}
+	}
+
+	return false
 }
 
 type VolumeSpec struct {
