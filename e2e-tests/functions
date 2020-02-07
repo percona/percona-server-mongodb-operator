@@ -8,8 +8,8 @@ GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]
 API="psmdb.percona.com/v1-4-0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/percona-server-mongodb-operator:master-pmm"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:master-mongod4.2"}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"percona/percona-server-mongodb-operator:1.2.0-backup"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:master-mongod4.0"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:master-backup"}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -608,6 +608,7 @@ kubectl_bin() {
     local LAST_OUT="$(mktemp)"
     local LAST_ERR="$(mktemp)"
     local exit_status=0
+    local timeout=4
     for i in $(seq 0 2); do
         kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
         exit_status=$?

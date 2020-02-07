@@ -22,6 +22,10 @@ IMAGE_PMM='percona/percona-server-mongodb-operator:1.1.0-pmm'
 IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod$MONGO_VER"
 IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.1.0-backup'
 
+if [[ "${MONGO_VER}" == "4.2" ]]; then
+    IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod4.0"
+fi
+
 compare_generation() {
     generation=$1
     resource=${2:-statefulset}
