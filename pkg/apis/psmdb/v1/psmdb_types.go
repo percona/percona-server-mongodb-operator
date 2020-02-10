@@ -171,6 +171,10 @@ type LivenessProbeExtended struct {
 }
 
 func (l LivenessProbeExtended) CommandHas(flag string) bool {
+	if l.Handler.Exec == nil {
+		return false
+	}
+
 	for _, v := range l.Handler.Exec.Command {
 		if v == flag {
 			return true

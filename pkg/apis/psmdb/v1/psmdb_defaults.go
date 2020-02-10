@@ -126,27 +126,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
-	startupDelaySeconds := 2 * 60 * 60
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 	for _, replset := range cr.Spec.Replsets {
 		if replset.LivenessProbe == nil {
-			replset.LivenessProbe = &LivenessProbeExtended{
-				Probe: corev1.Probe{
-					Handler: corev1.Handler{
-						Exec: &corev1.ExecAction{
-							Command: []string{
-								"mongodb-healthcheck",
-								"k8s",
-								"liveness",
-								startupDelaySecondsFlag,
-								strconv.Itoa(startupDelaySeconds),
-							},
-						},
-					},
-				},
-				StartupDelaySeconds: startupDelaySeconds,
-			}
+			replset.LivenessProbe = new(LivenessProbeExtended)
 		}
+
+		log.Info(fmt.Sprintf("%v", replset.LivenessProbe))
 
 		if replset.LivenessProbe.InitialDelaySeconds == 0 {
 			replset.LivenessProbe.InitialDelaySeconds = int32(60)
@@ -161,12 +147,25 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.LivenessProbe.FailureThreshold = int32(4)
 		}
 		if replset.LivenessProbe.StartupDelaySeconds == 0 {
-			replset.LivenessProbe.StartupDelaySeconds = startupDelaySeconds
+			replset.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
 		}
-		if !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+		if replset.LivenessProbe.Handler.Exec == nil {
+			replset.LivenessProbe.Probe.Handler.Exec = &corev1.ExecAction{
+				Command: []string{
+					"mongodb-healthcheck",
+					"k8s",
+					"liveness",
+					startupDelaySecondsFlag,
+					strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds),
+				},
+			}
+		} else if !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 			replset.LivenessProbe.Handler.Exec.Command = append(
-				replset.LivenessProbe.Handler.Exec.Command, startupDelaySecondsFlag, strconv.Itoa(startupDelaySeconds))
+				replset.LivenessProbe.Handler.Exec.Command,
+				startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
 		}
+
+		log.Info(fmt.Sprintf("%v", replset.LivenessProbe))
 
 		if replset.ReadinessProbe == nil {
 			replset.ReadinessProbe = &corev1.Probe{
