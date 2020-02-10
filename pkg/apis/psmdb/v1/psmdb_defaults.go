@@ -132,8 +132,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.LivenessProbe = new(LivenessProbeExtended)
 		}
 
-		log.Info(fmt.Sprintf("%v", replset.LivenessProbe))
-
 		if replset.LivenessProbe.InitialDelaySeconds == 0 {
 			replset.LivenessProbe.InitialDelaySeconds = int32(60)
 		}
@@ -164,8 +162,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				replset.LivenessProbe.Handler.Exec.Command,
 				startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
 		}
-
-		log.Info(fmt.Sprintf("%v", replset.LivenessProbe))
 
 		if replset.ReadinessProbe == nil {
 			replset.ReadinessProbe = &corev1.Probe{
