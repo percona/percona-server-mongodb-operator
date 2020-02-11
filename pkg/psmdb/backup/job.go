@@ -25,7 +25,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 		ServiceAccountName: backupSpec.ServiceAccountName,
 		Containers: []corev1.Container{
 			{
-				Name:    backupCtlContainerName,
+				Name:    "backup",
 				Image:   backupSpec.Image,
 				Command: []string{"sh"},
 				Env: []corev1.EnvVar{
@@ -38,7 +38,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 						Value: genRandString(5),
 					},
 				},
-				Args:            newBackupCronJobContainerArgs(backup, crName),
+				Args:            newBackupCronJobContainerArgs(backup),
 				SecurityContext: backupSpec.ContainerSecurityContext,
 			},
 		},
@@ -83,8 +83,8 @@ func NewBackupCronJobLabels(crName string) map[string]string {
 	}
 }
 
-func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, crName string) []string {
-	args := []string{
+func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec) []string {
+	return []string{
 		"-c",
 		`
 			cat <<-EOF | /usr/bin/kubectl apply -f -
@@ -102,8 +102,6 @@ func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, crName string) []
 			EOF
 		`,
 	}
-
-	return args
 }
 
 func genRandString(ln int) string {

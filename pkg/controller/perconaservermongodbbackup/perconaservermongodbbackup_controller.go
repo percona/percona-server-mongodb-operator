@@ -8,7 +8,6 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -76,8 +75,6 @@ type ReconcilePerconaServerMongoDBBackup struct {
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
 // and what is in the PerconaServerMongoDBBackup.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -110,49 +107,39 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, nil
 	}
 
-	err = r.reconcileBC(instance)
+	err = r.reconcile(instance)
 	if err != nil {
 		return rr, fmt.Errorf("reconcile backup: " + err.Error())
-	}
-
-	err = r.updateStatus(instance)
-	if err != nil {
-		return rr, fmt.Errorf("update status:" + err.Error())
 	}
 
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) reconcileBC(cr *psmdbv1.PerconaServerMongoDBBackup) error {
-	bh, err := newBackupHandler(cr)
+func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup) error {
+	bh, err := r.newBackup(cr)
 	if err != nil {
-		return fmt.Errorf("handler creation: %v", err)
+		return fmt.Errorf("create backup object: %v", err)
 	}
-	if len(cr.Status.State) == 0 {
-		cr.Status = psmdbv1.PerconaServerMongoDBBackupStatus{
-			StorageName: cr.Spec.StorageName,
-			StartAt:     &metav1.Time{},
-			CompletedAt: &metav1.Time{},
-		}
-	}
-	backupStatus, err := bh.CheckBackup(cr)
+	defer bh.Close()
+
+	err = bh.SetConfig(cr)
 	if err != nil {
-		return fmt.Errorf("check and update backup: %v", err)
-	}
-	if len(backupStatus.State) > 0 {
-		cr.Status = backupStatus
-		return nil
+		return fmt.Errorf("set backup config: %v", err)
 	}
 
-	backupStatus, err = bh.StartBackup(cr)
+	status, err := bh.Status(cr)
 	if err != nil {
-		cr.Status = backupStatus
-		return fmt.Errorf("start backup: %v", err)
+		return fmt.Errorf("check backup status: %v", err)
 	}
-	if len(backupStatus.State) > 0 {
-		cr.Status = backupStatus
-		return nil
+
+	if status == nil {
+		status = bh.Start(cr)
 	}
+
+	if cr.Status.State != status.State {
+		return r.updateStatus(cr)
+	}
+
 	return nil
 }
 

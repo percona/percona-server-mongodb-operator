@@ -380,9 +380,10 @@ type BackupTaskSpec struct {
 
 type BackupStorageS3Spec struct {
 	Bucket            string `json:"bucket"`
-	CredentialsSecret string `json:"credentialsSecret"`
+	Prefix            string `json:"prefix,omitempty"`
 	Region            string `json:"region,omitempty"`
 	EndpointURL       string `json:"endpointUrl,omitempty"`
+	CredentialsSecret string `json:"credentialsSecret"`
 }
 
 type BackupStorageType string

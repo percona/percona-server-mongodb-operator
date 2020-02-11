@@ -13,6 +13,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -22,10 +23,9 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
-
-	session, err := mongo.Dial(r.getReplsetAddrs(cr, replset, pods.Items), replset.Name, usersSecret, true)
+	session, err := mongo.Dial(GetReplsetAddrs(r.client, cr, replset, pods.Items), replset.Name, usersSecret, true)
 	if err != nil {
-		session, err = mongo.Dial(r.getReplsetAddrs(cr, replset, pods.Items), replset.Name, usersSecret, false)
+		session, err = mongo.Dial(GetReplsetAddrs(r.client, cr, replset, pods.Items), replset.Name, usersSecret, false)
 		if err != nil {
 			// try to init replset and if succseed
 			// we'll go further on the next reconcile iteration
@@ -60,7 +60,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			break
 		}
 
-		host, err := r.mongoHost(cr, replset, pod)
+		host, err := mongoHost(r.client, cr, replset, pod)
 		if err != nil {
 			return fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -108,12 +108,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return nil
 }
 
-// getReplsetAddrs returns a slice of replset host:port addresses
-func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) []string {
+// GetReplsetAddrs returns a slice of replset host:port addresses
+func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) []string {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
-		host, err := r.mongoHost(m, replset, pod)
+		host, err := mongoHost(cl, m, replset, pod)
 		if err != nil {
 			log.Error(err, "failed to get external hostname")
 			continue
@@ -124,21 +124,21 @@ func (r *ReconcilePerconaServerMongoDB) getReplsetAddrs(m *api.PerconaServerMong
 	return addrs
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoHost(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) (string, error) {
+func mongoHost(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) (string, error) {
 	if replset.Expose.Enabled {
-		return r.getExtAddr(m.Namespace, pod)
+		return getExtAddr(cl, m.Namespace, pod)
 	}
 
 	return getAddr(m, pod.Name, replset.Name), nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getExtAddr(namespace string, pod corev1.Pod) (string, error) {
-	svc, err := r.getExtServices(namespace, pod.Name)
+func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
+	svc, err := getExtServices(cl, namespace, pod.Name)
 	if err != nil {
 		return "", fmt.Errorf("fetch service address: %v", err)
 	}
 
-	hostname, err := psmdb.GetServiceAddr(*svc, pod, r.client)
+	hostname, err := psmdb.GetServiceAddr(*svc, pod, cl)
 	if err != nil {
 		return "", fmt.Errorf("get service hostname: %v", err)
 	}
@@ -172,7 +172,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 		}
 
 		if replset.Expose.Enabled {
-			svc, err := r.getExtServices(m.Namespace, pod.Name)
+			svc, err := getExtServices(r.client, m.Namespace, pod.Name)
 			if err != nil {
 				return fmt.Errorf("failed to fetch services: %v", err)
 			}
@@ -236,13 +236,13 @@ func isPodReady(pod corev1.Pod) bool {
 	return false
 }
 
-func (r *ReconcilePerconaServerMongoDB) getExtServices(namespace, podName string) (*corev1.Service, error) {
+func getExtServices(cl client.Client, namespace, podName string) (*corev1.Service, error) {
 	var retries uint64 = 0
 
 	svcMeta := &corev1.Service{}
 
 	for retries <= 5 {
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
+		err := cl.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
 
 		if err != nil {
 			if k8serrors.IsNotFound(err) {

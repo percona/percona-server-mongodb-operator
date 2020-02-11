@@ -16,27 +16,32 @@ type PerconaServerMongoDBBackupSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	PSMDBCluster string `json:"psmdbCluster,omitempty"`
 	StorageName  string `json:"storageName,omitempty"`
+	Replset      string `json:"replset,omitempty"`
 }
 
-type PerconaSMDBStatusState string
+type BackupState string
 
 const (
-	StateRequested PerconaSMDBStatusState = "requested"
-	StateRejected  PerconaSMDBStatusState = "rejected"
-	StateReady     PerconaSMDBStatusState = "ready"
+	StateRequested BackupState = "requested"
+	StateRejected              = "rejected"
+	StateRunning               = "running"
+	StateError                 = "error"
+	StateReady                 = "ready"
 )
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	State         PerconaSMDBStatusState `json:"state,omitempty"`
-	StartAt       *metav1.Time           `json:"start,omitempty"`
-	CompletedAt   *metav1.Time           `json:"completed,omitempty"`
-	LastScheduled *metav1.Time           `json:"lastscheduled,omitempty"`
-	Destination   string                 `json:"destination,omitempty"`
-	StorageName   string                 `json:"storageName,omitempty"`
-	S3            *BackupStorageS3Spec   `json:"s3,omitempty"`
+	State          BackupState          `json:"state,omitempty"`
+	StartAt        *metav1.Time         `json:"start,omitempty"`
+	CompletedAt    *metav1.Time         `json:"completed,omitempty"`
+	LastTransition *metav1.Time         `json:"lastTransition,omitempty"`
+	Destination    string               `json:"destination,omitempty"`
+	StorageName    string               `json:"storageName,omitempty"`
+	S3             *BackupStorageS3Spec `json:"s3,omitempty"`
+	PBMname        string               `json:"pbmName,omitempty"`
+	Error          string               `json:"pbmName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -63,14 +68,6 @@ type PerconaServerMongoDBBackupList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PerconaServerMongoDBBackup `json:"items"`
 }
-
-type PSMDBBackupState string
-
-const (
-	BackupStarting  PSMDBBackupState = "Starting"
-	BackupFailed                     = "Failed"
-	BackupSucceeded                  = "Ready"
-)
 
 func (p *PerconaServerMongoDBBackup) CheckFields() error {
 	if len(p.Spec.StorageName) == 0 {
