@@ -5,7 +5,6 @@ import (
 
 	pbapi "github.com/percona/percona-backup-mongodb/proto/api"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -18,7 +17,7 @@ func newRestoreHandler(cluster string) (RestoreHandler, error) {
 		grpc.WithStreamInterceptor(makeStreamInterceptor("")),
 		grpc.WithInsecure(),
 	}
-	conn, err := grpc.Dial(cluster+backup.GetCoordinatorSuffix()+":10001", grpcOpts...)
+	conn, err := grpc.Dial(cluster+":10001", grpcOpts...)
 	if err != nil {
 		return r, err
 	}

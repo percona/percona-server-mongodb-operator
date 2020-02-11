@@ -184,20 +184,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
-	bcpSfs, err := r.reconcileBackupCoordinator(cr)
-	if err != nil {
-		err = errors.Wrap(err, "reconcile backup coordinator")
-		return reconcile.Result{}, err
-	}
-
 	if cr.Spec.Backup.Enabled {
-		err = r.reconcileBackupStorageConfig(cr, bcpSfs)
-		if err != nil {
-			err = errors.Wrap(err, "reconcile backup storage config")
-			return reconcile.Result{}, err
-		}
-
-		err = r.reconcileBackupTasks(cr, bcpSfs)
+		err = r.reconcileBackupTasks(cr)
 		if err != nil {
 			err = errors.Wrap(err, "reconcile backup tasks")
 			return reconcile.Result{}, err
@@ -438,7 +426,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 		if cr.Spec.Backup.Enabled {
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr))
-			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, backup.AgentVolume(cr.Name))
+			// sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, backup.AgentVolume(cr.Name))
 		}
 
 		if cr.Spec.PMM.Enabled {
