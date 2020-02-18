@@ -126,6 +126,20 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
+	gte140, err := cr.VersionGreaterThanOrEqual("1.4.0")
+	if err != nil {
+		return fmt.Errorf("failed to check version %v", err)
+	}
+
+	timeoutSecondsDefault := int32(5)
+	initialDelaySecondsDefault := int32(90)
+	periodSecondsDeafult := int32(10)
+	failureThresholdDefault := int32(12)
+	if gte140 {
+		initialDelaySecondsDefault = int32(60)
+		periodSecondsDeafult = int32(30)
+		failureThresholdDefault = int32(4)
+	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 	for _, replset := range cr.Spec.Replsets {
 		if replset.LivenessProbe == nil {
@@ -133,16 +147,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if replset.LivenessProbe.InitialDelaySeconds == 0 {
-			replset.LivenessProbe.InitialDelaySeconds = int32(60)
+			replset.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
 		}
 		if replset.LivenessProbe.TimeoutSeconds == 0 {
-			replset.LivenessProbe.TimeoutSeconds = int32(5)
+			replset.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
 		}
 		if replset.LivenessProbe.PeriodSeconds == 0 {
-			replset.LivenessProbe.PeriodSeconds = int32(30)
+			replset.LivenessProbe.PeriodSeconds = periodSecondsDeafult
 		}
 		if replset.LivenessProbe.FailureThreshold == 0 {
-			replset.LivenessProbe.FailureThreshold = int32(4)
+			replset.LivenessProbe.FailureThreshold = failureThresholdDefault
 		}
 		if replset.LivenessProbe.StartupDelaySeconds == 0 {
 			replset.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
@@ -153,11 +167,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					"mongodb-healthcheck",
 					"k8s",
 					"liveness",
-					startupDelaySecondsFlag,
-					strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds),
 				},
 			}
-		} else if !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+		}
+
+		if gte140 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 			replset.LivenessProbe.Handler.Exec.Command = append(
 				replset.LivenessProbe.Handler.Exec.Command,
 				startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
