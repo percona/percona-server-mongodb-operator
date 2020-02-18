@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 3
+  generation: 4
   name: some-name-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1

@@ -75,11 +75,9 @@ spec:
             - mongodb-healthcheck
             - k8s
             - liveness
-            - --startupDelaySeconds
-            - "7200"
-          failureThreshold: 4
-          initialDelaySeconds: 60
-          periodSeconds: 30
+          failureThreshold: 12
+          initialDelaySeconds: 90
+          periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 5
         name: mongod
