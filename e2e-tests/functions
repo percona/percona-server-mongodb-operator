@@ -306,6 +306,7 @@ compare_kubectl() {
     fi
 
     kubectl_bin get -o yaml ${resource} \
+        | egrep -v "service.kubernetes.io/load-balancer-cleanup" \
         | egrep -v "namespace:|uid:|resourceVersion:|selfLink:|creationTimestamp:|image:|clusterIP:|dataSource:|procMount:" \
         | egrep -v "^  storageClassName:|finalizers:|kubernetes.io/pvc-protection|volumeName:|storage-provisioner:|status: \{\}|volumeMode: Filesystem" \
         | egrep -v "percona.com/.*-hash:|control-plane.alpha.kubernetes.io/leader:|volume.kubernetes.io/selected-node:" \
@@ -426,7 +427,7 @@ run_pumba() {
 deploy_cert_manager() {
     kubectl_bin create namespace cert-manager || :
     kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-    kubectl_bin apply -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.7/deploy/manifests/cert-manager.yaml --validate=false || : 2>/dev/null
+    kubectl_bin apply -f https://github.com/jetstack/cert-manager/releases/download/v0.10.1/cert-manager.yaml --validate=false || : 2>/dev/null
 }
 
 destroy() {
@@ -450,7 +451,7 @@ destroy() {
     kubectl_bin delete psmdb-backup --all || :
     kubectl_bin delete psmdb-recovery --all || :
 
-    kubectl_bin delete -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.7/deploy/manifests/cert-manager.yaml 2>/dev/null || :
+    kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.10.1/cert-manager.yaml 2>/dev/null || :
     if [ "$OPENSHIFT" == 1 ]; then
         oc delete --grace-period=0 --force=true project "$namespace"
     else
