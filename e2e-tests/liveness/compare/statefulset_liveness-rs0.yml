@@ -90,13 +90,13 @@ spec:
           name: mongodb
           protocol: TCP
         readinessProbe:
-          failureThreshold: 8
-          initialDelaySeconds: 10
-          periodSeconds: 3
-          successThreshold: 1
+          failureThreshold: 9
+          initialDelaySeconds: 11
+          periodSeconds: 4
+          successThreshold: 2
           tcpSocket:
             port: 27017
-          timeoutSeconds: 2
+          timeoutSeconds: 3
         resources:
           limits:
             cpu: 500m

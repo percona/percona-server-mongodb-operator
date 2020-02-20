@@ -67,6 +67,14 @@ spec:
       successThreshold: 1
       timeoutSeconds: 6
       startupDelaySeconds: 7201
+    readinessProbe:
+      failureThreshold: 9
+      initialDelaySeconds: 11
+      periodSeconds: 4
+      successThreshold: 2
+      tcpSocket:
+        port: 27017
+      timeoutSeconds: 3
   secrets:
     key: some-key
     users: some-users
