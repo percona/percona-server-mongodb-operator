@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -125,15 +126,77 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
+	gte140, err := cr.VersionGreaterThanOrEqual("1.4.0")
+	if err != nil {
+		return fmt.Errorf("failed to check version %v", err)
+	}
+
+	timeoutSecondsDefault := int32(5)
+	initialDelaySecondsDefault := int32(90)
+	periodSecondsDeafult := int32(10)
+	failureThresholdDefault := int32(12)
+	if gte140 {
+		initialDelaySecondsDefault = int32(60)
+		periodSecondsDeafult = int32(30)
+		failureThresholdDefault = int32(4)
+	}
+	startupDelaySecondsFlag := "--startupDelaySeconds"
 	for _, replset := range cr.Spec.Replsets {
-		if replset.LivenessInitialDelaySeconds == nil {
-			ld := int32(90)
-			replset.LivenessInitialDelaySeconds = &ld
+		if replset.LivenessProbe == nil {
+			replset.LivenessProbe = new(LivenessProbeExtended)
 		}
 
-		if replset.ReadinessInitialDelaySeconds == nil {
-			rd := int32(10)
-			replset.ReadinessInitialDelaySeconds = &rd
+		if replset.LivenessProbe.InitialDelaySeconds == 0 {
+			replset.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+		}
+		if replset.LivenessProbe.TimeoutSeconds == 0 {
+			replset.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+		}
+		if replset.LivenessProbe.PeriodSeconds == 0 {
+			replset.LivenessProbe.PeriodSeconds = periodSecondsDeafult
+		}
+		if replset.LivenessProbe.FailureThreshold == 0 {
+			replset.LivenessProbe.FailureThreshold = failureThresholdDefault
+		}
+		if replset.LivenessProbe.StartupDelaySeconds == 0 {
+			replset.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
+		}
+		if replset.LivenessProbe.Handler.Exec == nil {
+			replset.LivenessProbe.Probe.Handler.Exec = &corev1.ExecAction{
+				Command: []string{
+					"mongodb-healthcheck",
+					"k8s",
+					"liveness",
+				},
+			}
+		}
+
+		if gte140 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+			replset.LivenessProbe.Handler.Exec.Command = append(
+				replset.LivenessProbe.Handler.Exec.Command,
+				startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
+		}
+
+		if replset.ReadinessProbe == nil {
+			replset.ReadinessProbe = &corev1.Probe{
+				Handler: corev1.Handler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(cr.Spec.Mongod.Net.Port)),
+					},
+				},
+			}
+		}
+		if replset.ReadinessProbe.InitialDelaySeconds == 0 {
+			replset.ReadinessProbe.InitialDelaySeconds = int32(10)
+		}
+		if replset.ReadinessProbe.TimeoutSeconds == 0 {
+			replset.ReadinessProbe.TimeoutSeconds = int32(2)
+		}
+		if replset.ReadinessProbe.PeriodSeconds == 0 {
+			replset.ReadinessProbe.PeriodSeconds = int32(3)
+		}
+		if replset.ReadinessProbe.FailureThreshold == 0 {
+			replset.ReadinessProbe.FailureThreshold = int32(8)
 		}
 
 		if cr.Spec.Pause {

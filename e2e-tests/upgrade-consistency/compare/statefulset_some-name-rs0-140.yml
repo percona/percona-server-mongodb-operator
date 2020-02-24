@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 3
+  generation: 4
   name: some-name-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1
@@ -77,9 +77,11 @@ spec:
             - mongodb-healthcheck
             - k8s
             - liveness
-          failureThreshold: 12
-          initialDelaySeconds: 90
-          periodSeconds: 10
+            - --startupDelaySeconds
+            - "7200"
+          failureThreshold: 4
+          initialDelaySeconds: 60
+          periodSeconds: 30
           successThreshold: 1
           timeoutSeconds: 5
         name: mongod

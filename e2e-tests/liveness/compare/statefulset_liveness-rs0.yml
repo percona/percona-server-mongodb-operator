@@ -2,12 +2,12 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: no-limits-rs0
+  name: liveness-rs0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1
     controller: true
     kind: PerconaServerMongoDB
-    name: no-limits
+    name: liveness
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -15,34 +15,23 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: no-limits
+      app.kubernetes.io/instance: liveness
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: no-limits-rs0
+  serviceName: liveness-rs0
   template:
     metadata:
       annotations:
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: no-limits
+        app.kubernetes.io/instance: liveness
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
         app.kubernetes.io/replset: rs0
     spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchLabels:
-                app.kubernetes.io/instance: no-limits
-                app.kubernetes.io/managed-by: percona-server-mongodb-operator
-                app.kubernetes.io/name: percona-server-mongodb
-                app.kubernetes.io/part-of: percona-server-mongodb
-                app.kubernetes.io/replset: rs0
-            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - --bind_ip_all
@@ -60,6 +49,7 @@ spec:
         - --rateLimit=1
         - --enableEncryption
         - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+        - --wiredTigerCacheSizeGB=0.25
         - --wiredTigerCollectionBlockCompressor=snappy
         - --wiredTigerJournalCompressor=snappy
         - --wiredTigerIndexPrefixCompression=true
@@ -71,7 +61,7 @@ spec:
         - wiredTigerConcurrentWriteTransactions=128
         env:
         - name: SERVICE_NAME
-          value: no-limits
+          value: liveness
         - name: MONGODB_PORT
           value: "27017"
         - name: MONGODB_REPLSET
@@ -88,39 +78,41 @@ spec:
             - k8s
             - liveness
             - --startupDelaySeconds
-            - "7200"
-          failureThreshold: 4
-          initialDelaySeconds: 60
-          periodSeconds: 30
+            - "7201"
+          failureThreshold: 5
+          initialDelaySeconds: 61
+          periodSeconds: 31
           successThreshold: 1
-          timeoutSeconds: 5
+          timeoutSeconds: 6
         name: mongod
         ports:
         - containerPort: 27017
           name: mongodb
           protocol: TCP
         readinessProbe:
-          failureThreshold: 8
-          initialDelaySeconds: 10
-          periodSeconds: 3
-          successThreshold: 1
+          failureThreshold: 9
+          initialDelaySeconds: 11
+          periodSeconds: 4
+          successThreshold: 2
           tcpSocket:
             port: 27017
-          timeoutSeconds: 2
+          timeoutSeconds: 3
         resources:
-          requests:
-            cpu: 300m
+          limits:
+            cpu: 500m
             memory: 500M
+          requests:
+            cpu: 100m
+            memory: 100M
         securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
+          privileged: true
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
         - mountPath: /etc/mongodb-secrets
-          name: no-limits-mongodb-keyfile
+          name: liveness-mongodb-keyfile
           readOnly: true
         - mountPath: /etc/mongodb-ssl
           name: ssl
@@ -129,7 +121,7 @@ spec:
           name: ssl-internal
           readOnly: true
         - mountPath: /etc/mongodb-encryption
-          name: no-limits-mongodb-encryption-key
+          name: liveness-mongodb-encryption-key
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -137,28 +129,32 @@ spec:
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
+        supplementalGroups:
+        - 1001
+        - 1002
+        - 1003
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: no-limits-mongodb-keyfile
+      - name: liveness-mongodb-keyfile
         secret:
           defaultMode: 288
           optional: false
-          secretName: no-limits-mongodb-keyfile
-      - name: no-limits-mongodb-encryption-key
+          secretName: liveness-mongodb-keyfile
+      - name: liveness-mongodb-encryption-key
         secret:
           defaultMode: 288
           optional: false
-          secretName: no-limits-mongodb-encryption-key
+          secretName: liveness-mongodb-encryption-key
       - name: ssl
         secret:
           defaultMode: 288
           optional: false
-          secretName: some-name-ssl
+          secretName: liveness-ssl
       - name: ssl-internal
         secret:
           defaultMode: 288
           optional: true
-          secretName: no-limits-ssl-internal
+          secretName: liveness-ssl-internal
   updateStrategy:
     rollingUpdate:
       partition: 0

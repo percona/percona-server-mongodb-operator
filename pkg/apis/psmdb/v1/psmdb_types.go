@@ -151,18 +151,37 @@ type PodAffinity struct {
 }
 
 type ReplsetSpec struct {
-	Resources                    *ResourcesSpec             `json:"resources,omitempty"`
-	Name                         string                     `json:"name"`
-	Size                         int32                      `json:"size"`
-	ClusterRole                  ClusterRole                `json:"clusterRole,omitempty"`
-	Arbiter                      Arbiter                    `json:"arbiter,omitempty"`
-	Expose                       Expose                     `json:"expose,omitempty"`
-	VolumeSpec                   *VolumeSpec                `json:"volumeSpec,omitempty"`
-	ReadinessInitialDelaySeconds *int32                     `json:"readinessDelaySec,omitempty"`
-	LivenessInitialDelaySeconds  *int32                     `json:"livenessDelaySec,omitempty"`
-	PodSecurityContext           *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext     *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Resources                *ResourcesSpec             `json:"resources,omitempty"`
+	Name                     string                     `json:"name"`
+	Size                     int32                      `json:"size"`
+	ClusterRole              ClusterRole                `json:"clusterRole,omitempty"`
+	Arbiter                  Arbiter                    `json:"arbiter,omitempty"`
+	Expose                   Expose                     `json:"expose,omitempty"`
+	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	MultiAZ
+}
+
+type LivenessProbeExtended struct {
+	corev1.Probe        `json:",inline"`
+	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
+}
+
+func (l LivenessProbeExtended) CommandHas(flag string) bool {
+	if l.Handler.Exec == nil {
+		return false
+	}
+
+	for _, v := range l.Handler.Exec.Command {
+		if v == flag {
+			return true
+		}
+	}
+
+	return false
 }
 
 type VolumeSpec struct {

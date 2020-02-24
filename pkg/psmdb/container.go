@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -86,33 +85,9 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 				},
 			},
 		},
-		WorkingDir: MongodContainerDataDir,
-		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"mongodb-healthcheck",
-						"k8s",
-						"liveness",
-					},
-				},
-			},
-			InitialDelaySeconds: *replset.LivenessInitialDelaySeconds,
-			TimeoutSeconds:      int32(5),
-			PeriodSeconds:       int32(10),
-			FailureThreshold:    int32(12),
-		},
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
-				},
-			},
-			InitialDelaySeconds: *replset.ReadinessInitialDelaySeconds,
-			TimeoutSeconds:      int32(2),
-			PeriodSeconds:       int32(3),
-			FailureThreshold:    int32(8),
-		},
+		WorkingDir:      MongodContainerDataDir,
+		LivenessProbe:   &replset.LivenessProbe.Probe,
+		ReadinessProbe:  replset.ReadinessProbe,
 		Resources:       resources,
 		SecurityContext: replset.ContainerSecurityContext,
 		VolumeMounts:    volumes,
