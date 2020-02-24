@@ -45,6 +45,13 @@ spec:
 #      rack: rack-22
 #    nodeSelector:
 #      disktype: ssd
+#    livenessProbe:
+#      failureThreshold: 4
+#      initialDelaySeconds: 60
+#      periodSeconds: 30
+#      successThreshold: 1
+#      timeoutSeconds: 5
+#      startupDelaySeconds: 7200
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
