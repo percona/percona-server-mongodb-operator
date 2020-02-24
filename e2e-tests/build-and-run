@@ -9,7 +9,6 @@ src_dir="$(realpath $test_dir/..)"
 if [[ $BUILD != "0" ]]; then
     echo "building, set BUILD=0 to suppress this"
     "$test_dir"/build || exit
-    exit 1
 else
   echo "run without building"
 fi
