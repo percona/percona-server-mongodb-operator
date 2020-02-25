@@ -470,7 +470,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		}
 	}
 
-	sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
+	switch cr.Spec.UpdateStrategy {
+	case "OnDelete":
+		sfsSpec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{}
+		sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
+	default:
+		sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
+	}
 
 	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
 	if err != nil {
