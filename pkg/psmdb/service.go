@@ -4,15 +4,18 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 )
 
 // Service returns a core/v1 API Service
@@ -179,4 +182,64 @@ func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 
 	}
 	return "", fmt.Errorf("can't get service %s ingress, retry limit reached", pod.Name)
+}
+
+// GetReplsetAddrs returns a slice of replset host:port addresses
+func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) ([]string, error) {
+	addrs := make([]string, 0)
+
+	for _, pod := range pods {
+		host, err := MongoHost(cl, m, replset, pod)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
+		}
+		addrs = append(addrs, host)
+	}
+
+	return addrs, nil
+}
+
+// MongoHost returns the mongo host for given pod
+func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) (string, error) {
+	if replset.Expose.Enabled {
+		return getExtAddr(cl, m.Namespace, pod)
+	}
+
+	return getAddr(m, pod.Name, replset.Name), nil
+}
+
+func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
+	svc, err := getExtServices(cl, namespace, pod.Name)
+	if err != nil {
+		return "", fmt.Errorf("fetch service address: %v", err)
+	}
+
+	hostname, err := GetServiceAddr(*svc, pod, cl)
+	if err != nil {
+		return "", fmt.Errorf("get service hostname: %v", err)
+	}
+
+	return hostname.String(), nil
+}
+
+func getAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
+	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
+		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
+}
+
+func getExtServices(cl client.Client, namespace, podName string) (*corev1.Service, error) {
+	svcMeta := &corev1.Service{}
+
+	for retries := 0; retries < 6; retries++ {
+		err := cl.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			return nil, fmt.Errorf("failed to fetch service: %v", err)
+		}
+		return svcMeta, nil
+	}
+	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
 }

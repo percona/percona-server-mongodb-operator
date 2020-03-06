@@ -26,7 +26,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 		Containers: []corev1.Container{
 			{
 				Name:    "backup",
-				Image:   backupSpec.Image,
+				Image:   "percona/percona-server-mongodb-operator:1.3.0-backup", //backupSpec.Image,
 				Command: []string{"sh"},
 				Env: []corev1.EnvVar{
 					{

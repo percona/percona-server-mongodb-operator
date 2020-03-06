@@ -110,7 +110,7 @@ type ReconcilePerconaServerMongoDB struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling PerconaServerMongoDB")
+	// reqLogger.Info("Reconciling PerconaServerMongoDB")
 
 	rr := reconcile.Result{
 		RequeueAfter: r.reconcileIn,
@@ -425,8 +425,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		}
 
 		if cr.Spec.Backup.Enabled {
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr))
-			// sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, backup.AgentVolume(cr.Name))
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, replset.Name))
 		}
 
 		if cr.Spec.PMM.Enabled {
