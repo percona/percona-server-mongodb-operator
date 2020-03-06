@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/percona/percona-backup-mongodb/pbm"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -349,33 +350,12 @@ type MongodSpecOperationProfiling struct {
 	RateLimit         int                    `json:"rateLimit,omitempty"`
 }
 
-type BackupCoordinatorSpec struct {
-	Resources                   *corev1.ResourceRequirements `json:"resources,omitempty"`
-	StorageClass                string                       `json:"storageClass,omitempty"`
-	EnableClientsLogging        bool                         `json:"enableClientsLogging,omitempty"`
-	LivenessInitialDelaySeconds *int32                       `json:"livenessDelaySec,omitempty"`
-	MultiAZ
-}
-
-type BackupDestinationType string
-
-var (
-	BackupDestinationS3   BackupDestinationType = "s3"
-	BackupDestinationFile BackupDestinationType = "file"
-)
-
-type BackupCompressionType string
-
-var (
-	BackupCompressionGzip BackupCompressionType = "gzip"
-)
-
 type BackupTaskSpec struct {
-	Name            string                `json:"name"`
-	Enabled         bool                  `json:"enabled"`
-	Schedule        string                `json:"schedule,omitempty"`
-	StorageName     string                `json:"storageName,omitempty"`
-	CompressionType BackupCompressionType `json:"compressionType,omitempty"`
+	Name            string              `json:"name"`
+	Enabled         bool                `json:"enabled"`
+	Schedule        string              `json:"schedule,omitempty"`
+	StorageName     string              `json:"storageName,omitempty"`
+	CompressionType pbm.CompressionType `json:"compressionType,omitempty"`
 }
 
 type BackupStorageS3Spec struct {
@@ -400,9 +380,6 @@ type BackupStorageSpec struct {
 
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
-	Debug                    bool                         `json:"debug"`
-	RestartOnFailure         *bool                        `json:"restartOnFailure,omitempty"`
-	Coordinator              BackupCoordinatorSpec        `json:"coordinator,omitempty"`
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
 	Image                    string                       `json:"image,omitempty"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`

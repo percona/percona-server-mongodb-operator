@@ -3,30 +3,32 @@ package v1
 import (
 	"fmt"
 
+	"github.com/percona/percona-backup-mongodb/pbm"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	PSMDBCluster string `json:"psmdbCluster,omitempty"`
-	StorageName  string `json:"storageName,omitempty"`
-	Replset      string `json:"replset,omitempty"`
+	PSMDBCluster string              `json:"psmdbCluster,omitempty"`
+	StorageName  string              `json:"storageName,omitempty"`
+	Replset      string              `json:"replset,omitempty"`
+	Comperssion  pbm.CompressionType `json:"compressionType,omitempty"`
 }
 
 type BackupState string
 
 const (
-	StateRequested BackupState = "requested"
-	StateRejected              = "rejected"
-	StateRunning               = "running"
-	StateError                 = "error"
-	StateReady                 = "ready"
+	BackupStateNew       BackupState = ""
+	BackupStateRequested             = "requested"
+	BackupStateRejected              = "rejected"
+	BackupStateRunning               = "running"
+	BackupStateError                 = "error"
+	BackupStateReady                 = "ready"
 )
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
@@ -41,7 +43,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	StorageName    string               `json:"storageName,omitempty"`
 	S3             *BackupStorageS3Spec `json:"s3,omitempty"`
 	PBMname        string               `json:"pbmName,omitempty"`
-	Error          string               `json:"pbmName,omitempty"`
+	Error          string               `json:"error,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -75,6 +77,9 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 	}
 	if len(p.Spec.PSMDBCluster) == 0 {
 		return fmt.Errorf("spec psmsdbCluster field is empty")
+	}
+	if string(p.Spec.Comperssion) == "" {
+		p.Spec.Comperssion = pbm.CompressionTypeGZIP
 	}
 	return nil
 }

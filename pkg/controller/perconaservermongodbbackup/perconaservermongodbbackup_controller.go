@@ -79,8 +79,6 @@ type ReconcilePerconaServerMongoDBBackup struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	//reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
 	}
@@ -103,7 +101,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, fmt.Errorf("fields check: %v", err)
 	}
 
-	if instance.Status.State == psmdbv1.StateReady {
+	if instance.Status.State == psmdbv1.BackupStateReady {
 		return rr, nil
 	}
 
@@ -115,32 +113,37 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup) error {
-	bh, err := r.newBackup(cr)
+func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup) (err error) {
+	status := cr.Status
+
+	defer func() {
+		if err != nil {
+			status.State = psmdbv1.RestoreStateError
+			status.Error = err.Error()
+			log.Error(err, "failed to make restore", "backup", cr.Name)
+		}
+		if cr.Status.State != status.State {
+			cr.Status = status
+			uerr := r.updateStatus(cr)
+			if uerr != nil {
+				log.Error(uerr, "failed to updated restore status", "backup", cr.Name)
+			}
+		}
+	}()
+
+	bcp, err := r.newBackup(cr)
 	if err != nil {
 		return fmt.Errorf("create backup object: %v", err)
 	}
-	defer bh.Close()
+	defer bcp.Close()
 
-	err = bh.SetConfig(cr)
-	if err != nil {
-		return fmt.Errorf("set backup config: %v", err)
+	if cr.Status.State == psmdbv1.BackupStateNew {
+		status, err = bcp.Start(cr)
+		return err
 	}
 
-	status, err := bh.Status(cr)
-	if err != nil {
-		return fmt.Errorf("check backup status: %v", err)
-	}
-
-	if status == nil {
-		status = bh.Start(cr)
-	}
-
-	if cr.Status.State != status.State {
-		return r.updateStatus(cr)
-	}
-
-	return nil
+	status, err = bcp.Status(cr)
+	return err
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1.PerconaServerMongoDBBackup) error {

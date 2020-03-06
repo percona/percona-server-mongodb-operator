@@ -15,24 +15,28 @@ type PerconaServerMongoDBRestoreSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	BackupName  string `json:"backupName,omitempty"`
 	ClusterName string `json:"clusterName,omitempty"`
-	Destination string `json:"destination,omitempty"`
-	StorageName string `json:"storageName,omitempty"`
 }
 
-// PerconaSMDBRestoreStatusState is for restore status states
-type PerconaSMDBRestoreStatusState string
+// RestoreState is for restore status states
+type RestoreState string
 
 const (
-	RestoreStateRequested PerconaSMDBRestoreStatusState = "requested"
-	RestoreStateReady     PerconaSMDBRestoreStatusState = "ready"
-	RestoreStateRejected  PerconaSMDBRestoreStatusState = "rejected"
+	RestoreStateNew       RestoreState = ""
+	RestoreStateRequested              = "requested"
+	RestoreStateRejected               = "rejected"
+	RestoreStateRunning                = "running"
+	RestoreStateError                  = "error"
+	RestoreStateReady                  = "ready"
 )
 
 // PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	State PerconaSMDBRestoreStatusState `json:"state,omitempty"`
+	State          RestoreState `json:"state,omitempty"`
+	PBMname        string       `json:"pbmName,omitempty"`
+	Error          string       `json:"error,omitempty"`
+	CompletedAt    *metav1.Time `json:"completed,omitempty"`
+	LastTransition *metav1.Time `json:"lastTransition,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -60,8 +64,8 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 	if len(r.Spec.ClusterName) == 0 {
 		return fmt.Errorf("spec clusterName field is empty")
 	}
-	if len(r.Spec.BackupName) == 0 && (len(r.Spec.StorageName) == 0 || len(r.Spec.Destination) == 0) {
-		return fmt.Errorf("fields backupName or StorageNmae and destination is empty")
+	if len(r.Spec.BackupName) == 0 {
+		return fmt.Errorf("spec backupName field is empty")
 	}
 
 	return nil

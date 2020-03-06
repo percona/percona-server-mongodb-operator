@@ -2,18 +2,12 @@ package perconaservermongodb
 
 import (
 	"bytes"
-	"context"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -23,9 +17,13 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
-	session, err := mongo.Dial(GetReplsetAddrs(r.client, cr, replset, pods.Items), replset.Name, usersSecret, true)
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
 	if err != nil {
-		session, err = mongo.Dial(GetReplsetAddrs(r.client, cr, replset, pods.Items), replset.Name, usersSecret, false)
+		return errors.Wrap(err, "get replset addr")
+	}
+	session, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, true)
+	if err != nil {
+		session, err = mongo.Dial(rsAddrs, replset.Name, usersSecret, false)
 		if err != nil {
 			// try to init replset and if succseed
 			// we'll go further on the next reconcile iteration
@@ -60,7 +58,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			break
 		}
 
-		host, err := mongoHost(r.client, cr, replset, pod)
+		host, err := psmdb.MongoHost(r.client, cr, replset, pod)
 		if err != nil {
 			return fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -108,50 +106,58 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return nil
 }
 
-// GetReplsetAddrs returns a slice of replset host:port addresses
-func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) []string {
-	addrs := make([]string, 0)
-
-	for _, pod := range pods {
-		host, err := mongoHost(cl, m, replset, pod)
-		if err != nil {
-			log.Error(err, "failed to get external hostname")
-			continue
-		}
-		addrs = append(addrs, host)
-	}
-
-	return addrs
-}
-
-func mongoHost(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) (string, error) {
-	if replset.Expose.Enabled {
-		return getExtAddr(cl, m.Namespace, pod)
-	}
-
-	return getAddr(m, pod.Name, replset.Name), nil
-}
-
-func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
-	svc, err := getExtServices(cl, namespace, pod.Name)
-	if err != nil {
-		return "", fmt.Errorf("fetch service address: %v", err)
-	}
-
-	hostname, err := psmdb.GetServiceAddr(*svc, pod, cl)
-	if err != nil {
-		return "", fmt.Errorf("get service hostname: %v", err)
-	}
-
-	return hostname.String(), nil
-}
-
-func getAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
-	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
-		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
-}
-
 var ErrNoRunningMongodContainers = fmt.Errorf("no mongod containers in running state")
+
+const (
+	mongoInitAdminUser = `
+	db.getSiblingDB("admin").createUser(
+		{
+			user: "${MONGODB_USER_ADMIN_USER}",
+			pwd: "${MONGODB_USER_ADMIN_PASSWORD}",
+			roles: [ "userAdminAnyDatabase" ] 
+		}
+	)
+	`
+
+	mongoInitUsers = `
+	db.getSiblingDB("admin").createUser(
+		{
+			user: "${MONGODB_CLUSTER_ADMIN_USER}",
+			pwd: "${MONGODB_CLUSTER_ADMIN_PASSWORD}",
+			roles: [ "clusterAdmin" ] 
+		}
+	)
+	db.getSiblingDB("admin").createUser(
+		{
+			user: "${MONGODB_CLUSTER_MONITOR_USER}",
+			pwd: "${MONGODB_CLUSTER_MONITOR_PASSWORD}",
+			roles: [ "clusterMonitor" ] 
+		}
+	)
+	
+	db.getSiblingDB("admin").createRole({ "role": "pbmAnyAction",
+		  "privileges": [
+			 { "resource": { "anyResource": true },
+			   "actions": [ "anyAction" ]
+			 }
+		  ],
+		  "roles": []
+	   });
+	db.getSiblingDB("admin").createUser(
+		{
+			user: "${MONGODB_BACKUP_USER}",
+			pwd: "${MONGODB_BACKUP_PASSWORD}",
+			"roles" : [
+				{ "db" : "admin", "role" : "readWrite", "collection": "" },
+				{ "db" : "admin", "role" : "backup" },
+				{ "db" : "admin", "role" : "clusterMonitor" },
+				{ "db" : "admin", "role" : "restore" },
+				{ "db" : "admin", "role" : "pbmAnyAction" }
+			 ]
+		}
+	)
+	`
+)
 
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
 // This must be ran from within the running container to utilise the MongoDB Localhost Exeception.
@@ -166,27 +172,62 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		cmd := []string{
-			"k8s-mongodb-initiator",
-			"init",
-		}
-
-		if replset.Expose.Enabled {
-			svc, err := getExtServices(r.client, m.Namespace, pod.Name)
-			if err != nil {
-				return fmt.Errorf("failed to fetch services: %v", err)
-			}
-			hostname, err := psmdb.GetServiceAddr(*svc, pod, r.client)
-			if err != nil {
-				return fmt.Errorf("failed to fetch service address: %v", err)
-			}
-			cmd = append(cmd, "--ip", hostname.Host, "--port", strconv.Itoa(hostname.Port))
-		}
-
-		var errb bytes.Buffer
-		err := r.clientcmd.Exec(&pod, "mongod", cmd, nil, nil, &errb, false)
+		host, err := psmdb.MongoHost(r.client, m, replset, pod)
 		if err != nil {
-			return fmt.Errorf("exec: %v /  %s", err, errb.String())
+			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
+		}
+
+		cmd := []string{
+			"sh", "-c",
+			fmt.Sprintf(
+				`
+				cat <<-EOF | mongo 
+				rs.initiate(
+					{
+						_id: '%s',
+						version: 1,
+						members: [
+							{ _id: 0, host: "%s" },
+						]
+					}
+				)
+				EOF
+			`, replset.Name, host),
+		}
+
+		// !!! mongo --eval=''
+		var errb, outb bytes.Buffer
+		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
+		}
+
+		time.Sleep(time.Second * 5)
+
+		cmd[2] = fmt.Sprintf(
+			`
+			cat <<-EOF | mongo 
+			%s
+			EOF
+			`, mongoInitAdminUser)
+		errb.Reset()
+		outb.Reset()
+		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
+		}
+
+		cmd[2] = fmt.Sprintf(
+			`
+			cat <<-EOF | mongo "mongodb://${MONGODB_USER_ADMIN_USER}:${MONGODB_USER_ADMIN_PASSWORD}@%s/?replicaSet=%s"
+			%s
+			EOF
+			`, host, replset.Name, mongoInitUsers)
+		errb.Reset()
+		outb.Reset()
+		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec add users: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
 		return nil
@@ -234,26 +275,4 @@ func isPodReady(pod corev1.Pod) bool {
 		}
 	}
 	return false
-}
-
-func getExtServices(cl client.Client, namespace, podName string) (*corev1.Service, error) {
-	var retries uint64 = 0
-
-	svcMeta := &corev1.Service{}
-
-	for retries <= 5 {
-		err := cl.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
-
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				retries += 1
-				time.Sleep(500 * time.Millisecond)
-				log.Info(fmt.Sprintf("Service for %s not found. Retry", podName))
-				continue
-			}
-			return nil, fmt.Errorf("failed to fetch service: %v", err)
-		}
-		return svcMeta, nil
-	}
-	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
 }

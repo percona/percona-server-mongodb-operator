@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -24,8 +25,7 @@ var (
 	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
 	defaultImagePullPolicy                = corev1.PullAlways
 
-	defaultBackupDestinationType = BackupDestinationS3
-	defaultBackupS3SecretName    = "percona-server-mongodb-backup-s3"
+	defaultBackupS3SecretName = "percona-server-mongodb-backup-s3"
 )
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
@@ -220,23 +220,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	if cr.Spec.Backup.Enabled {
-		if cr.Spec.Backup.RestartOnFailure == nil {
-			t := true
-			cr.Spec.Backup.RestartOnFailure = &t
-		}
 		for _, bkpTask := range cr.Spec.Backup.Tasks {
-			if bkpTask.CompressionType == "" {
-				bkpTask.CompressionType = BackupCompressionGzip
+			if string(bkpTask.CompressionType) == "" {
+				bkpTask.CompressionType = pbm.CompressionTypeGZIP
 			}
-		}
-		if cr.Spec.Backup.Coordinator.LivenessInitialDelaySeconds == nil {
-			ld := int32(5)
-			cr.Spec.Backup.Coordinator.LivenessInitialDelaySeconds = &ld
 		}
 		if len(cr.Spec.Backup.ServiceAccountName) == 0 {
 			cr.Spec.Backup.ServiceAccountName = "percona-server-mongodb-operator"
 		}
-		cr.Spec.Backup.Coordinator.MultiAZ.reconcileOpts()
 
 		var fsgroup *int64
 		if platform == PlatformKubernetes {
