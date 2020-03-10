@@ -24,11 +24,11 @@ type BackupState string
 
 const (
 	BackupStateNew       BackupState = ""
-	BackupStateRequested             = "requested"
-	BackupStateRejected              = "rejected"
-	BackupStateRunning               = "running"
-	BackupStateError                 = "error"
-	BackupStateReady                 = "ready"
+	BackupStateRequested BackupState = "requested"
+	BackupStateRejected  BackupState = "rejected"
+	BackupStateRunning   BackupState = "running"
+	BackupStateError     BackupState = "error"
+	BackupStateReady     BackupState = "ready"
 )
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
