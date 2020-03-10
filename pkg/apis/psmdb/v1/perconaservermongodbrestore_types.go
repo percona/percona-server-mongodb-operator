@@ -22,11 +22,11 @@ type RestoreState string
 
 const (
 	RestoreStateNew       RestoreState = ""
-	RestoreStateRequested              = "requested"
-	RestoreStateRejected               = "rejected"
-	RestoreStateRunning                = "running"
-	RestoreStateError                  = "error"
-	RestoreStateReady                  = "ready"
+	RestoreStateRequested RestoreState = "requested"
+	RestoreStateRejected  RestoreState = "rejected"
+	RestoreStateRunning   RestoreState = "running"
+	RestoreStateError     RestoreState = "error"
+	RestoreStateReady     RestoreState = "ready"
 )
 
 // PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore

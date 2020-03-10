@@ -106,7 +106,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return nil
 }
 
-var ErrNoRunningMongodContainers = fmt.Errorf("no mongod containers in running state")
+var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
 const (
 	mongoInitAdminUser = `
@@ -195,7 +195,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			`, replset.Name, host),
 		}
 
-		// !!! mongo --eval=''
 		var errb, outb bytes.Buffer
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
@@ -232,7 +231,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		return nil
 	}
-	return ErrNoRunningMongodContainers
+	return errNoRunningMongodContainers
 }
 
 // isMongodPod returns a boolean reflecting if a pod

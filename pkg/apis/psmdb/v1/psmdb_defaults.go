@@ -14,7 +14,6 @@ import (
 
 var (
 	defaultRunUID                   int64 = 1001
-	defaultKeySecretName                  = "percona-server-mongodb-key"
 	defaultUsersSecretName                = "percona-server-mongodb-users"
 	defaultMongodSize               int32 = 3
 	defaultReplsetName                    = "rs"
@@ -24,8 +23,6 @@ var (
 	defaultInMemorySizeRatio              = 0.9
 	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
 	defaultImagePullPolicy                = corev1.PullAlways
-
-	defaultBackupS3SecretName = "percona-server-mongodb-backup-s3"
 )
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
