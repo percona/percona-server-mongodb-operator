@@ -8,7 +8,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func AgentContainer(cr *api.PerconaServerMongoDB, replSet string) corev1.Container {
+func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSize int32) corev1.Container {
 	fvar := false
 
 	return corev1.Container{
@@ -42,11 +42,15 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replSet string) corev1.Contain
 			},
 			{
 				Name:  "PBM_MONGODB_REPLSET",
-				Value: replSet,
+				Value: replsetName,
 			},
 			{
 				Name:  "PBM_MONGODB_PORT",
 				Value: strconv.Itoa(int(cr.Spec.Mongod.Net.Port)),
+			},
+			{
+				Name:  "PSMDB_RS_SIZE",
+				Value: strconv.Itoa(int(replsetSize)),
 			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,

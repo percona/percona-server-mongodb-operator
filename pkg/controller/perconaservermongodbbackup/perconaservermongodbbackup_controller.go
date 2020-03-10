@@ -118,7 +118,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 
 	defer func() {
 		if err != nil {
-			status.State = psmdbv1.RestoreStateError
+			status.State = psmdbv1.BackupStateError
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "backup", cr.Name)
 		}
