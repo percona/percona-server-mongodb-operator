@@ -1,7 +1,6 @@
 package perconaservermongodbbackup
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -28,7 +27,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(cr *api.PerconaServerMon
 func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	err := b.pbm.SetConfig(cr)
 	if err != nil {
-		return api.PerconaServerMongoDBBackupStatus{}, fmt.Errorf("set backup config: %v", err)
+		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrap(err, "set backup config")
 	}
 
 	backupStatus := api.PerconaServerMongoDBBackupStatus{
