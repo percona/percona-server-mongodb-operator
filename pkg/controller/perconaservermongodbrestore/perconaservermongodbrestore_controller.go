@@ -133,7 +133,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		}
 	}()
 
-	cjobs, err := backup.HasActiveJobs(r.client, cr.Spec.ClusterName, cr.Namespace)
+	cjobs, err := backup.HasActiveJobs(r.client, cr.Spec.ClusterName, cr.Namespace, backup.Job{Name: cr.Name, Type: backup.TypeRestore})
 	if err != nil {
 		return errors.Wrap(err, "check for concurrent jobs")
 	}

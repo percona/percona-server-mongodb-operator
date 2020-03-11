@@ -9,9 +9,21 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
+type JobType int
+
+const (
+	TypeBackup JobType = iota
+	TypeRestore
+)
+
+type Job struct {
+	Name string
+	Type JobType
+}
+
 // HasActiveJobs returns true if there are running backups or restores
 // in given cluster and namestpace
-func HasActiveJobs(cl client.Client, cluster, namespace string) (bool, error) {
+func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bool, error) {
 	bcps := &api.PerconaServerMongoDBBackupList{}
 	err := cl.List(context.TODO(),
 		&client.ListOptions{
@@ -23,6 +35,9 @@ func HasActiveJobs(cl client.Client, cluster, namespace string) (bool, error) {
 		return false, errors.Wrap(err, "get backup list")
 	}
 	for _, b := range bcps.Items {
+		if b.Name == current.Name && current.Type == TypeBackup {
+			continue
+		}
 		if b.Spec.PSMDBCluster == cluster && b.Status.State != api.BackupStateReady && b.Status.State != api.BackupStateError {
 			return true, nil
 		}
@@ -36,9 +51,12 @@ func HasActiveJobs(cl client.Client, cluster, namespace string) (bool, error) {
 		rstrs,
 	)
 	if err != nil {
-		return false, errors.Wrap(err, "get backup list")
+		return false, errors.Wrap(err, "get restore list")
 	}
 	for _, r := range rstrs.Items {
+		if r.Name == current.Name && current.Type == TypeRestore {
+			continue
+		}
 		if r.Spec.ClusterName == cluster && r.Status.State != api.RestoreStateReady && r.Status.State != api.RestoreStateError {
 			return true, nil
 		}
