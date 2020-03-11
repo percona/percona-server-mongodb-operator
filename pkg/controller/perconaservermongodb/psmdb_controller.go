@@ -424,7 +424,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		}
 
 		if cr.Spec.Backup.Enabled {
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, replset.Name, replset.Size))
+			agentC, err := backup.AgentContainer(cr, replset.Name, replset.Size)
+			if err != nil {
+				return nil, fmt.Errorf("create a backup container: %v", err)
+			}
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
 
 		if cr.Spec.PMM.Enabled {
