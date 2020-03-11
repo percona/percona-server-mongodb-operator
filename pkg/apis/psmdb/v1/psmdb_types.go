@@ -386,6 +386,7 @@ type BackupSpec struct {
 	ServiceAccountName       string                       `json:"serviceAccountName,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	Resources                *ResourcesSpec               `json:"resources,omitempty"`
 }
 
 type Arbiter struct {

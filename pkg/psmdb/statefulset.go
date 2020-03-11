@@ -92,7 +92,8 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Containers: []corev1.Container{
 					container(m, replset, containerName, resources, ikeyName),
 				},
-				Volumes: volumes,
+				Volumes:       volumes,
+				SchedulerName: m.Spec.SchedulerName,
 			},
 		},
 	}, nil
