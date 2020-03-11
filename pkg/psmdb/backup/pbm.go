@@ -78,6 +78,10 @@ func NewPBM(c client.Client, clusterName, replset, namespace string) (*PBM, erro
 		return nil, errors.Wrap(err, "get secrets")
 	}
 
+	if len(cluster.Spec.ClusterServiceDNSSuffix) == 0 {
+		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
+	}
+
 	addrs, err := psmdb.GetReplsetAddrs(c, cluster, rs, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo addr")
