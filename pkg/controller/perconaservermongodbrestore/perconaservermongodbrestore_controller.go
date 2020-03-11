@@ -102,7 +102,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		return rr, fmt.Errorf("fields check: %v", err)
 	}
 
-	if instance.Status.State == psmdbv1.RestoreStateReady {
+	switch instance.Status.State {
+	case psmdbv1.RestoreStateReady, psmdbv1.RestoreStateError:
 		return rr, nil
 	}
 
@@ -132,23 +133,38 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		}
 	}()
 
-	bcp, err := r.getBackup(cr)
+	cjobs, err := backup.HasActiveJobs(r.client, cr.Spec.ClusterName, cr.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "get backup")
+		return errors.Wrap(err, "check for concurrent jobs")
+	}
+	if cjobs {
+		return errors.New("another backup/restore is running")
 	}
 
-	if bcp.Status.State != psmdbv1.BackupStateReady {
-		return errors.New("backup is not ready")
+	bcpName := cr.Spec.BackupName
+	storageName := cr.Spec.StorageName
+
+	if bcpName == "" || storageName == "" {
+		bcp, err := r.getBackup(cr)
+		if err != nil {
+			return errors.Wrap(err, "get backup")
+		}
+		if bcp.Status.State != psmdbv1.BackupStateReady {
+			return errors.New("backup is not ready")
+		}
+
+		bcpName = bcp.Status.PBMname
+		storageName = bcp.Spec.StorageName
 	}
 
-	pbmc, err := backup.NewPBM(r.client, bcp.Spec.PSMDBCluster, bcp.Spec.Replset, cr.Namespace)
+	pbmc, err := backup.NewPBM(r.client, cr.Spec.ClusterName, cr.Spec.Replset, cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
 	defer pbmc.Close()
 
 	if status.State == psmdbv1.RestoreStateNew {
-		status.PBMname, err = runRestore(bcp, pbmc)
+		status.PBMname, err = runRestore(bcpName, storageName, pbmc)
 		status.State = psmdbv1.RestoreStateRequested
 		return err
 	}
@@ -179,8 +195,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	return nil
 }
 
-func runRestore(bcp *psmdbv1.PerconaServerMongoDBBackup, pbmc *backup.PBM) (string, error) {
-	err := pbmc.SetConfig(bcp)
+func runRestore(backup, storage string, pbmc *backup.PBM) (string, error) {
+	err := pbmc.SetConfig(storage)
 	if err != nil {
 		return "", errors.Wrap(err, "set pbm config")
 	}
@@ -195,7 +211,7 @@ func runRestore(bcp *psmdbv1.PerconaServerMongoDBBackup, pbmc *backup.PBM) (stri
 		Cmd: pbm.CmdRestore,
 		Restore: pbm.RestoreCmd{
 			Name:       rName,
-			BackupName: bcp.Status.PBMname,
+			BackupName: backup,
 		},
 	})
 	if err != nil {

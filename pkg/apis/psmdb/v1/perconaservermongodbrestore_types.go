@@ -13,8 +13,11 @@ import (
 type PerconaServerMongoDBRestoreSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	BackupName  string `json:"backupName,omitempty"`
 	ClusterName string `json:"clusterName,omitempty"`
+	Replset     string `json:"replset,omitempty"`
+	BackupName  string `json:"backupName,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	StorageName string `json:"storageName,omitempty"`
 }
 
 // RestoreState is for restore status states
@@ -64,8 +67,8 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 	if len(r.Spec.ClusterName) == 0 {
 		return fmt.Errorf("spec clusterName field is empty")
 	}
-	if len(r.Spec.BackupName) == 0 {
-		return fmt.Errorf("spec backupName field is empty")
+	if len(r.Spec.BackupName) == 0 && (len(r.Spec.StorageName) == 0 || len(r.Spec.Destination) == 0) {
+		return fmt.Errorf("fields backupName or storageName and destination is empty")
 	}
 
 	return nil
