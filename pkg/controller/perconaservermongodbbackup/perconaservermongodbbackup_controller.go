@@ -2,12 +2,11 @@ package perconaservermongodbbackup
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -16,6 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 var log = logf.Log.WithName("controller_perconaservermongodbbackup")
@@ -86,7 +88,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	instance := &psmdbv1.PerconaServerMongoDBBackup{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
@@ -98,16 +100,17 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 
 	err = instance.CheckFields()
 	if err != nil {
-		return rr, fmt.Errorf("fields check: %v", err)
+		return rr, errors.Wrap(err, "fields check")
 	}
 
-	if instance.Status.State == psmdbv1.BackupStateReady {
+	switch instance.Status.State {
+	case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
 		return rr, nil
 	}
 
 	err = r.reconcile(instance)
 	if err != nil {
-		return rr, fmt.Errorf("reconcile backup: " + err.Error())
+		return rr, errors.Wrap(err, "reconcile backup")
 	}
 
 	return rr, nil
@@ -131,9 +134,17 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 		}
 	}()
 
+	cjobs, err := backup.HasActiveJobs(r.client, cr.Spec.PSMDBCluster, cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "check for concurrent jobs")
+	}
+	if cjobs {
+		return errors.New("another backup/restore is running")
+	}
+
 	bcp, err := r.newBackup(cr)
 	if err != nil {
-		return fmt.Errorf("create backup object: %v", err)
+		return errors.Wrap(err, "create backup object")
 	}
 	defer bcp.Close()
 
@@ -154,7 +165,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1.PerconaSe
 		//TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
 		err := r.client.Update(context.TODO(), cr)
 		if err != nil {
-			return fmt.Errorf("send update: %v", err)
+			return errors.Wrap(err, "send update")
 		}
 	}
 	return nil

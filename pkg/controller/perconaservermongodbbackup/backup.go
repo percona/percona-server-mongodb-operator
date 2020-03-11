@@ -25,7 +25,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(cr *api.PerconaServerMon
 }
 
 func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
-	err := b.pbm.SetConfig(cr)
+	err := b.pbm.SetConfig(cr.Spec.StorageName)
 	if err != nil {
 		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrap(err, "set backup config")
 	}

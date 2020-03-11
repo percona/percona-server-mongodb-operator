@@ -26,6 +26,10 @@ const (
 type PBM struct {
 	C   *pbm.PBM
 	k8c client.Client
+
+	clusterName string
+	replset     string
+	namespace   string
 }
 
 // NewPBM creates a new connection to PBM.
@@ -74,10 +78,6 @@ func NewPBM(c client.Client, clusterName, replset, namespace string) (*PBM, erro
 		return nil, errors.Wrap(err, "get secrets")
 	}
 
-	if len(cluster.Spec.ClusterServiceDNSSuffix) == 0 {
-		cluster.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
-	}
-
 	addrs, err := psmdb.GetReplsetAddrs(c, cluster, rs, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo addr")
@@ -93,7 +93,13 @@ func NewPBM(c client.Client, clusterName, replset, namespace string) (*PBM, erro
 		return nil, errors.Wrapf(err, "create PBM connection to %s", strings.Join(addrs, ","))
 	}
 
-	return &PBM{C: pbmc, k8c: c}, nil
+	return &PBM{
+		C:           pbmc,
+		k8c:         c,
+		clusterName: clusterName,
+		replset:     rsName,
+		namespace:   namespace,
+	}, nil
 }
 
 func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
@@ -107,26 +113,28 @@ func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, err
 	return secret, err
 }
 
-func (b *PBM) SetConfig(cr *api.PerconaServerMongoDBBackup) error {
+// SetConfig sets the pbm config with storage defined in the cluster CR
+// by given storageName
+func (b *PBM) SetConfig(storageName string) error {
 	cluster := &api.PerconaServerMongoDB{}
-	err := b.k8c.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
+	err := b.k8c.Get(context.TODO(), types.NamespacedName{Name: b.clusterName, Namespace: b.namespace}, cluster)
 	if err != nil {
-		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
+		return errors.Wrapf(err, "get cluster %s/%s", b.namespace, b.clusterName)
 	}
 
-	stg, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+	stg, ok := cluster.Spec.Backup.Storages[storageName]
 	if !ok {
-		return errors.Errorf("unable to get storage '%s' at cluster '%s/%s'", cr.Spec.StorageName, cr.Namespace, cr.Spec.PSMDBCluster)
+		return errors.Errorf("unable to get storage '%s' at cluster '%s/%s'", storageName, b.namespace, b.clusterName)
 	}
 
 	switch stg.Type {
 	case pbm.StorageS3:
 		if stg.S3.CredentialsSecret == "" {
-			return errors.Errorf("no credentials specified for the secret name %s", cr.Spec.StorageName)
+			return errors.Errorf("no credentials specified for the secret name %s", storageName)
 		}
-		s3secret, err := secret(b.k8c, cr.Namespace, stg.S3.CredentialsSecret)
+		s3secret, err := secret(b.k8c, b.namespace, stg.S3.CredentialsSecret)
 		if err != nil {
-			return errors.Wrapf(err, "getting s3 credentials secret name %s", cr.Spec.StorageName)
+			return errors.Wrapf(err, "getting s3 credentials secret name %s", storageName)
 		}
 		conf := pbm.Config{
 			Storage: pbm.Storage{
@@ -148,14 +156,15 @@ func (b *PBM) SetConfig(cr *api.PerconaServerMongoDBBackup) error {
 			return errors.Wrap(err, "write config")
 		}
 	case pbm.StorageFilesystem:
-		return errors.Errorf("filesystem backup storage not supported yet, skipping storage name: %s", cr.Spec.StorageName)
+		return errors.Errorf("filesystem backup storage not supported yet, skipping storage name: %s", storageName)
 	default:
-		return errors.Errorf("unsupported backup storage type: %s", cr.Spec.StorageName)
+		return errors.Errorf("unsupported backup storage type: %s", storageName)
 	}
 
 	return nil
 }
 
+// Close close the PBM connection
 func (b *PBM) Close() error {
 	return b.C.Conn.Disconnect(context.Background())
 }
