@@ -62,6 +62,7 @@ Configuration
    storage
    TLS
    encryption
+   recovery
 
 Reference
 =========
