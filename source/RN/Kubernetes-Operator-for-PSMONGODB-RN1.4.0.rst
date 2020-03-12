@@ -8,10 +8,14 @@
 
 :Installation: `Installing Percona Kubernetes Operator for PSMDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
-New Features and Improvements
+New Features
 ================================================================================
 
 * :jirabug:`K8SPSMDB-113`: Percona Server for MongoDB 4.2 is now supported
+
+Improvements
+================================================================================
+
 * :jirabug:`K8SPSMDB-175`: Operator now updates observedGeneration status message for allow better monitoring of the cluster rollout or backups/restore process
 * :jirabug:`K8SPSMDB-176`: The Operator was updated to use Percona Backup for MongoDB version 1.1
 * :jirabug:`K8SPSMDB-153`: Now the user can adjust securityContext, replacing the automatically generated securityContext with the customized one
