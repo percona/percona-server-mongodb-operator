@@ -2,7 +2,7 @@ Crash Recovery
 =================
 
 Percona Server for MongoDB Operator provides two ways of recovery in situations
-when there was a cluster crash. 
+when there was a full cluster crash. Full cluster crash is a situation when all database instances become a shutdown in random order. How to shutdown cluster correctly please read in pause document.
 
 * The automated :ref:`recovery-bootstrap` is the simplest one, but it
   may cause loss of several recent transactions.
@@ -21,4 +21,3 @@ Doing this makes cluster to start, however there may exist data inconsistency
 in the cluster, and several last transactions may be lost. For situations when
 such data loss is undesirable, there is a more advanced manual method described
 in the next chapter.
-
