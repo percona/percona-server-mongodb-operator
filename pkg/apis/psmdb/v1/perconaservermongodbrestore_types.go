@@ -25,6 +25,7 @@ type RestoreState string
 
 const (
 	RestoreStateNew       RestoreState = ""
+	RestoreStateWaiting   RestoreState = "waiting"
 	RestoreStateRequested RestoreState = "requested"
 	RestoreStateRejected  RestoreState = "rejected"
 	RestoreStateRunning   RestoreState = "running"

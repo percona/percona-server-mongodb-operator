@@ -138,7 +138,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		return errors.Wrap(err, "check for concurrent jobs")
 	}
 	if cjobs {
-		return errors.New("another backup/restore is running")
+		if cr.Status.State != psmdbv1.RestoreStateWaiting {
+			log.Info("Waiting to finish another backup/restore.")
+		}
+		status.State = psmdbv1.RestoreStateWaiting
+		return nil
 	}
 
 	bcpName := cr.Spec.BackupName
@@ -169,7 +173,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	}
 	defer pbmc.Close()
 
-	if status.State == psmdbv1.RestoreStateNew {
+	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
 		stg, ok := cluster.Spec.Backup.Storages[storageName]
 		if !ok {
 			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
