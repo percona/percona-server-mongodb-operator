@@ -142,8 +142,6 @@ spec:
           value: rs0
         - name: PBM_MONGODB_PORT
           value: "27017"
-        - name: PSMDB_RS_SIZE
-          value: "3"
         imagePullPolicy: Always
         name: backup-agent
         resources: {}

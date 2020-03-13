@@ -55,10 +55,6 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSiz
 				Name:  "PBM_MONGODB_PORT",
 				Value: strconv.Itoa(int(cr.Spec.Mongod.Net.Port)),
 			},
-			{
-				Name:  "PSMDB_RS_SIZE",
-				Value: strconv.Itoa(int(replsetSize)),
-			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       res,
