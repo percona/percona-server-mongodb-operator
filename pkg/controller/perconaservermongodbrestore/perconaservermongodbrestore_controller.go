@@ -157,14 +157,25 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		storageName = bcp.Spec.StorageName
 	}
 
-	pbmc, err := backup.NewPBM(r.client, cr.Spec.ClusterName, cr.Spec.Replset, cr.Namespace)
+	cluster := &psmdbv1.PerconaServerMongoDB{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
+	if err != nil {
+		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
+	}
+
+	pbmc, err := backup.NewPBM(r.client, cluster)
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
 	defer pbmc.Close()
 
 	if status.State == psmdbv1.RestoreStateNew {
-		status.PBMname, err = runRestore(bcpName, storageName, pbmc)
+		stg, ok := cluster.Spec.Backup.Storages[storageName]
+		if !ok {
+			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
+		}
+
+		status.PBMname, err = runRestore(bcpName, stg, pbmc)
 		status.State = psmdbv1.RestoreStateRequested
 		return err
 	}
@@ -195,7 +206,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	return nil
 }
 
-func runRestore(backup, storage string, pbmc *backup.PBM) (string, error) {
+func runRestore(backup string, storage psmdbv1.BackupStorageSpec, pbmc *backup.PBM) (string, error) {
 	err := pbmc.SetConfig(storage)
 	if err != nil {
 		return "", errors.Wrap(err, "set pbm config")

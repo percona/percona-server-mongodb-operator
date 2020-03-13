@@ -15,7 +15,6 @@ type PerconaServerMongoDBBackupSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	PSMDBCluster string              `json:"psmdbCluster,omitempty"`
 	StorageName  string              `json:"storageName,omitempty"`
-	Replset      string              `json:"replset,omitempty"`
 	Comperssion  pbm.CompressionType `json:"compressionType,omitempty"`
 }
 

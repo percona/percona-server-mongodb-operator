@@ -24,45 +24,24 @@ const (
 )
 
 type PBM struct {
-	C   *pbm.PBM
-	k8c client.Client
-
-	clusterName string
-	replset     string
-	namespace   string
+	C         *pbm.PBM
+	k8c       client.Client
+	namespace string
 }
 
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
-func NewPBM(c client.Client, clusterName, replset, namespace string) (*PBM, error) {
-	cluster := &api.PerconaServerMongoDB{}
-	err := c.Get(context.TODO(), types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get cluster %s/%s", namespace, clusterName)
-	}
-
-	// if replset is not defined than we choose the first one
-	rsName := replset
-	var rs *api.ReplsetSpec
-	for _, r := range cluster.Spec.Replsets {
-		if replset == "" || r != nil && r.Name == replset {
-			rsName = r.Name
-			rs = r
-			break
-		}
-	}
-	if rs == nil {
-		return nil, errors.Errorf("replset %s not found", replset)
-	}
+func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
+	rs := cluster.Spec.Replsets[0]
 
 	pods := &corev1.PodList{}
-	err = c.List(context.TODO(),
+	err := c.List(context.TODO(),
 		&client.ListOptions{
-			Namespace: namespace,
+			Namespace: cluster.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
 				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   clusterName,
-				"app.kubernetes.io/replset":    rsName,
+				"app.kubernetes.io/instance":   cluster.Name,
+				"app.kubernetes.io/replset":    rs.Name,
 				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 				"app.kubernetes.io/part-of":    "percona-server-mongodb",
 			}),
@@ -70,10 +49,10 @@ func NewPBM(c client.Client, clusterName, replset, namespace string) (*PBM, erro
 		pods,
 	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get pods list for replset %s", replset)
+		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
-	scr, err := secret(c, namespace, cluster.Spec.Secrets.Users)
+	scr, err := secret(c, cluster.Namespace, cluster.Spec.Secrets.Users)
 	if err != nil {
 		return nil, errors.Wrap(err, "get secrets")
 	}
@@ -98,47 +77,23 @@ func NewPBM(c client.Client, clusterName, replset, namespace string) (*PBM, erro
 	}
 
 	return &PBM{
-		C:           pbmc,
-		k8c:         c,
-		clusterName: clusterName,
-		replset:     rsName,
-		namespace:   namespace,
+		C:         pbmc,
+		k8c:       c,
+		namespace: cluster.Namespace,
 	}, nil
-}
-
-func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-		},
-	}
-	err := cl.Get(context.TODO(), types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-	return secret, err
 }
 
 // SetConfig sets the pbm config with storage defined in the cluster CR
 // by given storageName
-func (b *PBM) SetConfig(storageName string) error {
-	cluster := &api.PerconaServerMongoDB{}
-	err := b.k8c.Get(context.TODO(), types.NamespacedName{Name: b.clusterName, Namespace: b.namespace}, cluster)
-	if err != nil {
-		return errors.Wrapf(err, "get cluster %s/%s", b.namespace, b.clusterName)
-	}
-
-	stg, ok := cluster.Spec.Backup.Storages[storageName]
-	if !ok {
-		return errors.Errorf("unable to get storage '%s' at cluster '%s/%s'", storageName, b.namespace, b.clusterName)
-	}
-
+func (b *PBM) SetConfig(stg api.BackupStorageSpec) error {
 	switch stg.Type {
 	case pbm.StorageS3:
 		if stg.S3.CredentialsSecret == "" {
-			return errors.Errorf("no credentials specified for the secret name %s", storageName)
+			return errors.New("no credentials specified for the secret name")
 		}
 		s3secret, err := secret(b.k8c, b.namespace, stg.S3.CredentialsSecret)
 		if err != nil {
-			return errors.Wrapf(err, "getting s3 credentials secret name %s", storageName)
+			return errors.Wrap(err, "getting s3 credentials secret name")
 		}
 		conf := pbm.Config{
 			Storage: pbm.Storage{
@@ -160,9 +115,9 @@ func (b *PBM) SetConfig(storageName string) error {
 			return errors.Wrap(err, "write config")
 		}
 	case pbm.StorageFilesystem:
-		return errors.Errorf("filesystem backup storage not supported yet, skipping storage name: %s", storageName)
+		return errors.New("filesystem backup storage not supported yet, skipping storage name")
 	default:
-		return errors.Errorf("unsupported backup storage type: %s", storageName)
+		return errors.New("unsupported backup storage type")
 	}
 
 	return nil
@@ -171,4 +126,15 @@ func (b *PBM) SetConfig(storageName string) error {
 // Close close the PBM connection
 func (b *PBM) Close() error {
 	return b.C.Conn.Disconnect(context.Background())
+}
+
+func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+		},
+	}
+	err := cl.Get(context.TODO(), types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
+	return secret, err
 }

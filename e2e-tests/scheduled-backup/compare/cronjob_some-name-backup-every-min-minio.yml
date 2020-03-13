@@ -10,10 +10,10 @@ metadata:
     app.kubernetes.io/replset: general
   name: some-name-backup-every-min-minio
   ownerReferences:
-  - apiVersion: apps/v1
+  - apiVersion: psmdb.percona.com/v1
     controller: true
-    kind: StatefulSet
-    name: some-name-backup-coordinator
+    kind: PerconaServerMongoDB
+    name: some-name
 spec:
   concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
@@ -45,7 +45,7 @@ spec:
             - name: psmdbCluster
               value: some-name
             imagePullPolicy: IfNotPresent
-            name: backup-pmbctl
+            name: backup
             resources: {}
             securityContext:
               runAsNonRoot: true
