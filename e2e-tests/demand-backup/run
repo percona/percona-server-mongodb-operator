@@ -73,10 +73,11 @@ backup_name_gcp="backup-gcp-cs"
 
 desc 'run backups'
 run_backup aws-s3
-wait_backup "$backup_name_aws"
 run_backup minio
-wait_backup "$backup_name_minio"
 run_backup gcp-cs
+
+wait_backup "$backup_name_aws"
+wait_backup "$backup_name_minio"
 wait_backup "$backup_name_gcp"
 
 sleep 5

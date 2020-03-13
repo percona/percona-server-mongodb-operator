@@ -22,6 +22,7 @@ type BackupState string
 
 const (
 	BackupStateNew       BackupState = ""
+	BackupStateWaiting   BackupState = "waiting"
 	BackupStateRequested BackupState = "requested"
 	BackupStateRejected  BackupState = "rejected"
 	BackupStateRunning   BackupState = "running"

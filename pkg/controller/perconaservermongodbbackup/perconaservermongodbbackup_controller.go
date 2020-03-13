@@ -116,6 +116,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	return rr, nil
 }
 
+// reconcile backup. first we chek if there are concurrent job running
 func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup) (err error) {
 	status := cr.Status
 
@@ -139,7 +140,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 		return errors.Wrap(err, "check for concurrent jobs")
 	}
 	if cjobs {
-		return errors.New("another backup/restore is running")
+		if status.State != psmdbv1.BackupStateWaiting {
+			log.Info("Waiting to finish another backup/restore.")
+		}
+		status.State = psmdbv1.BackupStateWaiting
+		return nil
 	}
 
 	bcp, err := r.newBackup(cr)
@@ -148,7 +153,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 	}
 	defer bcp.Close()
 
-	if cr.Status.State == psmdbv1.BackupStateNew {
+	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
 		status, err = bcp.Start(cr)
 		return err
 	}

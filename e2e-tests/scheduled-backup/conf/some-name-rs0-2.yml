@@ -35,11 +35,21 @@ spec:
           endpointUrl: https://storage.googleapis.com
           prefix: psmdb
     tasks:
+    - name: every-min-aws-s3
+      enabled: true
+      schedule: "* * * * *"
+      compressionType: gzip
+      storageName: aws-s3
     - name: every-min-minio
       enabled: true
       schedule: "* * * * *"
       compressionType: gzip
       storageName: minio
+    - name: every-min-gcp-cs
+      enabled: true
+      schedule: "* * * * *"
+      compressionType: gzip
+      storageName: gcp-cs
     - name: weekly
       enabled: true
       schedule: "0 0 * * 0"

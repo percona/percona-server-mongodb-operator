@@ -38,7 +38,10 @@ func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bo
 		if b.Name == current.Name && current.Type == TypeBackup {
 			continue
 		}
-		if b.Spec.PSMDBCluster == cluster && b.Status.State != api.BackupStateReady && b.Status.State != api.BackupStateError {
+		if b.Spec.PSMDBCluster == cluster &&
+			b.Status.State != api.BackupStateReady &&
+			b.Status.State != api.BackupStateError &&
+			b.Status.State != api.BackupStateWaiting {
 			return true, nil
 		}
 	}
@@ -57,7 +60,10 @@ func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bo
 		if r.Name == current.Name && current.Type == TypeRestore {
 			continue
 		}
-		if r.Spec.ClusterName == cluster && r.Status.State != api.RestoreStateReady && r.Status.State != api.RestoreStateError {
+		if r.Spec.ClusterName == cluster &&
+			r.Status.State != api.RestoreStateReady &&
+			r.Status.State != api.RestoreStateError &&
+			r.Status.State != api.RestoreStateWaiting {
 			return true, nil
 		}
 	}
