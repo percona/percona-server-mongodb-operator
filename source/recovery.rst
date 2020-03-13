@@ -3,7 +3,8 @@ Crash Recovery
 
 Percona Operator for Percona XtraDB Cluster provides two ways of recovery in situations
 when there was a full cluster crash. Full cluster crash is a situation when all database instances become a shutdown in random order. How to shutdown cluster correctly please read in pause document.
-
+when do you need to run full cluster crash recovery?
+you should see the following message in logs of your cluster:
 * The automated :ref:`recovery-bootstrap` is the simplest one, but it
   may cause loss of several recent transactions.
 * The manual :ref:`recovery-object-surgery` includes a lot of operations, but
