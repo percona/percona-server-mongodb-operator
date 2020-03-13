@@ -77,18 +77,6 @@ spec:
     debug: true
     restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:master-backup
-    coordinator:
-      enableClientsLogging: true
-      resources:
-        limits:
-          cpu: "100m"
-          memory: "0.2G"
-        requests:
-          cpu: "100m"
-          memory: "0.1G"
-          storage: "1Gi"
-      affinity:
-       antiAffinityTopologyKey: "kubernetes.io/hostname"
     storages:
      minio:
        type: s3

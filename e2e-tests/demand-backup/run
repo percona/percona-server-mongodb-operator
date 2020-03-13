@@ -50,8 +50,6 @@ wait_for_running $cluster 3
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster
-compare_kubectl statefulset/${cluster%%-rs0}-backup-coordinator
-compare_kubectl service/${cluster%%-rs0}-backup-coordinator
 
 desc 'write data, read from all'
 run_mongo \
@@ -65,16 +63,20 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
-desc 'run backups'
-run_backup aws-s3
-run_backup minio
-run_backup gcp-cs
+wait_backup_agent $cluster-0
+wait_backup_agent $cluster-1
+wait_backup_agent $cluster-2
 
 backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
+
+desc 'run backups'
+run_backup aws-s3
 wait_backup "$backup_name_aws"
+run_backup minio
 wait_backup "$backup_name_minio"
+run_backup gcp-cs
 wait_backup "$backup_name_gcp"
 
 sleep 5

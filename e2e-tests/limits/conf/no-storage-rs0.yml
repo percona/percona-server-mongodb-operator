@@ -8,10 +8,6 @@ spec:
   imagePullPolicy: Always
   backup:
     enabled: false
-    coordinator:
-      resources:
-        requests:
-          storage: "1Gi"
     storages:
     tasks:
   mongod:

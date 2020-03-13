@@ -1,15 +1,50 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
-  name: no-limits
+  name: some-name
 spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
   backup:
-    enabled: false
+    enabled: true
+    debug: true
+    restartOnFailure: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
+      aws-s3:
+        type: s3
+        s3:
+          credentialsSecret: aws-s3-secret
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+      gcp-cs:
+        type: s3
+        s3:
+          credentialsSecret: gcp-cs-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: https://storage.googleapis.com
+          prefix: psmdb
     tasks:
+    - name: every-min-aws-s3
+      enabled: true
+      schedule: "* * * * *"
+      compressionType: gzip
+      storageName: aws-s3
+    - name: weekly
+      enabled: true
+      schedule: "0 0 * * 0"
+      compressionType: gzip
+      storageName: aws-s3
   mongod:
     net:
       hostPort: 0
@@ -44,10 +79,15 @@ spec:
           prefixCompression: true
   replsets:
   - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
     resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
       requests:
-        cpu: 300m
-        memory: 0.5G
+        cpu: 250m
+        memory: 1Gi
     volumeSpec:
       persistentVolumeClaim:
         resources:
@@ -57,4 +97,3 @@ spec:
   secrets:
     key: some-key
     users: some-users
-    ssl: some-name-ssl

@@ -95,6 +95,27 @@ wait_cron() {
     set -o xtrace
 }
 
+wait_backup_agent() {
+    local agent_pod=$1
+
+    set +o xtrace
+    retry=0
+    echo -n $agent_pod
+    until [ "$(kubectl_bin logs $agent_pod -c backup-agent | tail -n 1)" == "pbm agent is listening for the commands" ]; do
+        sleep 5
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 120 ]; then
+            kubectl_bin logs $agent_pod -c backup-agent \
+                | tail -100
+            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+            exit 1
+        fi
+    done
+    echo
+    set -o xtrace
+}
+
 wait_backup() {
     local backup_name=$1
 

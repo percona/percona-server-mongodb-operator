@@ -66,8 +66,6 @@ wait_for_running $cluster 3
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster
-compare_kubectl statefulset/${cluster%%-rs0}-backup-coordinator
-compare_kubectl service/${cluster%%-rs0}-backup-coordinator
 
 desc 'write data, read from all'
 run_mongo \
@@ -81,23 +79,32 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
-desc 'add backups schedule, wait for the first backup'
-apply_cluster $test_dir/conf/$cluster-2.yml
-wait_pod ${cluster%%-rs0}-backup-coordinator-0
-wait_cron ${cluster%%-rs0}-backup-every-min-aws-s3
-wait_cron ${cluster%%-rs0}-backup-every-min-minio
-wait_cron ${cluster%%-rs0}-backup-every-min-gcp-cs
-compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-aws-s3
-compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-minio
-compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-gcp-cs
-sleep 35
+wait_backup_agent $cluster-0
+wait_backup_agent $cluster-1
+wait_backup_agent $cluster-2
 
+desc 'add backups schedule, wait for the first backup'
+apply_cluster $test_dir/conf/$cluster-every-min-aws-s3.yml
+wait_cron ${cluster%%-rs0}-backup-every-min-aws-s3
+compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-aws-s3
 apply_cluster $test_dir/conf/$cluster.yml
 backup_name_aws=$(kubectl_bin get psmdb-backup  | grep aws-s3 | awk '{print$1}' | head -1)
-backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print$1}' | head -1)
-backup_name_gcp=$(kubectl_bin get psmdb-backup  | grep gcp-cs | awk '{print$1}' | head -1)
 wait_backup "$backup_name_aws"
+
+desc 'add backups schedule, wait for the second backup'
+apply_cluster $test_dir/conf/$cluster-every-min-minio.yml
+wait_cron ${cluster%%-rs0}-backup-every-min-minio
+compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-minio
+apply_cluster $test_dir/conf/$cluster.yml
+backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print$1}' | head -1)
 wait_backup "$backup_name_minio"
+
+desc 'add backups schedule, wait for the second backup'
+apply_cluster $test_dir/conf/$cluster-every-min-gcp-cs.yml
+wait_cron ${cluster%%-rs0}-backup-every-min-gcp-cs
+compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-gcp-cs
+apply_cluster $test_dir/conf/$cluster.yml
+backup_name_gcp=$(kubectl_bin get psmdb-backup  | grep gcp-cs | awk '{print$1}' | head -1)
 wait_backup "$backup_name_gcp"
 
 sleep 5
