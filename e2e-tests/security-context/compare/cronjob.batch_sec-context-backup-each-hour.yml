@@ -10,10 +10,10 @@ metadata:
     app.kubernetes.io/replset: general
   name: sec-context-backup-each-hour
   ownerReferences:
-  - apiVersion: apps/v1
+  - apiVersion: psmdb.percona.com/v1
     controller: true
-    kind: StatefulSet
-    name: sec-context-backup-coordinator
+    kind: PerconaServerMongoDB
+    name: sec-context
 spec:
   concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
@@ -45,7 +45,7 @@ spec:
             - name: psmdbCluster
               value: sec-context
             imagePullPolicy: IfNotPresent
-            name: backup-pmbctl
+            name: backup
             resources: {}
             securityContext:
               privileged: false

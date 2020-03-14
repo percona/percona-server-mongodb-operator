@@ -124,17 +124,7 @@ spec:
           name: sec-context-mongodb-encryption-key
           readOnly: true
         workingDir: /data/db
-      - command:
-        - pbm-agent
-        env:
-        - name: PBM_AGENT_STORAGES_CONFIG
-          value: /etc/percona-backup-mongodb/storages.yml
-        - name: PBM_AGENT_STORAGE_CONFIG
-          value: /etc/percona-backup-mongodb/storages.yml
-        - name: PBM_AGENT_MONGODB_PORT
-          value: "27017"
-        - name: PBM_AGENT_DEBUG
-          value: "true"
+      - env:
         - name: PBM_AGENT_MONGODB_USERNAME
           valueFrom:
             secretKeyRef:
@@ -147,6 +137,10 @@ spec:
               key: MONGODB_BACKUP_PASSWORD
               name: some-users
               optional: false
+        - name: PBM_MONGODB_REPLSET
+          value: rs0
+        - name: PBM_MONGODB_PORT
+          value: "27017"
         imagePullPolicy: Always
         name: backup-agent
         resources: {}
@@ -156,10 +150,6 @@ spec:
           runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /etc/percona-backup-mongodb
-          name: sec-context-backup-agent-config
-          readOnly: true
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
@@ -190,11 +180,6 @@ spec:
           defaultMode: 288
           optional: true
           secretName: sec-context-ssl-internal
-      - name: sec-context-backup-agent-config
-        secret:
-          defaultMode: 420
-          optional: false
-          secretName: sec-context-backup-agent-config
   updateStrategy:
     rollingUpdate:
       partition: 0

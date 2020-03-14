@@ -16,6 +16,14 @@
         "db": "admin"
       },
       {
+        "role": "pbmAnyAction",
+        "db": "admin"
+      },
+      {
+        "role": "readWrite",
+        "db": "admin"
+      },
+      {
         "role": "restore",
         "db": "admin"
       }
@@ -100,6 +108,33 @@
       {
         "resource": {
           "db": "admin",
+          "collection": ""
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dbHash",
+          "dbStats",
+          "dropCollection",
+          "dropIndex",
+          "emptycapped",
+          "find",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead",
+          "remove",
+          "renameCollectionSameDB",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
           "collection": "system.backup_users"
         },
         "actions": [
@@ -111,6 +146,33 @@
           "dropCollection",
           "find",
           "insert"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dbHash",
+          "dbStats",
+          "dropCollection",
+          "dropIndex",
+          "emptycapped",
+          "find",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead",
+          "remove",
+          "renameCollectionSameDB",
+          "update"
         ]
       },
       {
@@ -313,9 +375,7 @@
           "anyResource": true
         },
         "actions": [
-          "collStats",
-          "listCollections",
-          "listIndexes"
+          "anyAction"
         ]
       }
     ]

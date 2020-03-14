@@ -49,7 +49,6 @@ run_recovery_check() {
 
     wait_restore ${backup1} 1
 
-    kubectl_bin logs pod/one-pod-backup-coordinator-0
     kubectl_bin delete -f "$test_dir/conf/${backup1}.yml"
     wait_for_running "${cluster}" 1
 }
