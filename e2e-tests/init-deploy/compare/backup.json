@@ -1,158 +1,40 @@
 {
-  "authInfo" : {
-    "authenticatedUsers" : [
+  "authInfo": {
+    "authenticatedUsers": [
       {
-        "user" : "backup",
-        "db" : "admin"
+        "user": "backup",
+        "db": "admin"
       }
     ],
-    "authenticatedUserRoles" : [
+    "authenticatedUserRoles": [
       {
-        "role" : "pbmAnyAction",
-        "db" : "admin"
+        "role": "backup",
+        "db": "admin"
       },
       {
-        "role" : "readWrite",
-        "db" : "admin"
+        "role": "clusterMonitor",
+        "db": "admin"
       },
       {
-        "role" : "backup",
-        "db" : "admin"
+        "role": "pbmAnyAction",
+        "db": "admin"
       },
       {
-        "role" : "clusterMonitor",
-        "db" : "admin"
+        "role": "readWrite",
+        "db": "admin"
       },
       {
-        "role" : "restore",
-        "db" : "admin"
+        "role": "restore",
+        "db": "admin"
       }
     ],
-    "authenticatedUserPrivileges" : [
+    "authenticatedUserPrivileges": [
       {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "system.backup_users"
+        "resource": {
+          "db": "",
+          "collection": ""
         },
-        "actions" : [
-          "bypassDocumentValidation",
-          "collMod",
-          "convertToCapped",
-          "createCollection",
-          "createIndex",
-          "dropCollection",
-          "find",
-          "insert"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "system.new_users"
-        },
-        "actions" : [
-          "bypassDocumentValidation",
-          "collMod",
-          "convertToCapped",
-          "createCollection",
-          "createIndex",
-          "dropCollection",
-          "find",
-          "insert"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "local",
-          "collection" : "system.js"
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "",
-          "collection" : "system.profile"
-        },
-        "actions" : [
-          "find"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "",
-          "collection" : "system.js"
-        },
-        "actions" : [
-          "bypassDocumentValidation",
-          "collMod",
-          "convertToCapped",
-          "createCollection",
-          "createIndex",
-          "dropCollection",
-          "find",
-          "insert"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "",
-          "collection" : "system.indexes"
-        },
-        "actions" : [
-          "find"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "",
-          "collection" : "system.users"
-        },
-        "actions" : [
-          "bypassDocumentValidation",
-          "collMod",
-          "convertToCapped",
-          "createCollection",
-          "createIndex",
-          "dropCollection",
-          "find",
-          "insert",
-          "remove",
-          "update"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "config",
-          "collection" : "system.js"
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "",
-          "collection" : ""
-        },
-        "actions" : [
+        "actions": [
           "bypassDocumentValidation",
           "changeCustomData",
           "changePassword",
@@ -180,22 +62,236 @@
         ]
       },
       {
-        "resource" : {
-          "db" : "config",
-          "collection" : "settings"
+        "resource": {
+          "db": "",
+          "collection": "system.indexes"
         },
-        "actions" : [
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": "system.js"
+        },
+        "actions": [
+          "bypassDocumentValidation",
+          "collMod",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dropCollection",
+          "find",
+          "insert"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": "system.namespaces"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": "system.profile"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": "system.users"
+        },
+        "actions": [
+          "bypassDocumentValidation",
+          "collMod",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dropCollection",
           "find",
           "insert",
+          "remove",
           "update"
         ]
       },
       {
-        "resource" : {
-          "db" : "config",
-          "collection" : ""
+        "resource": {
+          "db": "admin",
+          "collection": ""
         },
-        "actions" : [
+        "actions": [
+          "changeStream",
+          "collStats",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dbHash",
+          "dbStats",
+          "dropCollection",
+          "dropIndex",
+          "emptycapped",
+          "find",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead",
+          "remove",
+          "renameCollectionSameDB",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.backup_users"
+        },
+        "actions": [
+          "bypassDocumentValidation",
+          "collMod",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dropCollection",
+          "find",
+          "insert"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.indexes"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dbHash",
+          "dbStats",
+          "dropCollection",
+          "dropIndex",
+          "emptycapped",
+          "find",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead",
+          "remove",
+          "renameCollectionSameDB",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.namespaces"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.new_users"
+        },
+        "actions": [
+          "bypassDocumentValidation",
+          "collMod",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dropCollection",
+          "find",
+          "insert"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.roles"
+        },
+        "actions": [
+          "createIndex",
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.version"
+        },
+        "actions": [
+          "bypassDocumentValidation",
+          "collMod",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "dropCollection",
+          "find",
+          "insert"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "temproles"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "tempusers"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": ""
+        },
+        "actions": [
           "bypassDocumentValidation",
           "changeStream",
           "collMod",
@@ -217,36 +313,99 @@
         ]
       },
       {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "system.version"
+        "resource": {
+          "db": "config",
+          "collection": "settings"
         },
-        "actions" : [
+        "actions": [
+          "find",
+          "insert",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": "system.indexes"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": "system.namespaces"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": ""
+        },
+        "actions": [
           "bypassDocumentValidation",
+          "changeStream",
           "collMod",
+          "collStats",
           "convertToCapped",
           "createCollection",
           "createIndex",
+          "dbHash",
+          "dbStats",
           "dropCollection",
           "find",
-          "insert"
+          "getShardVersion",
+          "indexStats",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
         ]
       },
       {
-        "resource" : {
-          "db" : "local",
-          "collection" : "system.replset"
+        "resource": {
+          "db": "local",
+          "collection": "system.indexes"
         },
-        "actions" : [
-          "find"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "local",
-          "collection" : "system.namespaces"
-        },
-        "actions" : [
+        "actions": [
           "changeStream",
           "collStats",
           "dbHash",
@@ -259,20 +418,11 @@
         ]
       },
       {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "temproles"
+        "resource": {
+          "db": "local",
+          "collection": "system.js"
         },
-        "actions" : [
-          "find"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "config",
-          "collection" : "system.indexes"
-        },
-        "actions" : [
+        "actions": [
           "changeStream",
           "collStats",
           "dbHash",
@@ -285,10 +435,36 @@
         ]
       },
       {
-        "resource" : {
-          "cluster" : true
+        "resource": {
+          "db": "local",
+          "collection": "system.namespaces"
         },
-        "actions" : [
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.replset"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "cluster": true
+        },
+        "actions": [
           "appendOplogNote",
           "connPoolStats",
           "forceUUID",
@@ -312,187 +488,11 @@
         ]
       },
       {
-        "resource" : {
-          "anyResource" : true
+        "resource": {
+          "anyResource": true
         },
-        "actions" : [
+        "actions": [
           "anyAction"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "admin",
-          "collection" : ""
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "convertToCapped",
-          "createCollection",
-          "createIndex",
-          "dbHash",
-          "dbStats",
-          "dropCollection",
-          "dropIndex",
-          "emptycapped",
-          "find",
-          "insert",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead",
-          "remove",
-          "renameCollectionSameDB",
-          "update"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "local",
-          "collection" : ""
-        },
-        "actions" : [
-          "bypassDocumentValidation",
-          "changeStream",
-          "collMod",
-          "collStats",
-          "convertToCapped",
-          "createCollection",
-          "createIndex",
-          "dbHash",
-          "dbStats",
-          "dropCollection",
-          "find",
-          "getShardVersion",
-          "indexStats",
-          "insert",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "config",
-          "collection" : "system.namespaces"
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "system.roles"
-        },
-        "actions" : [
-          "createIndex",
-          "find"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "system.js"
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "convertToCapped",
-          "createCollection",
-          "createIndex",
-          "dbHash",
-          "dbStats",
-          "dropCollection",
-          "dropIndex",
-          "emptycapped",
-          "find",
-          "insert",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead",
-          "remove",
-          "renameCollectionSameDB",
-          "update"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "tempusers"
-        },
-        "actions" : [
-          "find"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "system.namespaces"
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "local",
-          "collection" : "system.indexes"
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "",
-          "collection" : "system.namespaces"
-        },
-        "actions" : [
-          "find"
-        ]
-      },
-      {
-        "resource" : {
-          "db" : "admin",
-          "collection" : "system.indexes"
-        },
-        "actions" : [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
         ]
       }
     ]

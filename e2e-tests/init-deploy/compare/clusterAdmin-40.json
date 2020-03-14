@@ -19,6 +19,7 @@
           "collection": ""
         },
         "actions": [
+          "clearJumboFlag",
           "collStats",
           "dbStats",
           "dropDatabase",
@@ -49,6 +50,7 @@
         },
         "actions": [
           "changeStream",
+          "clearJumboFlag",
           "collStats",
           "dbHash",
           "dbStats",
@@ -127,6 +129,7 @@
         },
         "actions": [
           "changeStream",
+          "clearJumboFlag",
           "collStats",
           "dbHash",
           "dbStats",
