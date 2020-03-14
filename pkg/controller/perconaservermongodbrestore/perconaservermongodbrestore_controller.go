@@ -167,9 +167,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
 
-	pbmc, err := backup.NewPBM(r.client, cluster)
-	if err != nil {
-		return errors.Wrap(err, "create pbm object")
+	pbmc, errPBM := backup.NewPBM(r.client, cluster)
+	if errPBM != nil {
+		log.Info("Waiting for pbm-agent.")
+		status.State = psmdbv1.RestoreStateWaiting
+		return nil
 	}
 	defer pbmc.Close()
 
