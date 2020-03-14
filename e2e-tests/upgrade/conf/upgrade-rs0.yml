@@ -7,7 +7,7 @@ spec:
   image:
   imagePullPolicy: Always
   backup:
-    enabled: true
+    enabled: false
     debug: true
     restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
