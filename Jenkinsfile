@@ -220,13 +220,18 @@ pipeline {
                     "
                 '''
 
-                sh """
-                    golicense ./percona-server-mongodb-operator \
-                        | grep -v 'license not found' \
-                        | awk '{print \$2}' | sort | uniq > golicense-new || true
+                withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_TOKEN')]) {
+                    sh """
+                        golicense -plain ./percona-server-mongodb-operator \
+                            | grep -v 'license not found' \
+                            | sed -r 's/^[^ ]+[ ]+//' \
+                            | sort \
+                            | uniq \
+                            > golicense-new || true
 
-                    diff -u e2e-tests/license/compare/golicense golicense-new
-                """
+                        diff -u e2e-tests/license/compare/golicense golicense-new
+                    """
+                }
             }
         }
         stage('Run tests for operator') {
