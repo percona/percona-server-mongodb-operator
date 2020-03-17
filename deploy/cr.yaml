@@ -1,11 +1,11 @@
-apiVersion: psmdb.percona.com/v1-3-0
+apiVersion: psmdb.percona.com/v1-4-0
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
-  image: percona/percona-server-mongodb-operator:1.3.0-mongod4.0
+  image: percona/percona-server-mongodb-operator:1.4.0-mongod4.2
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -16,7 +16,7 @@ spec:
     users: my-cluster-name-secrets
   pmm:
     enabled: false
-    image: percona/percona-server-mongodb-operator:1.3.0-pmm
+    image: percona/percona-server-mongodb-operator:1.4.0-pmm
     serverHost: monitoring-service
   replsets:
   - name: rs0
@@ -145,7 +145,7 @@ spec:
   backup:
     enabled: true
     restartOnFailure: true
-    image: percona/percona-server-mongodb-operator:1.3.0-backup
+    image: percona/percona-server-mongodb-operator:1.4.0-backup
     serviceAccountName: percona-server-mongodb-operator
 #    resources:
 #      limits:
