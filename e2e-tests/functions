@@ -336,6 +336,7 @@ compare_kubectl() {
         | $sed -e '/NAMESPACE/,+1d' \
         | $sed -e '/PBM_AGENT_SERVER_ADDRESS/,+1d' \
         | $sed -e '/name: suffix/,+1d' \
+        | $sed -e '/volumeClaimTemplates:/,/metadata:/d' \
         > ${new_result}
     diff -u ${expected_result} ${new_result}
 }
