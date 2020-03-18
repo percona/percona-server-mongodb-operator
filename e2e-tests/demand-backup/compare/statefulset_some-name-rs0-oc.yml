@@ -178,8 +178,6 @@ spec:
     rollingUpdate:
       partition: 0
     type: RollingUpdate
-  volumeClaimTemplates:
-  - metadata:
       name: mongod-data
     spec:
       accessModes:
