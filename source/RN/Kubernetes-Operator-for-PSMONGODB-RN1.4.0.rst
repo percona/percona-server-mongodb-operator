@@ -11,6 +11,8 @@
 New Features
 ================================================================================
 
+* :jirabug:`K8SPSMDB-89`: Amazon Elastic Container Service for Kubernetes (EKS)
+  was added to the list of the officially supported platforms
 * :jirabug:`K8SPSMDB-113`: Percona Server for MongoDB 4.2 is now supported
 
 Improvements
