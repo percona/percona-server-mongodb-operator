@@ -8,6 +8,7 @@ The following platforms are supported:
 * OpenShift 4.1
 * Google Kubernetes Engine (GKE) 1.11
 * GKE 1.14
+* Amazon Elastic Container Service for Kubernetes (EKS)
 * Minikube 1.12+
 
 .. note:: The Operator is subsequent to specific platform limitations: for
