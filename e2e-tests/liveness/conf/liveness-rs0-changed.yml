@@ -55,11 +55,6 @@ spec:
           requests:
             storage: 1Gi
     size: 3
-    containerSecurityContext:
-      privileged: false
-    podSecurityContext:
-      fsGroup: 1001
-      supplementalGroups: [1001, 1003]
     livenessProbe:
       failureThreshold: 6
       initialDelaySeconds: 62
@@ -79,13 +74,6 @@ spec:
     key: some-key
     users: some-users
   backup:
-    containerSecurityContext:
-      privileged: false
-      runAsNonRoot: true
-      runAsUser: 1001
-    podSecurityContext:
-      fsGroup: 1001
-      supplementalGroups: [1001, 1002, 1003]
     enabled: true
     debug: true
     restartOnFailure: true

@@ -14,20 +14,12 @@ kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/
 cluster="liveness"
 
 desc 'create first PSMDB cluster'
-if [[ "${OPENSHIFT}" == 1 ]]; then
-    spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0-oc.yml
-else
-    spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
-fi
+spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
 compare_kubectl "statefulset/${cluster}-rs0"
 
 desc 'change liveness config'
 postfix="-changed"
-if [[ "${OPENSHIFT}" == 1 ]]; then
-    apply_cluster $test_dir/conf/${cluster}-rs0$postfix-oc.yml
-else
-    apply_cluster $test_dir/conf/${cluster}-rs0$postfix.yml
-fi
+apply_cluster $test_dir/conf/${cluster}-rs0$postfix.yml
 sleep 20
 wait_for_running "${cluster}-rs0" "3"
 compare_kubectl "statefulset/${cluster}-rs0" $postfix

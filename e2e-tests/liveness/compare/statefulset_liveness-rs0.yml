@@ -105,7 +105,8 @@ spec:
             cpu: 100m
             memory: 100M
         securityContext:
-          privileged: true
+          runAsNonRoot: true
+          runAsUser: 1001
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -129,10 +130,6 @@ spec:
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
-        supplementalGroups:
-        - 1001
-        - 1002
-        - 1003
       terminationGracePeriodSeconds: 30
       volumes:
       - name: liveness-mongodb-keyfile

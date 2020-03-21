@@ -55,11 +55,6 @@ spec:
           requests:
             storage: 1Gi
     size: 3
-    containerSecurityContext:
-      privileged: true
-    podSecurityContext:
-      fsGroup: 1001
-      supplementalGroups: [1001, 1002, 1003]
     livenessProbe:
       failureThreshold: 5
       initialDelaySeconds: 61
