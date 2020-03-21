@@ -49,14 +49,12 @@ spec:
             resources: {}
             securityContext:
               runAsNonRoot: true
-              runAsUser: 1001
             terminationMessagePath: /dev/termination-log
             terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
           restartPolicy: Never
           schedulerName: default-scheduler
-          securityContext:
-            fsGroup: 1001
+          securityContext: {}
           serviceAccount: percona-server-mongodb-operator
           serviceAccountName: percona-server-mongodb-operator
           terminationGracePeriodSeconds: 30
