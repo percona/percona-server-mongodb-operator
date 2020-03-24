@@ -80,15 +80,7 @@ Install Percona server for MongoDB on Kubernetes
 
    More details about secrets can be found in `Users <users.html>`_.
 
-6. Install `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/kubernetes.html>`_ if it is not up and running yet, then generate and apply certificates as secrets according to `TLS document <TLS.html>`_.
-   
-   Pre-generated certificates are available in the ``deploy/ssl-secrets.yaml`` secrets file for test purposes, but we strongly recommend avoiding their usage on any production system.
-
-   .. code:: bash
-
-      $ kubectl apply -f <secrets file>
-
-7. After the operator is started, Percona Server for MongoDB cluster can
+6. After the operator is started, Percona Server for MongoDB cluster can
    be created with the following command:
 
    .. code:: bash
@@ -107,7 +99,7 @@ Install Percona server for MongoDB on Kubernetes
       my-cluster-name-rs0-2                              1/1     Running   0          7m
       percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
 
-6. Check connectivity to newly created cluster
+7. Check connectivity to newly created cluster
 
    .. code:: bash
 

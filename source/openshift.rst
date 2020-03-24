@@ -66,7 +66,7 @@ Install Percona server for MongoDB on OpenShift
 
       $ oc apply -f deploy/operator.yaml
 
-4. Add the MongoDB Users secrets to OpenShift. These secrets
+5. Add the MongoDB Users secrets to OpenShift. These secrets
    should be placed in the data section of the
    ``deploy/secrets.yaml`` file as login names and base64-encoded
    passwords (see `Kubernetes
@@ -88,14 +88,6 @@ Install Percona server for MongoDB on OpenShift
       $ oc apply -f deploy/secrets.yaml
 
    More details about secrets can be found in `Users <users.html>`_.
-
-5. Install `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ if it is not up and running yet, then generate and apply certificates as secrets according to `TLS document <TLS.html>`_.
-
-   Pre-generated certificates are awailable in the ``deploy/ssl-secrets.yaml`` secrets file for test purposes, but we strongly recommend avoiding their usage on any production system.
-
-   .. code:: bash
-
-      $ oc apply -f <secrets file>
 
 6. Percona Server for MongoDB cluster can
    be created at any time with the following two steps:
