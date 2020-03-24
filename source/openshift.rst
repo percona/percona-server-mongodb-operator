@@ -5,7 +5,7 @@ Install Percona server for MongoDB on OpenShift
 
    .. code:: bash
 
-      git clone -b release-{{release}} https://github.com/percona/percona-server-mongodb-operator
+      git clone -b {{{release}}} https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
    .. note::
@@ -29,14 +29,20 @@ Install Percona server for MongoDB on OpenShift
       Setting Custom Resource Definition requires your user to
       have cluster-admin role privileges.
 
-   An extra action is required if you want to manage PSMDB cluster with a
-   non-privileged user. Please make shure that `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ is already installed. The necessary permissions can be granted by applying
-   the clusterrole:
+   If you want to manage PSMDB cluster with a non-privileged user, the
+   necessary permissions can be granted by applying the next clusterrole:
 
    .. code:: bash
 
-      $ oc create clusterrole psmdb-admin --verb="*" --resource=perconaservermongodbs.psmdb.percona.com,perconaservermongodbs.psmdb.percona.com/status,perconaservermongodbbackups.psmdb.percona.com,perconaservermongodbbackups.psmdb.percona.com/status,perconaservermongodbrestores.psmdb.percona.com,perconaservermongodbrestores.psmdb.percona.com/status,issuers.certmanager.k8s.io,certificates.certmanager.k8s.io
+      $ oc create clusterrole psmdb-admin --verb="*" --resource=perconaservermongodbs.psmdb.percona.com,perconaservermongodbs.psmdb.percona.com/status,perconaservermongodbbackups.psmdb.percona.com,perconaservermongodbbackups.psmdb.percona.com/status,perconaservermongodbrestores.psmdb.percona.com,perconaservermongodbrestores.psmdb.percona.com/status
       $ oc adm policy add-cluster-role-to-user psmdb-admin <some-user>
+
+   If you have a `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ installed, then you have to execute two more commands to be able to manage certificates with a non-privileged user:
+
+   .. code:: bash
+
+      $ oc create clusterrole cert-admin --verb="*" --resource=iissuers.certmanager.k8s.io,certificates.certmanager.k8s.io
+      $ oc adm policy add-cluster-role-to-user cert-admin <some-user>
 
 2. Create a new ``psmdb`` project:
 
@@ -83,7 +89,7 @@ Install Percona server for MongoDB on OpenShift
 
    More details about secrets can be found in `Users <users.html>`_.
 
-5. Install `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ if it is not up and running yet then generate and apply certificates as secrets according to `TLS document <TLS.html>`:
+5. Install `cert-manager <https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html>`_ if it is not up and running yet, then generate and apply certificates as secrets according to `TLS document <TLS.html>`_.
 
    Pre-generated certificates are awailable in the ``deploy/ssl-secrets.yaml`` secrets file for test purposes, but we strongly recommend avoiding their usage on any production system.
 
