@@ -528,7 +528,10 @@ The replsets section controls the MongoDB Replica Set.
 | **Description** | The `Kubernetes Storage Class								|
 |                 | <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_				|
 |                 | to use with the MongoDB container `Persistent Volume Claim 					|
-|                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_	|
+|                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_.	|
+|                 | Use Storage Class with XFS as the default filesystem if possible, `for better MongoDB 	|
+|                 | performance 										|
+|                 | <https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
