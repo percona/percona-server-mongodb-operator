@@ -1,3 +1,5 @@
+.. _install-minikube:
+
 Install Percona Server for MongoDB on Minikube
 ==============================================
 
