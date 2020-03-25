@@ -8,7 +8,16 @@ The Percona Kubernetes Operator for PSMDB uses Transport Layer Security (TLS) cr
 
 The internal certificate is also used as an authorization method.
 
-TLS security can be configured in two ways: Percona Server for MongoDB Operator can use a *cert-manager* for automatic certificates generation, but also supports manual certificates generation. The following subsections cover these two ways to configure TLS security with the Operator, as well as explains how to temporarily disable it if needed.
+TLS security can be configured in several ways: 
+
+* The Operator can generate certificates automatically during the installation
+  process (requires no additional actions at all),
+* The Operator can use a specifically installed *cert-manager* for the automatic
+  certificates generation,
+* Certificates can be generated manually.
+
+The following subsections cover two last ways to configure TLS security with
+the Operator, as well as explain how to temporarily disable it if needed.
 
 .. contents:: :local:
 
