@@ -80,6 +80,10 @@ Install Percona server for MongoDB on Kubernetes
 
    More details about secrets can be found in `Users <users.html>`_.
 
+   .. note:: By default, the Operator will generate certificates automatically,
+      but you can generate and apply your own certificates as secrets according
+      to the `TLS document <TLS.html>`_ before the next step.
+
 6. After the operator is started, Percona Server for MongoDB cluster can
    be created with the following command:
 

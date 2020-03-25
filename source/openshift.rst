@@ -89,6 +89,10 @@ Install Percona server for MongoDB on OpenShift
 
    More details about secrets can be found in `Users <users.html>`_.
 
+   .. note:: By default, the Operator will generate certificates automatically,
+      but you can generate and apply your own certificates as secrets according
+      to the `TLS document <TLS.html>`_ before the next step.
+
 6. Percona Server for MongoDB cluster can
    be created at any time with the following two steps:
 
