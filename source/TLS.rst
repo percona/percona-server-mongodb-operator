@@ -10,16 +10,23 @@ The Percona Kubernetes Operator for PSMDB uses Transport Layer Security (TLS) cr
 
 The internal certificate is also used as an authorization method.
 
-TLS security can be configured in several ways: 
-
-* The Operator can generate certificates automatically during the installation
-  process (requires no additional actions at all),
+TLS security can be configured in several ways. By default, the Operator
+generates certificates automatically during the installation process. Other
+options are the following ones:
 * The Operator can use a specifically installed *cert-manager* for the automatic
   certificates generation,
 * Certificates can be generated manually.
 
-The following subsections cover two last ways to configure TLS security with
-the Operator, as well as explain how to temporarily disable it if needed.
+You can also use pre-generated certificates available in the
+``deploy/ssl-secrets.yaml`` file for test purposes, but we strongly recommend
+  avoiding their usage on any production system!
+
+**To allow these non-automatic approaches to generate certificates,**
+set ``allowUnsafeConfigurations`` key to ``true`` in the ``deploy/cr.yaml``
+configuration file.
+
+The following subsections explain how to configure TLS security with the
+Operator yourself, as well as how to temporarily disable it if needed.
 
 .. contents:: :local:
 
@@ -139,4 +146,4 @@ Run PSMDB without TLS
 
 Omitting TLS is also possible, but we recommend that you run your cluster with the TLS protocol enabled. 
 
-TLS protocol can be disabled (e.g. for demonstration purposes) by editing the ``cr.yaml/spec/allowUnstafeConfigurations`` setting to ``true``.
+To disable TLS protocol (e.g. for demonstration purposes) edit the ``cr.yaml/spec/allowUnstafeConfigurations`` setting to ``true`` and make sure that there are no certificates available.
