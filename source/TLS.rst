@@ -146,4 +146,4 @@ Run PSMDB without TLS
 
 Omitting TLS is also possible, but we recommend that you run your cluster with the TLS protocol enabled. 
 
-To disable TLS protocol (e.g. for demonstration purposes) edit the ``cr.yaml/spec/allowUnstafeConfigurations`` setting to ``true`` and make sure that there are no certificates available.
+To disable TLS protocol (e.g. for demonstration purposes) edit the ``cr.yaml/spec/allowUnstafeConfigurations`` setting to ``true`` and make sure that there are no certificates secrets available.
