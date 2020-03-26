@@ -21,9 +21,6 @@ You can also use pre-generated certificates available in the
 ``deploy/ssl-secrets.yaml`` file for test purposes, but we strongly recommend
   avoiding their usage on any production system!
 
-**To allow these non-automatic approaches to generate certificates,**
-set ``allowUnsafeConfigurations`` key to ``true`` in the ``deploy/cr.yaml``
-configuration file.
 
 The following subsections explain how to configure TLS security with the
 Operator yourself, as well as how to temporarily disable it if needed.
