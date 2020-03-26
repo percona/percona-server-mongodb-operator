@@ -10,17 +10,6 @@ The `Percona Kubernetes Operator for Percona Server for MongoDB <https://github.
 
 The Percona Kubernetes Operators are based on best practices for the configuration of a Percona Server for MongoDB replica set. The Operator provides many benefits but saving time, a consistent environment are the most important.
 
-*The operator was developed and tested for the following configurations only:*
-
-  * Percona Server for MongoDB 3.6 and Percona Server for MongoDB 4.0
-  * OpenShift 3.11 and OpenShift 4.0
-
-Other options may or may not work.
-
-Backups are not yet supported with Percona Server for MongoDB 4.0. Backups are supported for Percona Server for MongoDB 3.6.
-
-Also, the current PSMDB on Kubernetes implementation does not support Percona Server for MongoDB sharding.
-
 Overview
 ========
 
