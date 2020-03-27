@@ -142,6 +142,9 @@ extlinks = {'bug':
 'pmmbug':
 ('https://jira.percona.com/browse/PMM-%s',
                       'PMM-'),
+'jirabug':
+('https://jira.percona.com/browse/%s',
+                      ''),
 'cloudjira':
 ('https://jira.percona.com/browse/CLOUD-%s',
                       'CLOUD-')}
