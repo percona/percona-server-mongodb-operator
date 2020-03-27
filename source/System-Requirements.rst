@@ -4,9 +4,6 @@ System Requirements
 The Operator was developed and tested with Percona Server for MongoDB 3.6, 4.0,
 and 4.2. Other options may or may not work.
 
-Backups are not yet supported with Percona Server for MongoDB 4.0. Backups are
-supported for Percona Server for MongoDB 3.6.
-
 Also, the current PSMDB on Kubernetes implementation does not support Percona
 Server for MongoDB sharding.
 
