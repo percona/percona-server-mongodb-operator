@@ -4,7 +4,7 @@
 *Percona Kubernetes Operator for PSMDB* 1.4.0
 ================================================================================
 
-:Date: March XX, 2020
+:Date: March 31, 2020
 
 :Installation: `Installing Percona Kubernetes Operator for PSMDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
