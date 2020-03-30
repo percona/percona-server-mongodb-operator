@@ -22,7 +22,7 @@ Improvements
 * :jirabug:`K8SPSMDB-176`: The Operator was updated to use Percona Backup for MongoDB version 1.1
 * :jirabug:`K8SPSMDB-153`: Now the user can adjust securityContext, replacing the automatically generated securityContext with the customized one
 * :jirabug:`K8SPSMDB-79`: The health check algorithm improvements have increased the overall stability of the Operator
-* The OpenShift Container Platform 4.3.8 is now supported.
+* The OpenShift Container Platform 4.3 is now supported.
 
 Bugs Fixed
 ================================================================================
