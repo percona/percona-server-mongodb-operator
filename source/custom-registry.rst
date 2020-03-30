@@ -99,6 +99,18 @@ Percona Server for MongoDB Operator:
 
          * - Image
            - Digest
+         * - percona/percona-server-mongodb-operator:1.4.0
+           - fcae74acdc26a065e3d25f272a6be088daa6dd6f254207368e048ce492bcc1c0
+         * - percona/percona-server-mongodb-operator:1.4.0-mongod3.6
+           - 1532e1930a6aa89c56821f2a4248a0902971357fcfff3ebe336ad44e217c1aa6
+         * - percona/percona-server-mongodb-operator:1.4.0-mongod4.0
+           - d37a2b8c29707e521ad838939571f9587f7863e0927ac513096fbdf20e4728b7
+         * - percona/percona-server-mongodb-operator:1.4.0-mongod4.2
+           - d79a68524efb48d06e79e84b50870d1673cdfecc92b043d811e3a76cb0ae05ab
+         * - percona/percona-server-mongodb-operator:1.4.0-backup
+           - a7c661789afa45b5ccbab5ec288557b0863fd0e3b2697d113ced639b98183905
+         * - percona/percona-server-mongodb-operator:1.4.0-pmm
+           - bf0cdfd9f9971964cb720a92e99da1a75367cf6a07deec9367ca6b80e78b0f89
          * - percona/percona-server-mongodb-operator:1.3.0
            - d6abd625833fe3f3cae49721b7600bab5eeeaba78129df4796218a7ce170260d
          * - percona/percona-server-mongodb-operator:1.3.0-mongod3.6
