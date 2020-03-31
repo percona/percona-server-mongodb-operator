@@ -14,6 +14,7 @@ New Features
 * :jirabug:`K8SPSMDB-89`: Amazon Elastic Container Service for Kubernetes (EKS)
   was added to the list of the officially supported platforms
 * :jirabug:`K8SPSMDB-113`: Percona Server for MongoDB 4.2 is now supported
+* OpenShift Container Platform 4.3 is now supported
 
 Improvements
 ================================================================================
@@ -22,7 +23,6 @@ Improvements
 * :jirabug:`K8SPSMDB-176`: The Operator was updated to use Percona Backup for MongoDB version 1.2
 * :jirabug:`K8SPSMDB-153`: Now the user can adjust securityContext, replacing the automatically generated securityContext with the customized one
 * :jirabug:`K8SPSMDB-175`: Operator now updates observedGeneration status message to allow better monitoring of the cluster rollout or backups/restore process
-* The OpenShift Container Platform 4.3 is now supported.
 
 Bugs Fixed
 ================================================================================
