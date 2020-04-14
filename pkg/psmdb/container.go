@@ -237,6 +237,12 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 				"wiredTigerConcurrentWriteTransactions="+strconv.Itoa(mSpec.SetParameter.WiredTigerConcurrentWriteTransactions),
 			)
 		}
+		if mSpec.SetParameter.CursorTimeoutMillis > 0 {
+			args = append(args,
+				"--setParameter",
+				"cursorTimeoutMillis="+strconv.Itoa(mSpec.SetParameter.CursorTimeoutMillis),
+			)
+		}
 	}
 
 	// auditLog

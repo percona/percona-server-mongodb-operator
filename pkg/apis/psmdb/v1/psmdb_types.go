@@ -260,6 +260,7 @@ type MongodSpecSetParameter struct {
 	TTLMonitorSleepSecs                   int `json:"ttlMonitorSleepSecs,omitempty"`
 	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
 	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
+	CursorTimeoutMillis                   int `json:"cursorTimeoutMillis,omitempty"`
 }
 
 type StorageEngine string
