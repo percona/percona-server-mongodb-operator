@@ -126,7 +126,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 				RoleRef: rbacv1.RoleRef{
 					APIGroup: "rbac.authorization.k8s.io",
 					Kind:     "ClusterRole",
-					Name:     "mongodb-operator",
+					Name:     "percona-server-mongodb-operator",
 				},
 				Subjects: []rbacv1.Subject{
 					{

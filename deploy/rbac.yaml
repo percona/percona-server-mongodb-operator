@@ -1,4 +1,4 @@
-kind: Role
+kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
   name: percona-server-mongodb-operator
@@ -26,6 +26,7 @@ rules:
   - services
   - persistentvolumeclaims
   - secrets
+  - serviceaccounts
   verbs:
   - get
   - list
@@ -86,6 +87,23 @@ rules:
   - patch
   - delete
   - deletecollection
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  -  percona-server-mongodb-operator
+  resources:
+  - clusterroles
+  verbs:
+  - bind
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -100,6 +118,6 @@ subjects:
 - kind: ServiceAccount
   name: percona-server-mongodb-operator
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: percona-server-mongodb-operator
   apiGroup: rbac.authorization.k8s.io
