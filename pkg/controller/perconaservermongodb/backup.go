@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	roleBindingName = "mongodb-operator"
+	roleBindingName = "percona-server-mongodb-operator"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServerMongoDB) error {
