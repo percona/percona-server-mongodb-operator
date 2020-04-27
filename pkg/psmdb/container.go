@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -260,6 +261,19 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
 		default:
 			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
+		}
+	}
+
+	if len(replset.AdditionalArguments) > 0 {
+	additionalArgumentLoop:
+		for _, additionalArgument := range replset.AdditionalArguments {
+			for i := 0; i < len(args); i++ {
+				if strings.SplitN(args[i], "=", 2)[0] == strings.SplitN(additionalArgument, "=", 2)[0] {
+					args[i] = additionalArgument
+					continue additionalArgumentLoop
+				}
+			}
+			args = append(args, additionalArgument)
 		}
 	}
 

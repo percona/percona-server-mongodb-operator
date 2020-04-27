@@ -163,6 +163,7 @@ type ReplsetSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	AdditionalArguments      []string                   `json:"additionalArguments,omitempty"`
 	MultiAZ
 }
 

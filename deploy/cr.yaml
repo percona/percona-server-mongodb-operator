@@ -104,6 +104,8 @@ spec:
         resources:
           requests:
             storage: 3Gi
+#    additionalArguments:
+#    - --tlsAllowConnectionsWithoutCertificates
   mongod:
     net:
       port: 27017
