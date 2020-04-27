@@ -1,9 +1,6 @@
 package backup
 
 import (
-	"math/rand"
-	"time"
-
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -11,10 +8,6 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) *batchv1b.CronJob {
 	backupPod := corev1.PodSpec{
