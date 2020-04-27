@@ -88,6 +88,28 @@ func NewBackupCronJobLabels(crName string) map[string]string {
 func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec) []string {
 	return []string{
 		"-c",
-		`curl -vvv -X POST --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Content-Type: application/json" -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" --data "{\"kind\":\"PerconaServerMongoDBBackup\",\"apiVersion\":\"psmdb.percona.com/v1\",\"metadata\":{\"generateName\":\"cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-\",\"labels\":{\"` + backup.Name + `\":\"testing\",\"cluster\":\"${psmdbCluster}\",\"type\":\"cron\"}},\"spec\":{\"psmdbCluster\":\"${psmdbCluster}\",\"storageName\":\"` + backup.StorageName + `\"}}" https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/apis/psmdb.percona.com/v1/namespaces/${NAMESPACE}/perconaservermongodbbackups`,
+		`curl \
+			-vvv \
+			-X POST \
+			--cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt \
+			-H "Content-Type: application/json" \
+			-H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" \
+			--data "{ 
+				\"kind\":\"PerconaServerMongoDBBackup\",
+				\"apiVersion\":\"psmdb.percona.com/v1\",
+				\"metadata\":{
+					\"generateName\":\"cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-\",
+					\"labels\":{
+						\"ancestor\":\"` + backup.Name + `\",
+						\"cluster\":\"${psmdbCluster}\",
+						\"type\":\"cron\"
+					}
+				},
+				\"spec\":{
+					\"psmdbCluster\":\"${psmdbCluster}\",
+					\"storageName\":\"` + backup.StorageName + `\"
+				}
+			}" \
+			https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/apis/psmdb.percona.com/v1/namespaces/${NAMESPACE}/perconaservermongodbbackups`,
 	}
 }
