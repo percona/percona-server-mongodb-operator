@@ -1,7 +1,8 @@
 .. rn:: 1.2.0
 
+================================================================================
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.2.0
-==================================================================
+================================================================================
 
 Percona announces the *Percona Kubernetes Operator for Percona Server for
 MongoDB* 1.2.0 release on September 20, 2019. This release is now the current
@@ -17,7 +18,8 @@ the whole life cycle.
 The Operator source code is available `in our Github repository <https://github.com/percona/percona-server-mongodb-operator>`_.
 All of Percona’s software is open-source and free.
 
-**New features and improvements:**
+New Features and Improvements
+================================================================================
 
 * `A Service Broker was implemented <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/broker.html>`_
   for the Operator, allowing a user to deploy Percona XtraDB Cluster on the
@@ -36,7 +38,8 @@ All of Percona’s software is open-source and free.
 * The resource constraint values were refined for all containers to eliminate
   the possibility of an out of memory error.
 
-**Fixed bugs:**
+Fixed Bugs
+================================================================================
 
 * Oscillations of the cluster status between "initializing" and "ready" took
   place after an update.

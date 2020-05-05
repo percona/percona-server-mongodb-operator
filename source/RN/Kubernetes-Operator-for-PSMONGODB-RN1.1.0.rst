@@ -1,5 +1,6 @@
 .. rn:: 1.1.0
 
+==================================================================
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.1.0
 ==================================================================
 
@@ -9,7 +10,8 @@ The Operator simplifies the deployment and management of the `Percona Server for
 
 The Operator source code is available `in our Github repository <https://github.com/percona/percona-server-mongodb-operator>`_. All of Percona’s software is open-source and free.
 
-**New features and improvements**:
+New Features and Improvements
+================================================================================
 
 * Now the Percona Kubernetes Operator `allows upgrading <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/update.html>`_ Percona Server for MongoDB to newer versions, either in semi-automatic or in manual mode.
 * Also, two modes are implemented for updating the Percona Server for MongoDB ``mongod.conf`` configuration file: in *automatic configuration update* mode Percona Server for MongoDB Pods are immediately re-created to populate changed options from the Operator YAML file, while in *manual mode* changes are held until Percona Server for MongoDB Pods are re-created manually.

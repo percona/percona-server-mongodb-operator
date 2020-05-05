@@ -1,5 +1,6 @@
 .. rn:: 1.0.0
 
+==================================================================
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.0.0
 ==================================================================
 
@@ -28,6 +29,6 @@ The advantages are the following:
 
 
 Installation
-------------
+================================================================================
 
 Installation is performed by following the documentation installation instructions `for Kubernetes <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/kubernetes.html>`__ and `OpenShift <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/openshift.html>`__.
