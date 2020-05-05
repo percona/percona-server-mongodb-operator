@@ -1,7 +1,7 @@
 .. _K8SPSMDB-1.4.0:
 
 ================================================================================
-*Percona Kubernetes Operator for PSMDB* 1.4.0
+*Percona Kubernetes Operator for Percona Server for MongoDB* 1.4.0
 ================================================================================
 
 :Date: March 31, 2020
