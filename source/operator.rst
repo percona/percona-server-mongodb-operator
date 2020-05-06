@@ -65,27 +65,36 @@ has only two of them:
 
 .. glossary::
 
-  secrets.key : secrets
-
-     **Value Type**: string
+  ``secrets.key`` : secrets
      
-     **Example**: ``my-cluster-name-mongodb-key``
-     
-     **Description**: The secret name for the `MongoDB Internal Auth Key
+     The secret name for the `MongoDB Internal Auth Key
      <https://docs.mongodb.com/manual/core/security-internal-authentication/>`_.
      This secret is auto-created by the operator if it doesn’t exist.
+
+     .. list-table::
+
+        * - Value type
+          - Example
+
+        * - string
+          - ``my-cluster-name-mongodb-key``
+     |
      
-  secrets.users : secrets
-  
-     **Value Type**: string
-     
-     **Example**: ``my-cluster-name-mongodb-users``
-     
-     **Description**: The secret name for the MongoDB users required to run the
-      operator. **This secret is required to run the operator.**
-      
-  replsets.name : replsets
-  
+  ``secrets.users`` : secrets
+    
+    The secret name for the MongoDB users required to run the
+    operator. **This secret is required to run the operator.**
+
+    .. list-table::
+
+        * - Value type
+          - Example
+
+        * - string
+          - ``my-cluster-name-mongodb-users``
+    
+  ``replsets.name`` : replsets
+
      **Value Type**: string
      
      **Example**: ``rs 0``
