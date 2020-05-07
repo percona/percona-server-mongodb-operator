@@ -63,9 +63,10 @@ Secrets section
 Each spec in its turn may contain some key-value pairs. The secrets one
 has only two of them:
 
-.. glossary::
+.. _secrets-key:
 
-  ``secrets.key`` : secrets
+`secrets.key <operator.html#secrets-key>`_
+******************************************
      
      The secret name for the `MongoDB Internal Auth Key
      <https://docs.mongodb.com/manual/core/security-internal-authentication/>`_.
@@ -78,9 +79,12 @@ has only two of them:
 
         * - string
           - ``my-cluster-name-mongodb-key``
-     |
      
-  ``secrets.users`` : secrets
+     
+.. _secrets-users:
+
+`secrets.users <operator.html#secrets-users>`_
+**********************************************
     
     The secret name for the MongoDB users required to run the
     operator. **This secret is required to run the operator.**
@@ -92,16 +96,20 @@ has only two of them:
 
         * - string
           - ``my-cluster-name-mongodb-users``
-    
-  ``replsets.name`` : replsets
+
+.. _replsets-name:
+
+`replsets.name <operator.html#replsets-name>`_
+**********************************************
+   
+     The secret name for the MongoDB users required to run the
+     operator. **This secret is required to run the operator.**
 
      **Value Type**: string
      
      **Example**: ``rs 0``
      
-     **Description**: The secret name for the MongoDB users required to run the
-     operator. **This secret is required to run the operator.**
-  
+     
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
 +-----------------+---------------------------------------------------------------------------------------------+
