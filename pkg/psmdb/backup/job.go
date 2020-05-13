@@ -1,9 +1,6 @@
 package backup
 
 import (
-	"math/rand"
-	"time"
-
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -11,12 +8,6 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
-const genSymbols = "abcdefghijklmnopqrstuvwxyz1234567890"
 
 func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) *batchv1b.CronJob {
 	backupPod := corev1.PodSpec{
@@ -34,8 +25,12 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 						Value: crName,
 					},
 					{
-						Name:  "suffix",
-						Value: genRandString(5),
+						Name: "NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.namespace",
+							},
+						},
 					},
 				},
 				Args:            newBackupCronJobContainerArgs(backup),
@@ -86,29 +81,28 @@ func NewBackupCronJobLabels(crName string) map[string]string {
 func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec) []string {
 	return []string{
 		"-c",
-		`
-			cat <<-EOF | /usr/bin/kubectl apply -f -
-				apiVersion: psmdb.percona.com/v1
-				kind: PerconaServerMongoDBBackup
-				metadata:
-				  name: "cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-${suffix}"
-				  labels:
-				    ancestor: "` + backup.Name + `"
-				    cluster: "${psmdbCluster}"
-				    type: "cron"
-				spec:
-				  psmdbCluster: "${psmdbCluster}"
-				  storageName: "` + backup.StorageName + `"
-			EOF
-		`,
+		`curl \
+			-vvv \
+			-X POST \
+			--cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt \
+			-H "Content-Type: application/json" \
+			-H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" \
+			--data "{ 
+				\"kind\":\"PerconaServerMongoDBBackup\",
+				\"apiVersion\":\"psmdb.percona.com/v1\",
+				\"metadata\":{
+					\"generateName\":\"cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-\",
+					\"labels\":{
+						\"ancestor\":\"` + backup.Name + `\",
+						\"cluster\":\"${psmdbCluster}\",
+						\"type\":\"cron\"
+					}
+				},
+				\"spec\":{
+					\"psmdbCluster\":\"${psmdbCluster}\",
+					\"storageName\":\"` + backup.StorageName + `\"
+				}
+			}" \
+			https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/apis/psmdb.percona.com/v1/namespaces/${NAMESPACE}/perconaservermongodbbackups`,
 	}
-}
-
-func genRandString(ln int) string {
-	b := make([]byte, ln)
-	for i := range b {
-		b[i] = genSymbols[rand.Intn(len(genSymbols))]
-	}
-
-	return string(b)
 }
