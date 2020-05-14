@@ -33,17 +33,18 @@ spec:
           containers:
           - args:
             - -c
-            - "\n\t\t\tcat <<-EOF | /usr/bin/kubectl apply -f -\n\t\t\t\tapiVersion:
-              psmdb.percona.com/v1\n\t\t\t\tkind: PerconaServerMongoDBBackup\n\t\t\t\tmetadata:\n\t\t\t\t
-              \ name: \"cron-${psmdbCluster:0:16}-$(date -u \"+%Y%m%d%H%M%S\")-${suffix}\"\n\t\t\t\t
-              \ labels:\n\t\t\t\t    ancestor: \"every-min-aws-s3\"\n\t\t\t\t    cluster:
-              \"${psmdbCluster}\"\n\t\t\t\t    type: \"cron\"\n\t\t\t\tspec:\n\t\t\t\t
-              \ psmdbCluster: \"${psmdbCluster}\"\n\t\t\t\t  storageName: \"aws-s3\"\n\t\t\tEOF\n\t\t"
-            command:
+            - "curl \\\n\t\t\t-vvv \\\n\t\t\t-X POST \\\n\t\t\t--cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt
+              \\\n\t\t\t-H \"Content-Type: application/json\" \\\n\t\t\t-H \"Authorization:
+              Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)\" \\\n\t\t\t--data
+              \"{ \n\t\t\t\t\\\"kind\\\":\\\"PerconaServerMongoDBBackup\\\",\n\t\t\t\t\\\"apiVersion\\\":\\\"psmdb.percona.com/v1\\\",\n\t\t\t\t\\\"metadata\\\":{\n\t\t\t\t\t\\\"generateName\\\":\\\"cron-${psmdbCluster:0:16}-$(date
+              -u \"+%Y%m%d%H%M%S\")-\\\",\n\t\t\t\t\t\\\"labels\\\":{\n\t\t\t\t\t\t\\\"ancestor\\\":\\\"every-min-aws-s3\\\",\n\t\t\t\t\t\t\\\"cluster\\\":\\\"${psmdbCluster}\\\",\n\t\t\t\t\t\t\\\"type\\\":\\\"cron\\\"\n\t\t\t\t\t}\n\t\t\t\t},\n\t\t\t\t\\\"spec\\\":{\n\t\t\t\t\t\\\"psmdbCluster\\\":\\\"${psmdbCluster}\\\",\n\t\t\t\t\t\\\"storageName\\\":\\\"aws-s3\\\"\n\t\t\t\t}\n\t\t\t}\"
             - sh
             env:
             - name: psmdbCluster
               value: some-name
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
             imagePullPolicy: IfNotPresent
             name: backup
             resources: {}
