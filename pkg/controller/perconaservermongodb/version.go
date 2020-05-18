@@ -21,7 +21,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(id int) {
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongoDB, vs VersionService, sfs *appsv1.StatefulSet) error {
 	shedule, ok := r.crons.jobs[jobName]
 
-	if cr.Spec.UpgradeOptions.Schedule == "" {
+	if ok && cr.Spec.UpgradeOptions.Schedule == "" {
 		r.deleteEnsureVersion(shedule.ID)
 		return nil
 	}
