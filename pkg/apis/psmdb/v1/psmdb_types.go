@@ -60,8 +60,15 @@ type PerconaServerMongoDBSpec struct {
 	ImagePullPolicy         corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
 	PMM                     PMMSpec                              `json:"pmm,omitempty"`
 	UpdateStrategy          appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
+}
+
+type UpgradeOptions struct {
+	VersionServiceEndpoint string `json:"versionServiceEndpoint,omitempty"`
+	LockedVersion          string `json:"lockedVersion,omitempty"`
+	Schedule               string `json:"schedule,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
