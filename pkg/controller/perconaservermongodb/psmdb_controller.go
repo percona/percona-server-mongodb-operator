@@ -367,7 +367,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		return nil, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName)
+	inits := []corev1.Container{}
+	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+		inits = append(inits, EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
+	}
+
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits)
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
