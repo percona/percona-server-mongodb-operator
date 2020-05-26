@@ -403,6 +403,7 @@ type Expose struct {
 	ExposeType      corev1.ServiceType `json:"exposeType,omitempty"`
 	ExternalDnsZone string             `json:"externalDnsZone,omitempty"`
 	Annotations     map[string]string  `json:"annotations,omitempty"`
+	LoadBalancerSourceRanges  []string `json:"loadBalancerSourceRanges,omitempty"`
 }
 
 type Platform string
