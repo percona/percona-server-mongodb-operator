@@ -399,8 +399,10 @@ type Arbiter struct {
 }
 
 type Expose struct {
-	Enabled    bool               `json:"enabled"`
-	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
+	Enabled         bool               `json:"enabled"`
+	ExposeType      corev1.ServiceType `json:"exposeType,omitempty"`
+	ExternalDnsZone string             `json:"externalDnsZone,omitempty"`
+	Annotations     map[string]string  `json:"annotations,omitempty"`
 }
 
 type Platform string

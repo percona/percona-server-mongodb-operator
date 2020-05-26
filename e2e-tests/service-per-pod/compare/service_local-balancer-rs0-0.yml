@@ -8,6 +8,9 @@ metadata:
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
+  annotations:
+   service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+   external-dns.alpha.kubernetes.io/hostname: local-balancer-rs0-0.my.psmdb.example.com
   name: local-balancer-rs0-0
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1

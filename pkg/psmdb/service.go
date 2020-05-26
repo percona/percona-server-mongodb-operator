@@ -55,6 +55,7 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 
 // ExternalService returns a Service object needs to serve external connections
 func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podName string) *corev1.Service {
+	const externalDnsAnnotation = "external-dns.alpha.kubernetes.io/hostname"
 	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -63,7 +64,16 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: m.Namespace,
+			Annotations: make(map[string]string),
 		},
+	}
+
+	for k, v := range replset.Expose.Annotations {
+		svc.ObjectMeta.Annotations[k] = v
+	}
+
+	if replset.Expose.ExternalDnsZone != "" && svc.ObjectMeta.Annotations[externalDnsAnnotation] == "" {
+		svc.ObjectMeta.Annotations[externalDnsAnnotation] = fmt.Sprintf("%s.%s", podName, replset.Expose.ExternalDnsZone)
 	}
 
 	svc.Labels = map[string]string{
@@ -76,6 +86,7 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 	}
 
 	svc.Spec = corev1.ServiceSpec{
+
 		Ports: []corev1.ServicePort{
 			{
 				Name:       mongodPortName,

@@ -15,6 +15,9 @@ spec:
     expose:
       enabled: true
       exposeType: LoadBalancer
+      externalDnsZone: my.psmdb.example.com
+      annotations:
+        service.beta.kubernetes.io/aws-load-balancer-internal: "true"
     volumeSpec:
       persistentVolumeClaim:
         resources:
