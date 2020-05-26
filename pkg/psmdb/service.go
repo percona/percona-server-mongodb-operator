@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/pkg/errors"
 )
 
 // Service returns a core/v1 API Service
@@ -203,14 +202,11 @@ func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 }
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
-func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) ([]string, error) {
+func GetReplsetAddrs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
-		host, err := MongoHost(cl, m, replset, pod)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
-		}
+		host := MongoHost(m, replset, pod)
 		addrs = append(addrs, host)
 	}
 
@@ -218,30 +214,8 @@ func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, replset *api
 }
 
 // MongoHost returns the mongo host for given pod
-func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) (string, error) {
-	if replset.Expose.Enabled {
-		return getExtAddr(cl, m.Namespace, pod)
-	}
-
-	return getAddr(m, pod.Name, replset.Name), nil
-}
-
-func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
-	svc, err := getExtServices(cl, namespace, pod.Name)
-	if err != nil {
-		return "", fmt.Errorf("fetch service address: %v", err)
-	}
-
-	hostname, err := GetServiceAddr(*svc, pod, cl)
-	if err != nil {
-		return "", fmt.Errorf("get service hostname: %v", err)
-	}
-
-	return hostname.String(), nil
-}
-
-func getAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
-	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
+func MongoHost(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) string {
+	return strings.Join([]string{pod.Name, m.Name + "-" + replset.Name, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }
 

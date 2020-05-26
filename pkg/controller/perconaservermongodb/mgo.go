@@ -17,7 +17,7 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
+	rsAddrs, err := psmdb.GetReplsetAddrs(cr, replset, pods.Items)
 	if err != nil {
 		return errors.Wrap(err, "get replset addr")
 	}
@@ -58,10 +58,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			break
 		}
 
-		host, err := psmdb.MongoHost(r.client, cr, replset, pod)
-		if err != nil {
-			return fmt.Errorf("get host for pod %s: %v", pod.Name, err)
-		}
+		host := psmdb.MongoHost(cr, replset, pod)
 
 		member := mongo.Member{
 			ID:           key,
@@ -172,10 +169,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(r.client, m, replset, pod)
-		if err != nil {
-			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
-		}
+		host := psmdb.MongoHost(m, replset, pod)
 
 		cmd := []string{
 			"sh", "-c",
@@ -196,7 +190,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 		}
 
 		var errb, outb bytes.Buffer
-		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		err := r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
