@@ -75,6 +75,11 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
+	for i := range initContainers {
+		initContainers[i].Resources.Limits = c.Resources.Limits
+		initContainers[i].Resources.Requests = c.Resources.Requests
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
