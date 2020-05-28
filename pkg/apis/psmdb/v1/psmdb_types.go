@@ -443,7 +443,7 @@ func (cr *PerconaServerMongoDB) VersionGreaterThanOrEqual(version string) (bool,
 		}
 		apiVersion = newCR.APIVersion
 	}
-	crVersion := strings.Replace(strings.TrimLeft(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
+	crVersion := strings.Replace(strings.TrimPrefix(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
 	if len(crVersion) == 0 {
 		crVersion = "v1"
 	}
