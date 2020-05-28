@@ -143,11 +143,8 @@ spec:
         name: mongo-init
         resources:
           limits:
-            cpu: 500m
+            cpu: 300m
             memory: 500M
-          requests:
-            cpu: 100m
-            memory: 100M
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
