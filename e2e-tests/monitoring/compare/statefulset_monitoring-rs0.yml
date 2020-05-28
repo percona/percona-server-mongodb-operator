@@ -160,7 +160,7 @@ spec:
       initContainers:
       - command:
         - /init-entrypoint.sh
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         name: mongo-init
         resources: {}
         terminationMessagePath: /dev/termination-log
