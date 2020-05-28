@@ -116,7 +116,7 @@ spec:
       - command:
         - /init-entrypoint.sh
         imagePullPolicy: IfNotPresent
-        name: pxc-init
+        name: mongo-init
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File

@@ -13,7 +13,7 @@ func EntrypointInitContainer(initImageName string) corev1.Container {
 			},
 		},
 		Image:   initImageName,
-		Name:    "pxc-init",
+		Name:    "mongo-init",
 		Command: []string{"/init-entrypoint.sh"},
 	}
 }
