@@ -70,6 +70,11 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		)
 	}
 
+	c, err := container(m, replset, containerName, resources, ikeyName)
+	if err != nil {
+		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
@@ -89,12 +94,10 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				PriorityClassName: multiAZ.PriorityClassName,
 				RestartPolicy:     corev1.RestartPolicyAlways,
 				ImagePullSecrets:  m.Spec.ImagePullSecrets,
-				Containers: []corev1.Container{
-					container(m, replset, containerName, resources, ikeyName),
-				},
-				InitContainers: initContainers,
-				Volumes:        volumes,
-				SchedulerName:  m.Spec.SchedulerName,
+				Containers:        []corev1.Container{c},
+				InitContainers:    initContainers,
+				Volumes:           volumes,
+				SchedulerName:     m.Spec.SchedulerName,
 			},
 		},
 	}, nil

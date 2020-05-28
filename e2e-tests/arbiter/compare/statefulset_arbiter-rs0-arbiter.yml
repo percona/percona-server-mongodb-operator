@@ -60,6 +60,8 @@ spec:
         - --enableEncryption
         - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerIndexPrefixCompression=true
+        command:
+        - /data/db/ps-entry.sh
         env:
         - name: SERVICE_NAME
           value: arbiter
@@ -121,6 +123,17 @@ spec:
           readOnly: true
         workingDir: /data/db
       dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /init-entrypoint.sh
+        imagePullPolicy: IfNotPresent
+        name: pxc-init
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
