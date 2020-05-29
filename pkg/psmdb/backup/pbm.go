@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"strings"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -36,6 +37,7 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 
 	pods := &corev1.PodList{}
 	err := c.List(context.TODO(),
+		pods,
 		&client.ListOptions{
 			Namespace: cluster.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -46,7 +48,6 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 				"app.kubernetes.io/part-of":    "percona-server-mongodb",
 			}),
 		},
-		pods,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
@@ -87,7 +88,7 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 // by given storageName
 func (b *PBM) SetConfig(stg api.BackupStorageSpec) error {
 	switch stg.Type {
-	case pbm.StorageS3:
+	case api.BackupStorageType(pbm.StorageS3):
 		if stg.S3.CredentialsSecret == "" {
 			return errors.New("no credentials specified for the secret name")
 		}
@@ -96,14 +97,14 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec) error {
 			return errors.Wrap(err, "getting s3 credentials secret name")
 		}
 		conf := pbm.Config{
-			Storage: pbm.Storage{
+			Storage: pbm.StorageConf{
 				Type: pbm.StorageS3,
-				S3: pbm.S3{
+				S3: s3.Conf{
 					Region:      stg.S3.Region,
 					EndpointURL: stg.S3.EndpointURL,
 					Bucket:      stg.S3.Bucket,
 					Prefix:      stg.S3.Prefix,
-					Credentials: pbm.Credentials{
+					Credentials: s3.Credentials{
 						AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
 						SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
 					},
@@ -114,7 +115,7 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec) error {
 		if err != nil {
 			return errors.Wrap(err, "write config")
 		}
-	case pbm.StorageFilesystem:
+	case api.BackupStorageType(pbm.StorageFilesystem):
 		return errors.New("filesystem backup storage not supported yet, skipping storage name")
 	default:
 		return errors.New("unsupported backup storage type")

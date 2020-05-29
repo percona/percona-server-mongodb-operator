@@ -3,8 +3,9 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	v1 "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
 
-	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha1"
+	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha3"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	corev1 "k8s.io/api/core/v1"
@@ -78,7 +79,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			CommonName: cr.Name,
 			DNSNames:   certificateDNSNames,
 			IsCA:       true,
-			IssuerRef: cm.ObjectReference{
+			IssuerRef: v1.ObjectReference{
 				Name: issuerName,
 				Kind: issuerKind,
 			},
@@ -102,7 +103,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			CommonName: cr.Name,
 			DNSNames:   certificateDNSNames,
 			IsCA:       true,
-			IssuerRef: cm.ObjectReference{
+			IssuerRef: v1.ObjectReference{
 				Name: issuerName,
 				Kind: issuerKind,
 			},

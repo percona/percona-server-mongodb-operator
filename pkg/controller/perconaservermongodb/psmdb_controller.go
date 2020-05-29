@@ -209,11 +209,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		pods := &corev1.PodList{}
 		err := r.client.List(context.TODO(),
+			pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(matchLabels),
 			},
-			pods,
 		)
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
