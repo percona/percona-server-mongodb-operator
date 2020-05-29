@@ -210,9 +210,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GO111MODULE=on \
-                            golang:1.14 sh -c '
-                                && go build -v -mod=vendor -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager
-                            '
+                            golang:1.14 sh -c 'go build -v -mod=vendor -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
 
