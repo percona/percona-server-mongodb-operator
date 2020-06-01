@@ -1,14 +1,19 @@
 package mongo
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/pkg/errors"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -55,7 +60,7 @@ type Settings struct {
 	CatchUpTimeoutMillis    int64                  `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis,omitempty"`
 	GetLastErrorModes       map[string]ReplsetTags `bson:"getLastErrorModes,omitempty" json:"getLastErrorModes,omitempty"`
 	GetLastErrorDefaults    WriteConcern           `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults,omitempty"`
-	ReplicaSetID            bson.ObjectId          `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
+	ReplicaSetID            primitive.ObjectID     `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
 }
 
 // Response document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
@@ -83,42 +88,59 @@ const (
 	envMongoDBClusterAdminPassword = "MONGODB_CLUSTER_ADMIN_PASSWORD"
 )
 
-func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS bool) (*mgo.Session, error) {
-	dialInfo := mgo.DialInfo{
-		Addrs:          addrs,
-		ReplicaSetName: replset,
-		Username:       string(usersSecret.Data[envMongoDBClusterAdminUser]),
-		Password:       string(usersSecret.Data[envMongoDBClusterAdminPassword]),
-		Timeout:        3 * time.Second,
-		FailFast:       true,
-	}
+func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS bool) (*mongo.Client, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	opts := options.Client().
+		SetHosts(addrs).
+		SetReplicaSet(replset).
+		SetAuth(options.Credential{
+			Password: string(usersSecret.Data[envMongoDBClusterAdminPassword]),
+			Username: string(usersSecret.Data[envMongoDBClusterAdminUser]),
+		}).
+		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
+		SetReadPreference(readpref.Primary())
 	if useTLS {
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: true,
-		}
-		dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-			return tls.Dial("tcp", addr.String(), tlsConfig)
-		}
-	}
-	session, err := mgo.DialWithInfo(&dialInfo)
-	if err != nil {
-		return nil, err
+		tlsCfg := tls.Config{InsecureSkipVerify: true}
+		opts.SetTLSConfig(&tlsCfg)
+		opts.SetDialer(tlsDialer{cfg: &tlsCfg})
 	}
 
-	session.SetMode(mgo.Primary, true)
-	session.SetSafe(&mgo.Safe{
-		WMode: "majority",
-		FSync: true,
-	})
-	return session, nil
+	client, err := mongo.Connect(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		return nil, fmt.Errorf("failed to ping mongo: %v", err)
+	}
+
+	return client, nil
 }
 
-func ReadConfig(session *mgo.Session) (RSConfig, error) {
-	resp := &ReplSetGetConfig{}
-	err := session.Run(bson.D{{"replSetGetConfig", 1}}, resp)
-	if err != nil {
-		return RSConfig{}, errors.Wrap(err, "replSetGetConfig")
+type tlsDialer struct {
+	cfg *tls.Config
+}
+
+func (d tlsDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return tls.Dial("tcp", address, d.cfg)
+}
+
+func ReadConfig(ctx context.Context, session *mongo.Client) (RSConfig, error) {
+	resp := ReplSetGetConfig{}
+	res := session.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetGetConfig", Value: 1}})
+	if res.Err() != nil {
+		return RSConfig{}, errors.Wrap(res.Err(), "replSetGetConfig")
 	}
+	if err := res.Decode(&resp); err != nil {
+		return RSConfig{}, errors.Wrap(err, "failed to decoge to replSetGetConfig")
+	}
+
 	if resp.Config == nil {
 		return RSConfig{}, errors.New("mongo says: " + resp.Errmsg)
 	}
@@ -126,17 +148,21 @@ func ReadConfig(session *mgo.Session) (RSConfig, error) {
 	return *resp.Config, nil
 }
 
-func WriteConfig(session *mgo.Session, cfg RSConfig) error {
-	resp := &OKResponse{}
+func WriteConfig(ctx context.Context, session *mongo.Client, cfg RSConfig) error {
+	resp := OKResponse{}
 
 	// TODO The 'force' flag should be set to true if there is no PRIMARY in the replset (but this shouldn't ever happen).
-	err := session.Run(bson.D{{"replSetReconfig", cfg}, {"force", false}}, resp)
-	if err != nil {
-		return errors.Wrap(err, "replSetReconfig")
+	res := session.Database("admin").RunCommand(ctx, bson.D{{"replSetReconfig", cfg}, {"force", false}})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "replSetReconfig")
+	}
+
+	if err := res.Decode(&resp); err != nil {
+		return errors.Wrap(err, "failed to decoge to replSetReconfigResponce")
 	}
 
 	if resp.OK != 1 {
-		return errors.Wrap(err, "mongo")
+		return errors.New(resp.Errmsg)
 	}
 
 	return nil

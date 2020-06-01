@@ -311,7 +311,7 @@
   ]
   pruneopts = "NT"
   revision = "36ffc0710f360db0ecd2e5f400b3565555edd0f1"
-  version = "v0.7.2"
+  version = "v0.14.1"
 
 [[projects]]
   digest = "1:1234e31f3de67447e344dabcdf72c4588d31b8eed2d28f1889377ec006a086a9"
@@ -731,20 +731,6 @@
   version = "v0.9.1"
 
 [[projects]]
-  branch = "v2"
-  digest = "1:a925e210fd2dffddd71e9ad515d73199c662ee935f963f80e1b019734570ea1e"
-  name = "gopkg.in/mgo.v2"
-  packages = [
-    ".",
-    "bson",
-    "internal/json",
-    "internal/sasl",
-    "internal/scram",
-  ]
-  pruneopts = "NT"
-  revision = "9856a29383ce1c59f308dd1cf0363a79b5bef6b5"
-
-[[projects]]
   digest = "1:18108594151654e9e696b27b181b953f9a90b16bf14d253dd1b397b025a1487f"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
@@ -1048,8 +1034,12 @@
     "github.com/percona/percona-backup-mongodb/pbm",
     "github.com/pkg/errors",
     "github.com/stretchr/testify/assert",
-    "gopkg.in/mgo.v2",
-    "gopkg.in/mgo.v2/bson",
+    "go.mongodb.org/mongo-driver/bson",
+    "go.mongodb.org/mongo-driver/bson/primitive",
+    "go.mongodb.org/mongo-driver/mongo",
+    "go.mongodb.org/mongo-driver/mongo/options",
+    "go.mongodb.org/mongo-driver/mongo/readpref",
+    "go.mongodb.org/mongo-driver/mongo/writeconcern",
     "k8s.io/api/apps/v1",
     "k8s.io/api/batch/v1",
     "k8s.io/api/batch/v1beta1",

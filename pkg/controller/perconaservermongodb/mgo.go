@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
@@ -44,9 +45,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			return errors.Wrap(err, "dial:")
 		}
 	}
-	defer session.Close()
+	defer session.Disconnect(context.TODO())
 
-	cnf, err := mongo.ReadConfig(session)
+	cnf, err := mongo.ReadConfig(context.TODO(), session)
 	if err != nil {
 		return errors.Wrap(err, "get mongo config")
 	}
@@ -86,7 +87,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Members.SetVotes()
 
 		cnf.Version++
-		err = mongo.WriteConfig(session, cnf)
+		err = mongo.WriteConfig(context.TODO(), session, cnf)
 		if err != nil {
 			return errors.Wrap(err, "delete: write mongo config")
 		}
@@ -97,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Members.SetVotes()
 
 		cnf.Version++
-		err = mongo.WriteConfig(session, cnf)
+		err = mongo.WriteConfig(context.TODO(), session, cnf)
 		if err != nil {
 			return errors.Wrap(err, "add new: write mongo config")
 		}

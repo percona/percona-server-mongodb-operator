@@ -64,6 +64,10 @@ type PerconaServerMongoDBSpec struct {
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 }
 
+const (
+	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
+)
+
 type ReplsetMemberStatus struct {
 	Name    string `json:"name,omitempty"`
 	Version string `json:"version,omitempty"`
