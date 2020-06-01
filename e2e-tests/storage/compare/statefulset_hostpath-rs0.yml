@@ -150,7 +150,7 @@ spec:
           optional: true
           secretName: hostpath-ssl-internal
       - hostPath:
-          path: /tmp/data-dir
+          path: /run/data-dir
           type: Directory
         name: mongod-data
   updateStrategy:
