@@ -52,7 +52,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return errors.Wrap(err, "get mongo config")
 	}
 
-	members := mongo.RSMembers{}
+	members := mongo.ConfigMembers{}
 	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
 			err = errReplsetLimit
@@ -64,7 +64,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			return fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
 
-		member := mongo.Member{
+		member := mongo.ConfigMember{
 			ID:           key,
 			Host:         host,
 			BuildIndexes: true,
