@@ -11,7 +11,7 @@ spec:
 #    - name: private-registry-credentials
 #  runUid: 1001
   allowUnsafeConfigurations: false
-# updateStrategy: SmartUpdate
+  updateStrategy: SmartUpdate
   secrets:
     users: my-cluster-name-secrets
   pmm:

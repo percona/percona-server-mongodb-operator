@@ -54,9 +54,9 @@ type Settings struct {
 
 // Response document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
 type ReplSetGetConfig struct {
-	Config *RSConfig `bson:"config" json:"config"`
-	Errmsg string    `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
-	OKResponse
+	Config     *RSConfig `bson:"config" json:"config"`
+	Errmsg     string    `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
+	OKResponse `bson:",inline"`
 }
 
 // OKResponse is a standard MongoDB response
@@ -85,7 +85,7 @@ type Status struct {
 	Term                    int64          `bson:"term,omitempty" json:"term,omitempty"`
 	HeartbeatIntervalMillis int64          `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis,omitempty"`
 	Optimes                 *StatusOptimes `bson:"optimes,omitempty" json:"optimes,omitempty"`
-	OKResponse
+	OKResponse              `bson:",inline"`
 }
 
 type Member struct {

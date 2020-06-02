@@ -17,8 +17,8 @@ import (
 )
 
 func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS bool) (*mongo.Client, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer connectcancel()
 
 	opts := options.Client().
 		SetHosts(addrs).
@@ -29,10 +29,10 @@ func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS boo
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
 		SetReadPreference(readpref.Primary())
+
 	if useTLS {
 		tlsCfg := tls.Config{InsecureSkipVerify: true}
-		opts.SetTLSConfig(&tlsCfg)
-		opts.SetDialer(tlsDialer{cfg: &tlsCfg})
+		opts = opts.SetTLSConfig(&tlsCfg).SetDialer(tlsDialer{cfg: &tlsCfg})
 	}
 
 	client, err := mongo.Connect(ctx, opts)
@@ -40,8 +40,8 @@ func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS boo
 		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
 	}
 
-	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+	ctx, pingcancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer pingcancel()
 
 	err = client.Ping(ctx, readpref.Primary())
 	if err != nil {
