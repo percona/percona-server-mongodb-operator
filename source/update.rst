@@ -7,7 +7,7 @@ upgrades to newer versions. The upgrade can be either semi-automatic or manual.
 .. note:: Manual update mode is the recommended way for a production cluster.
 
 .. note:: Only the incremental update to a nearest minor version is supported
-   (for example, update from 1.2.0 to 1.3.0).
+   (for example, update from 1.3.0 to 1.4.0).
    To update to a newer version, which differs from the current version by more
    than one, make several incremental updates sequentially.
 
@@ -26,7 +26,7 @@ Semi-automatic update
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v1-3-0\"}" }},
+        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v{{{apiversion}}}\"}" }},
         "spec": {
             "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
@@ -54,7 +54,7 @@ Manual update
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v1-3-0\"}" }},
+        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v{{{apiversion}}}\"}" }},
         "spec": {"replsets":{ "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0" },
             "mongod": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0" },
             "backup":   { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },

@@ -51,6 +51,7 @@ Configuration
    storage
    TLS
    encryption
+   debug
 
 Reference
 =========
