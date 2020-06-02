@@ -3,7 +3,6 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-	dlog "log"
 	"sort"
 	"strings"
 	"time"
@@ -134,8 +133,6 @@ func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(cr *api.PerconaServerMongo
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get replset addr")
 	}
-
-	dlog.Printf("DEBUG: get primary pod %v", rsAddrs)
 
 	client, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, false)
 	if err != nil {
