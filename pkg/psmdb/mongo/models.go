@@ -55,7 +55,6 @@ type Settings struct {
 // Response document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
 type ReplSetGetConfig struct {
 	Config     *RSConfig `bson:"config" json:"config"`
-	Errmsg     string    `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
 	OKResponse `bson:",inline"`
 }
 
