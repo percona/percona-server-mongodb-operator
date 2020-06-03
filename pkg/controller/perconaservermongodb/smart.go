@@ -34,8 +34,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 
 	log.Info("statefullSet was changed, run smart update")
 
-	// TODO: check backup running
-
 	if sfs.Status.ReadyReplicas < sfs.Status.Replicas {
 		log.Info("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
 		return nil

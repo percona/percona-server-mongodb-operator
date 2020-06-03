@@ -11,12 +11,12 @@ fail() {
     exit 1
 }
 
-# $dir/init-deploy/run || fail "init-deploy"
-# $dir/limits/run || fail "limits"
-# $dir/scaling/run || fail "scaling"
-# $dir/monitoring/run || fail "monitoring"
-# $dir/monitoring-2-0/run || fail "monitoring-2-0"
-# $dir/liveness/run || fail "liveness"
+$dir/init-deploy/run || fail "init-deploy"
+$dir/limits/run || fail "limits"
+$dir/scaling/run || fail "scaling"
+$dir/monitoring/run || fail "monitoring"
+$dir/monitoring-2-0/run || fail "monitoring-2-0"
+$dir/liveness/run || fail "liveness"
 $dir/one-pod/run || fail "one-pod"
 $dir/service-per-pod/run || fail "service-per-pod"
 $dir/arbiter/run || fail "arbiter"
