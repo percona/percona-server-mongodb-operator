@@ -6,7 +6,12 @@ import (
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+<<<<<<< HEAD
 	"github.com/pkg/errors"
+=======
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+>>>>>>> updating cluster status when all mongo servers are live in the cluster
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,14 +96,60 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
+	matchLabels := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/replset":    cr.Spec.Replsets[0].Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	pods := &corev1.PodList{}
+	err := r.client.List(context.TODO(),
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(matchLabels),
+		},
+		pods,
+	)
+	if err != nil {
+		return r.writeStatus(cr)
+	}
+	secrets := &corev1.Secret{}
+	err = r.client.Get(
+		context.TODO(),
+		types.NamespacedName{Name: cr.Spec.Secrets.Users, Namespace: cr.Namespace},
+		secrets,
+	)
+	if err != nil {
+		err = errors.Wrap(err, "get mongodb secrets")
+		return r.writeStatus(cr)
+	}
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, cr.Spec.Replsets[0], pods.Items)
+	session, err := mongo.Dial(rsAddrs, cr.Spec.Replsets[0].Name, secrets, true)
+	if err != nil {
+		session, err = mongo.Dial(rsAddrs, cr.Spec.Replsets[0].Name, secrets, false)
+		if err != nil {
+			return r.writeStatus(cr)
+		}
+	}
 	cr.Status.Status = api.AppStateInit
-	if replsetsReady == len(cr.Spec.Replsets) {
+	if replsetsReady == len(cr.Spec.Replsets) && len(pods.Items) == len(session.LiveServers()) {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterReady,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
 		cr.Status.Status = api.AppStateReady
+	} else if replsetsReady == len(cr.Spec.Replsets) &&
+		clusterCondition.Type != api.ClusterReady &&
+		clusterCondition.Type != api.ClusterError {
+		clusterCondition = api.ClusterCondition{
+			Status:             api.ConditionTrue,
+			Type:               api.ClusterInit,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		}
+		cr.Status.Status = api.ClusterError
 	} else {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
