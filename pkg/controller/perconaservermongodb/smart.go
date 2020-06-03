@@ -28,6 +28,10 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
+	if ok, err := cr.VersionGreaterThanOrEqual("1.4.0"); !ok || err != nil {
+		return errors.Wrap(err, "failed to compare version")
+	}
+
 	log.Info("statefullSet was changed, run smart update")
 
 	// TODO: check backup running
