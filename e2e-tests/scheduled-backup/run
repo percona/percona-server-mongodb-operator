@@ -65,6 +65,7 @@ desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
 desc 'check if service and statefulset created with expected config'
+sleep 90
 compare_kubectl statefulset/$cluster
 
 desc 'write data, read from all'

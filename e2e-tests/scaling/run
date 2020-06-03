@@ -52,6 +52,7 @@ kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
     | kubectl_bin apply -f-
 
 desc 'check if Pod deleted'
+sleep 20
 wait_for_delete pod/$cluster-3
 wait_for_delete pod/$cluster-4
 
