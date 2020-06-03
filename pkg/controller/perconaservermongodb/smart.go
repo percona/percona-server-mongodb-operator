@@ -37,7 +37,17 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	// TODO: check backup running
 
 	if sfs.Status.ReadyReplicas < sfs.Status.Replicas {
-		return fmt.Errorf("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
+		log.Info("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
+		return nil
+	}
+
+	ok, err := r.isBackupRunning(cr)
+	if err != nil {
+		return fmt.Errorf("failed to check active backups: %v", err)
+	}
+	if ok {
+		log.Info("can't start 'SmartUpdate': waiting for running backups finished")
+		return nil
 	}
 
 	list := corev1.PodList{}
@@ -89,6 +99,24 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMongoDB) (bool, error) {
+	bcps := api.PerconaServerMongoDBBackupList{}
+	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: cr.Namespace}, &bcps); err != nil {
+		if k8sErrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "get backup list")
+	}
+
+	for _, bcp := range bcps.Items {
+		if bcp.Status.State == api.BackupStateRunning {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) applyNWait(cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
