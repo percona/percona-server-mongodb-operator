@@ -59,11 +59,11 @@ func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaSer
 	// clear old services
 	svcList := &corev1.ServiceList{}
 	err := r.client.List(context.TODO(),
+		svcList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(service.Labels),
 		},
-		svcList,
 	)
 	if err != nil {
 		return fmt.Errorf("get current services: %v", err)

@@ -58,7 +58,7 @@ func (e ErrConcurrentOp) Error() string {
 
 // Acquire tries to acquire the lock.
 // It returns true in case of success and false if there is
-// lock already acquired by another process or some error happend.
+// lock already acquired by another process or some error happened.
 // In case there is already concurrent lock exists, it checks if the concurrent lock isn't stale
 // and clear the rot and tries again if it's happened to be so.
 func (l *Lock) Acquire() (bool, error) {
@@ -137,7 +137,7 @@ func (l *Lock) acquire() (bool, error) {
 
 	_, err = l.c.InsertOne(l.p.Context(), l.LockData)
 	if err != nil && !strings.Contains(err.Error(), "E11000 duplicate key error") {
-		return false, errors.Wrap(err, "aquire lock")
+		return false, errors.Wrap(err, "acquire lock")
 	}
 
 	// if there is no duplicate key error, we got the lock
