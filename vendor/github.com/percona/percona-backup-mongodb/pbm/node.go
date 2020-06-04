@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Node struct {
@@ -24,13 +25,44 @@ const (
 	ReplRoleConfigSrv = "configsrv"
 )
 
-func NewNode(ctx context.Context, name string, conn *mongo.Client, curi string) *Node {
-	return &Node{
+func NewNode(ctx context.Context, name string, curi string) (*Node, error) {
+	n := &Node{
 		name: name,
 		ctx:  ctx,
-		cn:   conn,
 		curi: curi,
 	}
+	err := n.Connect()
+	if err != nil {
+		return nil, err
+	}
+
+	return n, nil
+}
+
+func (n *Node) Connect() error {
+	conn, err := mongo.NewClient(options.Client().ApplyURI(n.curi).SetAppName("pbm-agent-exec").SetDirect(true))
+	if err != nil {
+		return errors.Wrap(err, "create mongo client")
+	}
+	err = conn.Connect(n.ctx)
+	if err != nil {
+		return errors.Wrap(err, "connect")
+	}
+
+	err = conn.Ping(n.ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "ping")
+	}
+
+	if n.cn != nil {
+		err = n.cn.Disconnect(n.ctx)
+		if err != nil {
+			return errors.Wrap(err, "close existing connection")
+		}
+	}
+
+	n.cn = conn
+	return nil
 }
 
 func (n *Node) GetIsMaster() (*IsMaster, error) {
@@ -131,4 +163,14 @@ func (n *Node) ConnURI() string {
 
 func (n *Node) Session() *mongo.Client {
 	return n.cn
+}
+
+func (n *Node) CurrentUser() (*AuthInfo, error) {
+	c := &ConnectionStatus{}
+	err := n.cn.Database(DB).RunCommand(n.ctx, bson.D{{"connectionStatus", 1}}).Decode(c)
+	if err != nil {
+		return nil, errors.Wrap(err, "run mongo command connectionStatus")
+	}
+
+	return &c.AuthInfo, nil
 }

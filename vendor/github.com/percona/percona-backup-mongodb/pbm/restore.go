@@ -125,7 +125,7 @@ func (p *PBM) RestoresList(limit int64) ([]RestoreMeta, error) {
 	cur, err := p.Conn.Database(DB).Collection(RestoresCollection).Find(
 		p.ctx,
 		bson.M{},
-		options.Find().SetLimit(limit).SetSort(bson.D{{"start_ts", 1}}),
+		options.Find().SetLimit(limit).SetSort(bson.D{{"start_ts", -1}}),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "query mongo")
