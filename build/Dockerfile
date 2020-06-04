@@ -28,5 +28,7 @@ LABEL name="Percona Server for MongoDB Operator" \
 
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator
+COPY build/init-entrypoint.sh /init-entrypoint.sh
+COPY build/ps-entry.sh /ps-entry.sh
 
 USER nobody

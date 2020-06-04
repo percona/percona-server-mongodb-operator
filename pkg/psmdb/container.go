@@ -10,7 +10,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, ikeyName string) corev1.Container {
+func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, ikeyName string) (corev1.Container, error) {
 	fvar := false
 
 	volumes := []corev1.VolumeMount{
@@ -45,7 +45,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		)
 	}
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            name,
 		Image:           m.Spec.Image,
 		ImagePullPolicy: m.Spec.ImagePullPolicy,
@@ -92,6 +92,18 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		SecurityContext: replset.ContainerSecurityContext,
 		VolumeMounts:    volumes,
 	}
+
+	gte, err := m.VersionGreaterThanOrEqual("1.5.0")
+	if err != nil {
+		return corev1.Container{}, fmt.Errorf("failed to compare versions: %v", err)
+	}
+
+	if gte {
+		// container.Args = []string{"mongod"}
+		container.Command = []string{"/data/db/ps-entry.sh"}
+	}
+
+	return container, nil
 }
 
 // containerArgs returns the args to pass to the mSpec container

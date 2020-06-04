@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -367,7 +370,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		return nil, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName)
+	inits := []corev1.Container{}
+	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+		operatorPod, err := r.operatorPod()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get operator pod: %v", err)
+		}
+		inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
+	}
+
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits)
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
@@ -510,6 +522,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	return sfs, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) operatorPod() (corev1.Pod, error) {
+	operatorPod := corev1.Pod{}
+
+	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return operatorPod, err
+	}
+
+	ns := strings.TrimSpace(string(nsBytes))
+
+	if err := r.client.Get(context.TODO(), types.NamespacedName{
+		Namespace: ns,
+		Name:      os.Getenv("HOSTNAME"),
+	}, &operatorPod); err != nil {
+		return operatorPod, err
+	}
+
+	return operatorPod, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getTLSHash(cr *api.PerconaServerMongoDB, secretName string) (string, error) {

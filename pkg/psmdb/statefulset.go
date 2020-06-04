@@ -28,7 +28,7 @@ var secretFileMode int32 = 288
 
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string) (appsv1.StatefulSetSpec, error) {
+func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string, initContainers []corev1.Container) (appsv1.StatefulSetSpec, error) {
 	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
@@ -70,6 +70,16 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		)
 	}
 
+	c, err := container(m, replset, containerName, resources, ikeyName)
+	if err != nil {
+		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
+	}
+
+	for i := range initContainers {
+		initContainers[i].Resources.Limits = c.Resources.Limits
+		initContainers[i].Resources.Requests = c.Resources.Requests
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
@@ -89,11 +99,10 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				PriorityClassName: multiAZ.PriorityClassName,
 				RestartPolicy:     corev1.RestartPolicyAlways,
 				ImagePullSecrets:  m.Spec.ImagePullSecrets,
-				Containers: []corev1.Container{
-					container(m, replset, containerName, resources, ikeyName),
-				},
-				Volumes:       volumes,
-				SchedulerName: m.Spec.SchedulerName,
+				Containers:        []corev1.Container{c},
+				InitContainers:    initContainers,
+				Volumes:           volumes,
+				SchedulerName:     m.Spec.SchedulerName,
 			},
 		},
 	}, nil

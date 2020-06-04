@@ -13,7 +13,7 @@ spec:
       antiAffinityTopologyKey: none
     volumeSpec:
       hostPath:
-        path: /tmp/data-dir
+        path: /run/data-dir
         type: Directory
     size: 3
   secrets:
