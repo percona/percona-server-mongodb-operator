@@ -8,8 +8,8 @@ the Operator can be used with a special *debug image* of the Percona Server for
 MongoDB, which has the following specifics:
 
 * it avoids restarting on fail,
-* it contains additional tools useful for debugging (sudo, telnet, gdb, etc.),
-* it has debug mode enabled for the logs.
+* it contains additional tools useful for debugging (sudo, telnet, gdb, mongodb-debuginfo package, etc.),
+* extra verbosity is added to the mongodb daemon.
 
 Particularly, using this image is useful if the container entry point fails
 (``mongod`` crashes). In such a situation, Pod is continuously restarting.
