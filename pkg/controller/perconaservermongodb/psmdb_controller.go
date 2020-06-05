@@ -212,11 +212,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		pods := &corev1.PodList{}
 		err := r.client.List(context.TODO(),
+			pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(matchLabels),
 			},
-			pods,
 		)
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
@@ -370,7 +370,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		return nil, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName)
+	inits := []corev1.Container{}
+	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+		operatorPod, err := r.operatorPod()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get operator pod: %v", err)
+		}
+		inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
+	}
+
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits)
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}

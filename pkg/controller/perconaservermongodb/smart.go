@@ -49,7 +49,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	}
 
 	list := corev1.PodList{}
-	if err := r.client.List(context.TODO(),
+	if err := r.client.List(context.TODO(), &list,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -60,7 +60,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 				"app.kubernetes.io/part-of":    "percona-server-mongodb",
 			}),
 		},
-		&list,
 	); err != nil {
 		return fmt.Errorf("get pod list: %v", err)
 	}
@@ -101,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 
 func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMongoDB) (bool, error) {
 	bcps := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: cr.Namespace}, &bcps); err != nil {
+	if err := r.client.List(context.TODO(), &bcps, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}

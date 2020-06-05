@@ -160,6 +160,7 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB
 func (r *ReconcilePerconaServerMongoDB) rsStatus(rsSpec *api.ReplsetSpec, clusterName, namespace string) (api.ReplsetStatus, error) {
 	list := corev1.PodList{}
 	err := r.client.List(context.TODO(),
+		&list,
 		&client.ListOptions{
 			Namespace: namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -170,7 +171,6 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(rsSpec *api.ReplsetSpec, cluste
 				"app.kubernetes.io/part-of":    "percona-server-mongodb",
 			}),
 		},
-		&list,
 	)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)
