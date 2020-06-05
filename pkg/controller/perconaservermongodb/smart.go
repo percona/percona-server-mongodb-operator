@@ -49,7 +49,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	}
 
 	list := corev1.PodList{}
-	if err := r.client.List(context.TODO(), &list,
+	if err := r.client.List(context.TODO(),
+		&list,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
