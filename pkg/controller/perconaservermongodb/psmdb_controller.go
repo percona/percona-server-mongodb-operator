@@ -132,6 +132,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
+	isClusterLive := false
+	defer func() {
+		err = r.updateStatus(cr, err, isClusterLive)
+		if err != nil {
+			reqLogger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
+		}
+	}()
+
 	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
 		err = errors.Wrap(err, "wrong psmdb options")
@@ -290,14 +298,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
 		}
 
-		isClusterLive, err := r.reconcileCluster(cr, replset, *pods, secrets)
-
-		defer func() {
-			err = r.updateStatus(cr, err, isClusterLive)
-			if err != nil {
-				reqLogger.Error(err, "failed to update cluster status", "replset", replset.Name)
-			}
-		}()
+		isClusterLive, err = r.reconcileCluster(cr, replset, *pods, secrets)
 
 		if err != nil {
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)

@@ -16,7 +16,7 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (isClusterLive bool, err error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
 	if err != nil {
 		return false, errors.Wrap(err, "get replset addr")
@@ -44,14 +44,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			return false, errors.Wrap(err, "dial:")
 		}
 	}
-
 	isClusterLive := len(session.LiveServers()) == len(pods.Items)
 
 	defer session.Disconnect(context.TODO())
 
 	cnf, err := mongo.ReadConfig(context.TODO(), session)
 	if err != nil {
-		return isClusterLive, errors.Wrap(err, "get mongo config")
+		return false, errors.Wrap(err, "get mongo config")
 	}
 
 	members := mongo.ConfigMembers{}
@@ -63,7 +62,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 		host, err := psmdb.MongoHost(r.client, cr, replset, pod)
 		if err != nil {
-			return isClusterLive, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
+			return false, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
 
 		member := mongo.ConfigMember{
@@ -91,7 +90,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Version++
 		err = mongo.WriteConfig(context.TODO(), session, cnf)
 		if err != nil {
-			return isClusterLive, errors.Wrap(err, "delete: write mongo config")
+			return false, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
@@ -102,11 +101,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Version++
 		err = mongo.WriteConfig(context.TODO(), session, cnf)
 		if err != nil {
-			return isClusterLive, errors.Wrap(err, "add new: write mongo config")
+			return false, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
 
-	return isClusterLive, nil
+	return len(session.LiveServers()) == len(pods.Items), nil
 }
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
