@@ -103,11 +103,7 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
 		svc.Spec.ExternalTrafficPolicy = "Cluster"
-		if len(replset.Expose.LoadBalancerSourceRanges) > 0 {
-			for _, sr := range replset.Expose.LoadBalancerSourceRanges {
-				svc.Spec.LoadBalancerSourceRanges = append(svc.Spec.LoadBalancerSourceRanges, sr)
-			}
-		}
+		svc.Spec.LoadBalancerSourceRanges = replset.Expose.LoadBalancerSourceRanges
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
