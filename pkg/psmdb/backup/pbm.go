@@ -63,7 +63,7 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
 	}
 
-	addrs, err := psmdb.GetReplsetAddrs(cluster, rs, pods.Items)
+	addrs, err := psmdb.GetReplsetAddrs(c, cluster, rs, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo addr")
 	}
