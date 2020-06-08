@@ -11,6 +11,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
+	mgo "go.mongodb.org/mongo-driver/mongo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -65,7 +66,13 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	primary, err := r.getPrimaryPod(cr, replset, list, secret)
+	client, err := r.getMongoClient(cr, replset, list, secret)
+	if err != nil {
+		return fmt.Errorf("failed to get mongo client: %v", err)
+	}
+	defer client.Disconnect(context.TODO())
+
+	primary, err := r.getPrimaryPod(client)
 	if err != nil {
 		return fmt.Errorf("get primary pod: %v", err)
 	}
@@ -89,6 +96,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 				return fmt.Errorf("failed to apply changes: %v", err)
 			}
 		}
+	}
+
+	log.Info("doing step down...")
+	err = mongo.StepDown(context.TODO(), client)
+	if err != nil {
+		return errors.Wrap(err, "failed to do step down")
 	}
 
 	log.Info(fmt.Sprintf("apply changes to primary pod %s", primaryPod.Name))
@@ -159,17 +172,21 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, po
 	return fmt.Errorf("reach pod wait limit")
 }
 
-func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (string, error) {
+func (r *ReconcilePerconaServerMongoDB) getMongoClient(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get replset addr")
+		return nil, errors.Wrap(err, "failed to get replset addr")
 	}
 
 	client, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, false)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to dial mongo")
+		return nil, errors.Wrap(err, "failed to dial mongo")
 	}
 
+	return client, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(client *mgo.Client) (string, error) {
 	status, err := mongo.RSStatus(context.TODO(), client)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get rs status")

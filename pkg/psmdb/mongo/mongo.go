@@ -115,6 +115,25 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	return status, nil
 }
 
+func StepDown(ctx context.Context, client *mongo.Client) error {
+	resp := OKResponse{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: 60}})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "replSetStepDown")
+	}
+
+	if err := res.Decode(&resp); err != nil {
+		return errors.Wrap(err, "failed to decode responce of replSetStepDown")
+	}
+
+	if resp.OK != 1 {
+		return fmt.Errorf("mongo says: %s", resp.Errmsg)
+	}
+
+	return nil
+}
+
 // RemoveOld removes from the list those members which are not present in the given list.
 // It always should leave at least one element. The config won't be valid for mongo otherwise.
 // Better, if the last element has the smallest ID in order not to produce defragmentation
