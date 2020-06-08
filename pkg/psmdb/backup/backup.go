@@ -26,10 +26,10 @@ type Job struct {
 func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bool, error) {
 	bcps := &api.PerconaServerMongoDBBackupList{}
 	err := cl.List(context.TODO(),
+		bcps,
 		&client.ListOptions{
 			Namespace: namespace,
 		},
-		bcps,
 	)
 	if err != nil {
 		return false, errors.Wrap(err, "get backup list")
@@ -48,10 +48,10 @@ func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bo
 
 	rstrs := &api.PerconaServerMongoDBRestoreList{}
 	err = cl.List(context.TODO(),
+		rstrs,
 		&client.ListOptions{
 			Namespace: namespace,
 		},
-		rstrs,
 	)
 	if err != nil {
 		return false, errors.Wrap(err, "get restore list")

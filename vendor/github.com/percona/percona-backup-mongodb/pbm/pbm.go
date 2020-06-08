@@ -34,20 +34,22 @@ const (
 	RestoresCollection = "pbmRestores"
 	// CmdStreamCollection is the name of the mongo collection that contains backup/restore commands stream
 	CmdStreamCollection = "pbmCmd"
-)
 
-const (
 	// NoReplset is the name of a virtual replica set of the standalone node
 	NoReplset = "pbmnoreplicaset"
+
+	// MetadataFileSuffix is a suffix for the metadata file on a storage
+	MetadataFileSuffix = ".pbm.json"
 )
 
 type Command string
 
 const (
 	CmdUndefined        Command = ""
-	CmdBackup                   = "backup"
-	CmdRestore                  = "restore"
-	CmdResyncBackupList         = "resyncBcpList"
+	CmdBackup           Command = "backup"
+	CmdRestore          Command = "restore"
+	CmdCancelBackup     Command = "cancelBackup"
+	CmdResyncBackupList Command = "resyncBcpList"
 )
 
 type Cmd struct {
@@ -60,7 +62,6 @@ type Cmd struct {
 type BackupCmd struct {
 	Name        string          `bson:"name"`
 	Compression CompressionType `bson:"compression"`
-	StoreName   string          `bson:"store,omitempty"`
 }
 
 type RestoreCmd struct {
@@ -72,9 +73,11 @@ type CompressionType string
 
 const (
 	CompressionTypeNone   CompressionType = "none"
-	CompressionTypeGZIP                   = "gzip"
-	CompressionTypeSNAPPY                 = "snappy"
-	CompressionTypeLZ4                    = "lz4"
+	CompressionTypeGZIP   CompressionType = "gzip"
+	CompressionTypePGZIP  CompressionType = "pgzip"
+	CompressionTypeSNAPPY CompressionType = "snappy"
+	CompressionTypeLZ4    CompressionType = "lz4"
+	CompressionTypeS2     CompressionType = "s2"
 )
 
 var WaitActionStart = time.Second * 15
@@ -90,7 +93,7 @@ type PBM struct {
 func New(ctx context.Context, uri, appName string) (*PBM, error) {
 	uri = "mongodb://" + strings.Replace(uri, "mongodb://", "", 1)
 
-	client, err := connect(ctx, uri, "pbm-discovery")
+	client, err := connect(ctx, uri, appName)
 	if err != nil {
 		return nil, errors.Wrap(err, "create mongo connection")
 	}
@@ -113,10 +116,13 @@ func New(ctx context.Context, uri, appName string) (*PBM, error) {
 	}{}
 	err = client.Database("admin").Collection("system.version").
 		FindOne(ctx, bson.D{{"_id", "shardIdentity"}}).Decode(&csvr)
-	// no need in this connection anymore, we need a new one with the ConfigServer
-	client.Disconnect(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get config server connetion URI")
+	}
+	// no need in this connection anymore, we need a new one with the ConfigServer
+	err = client.Disconnect(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "diconnect old client")
 	}
 
 	chost := strings.Split(csvr.URI, "/")
@@ -129,7 +135,7 @@ func New(ctx context.Context, uri, appName string) (*PBM, error) {
 		return nil, errors.Wrapf(err, "parse mongo-uri '%s'", uri)
 	}
 
-	// Preserving `replicaSet` parameter will causes an error while connecting to the ConfigServer (mismatched replicaset names)
+	// Preserving the `replicaSet` parameter will cause an error while connecting to the ConfigServer (mismatched replicaset names)
 	query := curi.Query()
 	query.Del("replicaSet")
 	curi.RawQuery = query.Encode()
@@ -207,7 +213,7 @@ type BackupMeta struct {
 	Name             string              `bson:"name" json:"name"`
 	Replsets         []BackupReplset     `bson:"replsets" json:"replsets"`
 	Compression      CompressionType     `bson:"compression" json:"compression"`
-	Store            Storage             `bson:"store" json:"store"`
+	Store            StorageConf         `bson:"store" json:"store"`
 	MongoVersion     string              `bson:"mongodb_version" json:"mongodb_version,omitempty"`
 	StartTS          int64               `bson:"start_ts" json:"start_ts"`
 	LastTransitionTS int64               `bson:"last_transition_ts" json:"last_transition_ts"`
@@ -235,15 +241,16 @@ type BackupReplset struct {
 	Conditions       []Condition         `bson:"conditions" json:"conditions"`
 }
 
-// Status is backup current status
+// Status is a backup current status
 type Status string
 
 const (
 	StatusStarting Status = "starting"
-	StatusRunning         = "running"
-	StatusDumpDone        = "dumpDone"
-	StatusDone            = "done"
-	StatusError           = "error"
+	StatusRunning  Status = "running"
+	StatusDumpDone Status = "dumpDone"
+	StatusDone     Status = "done"
+	StatusCancelled Status = "canceled"
+	StatusError    Status = "error"
 )
 
 func (p *PBM) SetBackupMeta(m *BackupMeta) error {
@@ -363,7 +370,7 @@ func (p *PBM) BackupsList(limit int64) ([]BackupMeta, error) {
 	cur, err := p.Conn.Database(DB).Collection(BcpCollection).Find(
 		p.ctx,
 		bson.M{},
-		options.Find().SetLimit(limit).SetSort(bson.D{{"start_ts", 1}}),
+		options.Find().SetLimit(limit).SetSort(bson.D{{"start_ts", -1}}),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "query mongo")

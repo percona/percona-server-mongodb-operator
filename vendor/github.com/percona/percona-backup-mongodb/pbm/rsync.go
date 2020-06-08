@@ -2,15 +2,7 @@ package pbm
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"path"
-	"strings"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -20,23 +12,13 @@ func (p *PBM) ResyncBackupList() error {
 	if err != nil {
 		return errors.Wrap(err, "unable to get backup store")
 	}
-	var bcps []BackupMeta
-	switch stg.Type {
-	default:
-		return errors.New("store is doesn't set, you have to set store to make backup")
-	case StorageS3:
-		bcps, err = getBackupListS3(stg.S3)
-		if err != nil {
-			return errors.Wrap(err, "get backups from S3")
-		}
-	case StorageFilesystem:
-		bcps, err = getBackupListFS(stg.Filesystem)
-		if err != nil {
-			return errors.Wrap(err, "get backups from FS")
-		}
+
+	bcps, err := stg.FilesList(MetadataFileSuffix)
+	if err != nil {
+		return errors.Wrap(err, "get a backups list from the storage")
 	}
 
-	err = p.archiveBackupsMeta(bcps)
+	err = p.archiveBackupsMeta()
 	if err != nil {
 		return errors.Wrap(err, "copy current backups meta")
 	}
@@ -51,7 +33,12 @@ func (p *PBM) ResyncBackupList() error {
 	}
 
 	var ins []interface{}
-	for _, v := range bcps {
+	for _, b := range bcps {
+		v := BackupMeta{}
+		err = json.Unmarshal(b, &v)
+		if err != nil {
+			return errors.Wrap(err, "unmarshal backup meta")
+		}
 		ins = append(ins, v)
 	}
 	_, err = p.Conn.Database(DB).Collection(BcpCollection).InsertMany(p.ctx, ins)
@@ -62,120 +49,23 @@ func (p *PBM) ResyncBackupList() error {
 	return nil
 }
 
-func (p *PBM) archiveBackupsMeta(bm []BackupMeta) error {
-	if len(bm) == 0 {
-		return nil
-	}
-	_, err := p.Conn.Database(DB).Collection(BcpOldCollection).InsertOne(
-		p.ctx,
-		struct {
-			CopiedAt time.Time    `bson:"copied_at"`
-			Backups  []BackupMeta `bson:"backups"`
-		}{
-			CopiedAt: time.Now().UTC(),
-			Backups:  bm,
-		},
-	)
-
-	return err
-}
-
-func getBackupListFS(stg Filesystem) ([]BackupMeta, error) {
-	files, err := ioutil.ReadDir(stg.Path)
+func (p *PBM) archiveBackupsMeta() error {
+	err := p.Conn.Database(DB).Collection(BcpOldCollection).Drop(p.ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "read dir")
+		return errors.Wrap(err, "failed to remove old archive from backups metadata")
 	}
 
-	var bcps []BackupMeta
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-
-		fpath := path.Join(stg.Path, f.Name())
-		data, err := ioutil.ReadFile(fpath)
+	cur, err := p.Conn.Database(DB).Collection(BcpCollection).Find(p.ctx, bson.M{})
+	if err != nil {
+		return errors.Wrap(err, "get current backups meta")
+	}
+	for cur.Next(p.ctx) {
+		_, err = p.Conn.Database(DB).Collection(BcpOldCollection).InsertOne(p.ctx, cur.Current)
 		if err != nil {
-			return nil, errors.Wrapf(err, "read file '%s'", fpath)
+			return errors.Wrap(err, "insert")
 		}
 
-		m := BackupMeta{}
-		err = json.Unmarshal(data, &m)
-		if err != nil {
-			return nil, errors.Wrapf(err, "unmarshal file '%s'", fpath)
-		}
-
-		if m.Name != "" {
-			bcps = append(bcps, m)
-		}
 	}
 
-	return bcps, nil
-}
-
-func getBackupListS3(stg S3) ([]BackupMeta, error) {
-	awsSession, err := session.NewSession(&aws.Config{
-		Region:   aws.String(stg.Region),
-		Endpoint: aws.String(stg.EndpointURL),
-		Credentials: credentials.NewStaticCredentials(
-			stg.Credentials.AccessKeyID,
-			stg.Credentials.SecretAccessKey,
-			"",
-		),
-		S3ForcePathStyle: aws.Bool(true),
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "create AWS session")
-	}
-
-	lparams := &s3.ListObjectsInput{
-		Bucket:    aws.String(stg.Bucket),
-		Delimiter: aws.String("/"),
-	}
-	if stg.Prefix != "" {
-		lparams.Prefix = aws.String(stg.Prefix)
-		if stg.Prefix[len(stg.Prefix)-1] != '/' {
-			*lparams.Prefix += "/"
-		}
-	}
-
-	var bcps []BackupMeta
-	awscli := s3.New(awsSession)
-	var berr error
-	err = awscli.ListObjectsPages(lparams,
-		func(page *s3.ListObjectsOutput, lastPage bool) bool {
-			for _, o := range page.Contents {
-				name := aws.StringValue(o.Key)
-				if strings.HasSuffix(name, ".pbm.json") {
-					s3obj, err := awscli.GetObject(&s3.GetObjectInput{
-						Bucket: aws.String(stg.Bucket),
-						Key:    aws.String(name),
-					})
-					if err != nil {
-						berr = errors.Wrapf(err, "get object '%s'", name)
-						return false
-					}
-
-					m := BackupMeta{}
-					err = json.NewDecoder(s3obj.Body).Decode(&m)
-					if err != nil {
-						berr = errors.Wrapf(err, "decode object '%s'", name)
-						return false
-					}
-					if m.Name != "" {
-						bcps = append(bcps, m)
-					}
-				}
-			}
-			return true
-		})
-
-	if err != nil {
-		return nil, errors.Wrap(err, "get backup list")
-	}
-
-	if berr != nil {
-		return nil, errors.Wrap(berr, "metadata")
-	}
-
-	return bcps, nil
+	return cur.Err()
 }
