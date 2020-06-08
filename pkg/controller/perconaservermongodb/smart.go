@@ -109,9 +109,8 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	}
 
 	for _, bcp := range bcps.Items {
-		if bcp.Status.State == api.BackupStateRunning ||
-			bcp.Status.State == api.BackupStateWaiting ||
-			bcp.Status.State == api.BackupStateRequested {
+		if bcp.Status.State != api.BackupStateReady &&
+			bcp.Status.State != api.BackupStateError {
 			return true, nil
 		}
 	}
