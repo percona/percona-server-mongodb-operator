@@ -34,8 +34,9 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + replset.Name,
-			Namespace: m.Namespace,
+			Name:        m.Name + "-" + replset.Name,
+			Namespace:   m.Namespace,
+			Annotations: m.Spec.Mongod.ServiceAnnotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -45,8 +46,9 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 					TargetPort: intstr.FromInt(int(m.Spec.Mongod.Net.Port)),
 				},
 			},
-			ClusterIP: "None",
-			Selector:  ls,
+			ClusterIP:                "None",
+			Selector:                 ls,
+			LoadBalancerSourceRanges: m.Spec.Mongod.LoadBalancerSourceRanges,
 		},
 	}
 }

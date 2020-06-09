@@ -226,13 +226,15 @@ type MongosSpec struct {
 }
 
 type MongodSpec struct {
-	Net                *MongodSpecNet                `json:"net,omitempty"`
-	AuditLog           *MongodSpecAuditLog           `json:"auditLog,omitempty"`
-	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
-	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
-	Security           *MongodSpecSecurity           `json:"security,omitempty"`
-	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
-	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
+	Net                      *MongodSpecNet                `json:"net,omitempty"`
+	AuditLog                 *MongodSpecAuditLog           `json:"auditLog,omitempty"`
+	OperationProfiling       *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
+	Replication              *MongodSpecReplication        `json:"replication,omitempty"`
+	Security                 *MongodSpecSecurity           `json:"security,omitempty"`
+	SetParameter             *MongodSpecSetParameter       `json:"setParameter,omitempty"`
+	Storage                  *MongodSpecStorage            `json:"storage,omitempty"`
+	LoadBalancerSourceRanges []string                      `json:"loadBalancerSourceRanges,omitempty"`
+	ServiceAnnotations       map[string]string             `json:"serviceAnnotations,omitempty"`
 }
 
 type MongodSpecNet struct {
