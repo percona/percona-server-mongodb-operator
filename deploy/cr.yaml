@@ -15,7 +15,7 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com/operator/
     apply: latest
-    schedule: "0 2 * * *"
+    schedule: "* * * * *"
   secrets:
     users: my-cluster-name-secrets
   pmm:

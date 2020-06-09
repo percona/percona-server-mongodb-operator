@@ -128,7 +128,7 @@ type VersionResponse struct {
 
 func (vs VersionServiceMock) CheckNew() VersionResponse {
 	vr := VersionResponse{
-		Image:       "perconalab/percona-server-mongodb-operator:master-mongod4.0",
+		Image:       "perconalab/percona-server-mongodb-operator:master-mongod4.2",
 		Version:     "4.2",
 		BackupImage: "percona/percona-server-mongodb-operator:1.4.0-backup",
 		PMMImage:    "perconalab/percona-server-mongodb-operator:master-pmm",

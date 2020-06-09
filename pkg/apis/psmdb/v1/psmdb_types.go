@@ -102,7 +102,7 @@ const (
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	MongoStatus        AppState                  `json:"mongoState,omitempty"`
+	MongoStatus        AppState                  `json:"mongoStatus,omitempty"`
 	MongoVersion       string                    `json:"mongoVersion"`
 	Message            string                    `json:"message,omitempty"`
 	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
