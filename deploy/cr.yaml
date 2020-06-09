@@ -11,11 +11,11 @@ spec:
 #    - name: private-registry-credentials
 #  runUid: 1001
   allowUnsafeConfigurations: false
-  updateStrategy: RollingUpdate
+  updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com/operator/
-    lockedVersion: 5.7.27-31.39
-    schedule: "* * * * *"
+    apply: latest
+    schedule: "0 2 * * *"
   secrets:
     users: my-cluster-name-secrets
   pmm:

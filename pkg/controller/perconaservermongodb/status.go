@@ -25,7 +25,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	}
 	if reconcileErr != nil {
-		if cr.Status.Status != api.ClusterError {
+		if cr.Status.MongoStatus != api.ClusterError {
 			clusterCondition = api.ClusterCondition{
 				Status:             api.ConditionTrue,
 				Type:               api.ClusterError,
@@ -37,7 +37,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
-		cr.Status.Status = api.ClusterError
+		cr.Status.MongoStatus = api.ClusterError
 
 		return r.writeStatus(cr)
 	}
@@ -92,21 +92,21 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
-	cr.Status.Status = api.AppStateInit
+	cr.Status.MongoStatus = api.AppStateInit
 	if replsetsReady == len(cr.Spec.Replsets) {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterReady,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.Status = api.AppStateReady
+		cr.Status.MongoStatus = api.AppStateReady
 	} else {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterError,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.Status = api.ClusterError
+		cr.Status.MongoStatus = api.ClusterError
 	}
 
 	if len(cr.Status.Conditions) == 0 {
@@ -126,7 +126,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	if inProgress {
-		cr.Status.Status = api.AppStateInit
+		cr.Status.MongoStatus = api.AppStateInit
 	}
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation

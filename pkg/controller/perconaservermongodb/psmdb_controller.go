@@ -163,6 +163,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
 	}
+
+	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
+		log.Info("update version before deploy")
+		r.ensureVersion(cr, VersionServiceMock{})
+	}
+
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
@@ -322,7 +328,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.ensureVersion(cr, VersionServiceMock{}, sfs)
+	err = r.sheduleEnsureVersion(cr, VersionServiceMock{}, sfs)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}
@@ -500,11 +506,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	switch cr.Spec.UpdateStrategy {
-	case "OnDelete":
-		sfsSpec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{}
-		sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		sfsSpec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	case api.SmartUpdateStatefulSetStrategyType:
+		sfsSpec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
 	default:
-		sfsSpec.UpdateStrategy.Type = cr.Spec.UpdateStrategy
+		var zero int32 = 0
+		sfsSpec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
 	}
 
 	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)

@@ -65,9 +65,13 @@ type PerconaServerMongoDBSpec struct {
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 }
 
+const (
+	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
+)
+
 type UpgradeOptions struct {
 	VersionServiceEndpoint string `json:"versionServiceEndpoint,omitempty"`
-	LockedVersion          string `json:"lockedVersion,omitempty"`
+	Apply                  string `json:"lockedVersion,omitempty"`
 	Schedule               string `json:"schedule,omitempty"`
 }
 
@@ -98,11 +102,16 @@ const (
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	Status             AppState                  `json:"state,omitempty"`
+	MongoStatus        AppState                  `json:"mongoState,omitempty"`
+	MongoVersion       string                    `json:"mongoVersion"`
 	Message            string                    `json:"message,omitempty"`
 	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
 	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`
 	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
+	BackupStatus       AppState                  `json:"backup,omitempty"`
+	BackupVersion      string                    `json:"backupVersion"`
+	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
+	PMMVersion         string                    `json:"pmmVersion,omitempty"`
 }
 
 type ConditionStatus string

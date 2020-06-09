@@ -1,6 +1,6 @@
 # cloud.google.com/go v0.49.0
 cloud.google.com/go/compute/metadata
-# github.com/aws/aws-sdk-go v1.28.9
+# github.com/aws/aws-sdk-go v1.31.13
 github.com/aws/aws-sdk-go/aws
 github.com/aws/aws-sdk-go/aws/arn
 github.com/aws/aws-sdk-go/aws/awserr
@@ -20,6 +20,7 @@ github.com/aws/aws-sdk-go/aws/endpoints
 github.com/aws/aws-sdk-go/aws/request
 github.com/aws/aws-sdk-go/aws/session
 github.com/aws/aws-sdk-go/aws/signer/v4
+github.com/aws/aws-sdk-go/internal/context
 github.com/aws/aws-sdk-go/internal/ini
 github.com/aws/aws-sdk-go/internal/s3err
 github.com/aws/aws-sdk-go/internal/sdkio
@@ -28,6 +29,8 @@ github.com/aws/aws-sdk-go/internal/sdkrand
 github.com/aws/aws-sdk-go/internal/sdkuri
 github.com/aws/aws-sdk-go/internal/shareddefaults
 github.com/aws/aws-sdk-go/internal/strings
+github.com/aws/aws-sdk-go/internal/sync/singleflight
+github.com/aws/aws-sdk-go/private/checksum
 github.com/aws/aws-sdk-go/private/protocol
 github.com/aws/aws-sdk-go/private/protocol/eventstream
 github.com/aws/aws-sdk-go/private/protocol/eventstream/eventstreamapi
@@ -106,10 +109,16 @@ github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha3
 github.com/jetstack/cert-manager/pkg/apis/meta
 github.com/jetstack/cert-manager/pkg/apis/meta/v1
 github.com/jetstack/cert-manager/pkg/client/clientset/versioned/scheme
-# github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af
+# github.com/jmespath/go-jmespath v0.3.0
 github.com/jmespath/go-jmespath
 # github.com/json-iterator/go v1.1.9
 github.com/json-iterator/go
+# github.com/klauspost/compress v1.10.3
+github.com/klauspost/compress/fse
+github.com/klauspost/compress/huff0
+github.com/klauspost/compress/snappy
+github.com/klauspost/compress/zstd
+github.com/klauspost/compress/zstd/internal/xxhash
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/minio/minio-go v6.0.14+incompatible
@@ -154,17 +163,20 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/robfig/cron/v3 v3.0.1
+github.com/robfig/cron/v3
 # github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
-# github.com/stretchr/testify v1.4.0
+# github.com/stretchr/testify v1.5.1
 github.com/stretchr/testify/assert
 # github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 github.com/xdg/scram
 # github.com/xdg/stringprep v1.0.0
 github.com/xdg/stringprep
-# go.mongodb.org/mongo-driver v1.1.3
+# go.mongodb.org/mongo-driver v1.3.4
 go.mongodb.org/mongo-driver/bson
 go.mongodb.org/mongo-driver/bson/bsoncodec
+go.mongodb.org/mongo-driver/bson/bsonoptions
 go.mongodb.org/mongo-driver/bson/bsonrw
 go.mongodb.org/mongo-driver/bson/bsontype
 go.mongodb.org/mongo-driver/bson/primitive
@@ -186,6 +198,8 @@ go.mongodb.org/mongo-driver/x/mongo/driver/auth/internal/gssapi
 go.mongodb.org/mongo-driver/x/mongo/driver/connstring
 go.mongodb.org/mongo-driver/x/mongo/driver/description
 go.mongodb.org/mongo-driver/x/mongo/driver/dns
+go.mongodb.org/mongo-driver/x/mongo/driver/mongocrypt
+go.mongodb.org/mongo-driver/x/mongo/driver/mongocrypt/options
 go.mongodb.org/mongo-driver/x/mongo/driver/operation
 go.mongodb.org/mongo-driver/x/mongo/driver/session
 go.mongodb.org/mongo-driver/x/mongo/driver/topology
