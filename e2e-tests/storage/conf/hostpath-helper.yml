@@ -14,7 +14,7 @@ spec:
       containers:
       - name: cleanup
         image: ubuntu
-        command: ["bash", "-xc", "rm -rf /mnt/tmp/data-dir /mnt/tmp/data/fast-disks; install -m 777 -d /mnt/tmp/data-dir /mnt/tmp/data/fast-disks && sleep 100500"]
+        command: ["bash", "-xc", "rm -rf /mnt/run/data-dir /mnt/run/data/fast-disks; install -m 777 -d /mnt/run/data-dir /mnt/run/data/fast-disks && sleep 100500"]
         volumeMounts:
         - name: root
           mountPath: /mnt

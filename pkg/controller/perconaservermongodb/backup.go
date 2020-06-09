@@ -43,11 +43,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	// Remove old/unused tasks
 	tasksList := &batchv1b.CronJobList{}
 	err := r.client.List(context.TODO(),
+		tasksList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(ls),
 		},
-		tasksList,
 	)
 	if err != nil {
 		return fmt.Errorf("get backup list: %v", err)
