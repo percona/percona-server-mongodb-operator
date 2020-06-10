@@ -44,7 +44,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			return false, errors.Wrap(err, "dial:")
 		}
 	}
-	isClusterLive := len(session.LiveServers()) == len(pods.Items)
 
 	defer session.Disconnect(context.TODO())
 
@@ -105,7 +104,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 	}
 
-	return len(session.LiveServers()) == len(pods.Items), nil
+	rsStatus, err := mongo.RSStatus(context.TODO(), session)
+	if err != nil {
+		return false, errors.Wrap(err, "Unable to get Replset members")
+	}
+	return len(rsStatus.Members) == len(pods.Items), nil
 }
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
