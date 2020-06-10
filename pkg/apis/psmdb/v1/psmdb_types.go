@@ -103,13 +103,13 @@ const (
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
 	MongoStatus        AppState                  `json:"mongoStatus,omitempty"`
-	MongoVersion       string                    `json:"mongoVersion"`
+	MongoVersion       string                    `json:"mongoVersion,omitempty"`
 	Message            string                    `json:"message,omitempty"`
 	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
 	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`
 	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
 	BackupStatus       AppState                  `json:"backup,omitempty"`
-	BackupVersion      string                    `json:"backupVersion"`
+	BackupVersion      string                    `json:"backupVersion,omitempty"`
 	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
 	PMMVersion         string                    `json:"pmmVersion,omitempty"`
 }

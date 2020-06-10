@@ -87,10 +87,10 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 
 	new := vs.CheckNew()
 
-	if cr.Status.MongoVersion != new.Version {
-		log.Info(fmt.Sprintf("update Mongo version to %v", new.Version))
+	if cr.Status.MongoVersion != new.MongoVersion {
+		log.Info(fmt.Sprintf("update Mongo version to %v", new.MongoVersion))
 		cr.Spec.Image = new.Image
-		cr.Status.MongoVersion = new.Version
+		cr.Status.MongoVersion = new.MongoVersion
 	}
 	if cr.Status.BackupVersion != new.BackupVersion {
 		log.Info(fmt.Sprintf("update Backup version to %v", new.BackupVersion))
@@ -119,7 +119,7 @@ type VersionServiceMock struct {
 
 type VersionResponse struct {
 	Image         string `json:"pxcImage,omitempty"`
-	Version       string `json:"pxcVersion,omitempty"`
+	MongoVersion  string `json:"pxcVersion,omitempty"`
 	BackupImage   string `json:"backupImage,omitempty"`
 	BackupVersion string `json:"backupVersion,omitempty"`
 	PMMImage      string `json:"pmmImage,omitempty"`
@@ -128,15 +128,15 @@ type VersionResponse struct {
 
 func (vs VersionServiceMock) CheckNew() VersionResponse {
 	vr := VersionResponse{
-		Image:       "perconalab/percona-server-mongodb-operator:master-mongod4.2",
-		Version:     "4.2",
-		BackupImage: "percona/percona-server-mongodb-operator:1.4.0-backup",
-		PMMImage:    "perconalab/percona-server-mongodb-operator:master-pmm",
+		Image:        "perconalab/percona-server-mongodb-operator:master-mongod4.2",
+		MongoVersion: "4.2",
+		BackupImage:  "percona/percona-server-mongodb-operator:1.4.0-backup",
+		PMMImage:     "perconalab/percona-server-mongodb-operator:master-pmm",
 	}
 
 	if rand.Int()%2 == 0 {
 		vr.Image = "perconalab/percona-server-mongodb-operator:master-mongod4.0"
-		vr.Version = "4.0"
+		vr.MongoVersion = "4.0"
 	}
 
 	return vr

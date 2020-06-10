@@ -165,7 +165,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		log.Info("update version before deploy")
 		r.ensureVersion(cr, VersionServiceMock{})
 	}
 
