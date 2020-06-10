@@ -12,7 +12,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.5.1
-	go.mongodb.org/mongo-driver v1.1.3
+	go.mongodb.org/mongo-driver v1.3.4
 	k8s.io/api v0.18.0
 	k8s.io/apimachinery v0.18.0
 	k8s.io/client-go v12.0.0+incompatible
