@@ -7,7 +7,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/stretchr/testify/assert"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 func TestSetSafeDefault(t *testing.T) {
