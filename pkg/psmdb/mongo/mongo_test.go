@@ -9,31 +9,31 @@ import (
 func TestVoting(t *testing.T) {
 	cases := []struct {
 		name     string
-		mset     *mongo.RSMembers
-		desiered *mongo.RSMembers
+		mset     *mongo.ConfigMembers
+		desiered *mongo.ConfigMembers
 	}{
 		{
 			"nothing",
-			&mongo.RSMembers{},
-			&mongo.RSMembers{},
+			&mongo.ConfigMembers{},
+			&mongo.ConfigMembers{},
 		},
 		{
 			"3 mongos",
-			&mongo.RSMembers{
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
@@ -41,16 +41,16 @@ func TestVoting(t *testing.T) {
 		},
 		{
 			"2 mongos",
-			&mongo.RSMembers{
-				mongo.Member{},
-				mongo.Member{},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
@@ -58,21 +58,21 @@ func TestVoting(t *testing.T) {
 		},
 		{
 			"2 mongos + 1 arbiter",
-			&mongo.RSMembers{
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{ArbiterOnly: true},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{ArbiterOnly: true},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 0,
 				},
@@ -80,21 +80,21 @@ func TestVoting(t *testing.T) {
 		},
 		{
 			"2 mongos + 1 first arbiter",
-			&mongo.RSMembers{
-				mongo.Member{ArbiterOnly: true},
-				mongo.Member{},
-				mongo.Member{},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{ArbiterOnly: true},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 0,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
@@ -102,51 +102,51 @@ func TestVoting(t *testing.T) {
 		},
 		{
 			"9 mongos",
-			&mongo.RSMembers{
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
@@ -154,46 +154,46 @@ func TestVoting(t *testing.T) {
 		},
 		{
 			"8 mongos",
-			&mongo.RSMembers{
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
@@ -201,51 +201,51 @@ func TestVoting(t *testing.T) {
 		},
 		{
 			"8 mongos + 1 arbiter",
-			&mongo.RSMembers{
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{ArbiterOnly: true},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{ArbiterOnly: true},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 0,
 				},
@@ -253,26 +253,26 @@ func TestVoting(t *testing.T) {
 		},
 		{
 			"3 mongos + 1 arbiter",
-			&mongo.RSMembers{
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{},
-				mongo.Member{ArbiterOnly: true},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{},
+				mongo.ConfigMember{ArbiterOnly: true},
 			},
-			&mongo.RSMembers{
-				mongo.Member{
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 1,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
-				mongo.Member{
+				mongo.ConfigMember{
 					Votes:    1,
 					Priority: 0,
 				},
@@ -288,7 +288,7 @@ func TestVoting(t *testing.T) {
 		}
 
 		for i, member := range *c.mset {
-			d := []mongo.Member(*c.desiered)
+			d := []mongo.ConfigMember(*c.desiered)
 			if member.Votes != d[i].Votes || member.Priority != d[i].Priority {
 				t.Errorf("%s: member %d want %v, have %v", c.name, i, d[i], member)
 			}
