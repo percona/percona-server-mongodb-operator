@@ -10,7 +10,7 @@ require (
 	github.com/percona/percona-backup-mongodb v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.4.0
-	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
+	go.mongodb.org/mongo-driver v1.1.3
 	k8s.io/api v0.18.0
 	k8s.io/apimachinery v0.18.0
 	k8s.io/client-go v12.0.0+incompatible
