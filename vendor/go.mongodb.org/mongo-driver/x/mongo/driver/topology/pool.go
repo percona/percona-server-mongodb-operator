@@ -117,8 +117,6 @@ func connectionCloseFunc(v interface{}) {
 	}
 
 	go func() {
-		// wait for connection to finish trying to connect
-		_ = c.wait()
 		_ = c.pool.closeConnection(c)
 	}()
 }
@@ -180,9 +178,6 @@ func newPool(config poolConfig, connOpts ...ConnectionOption) (*pool, error) {
 
 	return pool, nil
 }
-
-// drain drains the pool by increasing the generation ID.
-func (p *pool) drain() { atomic.AddUint64(&p.generation, 1) }
 
 // stale checks if a given connection's generation is below the generation of the pool
 func (p *pool) stale(c *connection) bool {
@@ -414,6 +409,11 @@ func (p *pool) closeConnection(c *connection) error {
 	delete(p.opened, c.poolID)
 	p.Unlock()
 
+	if atomic.LoadInt32(&c.connected) == connected {
+		c.closeConnectContext()
+		_ = c.wait() // Make sure that the connection has finished connecting
+	}
+
 	if !atomic.CompareAndSwapInt32(&c.connected, connected, disconnected) {
 		return nil // We're closing an already closed connection
 	}
@@ -424,6 +424,18 @@ func (p *pool) closeConnection(c *connection) error {
 			return ConnectionError{ConnectionID: c.id, Wrapped: err, message: "failed to close net.Conn"}
 		}
 	}
+
+	return nil
+}
+
+// removeConnection removes a connection from the pool.
+func (p *pool) removeConnection(c *connection) error {
+	if c.pool != p {
+		return ErrWrongPool
+	}
+	p.Lock()
+	delete(p.opened, c.poolID)
+	p.Unlock()
 
 	return nil
 }
@@ -458,7 +470,7 @@ func (p *pool) put(c *connection) error {
 	return nil
 }
 
-// clear clears the pool by incrementing the generation and then maintaining the pool
+// clear clears the pool by incrementing the generation
 func (p *pool) clear() {
 	if p.monitor != nil {
 		p.monitor.Event(&event.PoolEvent{
@@ -466,7 +478,5 @@ func (p *pool) clear() {
 			Address: p.address.String(),
 		})
 	}
-
-	p.drain()
-	p.conns.Maintain()
+	atomic.AddUint64(&p.generation, 1)
 }

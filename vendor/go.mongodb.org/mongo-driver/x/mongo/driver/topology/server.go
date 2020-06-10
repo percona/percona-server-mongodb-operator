@@ -148,7 +148,7 @@ func NewServer(addr address.Address, opts ...ServerOption) (*Server, error) {
 	}
 	s.desc.Store(description.Server{Addr: addr})
 
-	callback := func(desc description.Server) { s.updateDescription(desc, false) }
+	callback := func(desc description.Server) { s.updateDescription(desc) }
 	pc := poolConfig{
 		Address:     addr,
 		MinPoolSize: cfg.minConns,
@@ -243,8 +243,8 @@ func (s *Server) Connection(ctx context.Context) (driver.Connection, error) {
 	conn, err := s.pool.get(ctx)
 	if err != nil {
 		s.sem.Release(1)
-		connErr, ok := err.(ConnectionError)
-		if !ok {
+		wrappedConnErr := unwrapConnectionError(err)
+		if wrappedConnErr == nil {
 			return nil, err
 		}
 
@@ -252,9 +252,10 @@ func (s *Server) Connection(ctx context.Context) (driver.Connection, error) {
 		// error, we should set the description.Server appropriately.
 		desc := description.Server{
 			Kind:      description.Unknown,
-			LastError: connErr.Wrapped,
+			LastError: wrappedConnErr,
 		}
-		s.updateDescription(desc, false)
+		s.updateDescription(desc)
+		s.pool.clear()
 
 		return nil, err
 	}
@@ -317,13 +318,14 @@ func (s *Server) RequestImmediateCheck() {
 
 // ProcessError handles SDAM error handling and implements driver.ErrorProcessor.
 func (s *Server) ProcessError(err error) {
-	// Invalidate server description if not master or node recovering error occurs
-	if cerr, ok := err.(driver.Error); ok && (cerr.NetworkError() || cerr.NodeIsRecovering() || cerr.NotMaster()) {
+	// Invalidate server description if not master or node recovering error occurs.
+	// These errors can be reported as a command error or a write concern error.
+	if cerr, ok := err.(driver.Error); ok && (cerr.NodeIsRecovering() || cerr.NotMaster()) {
 		desc := s.Description()
 		desc.Kind = description.Unknown
 		desc.LastError = err
 		// updates description to unknown
-		s.updateDescription(desc, false)
+		s.updateDescription(desc)
 		// If the node is shutting down or is older than 4.2, we synchronously clear the pool
 		if cerr.NodeIsShuttingDown() || desc.WireVersion == nil || desc.WireVersion.Max < 8 {
 			s.RequestImmediateCheck()
@@ -336,7 +338,7 @@ func (s *Server) ProcessError(err error) {
 		desc.Kind = description.Unknown
 		desc.LastError = err
 		// updates description to unknown
-		s.updateDescription(desc, false)
+		s.updateDescription(desc)
 		// If the node is shutting down or is older than 4.2, we synchronously clear the pool
 		if wcerr.NodeIsShuttingDown() || desc.WireVersion == nil || desc.WireVersion.Max < 8 {
 			s.RequestImmediateCheck()
@@ -345,15 +347,16 @@ func (s *Server) ProcessError(err error) {
 		return
 	}
 
-	ne, ok := err.(ConnectionError)
-	if !ok {
+	wrappedConnErr := unwrapConnectionError(err)
+	if wrappedConnErr == nil {
 		return
 	}
 
-	if netErr, ok := ne.Wrapped.(net.Error); ok && netErr.Timeout() {
+	// Ignore transient timeout errors.
+	if netErr, ok := wrappedConnErr.(net.Error); ok && netErr.Timeout() {
 		return
 	}
-	if ne.Wrapped == context.Canceled || ne.Wrapped == context.DeadlineExceeded {
+	if wrappedConnErr == context.Canceled || wrappedConnErr == context.DeadlineExceeded {
 		return
 	}
 
@@ -361,7 +364,8 @@ func (s *Server) ProcessError(err error) {
 	desc.Kind = description.Unknown
 	desc.LastError = err
 	// updates description to unknown
-	s.updateDescription(desc, false)
+	s.updateDescription(desc)
+	s.pool.clear()
 }
 
 // update handles performing heartbeats and updating any subscribers of the
@@ -390,7 +394,7 @@ func (s *Server) update() {
 	var desc description.Server
 
 	desc, conn = s.heartbeat(nil)
-	s.updateDescription(desc, true)
+	s.updateDescription(desc)
 
 	closeServer := func() {
 		doneOnce = true
@@ -430,7 +434,7 @@ func (s *Server) update() {
 		}
 
 		desc, conn = s.heartbeat(conn)
-		s.updateDescription(desc, false)
+		s.updateDescription(desc)
 	}
 }
 
@@ -438,7 +442,7 @@ func (s *Server) update() {
 // subscribers, and potentially draining the connection pool. The initial
 // parameter is used to determine if this is the first description from the
 // server.
-func (s *Server) updateDescription(desc description.Server, initial bool) {
+func (s *Server) updateDescription(desc description.Server) {
 	defer func() {
 		//  ¯\_(ツ)_/¯
 		_ = recover()
@@ -460,16 +464,6 @@ func (s *Server) updateDescription(desc description.Server, initial bool) {
 		c <- desc
 	}
 	s.subLock.Unlock()
-
-	if initial {
-		// We don't clear the pool on the first update on the description.
-		return
-	}
-
-	switch desc.Kind {
-	case description.Unknown:
-		s.pool.drain()
-	}
 }
 
 // heartbeat sends a heartbeat to the server using the given connection. The connection can be nil.
@@ -540,18 +534,19 @@ func (s *Server) heartbeat(conn *connection) (description.Server, *connection) {
 			if err == nil {
 				tmpDesc := op.Result(s.address)
 				descPtr = &tmpDesc
+			} else {
+				// close the connection here rather than in the error check below to avoid calling Close on a net.Conn
+				// that wasn't successfully created
+				_ = conn.close()
 			}
 		}
 
 		// we do a retry if the server is connected, if succeed return new server desc (see below)
 		if err != nil {
 			saved = err
-			if conn != nil && conn.nc != nil {
-				conn.nc.Close()
-			}
 			conn = nil
-			if _, ok := err.(ConnectionError); ok {
-				s.pool.drain()
+			if wrappedConnErr := unwrapConnectionError(err); wrappedConnErr != nil {
+				s.pool.clear()
 				// If the server is not connected, give up and exit loop
 				if s.Description().Kind == description.Unknown {
 					break
@@ -633,6 +628,29 @@ func (ss *ServerSubscription) Unsubscribe() error {
 
 	close(ch)
 	delete(ss.s.subscribers, ss.id)
+
+	return nil
+}
+
+// unwrapConnectionError returns the connection error wrapped by err, or nil if err does not wrap a connection error.
+func unwrapConnectionError(err error) error {
+	// This is essentially an implementation of errors.As to unwrap this error until we get a ConnectionError and then
+	// return ConnectionError.Wrapped.
+
+	connErr, ok := err.(ConnectionError)
+	if ok {
+		return connErr.Wrapped
+	}
+
+	driverErr, ok := err.(driver.Error)
+	if !ok || !driverErr.NetworkError() {
+		return nil
+	}
+
+	connErr, ok = driverErr.Wrapped.(ConnectionError)
+	if ok {
+		return connErr.Wrapped
+	}
 
 	return nil
 }
