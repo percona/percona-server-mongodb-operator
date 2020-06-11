@@ -13,9 +13,9 @@ spec:
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   upgradeOptions:
-    versionServiceEndpoint: https://check.percona.com/operator/
+    versionServiceEndpoint: https://check.percona.com/versions/
     apply: Disabled
-    schedule: "* * * * *"
+    schedule: "0 2 * * *"
   secrets:
     users: my-cluster-name-secrets
   pmm:
