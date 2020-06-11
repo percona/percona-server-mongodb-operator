@@ -16,8 +16,13 @@ import (
 )
 
 const maxStatusesQuantity = 20
+const (
+	clusterReady = iota
+	clusterInit
+	clusterError
+)
 
-func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, isClusterLive bool) error {
+func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState int) error {
 	clusterCondition := api.ClusterCondition{
 		Status:             api.ConditionTrue,
 		Type:               api.ClusterInit,
@@ -92,22 +97,21 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	cr.Status.Status = api.AppStateInit
-	if replsetsReady == len(cr.Spec.Replsets) && isClusterLive {
+	if replsetsReady == len(cr.Spec.Replsets) && clusterState == clusterReady {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterReady,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
 		cr.Status.Status = api.AppStateReady
-	} else if replsetsReady == len(cr.Spec.Replsets) &&
-		clusterCondition.Type != api.ClusterReady &&
-		clusterCondition.Type != api.ClusterError {
+	} else if cr.Status.Conditions[len(cr.Status.Conditions)-1].Type != api.ClusterReady &&
+		clusterState == clusterInit {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterInit,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.Status = api.ClusterError
+		cr.Status.Status = api.ClusterInit
 	} else {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,

@@ -132,7 +132,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
-	isClusterLive := false
+	isClusterLive := clusterInit
 	defer func() {
 		err = r.updateStatus(cr, err, isClusterLive)
 		if err != nil {
