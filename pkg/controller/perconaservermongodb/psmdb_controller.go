@@ -220,7 +220,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, err
 		}
 	}
-	var sfs *appsv1.StatefulSet
+
 	for i, replset := range cr.Spec.Replsets {
 		// multiple replica sets is not supported until sharding is
 		// added to the operator
@@ -327,7 +327,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.sheduleEnsureVersion(cr, VersionServiceMock{}, sfs)
+	err = r.sheduleEnsureVersion(cr, VersionServiceMock{})
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}

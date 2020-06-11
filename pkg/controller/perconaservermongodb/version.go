@@ -8,7 +8,6 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/robfig/cron/v3"
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -21,7 +20,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(id int) {
 	delete(r.crons.jobs, jobName)
 }
 
-func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServerMongoDB, vs VersionService, sfs *appsv1.StatefulSet) error {
+func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
 	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType ||
 		cr.Spec.UpgradeOptions.Schedule == "" ||
 		cr.Spec.UpgradeOptions.Apply == never ||
