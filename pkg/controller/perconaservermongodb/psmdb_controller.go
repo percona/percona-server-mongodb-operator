@@ -165,7 +165,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		r.ensureVersion(cr, VersionServiceMock{})
+		err := r.ensureVersion(cr, VersionServiceMock{})
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
+		}
 	}
 
 	err = r.reconcileUsersSecret(cr)

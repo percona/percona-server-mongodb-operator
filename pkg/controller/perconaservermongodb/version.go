@@ -7,6 +7,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -52,12 +53,10 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 			return
 		}
 
-		if localCr.Status.MongoStatus != v1.AppStateReady {
-			log.Info("cluster is not ready")
-			return
+		err = r.ensureVersion(localCr, vs)
+		if err != nil {
+			log.Error(err, "failed to ensure version")
 		}
-
-		r.ensureVersion(localCr, vs)
 	})
 	if err != nil {
 		return err
@@ -71,17 +70,16 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongoDB, vs VersionService) {
+func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
 	if cr.Spec.UpdateStrategy != v1.SmartUpdateStatefulSetStrategyType ||
 		cr.Spec.UpgradeOptions.Schedule == "" ||
 		cr.Spec.UpgradeOptions.Apply == never ||
 		cr.Spec.UpgradeOptions.Apply == disabled {
-		return
+		return nil
 	}
 
 	if cr.Status.MongoStatus != v1.AppStateReady && cr.Status.MongoVersion != "" {
-		log.Info("cluster is not ready")
-		return
+		return errors.New("cluster is not ready")
 	}
 
 	new := vs.CheckNew()
@@ -104,9 +102,10 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 
 	err := r.client.Update(context.Background(), cr)
 	if err != nil {
-		log.Error(err, "failed to update CR")
-		return
+		return fmt.Errorf("failed to update CR: %v", err)
 	}
+
+	return nil
 }
 
 type VersionService interface {
