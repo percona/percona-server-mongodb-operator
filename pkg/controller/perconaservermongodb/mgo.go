@@ -16,7 +16,7 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (clusterState int, err error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
 	if err != nil {
 		return clusterError, errors.Wrap(err, "get replset addr")
@@ -106,7 +106,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 	rsStatus, err := mongo.RSStatus(context.TODO(), session)
 	if err != nil {
-		return clusterError, errors.Wrap(err, "Unable to get Replset members")
+		return clusterError, errors.Wrap(err, "unable to get replset members")
 	}
 	membersLive := 0
 	for _, member := range rsStatus.Members {
@@ -116,7 +116,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback:
 			return clusterInit, nil
 		default:
-			return clusterError, nil
+			return clusterError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
 		}
 	}
 	if membersLive == len(pods.Items) {

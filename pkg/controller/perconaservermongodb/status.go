@@ -16,13 +16,16 @@ import (
 )
 
 const maxStatusesQuantity = 20
+
+type mongoClusterState int
+
 const (
-	clusterReady = iota
+	clusterReady mongoClusterState = iota
 	clusterInit
 	clusterError
 )
 
-func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState int) error {
+func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState mongoClusterState) error {
 	clusterCondition := api.ClusterCondition{
 		Status:             api.ConditionTrue,
 		Type:               api.ClusterInit,
