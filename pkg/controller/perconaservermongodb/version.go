@@ -22,26 +22,25 @@ func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(id int) {
 }
 
 func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
+	schedule, ok := r.crons.jobs[jobName]
+
 	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType ||
 		cr.Spec.UpgradeOptions.Schedule == "" ||
 		cr.Spec.UpgradeOptions.Apply == never ||
 		cr.Spec.UpgradeOptions.Apply == disabled {
+		if ok {
+			r.deleteEnsureVersion(schedule.ID)
+		}
 		return nil
 	}
 
-	shedule, ok := r.crons.jobs[jobName]
-	if ok && (cr.Spec.UpgradeOptions.Schedule == "" ||
-		cr.Spec.UpgradeOptions.Apply == never ||
-		cr.Spec.UpgradeOptions.Apply == disabled) {
-		r.deleteEnsureVersion(shedule.ID)
+	if ok && schedule.CronShedule == cr.Spec.UpgradeOptions.Schedule {
 		return nil
 	}
-	if ok && shedule.CronShedule == cr.Spec.UpgradeOptions.Schedule {
-		return nil
-	}
+
 	if ok {
-		log.Info(fmt.Sprintf("remove job %s because of new %s", shedule.CronShedule, cr.Spec.UpgradeOptions.Schedule))
-		r.deleteEnsureVersion(shedule.ID)
+		log.Info(fmt.Sprintf("remove job %s because of new %s", schedule.CronShedule, cr.Spec.UpgradeOptions.Schedule))
+		r.deleteEnsureVersion(schedule.ID)
 	}
 
 	log.Info(fmt.Sprintf("add new job: %s", cr.Spec.UpgradeOptions.Schedule))
