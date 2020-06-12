@@ -224,7 +224,6 @@ deploy_helm() {
     else
         kubectl_bin --namespace kube-system create sa tiller || :
         kubectl_bin create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller || :
-        helm init --service-account tiller
         kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="kube-system"
     fi
 
@@ -245,10 +244,9 @@ deploy_helm() {
 
 deploy_minio() {
     desc 'install Minio'
-    helm del --purge minio-service || :
+    helm del minio-service || :
     # kubectl_bin delete pvc minio-service --force
-    retry 10 60 helm install \
-        --name minio-service \
+    retry 10 60 helm install minio-service \
         --set accessKey=some-access-key \
         --set secretKey=some-secret-key \
         --set service.type=ClusterIP \
