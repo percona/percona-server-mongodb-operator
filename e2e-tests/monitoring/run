@@ -9,7 +9,6 @@ cluster="monitoring-rs0"
 
 deploy_cert_manager
 create_namespace $namespace
-deploy_helm $namespace
 deploy_operator
 
 desc 'install PMM Server'

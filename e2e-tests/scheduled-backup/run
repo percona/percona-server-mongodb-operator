@@ -17,7 +17,6 @@ unlabel_node() {
 }
 
 create_namespace $namespace
-deploy_helm $namespace
 deploy_operator
 
 desc 'install Minio'

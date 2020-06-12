@@ -63,7 +63,6 @@ main() {
                   -f "${conf_dir}/secrets.yml" \
                   -f "${conf_dir}/minio-secret.yml"
 
-    deploy_helm $namespace
     deploy_minio
 
     spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"

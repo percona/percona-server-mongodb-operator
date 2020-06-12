@@ -50,7 +50,6 @@ main() {
 	create_namespace $namespace
     deploy_operator
 
-    deploy_helm $namespace
     deploy_minio
 
     kubectl_bin apply -f "${conf_dir}/client.yml" \
