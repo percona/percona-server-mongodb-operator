@@ -20,18 +20,7 @@ create_namespace $namespace
 deploy_operator
 
 desc 'install Minio'
-helm del minio-service || :
-helm install minio-service \
-    --set accessKey=some-access-key \
-    --set secretKey=some-secret-key \
-    --set service.type=ClusterIP \
-    --set configPath=/tmp/.minio/ \
-    --set persistence.size=2G \
-    --set environment.MINIO_REGION=us-east-1 \
-    --set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
-    stable/minio
-MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
-wait_pod $MINIO_POD
+deploy_minio
 
 # create bucket
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \

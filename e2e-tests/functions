@@ -216,6 +216,7 @@ deploy_operator() {
 deploy_minio() {
     desc 'install Minio'
     helm del minio-service || :
+    helm repo add stable https://kubernetes-charts.storage.googleapis.com/
     # kubectl_bin delete pvc minio-service --force
     retry 10 60 helm install minio-service \
         --set accessKey=some-access-key \
