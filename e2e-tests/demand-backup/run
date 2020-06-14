@@ -17,11 +17,6 @@ deploy_operator
 
 deploy_minio
 
-# create bucket
-kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-    /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
-
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl_bin apply \
