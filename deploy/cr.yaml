@@ -12,6 +12,10 @@ spec:
 #  runUid: 1001
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com/versions/
+    apply: Disabled
+    schedule: "0 2 * * *"
   secrets:
     users: my-cluster-name-secrets
   pmm:
