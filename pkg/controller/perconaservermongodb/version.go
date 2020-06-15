@@ -13,8 +13,6 @@ import (
 )
 
 const jobName = "ensure-version"
-const never = "Never"
-const disabled = "Disabled"
 
 func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(id int) {
 	r.crons.crons.Remove(cron.EntryID(id))
@@ -26,8 +24,8 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 
 	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType ||
 		cr.Spec.UpgradeOptions.Schedule == "" ||
-		cr.Spec.UpgradeOptions.Apply == never ||
-		cr.Spec.UpgradeOptions.Apply == disabled {
+		cr.Spec.UpgradeOptions.Apply == api.UpgradeStrategyNever ||
+		cr.Spec.UpgradeOptions.Apply == api.UpgradeStrategyDiasbled {
 		if ok {
 			r.deleteEnsureVersion(schedule.ID)
 		}
@@ -72,8 +70,8 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
 	if cr.Spec.UpdateStrategy != v1.SmartUpdateStatefulSetStrategyType ||
 		cr.Spec.UpgradeOptions.Schedule == "" ||
-		cr.Spec.UpgradeOptions.Apply == never ||
-		cr.Spec.UpgradeOptions.Apply == disabled {
+		cr.Spec.UpgradeOptions.Apply == api.UpgradeStrategyNever ||
+		cr.Spec.UpgradeOptions.Apply == api.UpgradeStrategyDiasbled {
 		return nil
 	}
 

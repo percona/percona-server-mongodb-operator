@@ -70,9 +70,9 @@ const (
 )
 
 type UpgradeOptions struct {
-	VersionServiceEndpoint string `json:"versionServiceEndpoint,omitempty"`
-	Apply                  string `json:"apply,omitempty"`
-	Schedule               string `json:"schedule,omitempty"`
+	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
+	Apply                  UpgradeStrategy `json:"apply,omitempty"`
+	Schedule               string          `json:"schedule,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -98,6 +98,13 @@ const (
 	AppStateInit             = "initializing"
 	AppStateReady            = "ready"
 	AppStateError            = "error"
+)
+
+type UpgradeStrategy string
+
+const (
+	UpgradeStrategyDiasbled UpgradeStrategy = "Disabled"
+	UpgradeStrategyNever    UpgradeStrategy = "Never"
 )
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
