@@ -9,7 +9,6 @@ cluster="monitoring-rs0"
 
 deploy_cert_manager
 create_namespace $namespace
-deploy_helm $namespace
 deploy_operator
 
 desc 'install PMM Server'
@@ -18,7 +17,7 @@ if [ "$OPENSHIFT" == 1 ]; then
     platform=openshift
 fi
 helm del --purge monitoring || :
-retry 10 60 helm install --name monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-1.17.3.tgz
+retry 10 60 helm install monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-1.17.3.tgz
 
 desc 'create PSMDB cluster'
 kubectl_bin apply \
@@ -50,5 +49,5 @@ sleep 90
 desc 'check QAN data'
 get_qan_values $cluster-0
 
-helm delete --purge monitoring
+helm delete monitoring
 destroy $namespace
