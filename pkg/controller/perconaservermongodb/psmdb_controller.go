@@ -9,8 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/percona/percona-server-mongodb-operator/clientcmd"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
-
+	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -28,13 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 var secretFileMode int32 = 288
@@ -70,6 +69,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:        mgr.GetScheme(),
 		serverVersion: sv,
 		reconcileIn:   time.Second * 5,
+		crons:         NewCronRegistry(),
 
 		clientcmd: cli,
 	}, nil
@@ -92,6 +92,27 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
+type CronRegistry struct {
+	crons *cron.Cron
+	jobs  map[string]Shedule
+}
+
+type Shedule struct {
+	ID          int
+	CronShedule string
+}
+
+func NewCronRegistry() CronRegistry {
+	c := CronRegistry{
+		crons: cron.New(),
+		jobs:  make(map[string]Shedule),
+	}
+
+	c.crons.Start()
+
+	return c
+}
+
 var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDB{}
 
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
@@ -101,6 +122,7 @@ type ReconcilePerconaServerMongoDB struct {
 	client client.Client
 	scheme *runtime.Scheme
 
+	crons         CronRegistry
 	clientcmd     *clientcmd.Client
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
@@ -145,6 +167,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
 	}
+
+	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
+		err := r.ensureVersion(cr, VersionServiceMock{})
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
+		}
+	}
+
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
@@ -303,6 +333,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		if err != nil {
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
+	}
+
+	err = r.sheduleEnsureVersion(cr, VersionServiceMock{})
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}
 
 	return rr, nil

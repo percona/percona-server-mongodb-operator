@@ -60,6 +60,7 @@ type PerconaServerMongoDBSpec struct {
 	ImagePullPolicy         corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
 	PMM                     PMMSpec                              `json:"pmm,omitempty"`
 	UpdateStrategy          appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 }
@@ -67,6 +68,12 @@ type PerconaServerMongoDBSpec struct {
 const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 )
+
+type UpgradeOptions struct {
+	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
+	Apply                  UpgradeStrategy `json:"apply,omitempty"`
+	Schedule               string          `json:"schedule,omitempty"`
+}
 
 type ReplsetMemberStatus struct {
 	Name    string `json:"name,omitempty"`
@@ -93,13 +100,25 @@ const (
 	AppStateError            = "error"
 )
 
+type UpgradeStrategy string
+
+const (
+	UpgradeStrategyDiasbled UpgradeStrategy = "Disabled"
+	UpgradeStrategyNever    UpgradeStrategy = "Never"
+)
+
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	Status             AppState                  `json:"state,omitempty"`
+	MongoStatus        AppState                  `json:"mongoStatus,omitempty"`
+	MongoVersion       string                    `json:"mongoVersion,omitempty"`
 	Message            string                    `json:"message,omitempty"`
 	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
 	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`
 	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
+	BackupStatus       AppState                  `json:"backup,omitempty"`
+	BackupVersion      string                    `json:"backupVersion,omitempty"`
+	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
+	PMMVersion         string                    `json:"pmmVersion,omitempty"`
 }
 
 type ConditionStatus string
