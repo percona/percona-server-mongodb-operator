@@ -17,7 +17,15 @@ import (
 
 const maxStatusesQuantity = 20
 
-func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error) error {
+type mongoClusterState int
+
+const (
+	clusterReady mongoClusterState = iota
+	clusterInit
+	clusterError
+)
+
+func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState mongoClusterState) error {
 	clusterCondition := api.ClusterCondition{
 		Status:             api.ConditionTrue,
 		Type:               api.ClusterInit,
@@ -92,13 +100,22 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	cr.Status.MongoStatus = api.AppStateInit
-	if replsetsReady == len(cr.Spec.Replsets) {
+	if replsetsReady == len(cr.Spec.Replsets) && clusterState == clusterReady {
+
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterReady,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
 		cr.Status.MongoStatus = api.AppStateReady
+	} else if cr.Status.Conditions[len(cr.Status.Conditions)-1].Type != api.ClusterReady &&
+		clusterState == clusterInit {
+		clusterCondition = api.ClusterCondition{
+			Status:             api.ConditionTrue,
+			Type:               api.ClusterInit,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		}
+		cr.Status.MongoStatus = api.ClusterInit
 	} else {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
