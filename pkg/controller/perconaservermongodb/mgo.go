@@ -16,10 +16,10 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
 	if err != nil {
-		return errors.Wrap(err, "get replset addr")
+		return clusterError, errors.Wrap(err, "get replset addr")
 	}
 	session, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, true)
 	if err != nil {
@@ -30,7 +30,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			if !cr.Status.Replsets[replset.Name].Initialized {
 				err = r.handleReplsetInit(cr, replset, pods.Items)
 				if err != nil {
-					return errors.Wrap(err, "handleReplsetInit:")
+					return clusterInit, errors.Wrap(err, "handleReplsetInit:")
 				}
 				cr.Status.Replsets[replset.Name].Initialized = true
 				cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
@@ -39,16 +39,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 					Message:            replset.Name,
 					LastTransitionTime: metav1.NewTime(time.Now()),
 				})
-				return nil
+				return clusterInit, nil
 			}
-			return errors.Wrap(err, "dial:")
+			return clusterError, errors.Wrap(err, "dial:")
 		}
 	}
+
 	defer session.Disconnect(context.TODO())
 
 	cnf, err := mongo.ReadConfig(context.TODO(), session)
 	if err != nil {
-		return errors.Wrap(err, "get mongo config")
+		return clusterError, errors.Wrap(err, "get mongo config")
 	}
 
 	members := mongo.ConfigMembers{}
@@ -60,7 +61,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 		host, err := psmdb.MongoHost(r.client, cr, replset, pod)
 		if err != nil {
-			return fmt.Errorf("get host for pod %s: %v", pod.Name, err)
+			return clusterError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
 
 		member := mongo.ConfigMember{
@@ -88,7 +89,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Version++
 		err = mongo.WriteConfig(context.TODO(), session, cnf)
 		if err != nil {
-			return errors.Wrap(err, "delete: write mongo config")
+			return clusterError, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
@@ -99,11 +100,29 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Version++
 		err = mongo.WriteConfig(context.TODO(), session, cnf)
 		if err != nil {
-			return errors.Wrap(err, "add new: write mongo config")
+			return clusterError, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
 
-	return nil
+	rsStatus, err := mongo.RSStatus(context.TODO(), session)
+	if err != nil {
+		return clusterError, errors.Wrap(err, "unable to get replset members")
+	}
+	membersLive := 0
+	for _, member := range rsStatus.Members {
+		switch member.State {
+		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
+			membersLive++
+		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback:
+			return clusterInit, nil
+		default:
+			return clusterError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
+		}
+	}
+	if membersLive == len(pods.Items) {
+		return clusterReady, nil
+	}
+	return clusterInit, nil
 }
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
