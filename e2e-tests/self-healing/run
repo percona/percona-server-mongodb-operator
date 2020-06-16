@@ -17,6 +17,8 @@ setup_cluster() {
 
     apply_cluster $conf_dir/$cluster.yml
 
+    kubectl_bin patch psmdb some-name --type='merge' -p '{"spec":{"backup":{"enabled":true}}}'
+
     # check if all 3 Pods started
     wait_for_running $cluster 3
 
