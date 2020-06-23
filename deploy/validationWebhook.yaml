@@ -1,0 +1,20 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: mongodb-operator-storagevalidation
+webhooks:
+  - name: webhook.perconaservermongodbbackups.psmdb.percona.com
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    clientConfig:
+      service:
+        name: percona-server-mongodb-operator
+        namespace: default
+        path: "/validate"
+      caBundle: default
+    rules:
+      - operations: ["CREATE","UPDATE"]
+        apiGroups: ["psmdb.percona.com"]
+        apiVersions: ["*"]
+        resources: ["perconaservermongodbs"]

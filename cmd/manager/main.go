@@ -7,19 +7,20 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/webhook"
+
 	certmgrscheme "github.com/jetstack/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/ready"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
+	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
-
-	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
 )
 
 var (
@@ -93,6 +94,18 @@ func main() {
 
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	srv, err := webhook.NewServer(mgr, namespace)
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	err = mgr.Add(srv)
+	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

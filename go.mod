@@ -7,6 +7,7 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/hashicorp/go-version v1.2.0
 	github.com/jetstack/cert-manager v0.15.1
+	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/operator-framework/operator-sdk v0.17.1
 	github.com/percona/percona-backup-mongodb v1.2.0
 	github.com/pkg/errors v0.9.1
