@@ -24,32 +24,18 @@ OpenShift.
 
 3. Use helm to install PMM Server:
 
+   OpenShift command:
+
    ::
 
-      $ helm install percona/pmm-server --name monitoring --set platform=openshift --set credentials.username=clusterMonitor --set "credentials.password=clusterMonitor123456"
+      $ helm install monitoring percona/pmm-server --set platform=openshift --version 1.17.3 --set "credentials.password=supa|^|pazz"
 
-   You must specify the correct options in the installation
-   command:
+   Kubernetes command:
 
-   -  ``platform`` should be either ``kubernetes`` or ``openshift``
-      depending on which platform are you using.
-   -  ``name`` should correspond to the ``serverHost`` key in the
-      ``pmm`` section of the
-      `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
-      file with a “-service” suffix, the default ``--name monitoring``
-      part of the command corresponds to a
-      ``monitoring-service`` value of the ``serverHost`` key.
-   -  ``credentials.username`` should correspond to the
-      ``MONGODB_CLUSTER_MONITOR_USER`` base64 decoded value of key in the the
-      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`__
-      file.
-   -  ``credentials.password`` should correspond to a value of the
-      ``MONGODB_CLUSTER_MONITOR_PASSWORD`` base64 decoded value of key specified in
-      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`__
-      secrets file. Note - the password specified in this example is the
-      default development mode password and is not intended to be used on
-      production systems.
+   ::
 
+      $ helm install monitoring percona/pmm-server --set platform=kubernetes --version 2.7.0 --set "credentials.password=supa|^|pazz"
+      
 4. You must edit and update the ``pmm`` section in
    the
    `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
