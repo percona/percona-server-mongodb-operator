@@ -5,9 +5,13 @@ The Percona Monitoring and Management (PMM) `provides an excellent
 solution <https://www.percona.com/doc/percona-monitoring-and-management/index.html>`__
 to monitor Percona Server for MongoDB.
 
-The following steps are needed to install both PMM Client and PMM Server. The PMM Client and PMM Server are
-preconfigured to monitor Percona Server for MongoDB on Kubernetes or
-OpenShift.
+Installing the PMM Server
+-------------------------
+
+This first section installs the PMM Server to monitor Percona Server for MongoDB on Kubernetes or
+OpenShift. The following steps are optional if
+you already have installed the PMM Server. The PMM Server available on
+your network does not require another installation in Kubernetes.
 
 1. The recommended installation approach is based on using
    `helm <https://github.com/helm/helm>`__ - the package manager for
@@ -35,9 +39,14 @@ OpenShift.
    ::
 
       $ helm install monitoring percona/pmm-server --set platform=kubernetes --version 2.7.0 --set "credentials.password=supa|^|pazz"
-      
-4. You must edit and update the ``pmm`` section in
-   the
+
+Installing the PMM Client
+-------------------------
+
+The following steps are needed for the PMM client installation:
+
+1. The PMM client installation is initiated by updating the ``pmm``
+   section in the
    `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
    file.
 
@@ -46,11 +55,12 @@ OpenShift.
       ``monitoring-service`` by default) is the same as value specified
       for the ``name`` parameter on the previous step, but with an added
       additional ``-service`` suffix.
-   -  make sure the ``PMM_USER`` and ``PMM_PASSWORD`` keys in the
-      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`__
-      secrets file are the same as base64 decoded equivalent values specified for the
-      ``credentials.username`` and ``credentials.password`` parameters
-      on the previous step (if not, fix the value and apply with the
+   -  check that ``serverUser`` match the PMM Server user name
+      (``pmm`` by default for PMM 1.x and ``admin`` for PMM 2.x).
+   -  make sure thу ``pmmserver`` field in the
+      ``deploy/secrets.yaml`` secrets file is the same as base64 decoded
+      equivalent value specified for the ``credentials.password`` parameter
+      on the previous step (if not, fix it and apply with the
       ``kubectl apply -f deploy/secrets.yaml`` command).
 
    When done, apply the edited ``deploy/cr.yaml`` file:
@@ -59,7 +69,7 @@ OpenShift.
 
       $ kubectl apply -f deploy/cr.yaml
 
-5. Check that correspondent Pods are
+2. Check that correspondent Pods are
    not in a cycle of stopping and restarting. This cycle occurs if there are errors on the previous steps:
 
    ::
@@ -67,7 +77,7 @@ OpenShift.
       $ kubectl get pods
       $ kubectl logs my-cluster-name-rs0-0 -c pmm-client
 
-6. Run the following command:
+3. Run the following command:
 
    ``kubectl get service/monitoring-service -o wide``
 
