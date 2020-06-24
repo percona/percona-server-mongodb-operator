@@ -57,14 +57,15 @@ The following steps are needed for the PMM client installation:
       additional ``-service`` suffix.
    -  check that ``PMM_USER`` key in the
       `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
-      secrets file matches the PMM Server user name (``pmm`` by default for PMM
+      secrets file is a based64 encoded equivalent of the PMM Server user name (``pmm`` by default for PMM
       1.x and ``admin`` for PMM 2.x).
    -  make sure the ``PMM_PASSWORD`` key in the
       `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
-      secrets file is the same as base64 decoded equivalent values specified for the
+      secrets file is a base64 encoded equivalent of the value specified for the
       ``credentials.password`` parameter
-      on the last PMM Server installation step (if not, fix the value and apply with the
-      ``kubectl apply -f deploy/secrets.yaml`` command).
+      on the last PMM Server installation step.
+
+   Apply changes with the ``kubectl apply -f deploy/secrets.yaml`` command.
 
    When done, apply the edited ``deploy/cr.yaml`` file:
 
