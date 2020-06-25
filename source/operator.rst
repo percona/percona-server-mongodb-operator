@@ -1,3 +1,5 @@
+.. _operator.custom-resource-options:
+
 Custom Resource options
 =======================
 
