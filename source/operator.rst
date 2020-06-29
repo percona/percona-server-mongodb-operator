@@ -102,7 +102,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-name:										|
 |                 |												|
-| **Key**         | `replsets.name <operator.hrml#										|
+| **Key**         | `replsets.name <operator.hrml#replsets-name>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -114,7 +114,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-size:										|
 |                 |												|
-| **Key**         | `replsets.size <operator.hrml#										|
+| **Key**         | `replsets.size <operator.hrml#replsets-size>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -127,7 +127,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-affinity-antiaffinitytopologykey:						|
 |                 |												|
-| **Key**         | `replsets.affinity.antiAffinityTopologyKey <operator.hrml#							|
+| **Key**         | `replsets.affinity.antiAffinityTopologyKey							|
+|                 | <operator.hrml#replsets-affinity-antiaffinitytopologykey>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -142,7 +143,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-affinity-advanced:								|
 |                 |												|
-| **Key**         | `replsets.affinity.advanced <operator.hrml#									|
+| **Key**         | `replsets.affinity.advanced <operator.hrml#replsets-affinity-advanced>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | subdoc											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -156,7 +157,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-tolerations-key:								|
 |                 |												|
-| **Key**         | `replsets.tolerations.key <operator.hrml#									|
+| **Key**         | `replsets.tolerations.key <operator.hrml#replsets-tolerations-key>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -170,7 +171,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-tolerations-operator:								|
 |                 |												|
-| **Key**         | `replsets.tolerations.operator <operator.hrml#								|
+| **Key**         | `replsets.tolerations.operator <operator.hrml#replsets-tolerations-operator>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -184,7 +185,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-tolerations-effect:								|
 |                 |												|
-| **Key**         | `replsets.tolerations.effect <operator.hrml#									|
+| **Key**         | `replsets.tolerations.effect <operator.hrml#replsets-tolerations-effect>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -198,7 +199,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-tolerations-tolerationSeconds:							|
 |                 |												|
-| **Key**         | `replsets.tolerations.tolerationSeconds <operator.hrml#							|
+| **Key**         | `replsets.tolerations.tolerationSeconds							|
+|                 | <operator.hrml#replsets-tolerations-tolerationSeconds>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int	 											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -212,7 +214,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-priorityClassName:								|
 |                 |												|
-| **Key**         | `replsets.priorityClassName <operator.hrml#									|
+| **Key**         | `replsets.priorityClassName <operator.hrml#replsets-priorityClassName>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -226,7 +228,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-annotations:									|
 |                 |												|
-| **Key**         | `replsets.annotations.iam.amazonaws.com/role <operator.hrml#							|
+| **Key**         | `replsets.annotations.iam.amazonaws.com/role <operator.hrml#replsets-annotations>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -240,7 +242,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-labels:									|
 |                 |												|
-| **Key**         | `replsets.labels <operator.hrml#										|
+| **Key**         | `replsets.labels <operator.hrml#replsets-labels>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -254,7 +256,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-nodeSelector:									|
 |                 |												|
-| **Key**         | `replsets.nodeSelector <operator.hrml#									|
+| **Key**         | `replsets.nodeSelector <operator.hrml#replsets-nodeSelector>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -268,7 +270,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-poddisruptionbudget-maxunavailable:						|
 |                 |												|
-| **Key**         | `replsets.podDisruptionBudget.maxUnavailable <operator.hrml#							|
+| **Key**         | `replsets.podDisruptionBudget.maxUnavailable						|
+|                 | <operator.hrml#replsets-poddisruptionbudget-maxunavailable>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -282,7 +285,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-podDisruptionBudget-minAvailable:						|
 |                 |												|
-| **Key**         | `replsets.podDisruptionBudget.minAvailable <operator.hrml#							|
+| **Key**         | `replsets.podDisruptionBudget.minAvailable							|
+|                 | <operator.hrml#replsets-podDisruptionBudget-minAvailable>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -296,7 +300,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-expose-enabled:								|
 |                 |												|
-| **Key**         | `replsets.expose.enabled <operator.hrml#									|
+| **Key**         | `replsets.expose.enabled <operator.hrml#replsets-expose-enabled>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | boolean											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -309,7 +313,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-expose-exposeType:								|
 |                 |												|
-| **Key**         | `replsets.expose.exposeType <operator.hrml#									|
+| **Key**         | `replsets.expose.exposeType <operator.hrml#replsets-expose-exposeType>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -322,7 +326,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-enabled:								|
 |                 |												|
-| **Key**         | `replsets.arbiter.enabled <operator.hrml#									|
+| **Key**         | `replsets.arbiter.enabled <operator.hrml#replsets-arbiter-enabled>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | boolean											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -335,7 +339,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-size:									|
 |                 |												|
-| **Key**         | `replsets.arbiter.size <operator.hrml#									|
+| **Key**         | `replsets.arbiter.size <operator.hrml#replsets-arbiter-size>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -349,7 +353,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-affinity-antiaffinitytopologykey:					|
 |                 |												|
-| **Key**         | `replsets.arbiter.afinity.antiAffinityTopologyKey <operator.hrml#						|
+| **Key**         | `replsets.arbiter.afinity.antiAffinityTopologyKey						|
+|                 | <operator.hrml#replsets-arbiter-affinity-antiaffinitytopologykey>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -364,7 +369,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-affinity-advanced:							|
 |                 |												|
-| **Key**         | `replsets.arbiter.affinity.advanced <operator.hrml#								|
+| **Key**         | `replsets.arbiter.affinity.advanced <operator.hrml#replsets-arbiter-affinity-advanced>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | subdoc											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -378,7 +383,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-tolerations-key:							|
 |                 |												|
-| **Key**         | `replsets.arbiter.tolerations.key <operator.hrml#								|
+| **Key**         | `replsets.arbiter.tolerations.key <operator.hrml#replsets-arbiter-tolerations-key>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -392,7 +397,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-tolerations-operator:							|
 |                 |												|
-| **Key**         | `replsets.arbiter.tolerations.operator <operator.hrml#							|
+| **Key**         | `replsets.arbiter.tolerations.operator							|
+|                 | <operator.hrml#replsets-arbiter-tolerations-operator>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -406,7 +412,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-tolerations-effect:							|
 |                 |												|
-| **Key**         | `replsets.arbiter.tolerations.effect <operator.hrml#								|
+| **Key**         | `replsets.arbiter.tolerations.effect <operator.hrml#replsets-arbiter-tolerations-effect>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -420,7 +426,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-tolerations-tolerationSeconds:						|
 |                 |												|
-| **Key**         | `replsets.arbiter.tolerations.tolerationSeconds <operator.hrml#						|
+| **Key**         | `replsets.arbiter.tolerations.tolerationSeconds						|
+|                 | <operator.hrml#replsets-arbiter-tolerations-tolerationSeconds>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -434,7 +441,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-priorityClassName:							|
 |                 |												|
-| **Key**         | `replsets.arbiter.priorityClassName <operator.hrml#								|
+| **Key**         | `replsets.arbiter.priorityClassName <operator.hrml#replsets-arbiter-priorityClassName>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -448,7 +455,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-annotations:								|
 |                 |												|
-| **Key**         | `replsets.arbiter.annotations.iam.amazonaws.com/role <operator.hrml#						|
+| **Key**         | `replsets.arbiter.annotations.iam.amazonaws.com/role					|
+|                 | <operator.hrml#replsets-arbiter-annotations>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -462,7 +470,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-labels:								|
 |                 |												|
-| **Key**         | `replsets.arbiter.labels <operator.hrml#									|
+| **Key**         | `replsets.arbiter.labels <operator.hrml#replsets-arbiter-labels>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -476,7 +484,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-nodeSelector:								|
 |                 |												|
-| **Key**         | `replsets.arbiter.nodeSelector <operator.hrml#								|
+| **Key**         | `replsets.arbiter.nodeSelector <operator.hrml#replsets-arbiter-nodeSelector>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -490,7 +498,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-resources-limits-cpu:								|
 |                 |												|
-| **Key**         | `replsets.resources.limits.cpu <operator.hrml#								|
+| **Key**         | `replsets.resources.limits.cpu <operator.hrml#replsets-resources-limits-cpu>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -504,7 +512,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-resources-limits-memory:							|
 |                 |												|
-| **Key**         | `replsets.resources.limits.memory <operator.hrml#								|
+| **Key**         | `replsets.resources.limits.memory <operator.hrml#replsets-resources-limits-memory>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -518,7 +526,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-resources-requests-cpu:							|
 |                 |												|
-| **Key**         | `replsets.resources.requests.cpu <operator.hrml#								|
+| **Key**         | `replsets.resources.requests.cpu <operator.hrml#replsets-resources-requests-cpu>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -532,7 +540,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-resources-requests-memory:							|
 |                 |												|
-| **Key**         | `replsets.resources.requests.memory <operator.hrml#							|
+| **Key**         | `replsets.resources.requests.memory <operator.hrml#replsets-resources-requests-memory>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -546,7 +554,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-volumeSpec-emptyDir:								|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.emptyDir <operator.hrml#								|
+| **Key**         | `replsets.volumeSpec.emptyDir <operator.hrml#replsets-volumeSpec-emptyDir>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -560,7 +568,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-volumeSpec-hostPath-path:							|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.hostPath.path <operator.hrml#								|
+| **Key**         | `replsets.volumeSpec.hostPath.path <operator.hrml#replsets-volumeSpec-hostPath-path>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -574,7 +582,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-volumeSpec-hostPath-type:							|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.hostPath.type <operator.hrml#								|
+| **Key**         | `replsets.volumeSpec.hostPath.type <operator.hrml#replsets-volumeSpec-hostPath-type>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -587,7 +595,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-volumeSpec-persistentVolumeClaim-storageClassName:				|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.persistentVolumeClaim.storageClassName <operator.hrml#					|
+| **Key**         | `replsets.volumeSpec.persistentVolumeClaim.storageClassName					|
+|                 | <operator.hrml#replsets-volumeSpec-persistentVolumeClaim-storageClassName>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -605,7 +614,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-volumeSpec-persistentVolumeClaim-accessModes:					|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.persistentVolumeClaim.accessModes <operator.hrml#					|
+| **Key**         | `replsets.volumeSpec.persistentVolumeClaim.accessModes					|
+|                 | <operator.hrml#replsets-volumeSpec-persistentVolumeClaim-accessModes>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | array											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -619,7 +629,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-volumeSpec-persistentVolumeClaim-resources-requests-storage:			|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.persistentVolumeClaim.resources.requests.storage <operator.hrml#			|
+| **Key**         | `replsets.volumeSpec.persistentVolumeClaim.resources.requests.storage			|
+|                 | <operator.hrml#replsets-volumeSpec-persistentVolumeClaim-resources-requests-storage>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -641,7 +652,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _pmm-enabled:										|
 |                 |												|
-| **Key**         | `pmm.enabled <operator.hrml#										|
+| **Key**         | `pmm.enabled <operator.hrml#pmm-enabled>`_							|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | boolean											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -655,7 +666,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _pmm-image:										|
 |                 |												|
-| **Key**         | `pmm.image <operator.hrml#											|
+| **Key**         | `pmm.image <operator.hrml#pmm-image>`_							|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -667,7 +678,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _pmm-serverHost:										|
 |                 |												|
-| **Key**         | `pmm.serverHost <operator.hrml#										|
+| **Key**         | `pmm.serverHost <operator.hrml#pmm-serverHost>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -687,7 +698,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-net-port:									|
 |                 |												|
-| **Key**         | `mongod.net.port <operator.hrml#										|
+| **Key**         | `mongod.net.port <operator.hrml#mongod-net-port>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -700,7 +711,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-net-hostPort:									|
 |                 |												|
-| **Key**         | `mongod.net.hostPort <operator.hrml#										|
+| **Key**         | `mongod.net.hostPort <operator.hrml#mongod-net-hostPort>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -714,7 +725,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-security-redactClientLogData:							|
 |                 |												|
-| **Key**         | `mongod.security.redactClientLogData <operator.hrml#								|
+| **Key**         | `mongod.security.redactClientLogData <operator.hrml#mongod-security-redactClientLogData>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -727,7 +738,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-security-enableEncryption:							|
 |                 |												|
-| **Key**         | `mongod.security.enableEncryption <operator.hrml#								|
+| **Key**         | `mongod.security.enableEncryption <operator.hrml#mongod-security-enableEncryption>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -741,7 +752,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-security-encryptionKeySecret:							|
 |                 |												|
-| **Key**         | `mongod.security.encryptionKeySecret <operator.hrml#								|
+| **Key**         | `mongod.security.encryptionKeySecret <operator.hrml#mongod-security-encryptionKeySecret>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -754,7 +765,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-security-encryptionCipherMode:							|
 |                 |												|
-| **Key**         | `mongod.security.encryptionCipherMode <operator.hrml#							|
+| **Key**         | `mongod.security.encryptionCipherMode <operator.hrml#mongod-security-encryptionCipherMode>`_|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -768,7 +779,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-setParameter-ttlMonitorSleepSecs:						|
 |                 |												|
-| **Key**         | `mongod.setParameter.ttlMonitorSleepSecs <operator.hrml#							|
+| **Key**         | `mongod.setParameter.ttlMonitorSleepSecs							|
+|                 | <operator.hrml#mongod-setParameter-ttlMonitorSleepSecs>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -780,7 +792,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-setParameter-wiredTigerConcurrentReadTransactions:				|
 |                 |												|
-| **Key**         | `mongod.setParameter.wiredTigerConcurrentReadTransactions <operator.hrml#					|
+| **Key**         | `mongod.setParameter.wiredTigerConcurrentReadTransactions					|
+|                 | <operator.hrml#mongod-setParameter-wiredTigerConcurrentReadTransactions>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -794,7 +807,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-setParameter-wiredTigerConcurrentWriteTransactions:				|
 |                 |												|
-| **Key**         | `mongod.setParameter.wiredTigerConcurrentWriteTransactions <operator.hrml#					|
+| **Key**         | `mongod.setParameter.wiredTigerConcurrentWriteTransactions					|
+|                 | <operator.hrml#mongod-setParameter-wiredTigerConcurrentWriteTransactions>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -808,7 +822,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-engine:									|
 |                 |												|
-| **Key**         | `mongod.storage.engine <operator.hrml#									|
+| **Key**         | `mongod.storage.engine <operator.hrml#mongod-storage-engine>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -821,7 +835,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-inMemory-engineConfig-inMemorySizeRatio:					|
 |                 |												|
-| **Key**         | `mongod.storage.inMemory.engineConfig.inMemorySizeRatio <operator.hrml#					|
+| **Key**         | `mongod.storage.inMemory.engineConfig.inMemorySizeRatio					|
+|                 | <operator.hrml#mongod-storage-inMemory-engineConfig-inMemorySizeRatio>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | float											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -835,7 +850,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-mmapv1-nsSize:								|
 |                 |												|
-| **Key**         | `mongod.storage.mmapv1.nsSize <operator.hrml#								|
+| **Key**         | `mongod.storage.mmapv1.nsSize <operator.hrml#mongod-storage-mmapv1-nsSize>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -848,7 +863,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-mmapv1-smallfiles:							|
 |                 |												|
-| **Key**         | `mongod.storage.mmapv1.smallfiles <operator.hrml#								|
+| **Key**         | `mongod.storage.mmapv1.smallfiles <operator.hrml#mongod-storage-mmapv1-smallfiles>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -862,7 +877,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-wiredTiger-engineConfig-cacheSizeRatio:					|
 |                 |												|
-| **Key**         | `mongod.storage.wiredTiger.engineConfig.cacheSizeRatio <operator.hrml#					|
+| **Key**         | `mongod.storage.wiredTiger.engineConfig.cacheSizeRatio					|
+|                 | <operator.hrml#mongod-storage-wiredTiger-engineConfig-cacheSizeRatio>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | float											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -876,7 +892,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-wiredTiger-engineConfig-directoryForIndexes:				|
 |                 |												|
-| **Key**         | `mongod.storage.wiredTiger.engineConfig.directoryForIndexes <operator.hrml#					|
+| **Key**         | `mongod.storage.wiredTiger.engineConfig.directoryForIndexes					|
+|                 | <operator.hrml#mongod-storage-wiredTiger-engineConfig-directoryForIndexes>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -890,7 +907,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-wiredTiger-engineConfig-journalCompressor:				|
 |                 |												|
-| **Key**         | `mongod.storage.wiredTiger.engineConfig.journalCompressor <operator.hrml#					|
+| **Key**         | `mongod.storage.wiredTiger.engineConfig.journalCompressor					|
+|                 | <operator.hrml#mongod-storage-wiredTiger-engineConfig-journalCompressor>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -904,7 +922,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-wiredTiger-collectionConfig-blockCompressor:				|
 |                 |												|
-| **Key**         | `mongod.storage.wiredTiger.collectionConfig.blockCompressor <operator.hrml#					|
+| **Key**         | `mongod.storage.wiredTiger.collectionConfig.blockCompressor					|
+|                 | <operator.hrml#mongod-storage-wiredTiger-collectionConfig-blockCompressor>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -918,7 +937,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-storage-wiredTiger-indexConfig-prefixCompression:				|
 |                 |												|
-| **Key**         | `mongod.storage.wiredTiger.indexConfig.prefixCompression <operator.hrml#					|
+| **Key**         | `mongod.storage.wiredTiger.indexConfig.prefixCompression					|
+|                 | <operator.hrml#mongod-storage-wiredTiger-indexConfig-prefixCompression>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -932,7 +952,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-operationProfiling-mode:								|
 |                 |												|
-| **Key**         | `mongod.operationProfiling.mode <operator.hrml#								|
+| **Key**         | `mongod.operationProfiling.mode <operator.hrml#mongod-operationProfiling-mode>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -946,7 +966,8 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-operationProfiling-slowOpThresholdMs:						|
 |                 |												|
-| **Key**         | `mongod.operationProfiling.slowOpThresholdMs <operator.hrml#							|
+| **Key**         | `mongod.operationProfiling.slowOpThresholdMs						|
+|                 | <operator.hrml#mongod-operationProfiling-slowOpThresholdMs>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -960,7 +981,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-operationProfiling-rateLimit:							|
 |                 |												|
-| **Key**         | `mongod.operationProfiling.rateLimit <operator.hrml#								|
+| **Key**         | `mongod.operationProfiling.rateLimit <operator.hrml#mongod-operationProfiling-rateLimit>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -973,7 +994,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-auditLog-destination:								|
 |                 |												|
-| **Key**         | `mongod.auditLog.destination <operator.hrml#									|
+| **Key**         | `mongod.auditLog.destination <operator.hrml#mongod.auditLog.destination>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -986,7 +1007,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-auditLog-format:									|
 |                 |												|
-| **Key**         | `mongod.auditLog.format <operator.hrml#									|
+| **Key**         | `mongod.auditLog.format <operator.hrml#mongod-auditLog-format>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -999,7 +1020,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-auditLog-filter:									|
 |                 |												|
-| **Key**         | `mongod.auditLog.filter <operator.hrml#									|
+| **Key**         | `mongod.auditLog.filter <operator.hrml#mongod-auditLog-filter>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
