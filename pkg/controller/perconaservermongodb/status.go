@@ -32,7 +32,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	}
 	if reconcileErr != nil {
-		if cr.Status.MongoStatus != api.ClusterError {
+		if cr.Status.Status != api.ClusterError {
 			clusterCondition = api.ClusterCondition{
 				Status:             api.ConditionTrue,
 				Type:               api.ClusterError,
@@ -44,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
-		cr.Status.MongoStatus = api.ClusterError
+		cr.Status.Status = api.ClusterError
 
 		return r.writeStatus(cr)
 	}
@@ -99,7 +99,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
-	cr.Status.MongoStatus = api.AppStateInit
+	cr.Status.Status = api.AppStateInit
 	if replsetsReady == len(cr.Spec.Replsets) && clusterState == clusterReady {
 
 		clusterCondition = api.ClusterCondition{
@@ -107,7 +107,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			Type:               api.ClusterReady,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.MongoStatus = api.AppStateReady
+		cr.Status.Status = api.AppStateReady
 	} else if cr.Status.Conditions[len(cr.Status.Conditions)-1].Type != api.ClusterReady &&
 		clusterState == clusterInit {
 		clusterCondition = api.ClusterCondition{
@@ -115,14 +115,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			Type:               api.ClusterInit,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.MongoStatus = api.ClusterInit
+		cr.Status.Status = api.ClusterInit
 	} else {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterError,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.MongoStatus = api.ClusterError
+		cr.Status.Status = api.ClusterError
 	}
 
 	if len(cr.Status.Conditions) == 0 {
@@ -142,7 +142,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	if inProgress {
-		cr.Status.MongoStatus = api.AppStateInit
+		cr.Status.Status = api.AppStateInit
 	}
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
