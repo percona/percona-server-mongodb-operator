@@ -307,6 +307,7 @@ compare_kubectl() {
         | $sed -e '/PBM_AGENT_SERVER_ADDRESS/,+1d' \
         | $sed -e '/name: suffix/,+1d' \
         | $sed -e '/volumeClaimTemplates:/,/metadata:/d' \
+        | $sed -e '/volumeClaimTemplates:$/{N;/  \- apiVersion.*$/ {N;/  kind.*$/ {N;/    metadata:$/{s/volumeClaimTemplates.*metadata:$/volumeClaimTemplates:\n  \- metadata:/}}}}' \
         > ${new_result}
     diff -u ${expected_result} ${new_result}
 }
