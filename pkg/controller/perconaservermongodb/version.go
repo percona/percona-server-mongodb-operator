@@ -75,7 +75,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		return nil
 	}
 
-	if cr.Status.Status != v1.AppStateReady && cr.Status.MongoVersion != "" {
+	if cr.Status.State != v1.AppStateReady && cr.Status.MongoVersion != "" {
 		return errors.New("cluster is not ready")
 	}
 

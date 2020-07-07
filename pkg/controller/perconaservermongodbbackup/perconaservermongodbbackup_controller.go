@@ -144,8 +144,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
 	}
 
-	if cluster.Status.Status != api.AppStateReady {
-		return fmt.Errorf("failed to run backup on cluster with status %s", cluster.Status.Status)
+	if cluster.Status.State != api.AppStateReady {
+		return fmt.Errorf("failed to run backup on cluster with status %s", cluster.Status.State)
 	}
 
 	cjobs, err := backup.HasActiveJobs(r.client, cr.Spec.PSMDBCluster, cr.Namespace, backup.Job{Name: cr.Name, Type: backup.TypeBackup})
