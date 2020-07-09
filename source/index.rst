@@ -31,7 +31,6 @@ Installation
    minikube
    scaling
    update
-   monitoring
    custom-registry
    broker
 
