@@ -8,8 +8,11 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -153,58 +156,44 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	return nil
 }
 
-// func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB, sfs api.StatefulApp) error {
-// return nil
-// if cr.Status.PXC.Status != api.AppStateReady {
-// 	return nil
-// }
+func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
+	if cr.Status.MongoImage == cr.Spec.Image {
+		return nil
+	}
 
-// if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation {
-// 	return nil
-// }
+	if cr.Status.State != api.AppStateReady {
+		return nil
+	}
 
-// if cr.Status.PXC.Version != "" &&
-// 	cr.Status.PXC.Image == cr.Spec.PXC.Image {
-// 	return nil
-// }
+	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation {
+		return nil
+	}
 
-// list := corev1.PodList{}
-// if err := r.client.List(context.TODO(),
-// 	&list,
-// 	&client.ListOptions{
-// 		Namespace:     sfs.StatefulSet().Namespace,
-// 		LabelSelector: labels.SelectorFromSet(sfs.Labels()),
-// 	},
-// ); err != nil {
-// 	return fmt.Errorf("get pod list: %v", err)
-// }
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
+	if err != nil {
+		return errors.Wrap(err, "get replset addr")
+	}
 
-// user := "root"
-// for _, pod := range list.Items {
-// 	database, err := queries.New(r.client, cr.Namespace, cr.Spec.SecretsName, user, pod.Status.PodIP, 3306)
-// 	if err != nil {
-// 		log.Error(err, "failed to create db instance")
-// 		continue
-// 	}
+	session, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, false)
+	if err != nil {
+		return errors.Wrap(err, "dial")
+	}
 
-// 	defer database.Close()
+	defer session.Disconnect(context.TODO())
 
-// 	version, err := database.Version()
-// 	if err != nil {
-// 		log.Error(err, "failed to get pxc version")
-// 		continue
-// 	}
+	info, err := mongo.RSBuildInfo(context.Background(), session)
+	if err != nil {
+		return errors.Wrap(err, "get build info")
+	}
 
-// 	log.Info(fmt.Sprintf("update PXC version to %v (fetched from db)", version))
-// 	cr.Status.PXC.Version = version
-// 	cr.Status.PXC.Image = cr.Spec.PXC.Image
-// 	err = r.client.Status().Update(context.Background(), cr)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to update CR: %v", err)
-// 	}
+	log.Info(fmt.Sprintf("update Mongo version to %v (fetched from db)", info.Version))
+	cr.Status.MongoVersion = info.Version
+	cr.Status.MongoImage = cr.Spec.Image
 
-// 	return nil
-// }
+	err = r.client.Status().Update(context.Background(), cr)
+	if err != nil {
+		return fmt.Errorf("failed to update CR: %v", err)
+	}
 
-// return fmt.Errorf("failed to reach any pod")
-// }
+	return nil
+}

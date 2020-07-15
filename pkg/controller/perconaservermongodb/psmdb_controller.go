@@ -338,9 +338,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		isClusterLive, err = r.reconcileCluster(cr, replset, *pods, secrets)
-
 		if err != nil {
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
+		}
+
+		if err := r.fetchVersionFromMongo(cr, replset, *pods, secrets); err != nil {
+			return rr, errors.Wrap(err, "update CR version")
 		}
 	}
 
