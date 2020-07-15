@@ -111,6 +111,7 @@ const (
 type PerconaServerMongoDBStatus struct {
 	State              AppState                  `json:"state,omitempty"`
 	MongoVersion       string                    `json:"mongoVersion,omitempty"`
+	MongoImage         string                    `json:"mongoImage,omitempty"`
 	Message            string                    `json:"message,omitempty"`
 	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
 	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`

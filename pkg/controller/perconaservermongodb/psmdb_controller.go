@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
@@ -126,7 +127,15 @@ type ReconcilePerconaServerMongoDB struct {
 	clientcmd     *clientcmd.Client
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
+
+	statusMutex *sync.Mutex
+	updateSync  int32
 }
+
+const (
+	updateDone = 0
+	updateWait = 1
+)
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDB object and makes changes based on the state read
 // and what is in the PerconaServerMongoDB.Spec
@@ -169,7 +178,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		err := r.ensureVersion(cr, VersionServiceMock{})
+		err := r.ensureVersion(cr, VersionServiceClient{})
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 		}
@@ -335,7 +344,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.sheduleEnsureVersion(cr, VersionServiceMock{})
+	err = r.sheduleEnsureVersion(cr, VersionServiceClient{})
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}
