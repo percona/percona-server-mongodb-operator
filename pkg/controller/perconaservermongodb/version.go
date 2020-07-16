@@ -101,15 +101,19 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		return errors.New("cluster is not ready")
 	}
 
-	newVersion, err := vs.GetExactVersion(versionMeta{
+	vm := versionMeta{
 		Apply:         string(cr.Spec.UpgradeOptions.Apply),
-		Platform:      string(*cr.Spec.Platform),
 		KubeVersion:   r.serverVersion.Info.GitVersion,
 		MongoVersion:  cr.Status.MongoVersion,
 		PMMVersion:    cr.Status.PMMVersion,
 		BackupVersion: cr.Status.BackupVersion,
 		CRUID:         string(cr.GetUID()),
-	})
+	}
+	if cr.Spec.Platform != nil {
+		vm.Platform = string(*cr.Spec.Platform)
+	}
+
+	newVersion, err := vs.GetExactVersion(vm)
 	if err != nil {
 		return fmt.Errorf("failed to check version: %v", err)
 	}

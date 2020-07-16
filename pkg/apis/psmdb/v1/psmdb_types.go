@@ -459,27 +459,41 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 	}, nil
 }
 
-func (cr *PerconaServerMongoDB) VersionGreaterThanOrEqual(version string) (bool, error) {
+func (cr *PerconaServerMongoDB) Version() (*v.Version, error) {
 	apiVersion := cr.APIVersion
+
 	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		var newCR PerconaServerMongoDB
 		err := json.Unmarshal([]byte(lastCR), &newCR)
 		if err != nil {
-			return true, err
+			return nil, err
 		}
 		apiVersion = newCR.APIVersion
 	}
+
 	crVersion := strings.Replace(strings.TrimPrefix(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
 	if len(crVersion) == 0 {
 		crVersion = "v1"
 	}
+
+	currentVersion, err := v.NewVersion(crVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	return currentVersion, nil
+}
+
+func (cr *PerconaServerMongoDB) VersionGreaterThanOrEqual(version string) (bool, error) {
 	checkVersion, err := v.NewVersion(version)
 	if err != nil {
 		return true, err
 	}
-	currentVersion, err := v.NewVersion(crVersion)
+
+	currentVersion, err := cr.Version()
 	if err != nil {
 		return true, err
 	}
+
 	return currentVersion.GreaterThanOrEqual(checkVersion), nil
 }

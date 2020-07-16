@@ -15,7 +15,7 @@ func (vs VersionServiceClient) GetExactVersion(vm versionMeta) (DepVersion, erro
 	}
 
 	requestURL, err := url.Parse(
-		fmt.Sprintf("%s/v1/mongo-operator/%s/%s",
+		fmt.Sprintf("%s/v1/psmdb-operator/%s/%s",
 			strings.TrimRight(vs.URL, "/"),
 			vs.OpVersion,
 			vm.Apply,
@@ -130,7 +130,7 @@ type Version struct {
 }
 
 type VersionMatrix struct {
-	Mongo  map[string]Version `json:"mongo"`
+	Mongo  map[string]Version `json:"mongod"`
 	PMM    map[string]Version `json:"pmm"`
 	Backup map[string]Version `json:"backup"`
 }

@@ -71,6 +71,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		serverVersion: sv,
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
+		statusMutex:   new(sync.Mutex),
 
 		clientcmd: cli,
 	}, nil
@@ -177,8 +178,16 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	version, err := cr.Version()
+	if err != nil {
+		return rr, errors.Wrap(err, "get version")
+	}
+
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		err := r.ensureVersion(cr, VersionServiceClient{})
+		err := r.ensureVersion(cr, VersionServiceClient{
+			URL:       cr.Spec.UpgradeOptions.VersionServiceEndpoint,
+			OpVersion: version.String(),
+		})
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 		}
@@ -347,7 +356,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.sheduleEnsureVersion(cr, VersionServiceClient{})
+	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
+		URL:       cr.Spec.UpgradeOptions.VersionServiceEndpoint,
+		OpVersion: version.String(),
+	})
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}
