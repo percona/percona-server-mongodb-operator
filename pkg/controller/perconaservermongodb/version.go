@@ -118,17 +118,17 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		return fmt.Errorf("failed to check version: %v", err)
 	}
 
-	if cr.Status.MongoVersion != newVersion.MongoVersion {
+	if cr.Spec.Image != newVersion.MongoImage {
 		log.Info(fmt.Sprintf("update Mongo version from %s to %s", cr.Status.MongoVersion, newVersion.MongoVersion))
 		cr.Spec.Image = newVersion.MongoImage
 	}
 
-	if cr.Status.BackupVersion != newVersion.BackupVersion {
+	if cr.Spec.Backup.Image != newVersion.BackupImage {
 		log.Info(fmt.Sprintf("update Backup version from %s to %s", cr.Status.BackupVersion, newVersion.BackupVersion))
 		cr.Spec.Backup.Image = newVersion.BackupImage
 	}
 
-	if cr.Status.PMMVersion != newVersion.PMMVersion {
+	if cr.Spec.PMM.Image != newVersion.PMMImage {
 		log.Info(fmt.Sprintf("update PMM version from %s to %s", cr.Status.PMMVersion, newVersion.PMMVersion))
 		cr.Spec.PMM.Image = newVersion.PMMImage
 	}
