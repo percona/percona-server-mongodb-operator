@@ -129,7 +129,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 	}
 
 	if len(sysUsers) > 0 {
-		err := r.UpdateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_USER"]), string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]), internalSysSecretObj)
+		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_USER"]), string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]), internalSysSecretObj)
 		if err != nil {
 			return restartSfs, errors.Wrap(err, "update sys users pass")
 		}
@@ -138,7 +138,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 	return restartSfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) UpdateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
+func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
 	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
 			return nil
