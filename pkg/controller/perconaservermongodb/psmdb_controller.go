@@ -38,6 +38,7 @@ import (
 
 var secretFileMode int32 = 288
 var log = logf.Log.WithName("controller_psmdb")
+var usersSecretName string
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -153,7 +154,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		// Error reading the object - requeue the request.
 		return rr, err
 	}
-
+	usersSecretName = cr.Spec.Secrets.Users
+	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+		usersSecretName = internalPrefix + cr.Name + "-users"
+	}
 	isClusterLive := clusterInit
 	defer func() {
 		err = r.updateStatus(cr, err, isClusterLive)
@@ -180,6 +184,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
 
+	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+		err = r.reconcileUsers(cr)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
+		}
+	}
 	if !cr.Spec.UnsafeConf {
 		err = r.reconsileSSL(cr)
 		if err != nil {
@@ -212,7 +222,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	secrets := &corev1.Secret{}
 	err = r.client.Get(
 		context.TODO(),
-		types.NamespacedName{Name: cr.Spec.Secrets.Users, Namespace: cr.Namespace},
+		types.NamespacedName{Name: usersSecretName, Namespace: cr.Namespace},
 		secrets,
 	)
 	if err != nil {
@@ -485,7 +495,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 		if cr.Spec.PMM.Enabled {
 			pmmsec := corev1.Secret{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.Secrets.Users, Namespace: cr.Namespace}, &pmmsec)
+			err := r.client.Get(context.TODO(), types.NamespacedName{Name: usersSecretName, Namespace: cr.Namespace}, &pmmsec)
 			if err != nil {
 				return nil, fmt.Errorf("check pmm secrets: %v", err)
 			}
@@ -497,7 +507,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 				return nil, fmt.Errorf("check version error: %v", err)
 			}
 
-			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp, cr.Name, is120)
+			pmmC := psmdb.PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120)
 			if is120 {
 				res, err := psmdb.CreateResources(cr.Spec.PMM.Resources)
 				if err != nil {
