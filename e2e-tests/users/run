@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+newpassencrypted="dGVzdC1wYXNzd29yZA=="
+newpass="test-password"
+
+create_namespace $namespace
+deploy_operator
+
+cluster="some-name-rs0"
+
+kubectl_bin apply -f "${conf_dir}/client.yml" \
+                -f "${conf_dir}/secrets.yml" \
+
+apply_cluster $conf_dir/$cluster.yml
+desc 'check if all 3 Pods started'
+wait_for_running $cluster 3
+
+desc 'test MONGODB_BACKUP_USER'
+patch_secret "some-users" "MONGODB_BACKUP_PASSWORD" "$newpassencrypted"
+sleep 15
+wait_for_running $cluster 3
+user=$(getSecretData "some-users" "MONGODB_BACKUP_USER")
+compare_mongo_ping "find" "$user:$newpass@$cluster-0.$cluster.$namespace" "MONGODB_BACKUP_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-1.$cluster.$namespace" "MONGODB_BACKUP_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-2.$cluster.$namespace" "MONGODB_BACKUP_USER"
+
+desc 'test MONGODB_USER_ADMIN_USER'
+patch_secret "some-users" "MONGODB_USER_ADMIN_PASSWORD" "$newpassencrypted"
+sleep 15
+wait_for_running $cluster 3
+user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
+compare_mongo_ping "find" "$user:$newpass@$cluster-0.$cluster.$namespace" "MONGODB_USER_ADMIN_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-1.$cluster.$namespace" "MONGODB_USER_ADMIN_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-2.$cluster.$namespace" "MONGODB_USER_ADMIN_USER"
+
+desc 'test MONGODB_CLUSTER_ADMIN_USER'
+patch_secret "some-users" "MONGODB_CLUSTER_ADMIN_PASSWORD" "$newpassencrypted"
+sleep 15
+wait_for_running $cluster 3
+user=$(getSecretData "some-users" "MONGODB_CLUSTER_ADMIN_USER")
+compare_mongo_ping "find" "$user:$newpass@$cluster-0.$cluster.$namespace" "MONGODB_CLUSTER_ADMIN_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-1.$cluster.$namespace" "MONGODB_CLUSTER_ADMIN_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-2.$cluster.$namespace" "MONGODB_CLUSTER_ADMIN_USER"
+
+desc 'test MONGODB_CLUSTER_MONITOR_USER'
+patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_PASSWORD" "$newpassencrypted"
+sleep 15
+wait_for_running $cluster 3
+user=$(getSecretData "some-users" "MONGODB_CLUSTER_MONITOR_USER")
+compare_mongo_ping "find" "$user:$newpass@$cluster-0.$cluster.$namespace" "MONGODB_CLUSTER_MONITOR_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-1.$cluster.$namespace" "MONGODB_CLUSTER_MONITOR_USER"
+compare_mongo_ping "find" "$user:$newpass@$cluster-2.$cluster.$namespace" "MONGODB_CLUSTER_MONITOR_USER"
+
+
+destroy $namespace

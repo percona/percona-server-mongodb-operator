@@ -622,3 +622,31 @@ kubectl_bin() {
     rm "$LAST_OUT" "$LAST_ERR"
     return ${exit_status}
 }
+
+patch_secret() {
+    local secret=$1
+    local key=$2
+    local value=$3
+    
+    kubectl patch secret $secret -p="{\"data\":{\"$key\": \"$value\"}}"
+}
+
+getSecretData() {
+    local secretName=$1
+    local dataKey=$2
+    local  data=`kubectl get secrets/${secretName} --template={{.data.${dataKey}}} | base64 -D`
+    echo "$data"
+}
+
+compare_mongo_ping() {
+    local command="$1"
+    local uri="$2"
+    local postfix="$3"
+    local suffix="$4"
+
+    run_mongo "db.runCommand({ ping: 1 })" "$uri" "mongodb" "$suffix" \
+        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+        | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
+        | grep ok > $tmp_dir/${command}
+    diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+}
