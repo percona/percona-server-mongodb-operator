@@ -24,6 +24,8 @@ Installation
    kubernetes
    openshift
    minikube
+   gke
+   eks
    scaling
    update
    custom-registry
