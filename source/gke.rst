@@ -36,7 +36,7 @@ You can configure the settings using the ``gcloud`` tool. You can run it either 
 
 You may wait a few minutes for the cluster to be generated, and then you will see it listed in the Google Cloud console (select *Kubernetes Engine* |rarr| *Clusters* in the left menu panel):
 
-.. image:: ./assets/images/gke-quickstart-cluster-connect.png
+.. image:: ./img/gke-quickstart-cluster-connect.png
    :align: center
 
 Now you should configure the command-line access to your newly created cluster to make ``kubectl`` be able to use it.
