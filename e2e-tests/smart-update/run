@@ -54,3 +54,5 @@ for i in "${!pods[@]}"; do
 		exit 1
 	fi
 done
+
+destroy $namespace
