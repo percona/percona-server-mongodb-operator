@@ -16,16 +16,21 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS bool) (*mongo.Client, error) {
+func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS, connectWithUserAdmin bool) (*mongo.Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer connectcancel()
-
+	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
+	if connectWithUserAdmin {
+		password = string(usersSecret.Data[envMongoDBUserAdminPassword])
+		username = string(usersSecret.Data[envMongoDBUserAdminUser])
+	}
 	opts := options.Client().
 		SetHosts(addrs).
 		SetReplicaSet(replset).
 		SetAuth(options.Credential{
-			Password: string(usersSecret.Data[envMongoDBClusterAdminPassword]),
-			Username: string(usersSecret.Data[envMongoDBClusterAdminUser]),
+			Password: password,
+			Username: username,
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
 		SetReadPreference(readpref.Primary())

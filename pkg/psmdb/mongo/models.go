@@ -74,6 +74,8 @@ type WriteConcern struct {
 const (
 	envMongoDBClusterAdminUser     = "MONGODB_CLUSTER_ADMIN_USER"
 	envMongoDBClusterAdminPassword = "MONGODB_CLUSTER_ADMIN_PASSWORD"
+	envMongoDBUserAdminUser        = "MONGODB_USER_ADMIN_USER"
+	envMongoDBUserAdminPassword    = "MONGODB_USER_ADMIN_PASSWORD"
 )
 
 type Status struct {

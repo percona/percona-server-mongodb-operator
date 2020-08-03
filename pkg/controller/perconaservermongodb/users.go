@@ -1,7 +1,6 @@
 package perconaservermongodb
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -9,7 +8,9 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -70,22 +71,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "manage sys users")
 	}
 
+	err = r.updateInternalSysUsersSecret(cr, &sysUsersSecretObj)
+	if err != nil {
+		return errors.Wrap(err, "update internal sys users secret")
+	}
+
 	if restartSfs {
 		err = r.restartStatefulset(cr, newSecretDataHash)
 		if err != nil {
 			return errors.Wrap(err, "restart statefulset")
 		}
 	}
-	err = r.updateInternalSysUsersSecret(cr, &sysUsersSecretObj)
-	if err != nil {
-		return errors.Wrap(err, "update internal sys users secret")
-	}
 
 	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMongoDB, sysUsersSecretObj, internalSysSecretObj *corev1.Secret) (bool, error) {
-	sysUsers := []sysUser{}
+	var (
+		sysUsers  []sysUser
+		userAdmin *sysUser
+	)
 	restartSfs := false
 	for key := range sysUsersSecretObj.Data {
 		if string(sysUsersSecretObj.Data[key]) == string(internalSysSecretObj.Data[key]) {
@@ -112,11 +117,10 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 			},
 			)
 		case "MONGODB_USER_ADMIN_PASSWORD":
-			sysUsers = append(sysUsers, sysUser{
+			userAdmin = &sysUser{
 				Name: string(sysUsersSecretObj.Data["MONGODB_USER_ADMIN_USER"]),
 				Pass: string(sysUsersSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]),
-			},
-			)
+			}
 		case "PMM_SERVER_PASSWORD":
 			sysUsers = append(sysUsers, sysUser{
 				Name: string(sysUsersSecretObj.Data["PMM_SERVER_USER"]),
@@ -125,9 +129,10 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 			)
 			restartSfs = true
 		}
-
 	}
-
+	if userAdmin != nil {
+		sysUsers = append(sysUsers, *userAdmin)
+	}
 	if len(sysUsers) > 0 {
 		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_USER"]), string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]), internalSysSecretObj)
 		if err != nil {
@@ -139,7 +144,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
-	for i, replset := range cr.Spec.Replsets {
+	for i, repleset := range cr.Spec.Replsets {
 		if i > 0 {
 			return nil
 		}
@@ -147,7 +152,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
 			"app.kubernetes.io/instance":   cr.Name,
-			"app.kubernetes.io/replset":    replset.Name,
+			"app.kubernetes.io/replset":    repleset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		}
@@ -161,68 +166,31 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 			},
 		)
 		if err != nil {
-			return errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
+			return errors.Errorf("get pods list for replset %s: %v", repleset.Name, err)
 		}
-
-		for _, pod := range pods.Items {
-			host, err := psmdb.MongoHost(r.client, cr, replset, pod)
+		rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, repleset, pods.Items)
+		if err != nil {
+			return errors.Wrap(err, "get replset addr")
+		}
+		fmt.Println("Try to update users", users)
+		client, err := mongo.Dial(rsAddrs, repleset.Name, internalSysSecretObj, true, true)
+		if err != nil {
+			client, err = mongo.Dial(rsAddrs, repleset.Name, internalSysSecretObj, false, true)
 			if err != nil {
-				return errors.Errorf("get host for the pod %s: %v", pod.Name, err)
+				return errors.Wrap(err, "dial:")
 			}
+		}
+		defer client.Disconnect(context.TODO())
 
-			master, err := r.isMaster(&pod, adminUser, adminPass, host)
-			if err != nil {
-				return errors.Wrap(err, "check if pod is master")
+		for _, user := range users {
+			res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "updateUser", Value: user.Name}, {Key: "pwd", Value: user.Pass}})
+			if res.Err() != nil {
+				return errors.Wrap(res.Err(), "change pass")
 			}
-			if !master {
-				continue
-			}
-
-			changePass := `use admin
-`
-			for _, user := range users {
-				changePass += `db.changeUserPassword("` + user.Name + `", "` + user.Pass + `")
-`
-			}
-
-			cmdChangePass := []string{
-				"sh", "-c",
-				fmt.Sprintf(
-					`
-cat <<-EOF | mongo "mongodb://%s:%s@%s/admin?ssl=false"
-%s
-EOF
-`, adminUser, adminPass, host, changePass)}
-
-			var errb, outb bytes.Buffer
-			err = r.clientcmd.Exec(&pod, "mongod", cmdChangePass, nil, &outb, &errb, false)
-			if err != nil {
-				return fmt.Errorf("exec change users: error: %v /stdout: %s /errout: %s", err, outb.String(), errb.String())
-			}
-			break
 		}
 	}
 
 	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) isMaster(pod *corev1.Pod, adminUser, adminPass, host string) (bool, error) {
-	cmdIsMaster := []string{
-		"sh", "-c",
-		fmt.Sprintf(
-			`
-cat <<-EOF | mongo "mongodb://%s:%s@%s/admin?ssl=false"
-db.isMaster()
-EOF
-`, adminUser, adminPass, host)}
-	var errb, outb bytes.Buffer
-
-	err := r.clientcmd.Exec(pod, "mongod", cmdIsMaster, nil, &outb, &errb, false)
-	if err != nil {
-		return false, fmt.Errorf("exec change users: error: %v /stdout: %s /errout: %s", err, outb.String(), errb.String())
-	}
-
-	return bytes.Contains(outb.Bytes(), []byte(`"ismaster" : true`)), nil
 }
 
 // getInternalSysUsersSecret return secret created by operator for storing system users data

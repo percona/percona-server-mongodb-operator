@@ -21,9 +21,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	if err != nil {
 		return clusterError, errors.Wrap(err, "get replset addr")
 	}
-	session, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, true)
+	session, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, true, false)
 	if err != nil {
-		session, err = mongo.Dial(rsAddrs, replset.Name, usersSecret, false)
+		session, err = mongo.Dial(rsAddrs, replset.Name, usersSecret, false, false)
 		if err != nil {
 			// try to init replset and if succseed
 			// we'll go further on the next reconcile iteration
