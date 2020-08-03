@@ -172,7 +172,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 		if err != nil {
 			return errors.Wrap(err, "get replset addr")
 		}
-		fmt.Println("Try to update users", users)
+
 		client, err := mongo.Dial(rsAddrs, repleset.Name, internalSysSecretObj, true, true)
 		if err != nil {
 			client, err = mongo.Dial(rsAddrs, repleset.Name, internalSysSecretObj, false, true)
