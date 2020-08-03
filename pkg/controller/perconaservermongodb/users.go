@@ -254,15 +254,11 @@ func (r *ReconcilePerconaServerMongoDB) getInternalSysUsersSecretObj(cr *api.Per
 func sysUsersSecretDataChanged(newHash string, usersSecret *corev1.Secret) (bool, error) {
 	secretData, err := json.Marshal(usersSecret.Data)
 	if err != nil {
-		return true, err
+		return false, err
 	}
 	oldHash := sha256Hash(secretData)
 
-	if oldHash != newHash {
-		return true, nil
-	}
-
-	return false, nil
+	return oldHash != newHash, nil
 }
 
 func sha256Hash(data []byte) string {
@@ -282,7 +278,7 @@ func (r *ReconcilePerconaServerMongoDB) restartStatefulset(cr *api.PerconaServer
 		return errors.Wrap(err, "failed to get stetefulset")
 	}
 
-	if len(sfs.Annotations) == 0 {
+	if sfs.Annotations == nil {
 		sfs.Annotations = make(map[string]string)
 	}
 	sfs.Spec.Template.Annotations["last-applied-secret"] = newSecretDataHash
