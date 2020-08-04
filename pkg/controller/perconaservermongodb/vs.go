@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func (vs VersionServiceClient) GetExactVersion(vm versionMeta) (DepVersion, error) {
+func (vs VersionServiceClient) GetExactVersion(vm VersionMeta) (DepVersion, error) {
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
@@ -113,7 +113,7 @@ type DepVersion struct {
 }
 
 type VersionService interface {
-	GetExactVersion(vm versionMeta) (DepVersion, error)
+	GetExactVersion(vm VersionMeta) (DepVersion, error)
 }
 
 type VersionServiceClient struct {
@@ -145,7 +145,7 @@ type VersionResponse struct {
 	Versions []OperatorVersion `json:"versions"`
 }
 
-type versionMeta struct {
+type VersionMeta struct {
 	Apply         string
 	MongoVersion  string
 	KubeVersion   string

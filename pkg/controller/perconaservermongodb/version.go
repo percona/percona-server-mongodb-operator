@@ -101,7 +101,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		return errors.New("cluster is not ready")
 	}
 
-	vm := versionMeta{
+	vm := VersionMeta{
 		Apply:         string(cr.Spec.UpgradeOptions.Apply),
 		KubeVersion:   r.serverVersion.Info.GitVersion,
 		MongoVersion:  cr.Status.MongoVersion,
