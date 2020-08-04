@@ -128,7 +128,7 @@ func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {
 	}
 
 	if bi.OK != 1 {
-		return bi, fmt.Errorf("mongo says: %s", bi.Errmsg)
+		return bi, errors.Errorf("mongo says: %s", bi.Errmsg)
 	}
 
 	return bi, nil
