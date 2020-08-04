@@ -189,9 +189,5 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 	cr.Status.MongoImage = cr.Spec.Image
 
 	err = r.client.Status().Update(context.Background(), cr)
-	if err != nil {
-		return fmt.Errorf("failed to update CR: %v", err)
-	}
-
-	return nil
+	return errors.Wrapf(err, "failed to update CR")
 }
