@@ -161,15 +161,9 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
-	if cr.Status.MongoImage == cr.Spec.Image {
-		return nil
-	}
-
-	if cr.Status.State != api.AppStateReady {
-		return nil
-	}
-
-	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation {
+	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
+		cr.Status.State != api.AppStateReady ||
+		cr.Status.MongoImage == cr.Spec.Image {
 		return nil
 	}
 
