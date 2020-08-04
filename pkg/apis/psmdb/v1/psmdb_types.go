@@ -461,7 +461,7 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 	}, nil
 }
 
-// setVersion sets the API version of a PXC resource.
+// setVersion sets the API version of a PSMDB resource.
 // The new (semver-matching) version is determined either by the CR's API version or an API version specified via the CR's annotations.
 // If the CR's API version is an empty string, it returns "v1"
 func (cr *PerconaServerMongoDB) setVersion() error {
