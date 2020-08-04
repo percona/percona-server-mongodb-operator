@@ -109,6 +109,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("failed to apply changes: %v", err)
 	}
 
+	log.Info("smart update finished")
+
 	return nil
 }
 
