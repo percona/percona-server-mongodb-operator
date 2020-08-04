@@ -432,7 +432,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	inits := []corev1.Container{}
-	if cr.VersionGreaterThanOrEqual("1.5.0") {
+	if cr.CompareVersion("1.5.0") >= 0 {
 		operatorPod, err := r.operatorPod()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get operator pod: %v", err)
@@ -513,7 +513,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 			_, okl := pmmsec.Data[psmdb.PMMUserKey]
 			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
-			is120 := cr.VersionGreaterThanOrEqual("1.2.0")
+			is120 := cr.CompareVersion("1.2.0") >= 0
 
 			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp, cr.Name, is120)
 			if is120 {
@@ -552,7 +552,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if len(sfsSpec.Template.Annotations) == 0 {
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
-	is110 := cr.VersionGreaterThanOrEqual("1.1.0")
+	is110 := cr.CompareVersion("1.1.0") >= 0
 	if is110 {
 		sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
 	}

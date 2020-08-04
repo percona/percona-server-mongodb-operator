@@ -495,11 +495,11 @@ func (cr *PerconaServerMongoDB) Version() *v.Version {
 	return cr.version
 }
 
-func (cr *PerconaServerMongoDB) VersionGreaterThanOrEqual(version string) bool {
+func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 	if cr.version == nil {
 		_ = cr.setVersion()
 	}
 
 	//using Must because "version" must be right format
-	return cr.version.Compare(v.Must(v.NewVersion(version))) >= 0
+	return cr.version.Compare(v.Must(v.NewVersion(version)))
 }

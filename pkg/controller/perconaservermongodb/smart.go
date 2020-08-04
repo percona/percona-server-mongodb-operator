@@ -29,7 +29,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	if !cr.VersionGreaterThanOrEqual("1.4.0") {
+	if cr.CompareVersion("1.4.0") < 0 {
 		return nil
 	}
 

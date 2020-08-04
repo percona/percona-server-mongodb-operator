@@ -68,7 +68,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
-		is120 := cr.VersionGreaterThanOrEqual("1.2.0")
+		is120 := cr.CompareVersion("1.2.0") >= 0
 		cr.Spec.Mongod.Security.EnableEncryption = &is120
 	}
 
@@ -129,7 +129,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
-	gte140 := cr.VersionGreaterThanOrEqual("1.4.0")
+	gte140 := cr.CompareVersion("1.4.0") >= 0
 
 	timeoutSecondsDefault := int32(5)
 	initialDelaySecondsDefault := int32(90)
