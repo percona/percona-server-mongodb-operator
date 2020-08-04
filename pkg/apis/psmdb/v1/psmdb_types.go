@@ -27,6 +27,8 @@ type PerconaServerMongoDB struct {
 
 	Spec   PerconaServerMongoDBSpec   `json:"spec,omitempty"`
 	Status PerconaServerMongoDBStatus `json:"status,omitempty"`
+
+	version *v.Version
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -459,14 +461,17 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 	}, nil
 }
 
-func (cr *PerconaServerMongoDB) Version() (*v.Version, error) {
+// setVersion sets the API version of a PXC resource.
+// The new (semver-matching) version is determined either by the CR's API version or an API version specified via the CR's annotations.
+// If the CR's API version is an empty string, it returns "v1"
+func (cr *PerconaServerMongoDB) setVersion() error {
 	apiVersion := cr.APIVersion
 
 	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		var newCR PerconaServerMongoDB
 		err := json.Unmarshal([]byte(lastCR), &newCR)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		apiVersion = newCR.APIVersion
 	}
@@ -478,22 +483,23 @@ func (cr *PerconaServerMongoDB) Version() (*v.Version, error) {
 
 	currentVersion, err := v.NewVersion(crVersion)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return currentVersion, nil
+	cr.version = currentVersion
+
+	return nil
 }
 
-func (cr *PerconaServerMongoDB) VersionGreaterThanOrEqual(version string) (bool, error) {
-	checkVersion, err := v.NewVersion(version)
-	if err != nil {
-		return true, err
+func (cr *PerconaServerMongoDB) Version() *v.Version {
+	return cr.version
+}
+
+func (cr *PerconaServerMongoDB) VersionGreaterThanOrEqual(version string) bool {
+	if cr.version == nil {
+		_ = cr.setVersion()
 	}
 
-	currentVersion, err := cr.Version()
-	if err != nil {
-		return true, err
-	}
-
-	return currentVersion.GreaterThanOrEqual(checkVersion), nil
+	//using Must because "version" must be right format
+	return cr.version.Compare(v.Must(v.NewVersion(version))) >= 0
 }
