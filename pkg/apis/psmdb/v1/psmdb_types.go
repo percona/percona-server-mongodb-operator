@@ -104,9 +104,13 @@ const (
 
 type UpgradeStrategy string
 
+func (us UpgradeStrategy) Lower() UpgradeStrategy {
+	return UpgradeStrategy(strings.ToLower(string(us)))
+}
+
 const (
-	UpgradeStrategyDiasbled UpgradeStrategy = "Disabled"
-	UpgradeStrategyNever    UpgradeStrategy = "Never"
+	UpgradeStrategyDiasbled UpgradeStrategy = "disabled"
+	UpgradeStrategyNever    UpgradeStrategy = "never"
 )
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
