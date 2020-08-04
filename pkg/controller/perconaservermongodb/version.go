@@ -102,7 +102,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	}
 
 	vm := VersionMeta{
-		Apply:         string(cr.Spec.UpgradeOptions.Apply),
+		Apply:         cr.Spec.UpgradeOptions.Apply,
 		KubeVersion:   r.serverVersion.Info.GitVersion,
 		MongoVersion:  cr.Status.MongoVersion,
 		PMMVersion:    cr.Status.PMMVersion,

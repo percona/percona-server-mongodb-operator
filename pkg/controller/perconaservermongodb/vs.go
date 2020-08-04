@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 func (vs VersionServiceClient) GetExactVersion(vm VersionMeta) (DepVersion, error) {
@@ -146,7 +148,7 @@ type VersionResponse struct {
 }
 
 type VersionMeta struct {
-	Apply         string
+	Apply         v1.UpgradeStrategy
 	MongoVersion  string
 	KubeVersion   string
 	Platform      string
