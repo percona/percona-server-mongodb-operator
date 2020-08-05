@@ -14,6 +14,15 @@ upgrades to newer versions. The upgrade can be either semi-automatic or manual.
 Semi-automatic update
 ---------------------
 
+#. Update the Custom Resource Definition file for the Operator, taking it from
+   the official repository on Github, and do the same for the Role-based access
+   control:
+
+   .. code:: bash
+
+      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
+
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
    ``RollingUpdate``.
 
@@ -41,6 +50,15 @@ Semi-automatic update
 
 Manual update
 -------------
+
+#. Update the Custom Resource Definition file for the Operator, taking it from
+   the official repository on Github, and do the same for the Role-based access
+   control:
+
+   .. code:: bash
+
+      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
 
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
    ``OnDelete``.
