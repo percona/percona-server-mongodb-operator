@@ -26,7 +26,7 @@ Semi-automatic update
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v{{{apiversion}}}\"}" }},
+        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"psmdb.percona.com/v{{{apiversion}}}\"}" }},
         "spec": {
             "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
@@ -37,7 +37,7 @@ Semi-automatic update
    You can track the rollout process in real time using the
    ``kubectl rollout status`` command with the name of your cluster::
 
-     kubectl rollout status sts cluster1-pxc
+     kubectl rollout status sts my-cluster-name-rs0
 
 Manual update
 -------------
@@ -54,7 +54,7 @@ Manual update
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"pxc.percona.com/v{{{apiversion}}}\"}" }},
+        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"psmdb.percona.com/v{{{apiversion}}}\"}" }},
         "spec": {"replsets":{ "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0" },
             "mongod": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0" },
             "backup":   { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
