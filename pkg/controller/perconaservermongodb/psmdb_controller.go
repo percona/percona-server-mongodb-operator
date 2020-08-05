@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
@@ -149,6 +150,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	rr := reconcile.Result{
 		RequeueAfter: r.reconcileIn,
 	}
+
+	// PerconaServerMongoDB object is also accessed and changed by a version service's corn job (that run concurrently)
+	r.statusMutex.Lock()
+	defer r.statusMutex.Unlock()
+	// we have to be sure the reconcile loop will be run at least once
+	// in-between any version service jobs (hence any two vs jobs shouldn't be run sequentially).
+	// the version service job sets the state to  `updateWait` and the next job can be run only
+	// after the state was dropped to`updateDone` again
+	defer atomic.StoreInt32(&r.updateSync, updateDone)
 
 	// Fetch the PerconaServerMongoDB instance
 	cr := &api.PerconaServerMongoDB{}
