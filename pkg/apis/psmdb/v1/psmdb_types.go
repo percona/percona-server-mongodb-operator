@@ -27,6 +27,8 @@ type PerconaServerMongoDB struct {
 
 	Spec   PerconaServerMongoDBSpec   `json:"spec,omitempty"`
 	Status PerconaServerMongoDBStatus `json:"status,omitempty"`
+
+	version *v.Version
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -102,15 +104,20 @@ const (
 
 type UpgradeStrategy string
 
+func (us UpgradeStrategy) Lower() UpgradeStrategy {
+	return UpgradeStrategy(strings.ToLower(string(us)))
+}
+
 const (
-	UpgradeStrategyDiasbled UpgradeStrategy = "Disabled"
-	UpgradeStrategyNever    UpgradeStrategy = "Never"
+	UpgradeStrategyDiasbled UpgradeStrategy = "disabled"
+	UpgradeStrategyNever    UpgradeStrategy = "never"
 )
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
 	State              AppState                  `json:"state,omitempty"`
 	MongoVersion       string                    `json:"mongoVersion,omitempty"`
+	MongoImage         string                    `json:"mongoImage,omitempty"`
 	Message            string                    `json:"message,omitempty"`
 	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
 	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`
@@ -458,27 +465,45 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 	}, nil
 }
 
-func (cr *PerconaServerMongoDB) VersionGreaterThanOrEqual(version string) (bool, error) {
+// setVersion sets the API version of a PSMDB resource.
+// The new (semver-matching) version is determined either by the CR's API version or an API version specified via the CR's annotations.
+// If the CR's API version is an empty string, it returns "v1"
+func (cr *PerconaServerMongoDB) setVersion() error {
 	apiVersion := cr.APIVersion
+
 	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		var newCR PerconaServerMongoDB
 		err := json.Unmarshal([]byte(lastCR), &newCR)
 		if err != nil {
-			return true, err
+			return err
 		}
 		apiVersion = newCR.APIVersion
 	}
+
 	crVersion := strings.Replace(strings.TrimPrefix(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
 	if len(crVersion) == 0 {
 		crVersion = "v1"
 	}
-	checkVersion, err := v.NewVersion(version)
-	if err != nil {
-		return true, err
-	}
+
 	currentVersion, err := v.NewVersion(crVersion)
 	if err != nil {
-		return true, err
+		return err
 	}
-	return currentVersion.GreaterThanOrEqual(checkVersion), nil
+
+	cr.version = currentVersion
+
+	return nil
+}
+
+func (cr *PerconaServerMongoDB) Version() *v.Version {
+	return cr.version
+}
+
+func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
+	if cr.version == nil {
+		_ = cr.setVersion()
+	}
+
+	//using Must because "version" must be right format
+	return cr.version.Compare(v.Must(v.NewVersion(version)))
 }

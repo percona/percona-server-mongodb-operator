@@ -58,6 +58,12 @@ type ReplSetGetConfig struct {
 	OKResponse `bson:",inline"`
 }
 
+// BuildInfo contains information about mongod build params
+type BuildInfo struct {
+	Version    string `json:"version" bson:"version"`
+	OKResponse `bson:",inline"`
+}
+
 // OKResponse is a standard MongoDB response
 type OKResponse struct {
 	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`

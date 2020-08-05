@@ -115,6 +115,25 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	return status, nil
 }
 
+func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {
+	bi := BuildInfo{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "buildinfo", Value: 1}})
+	if resp.Err() != nil {
+		return bi, errors.Wrap(resp.Err(), "buildinfo")
+	}
+
+	if err := resp.Decode(&bi); err != nil {
+		return bi, errors.Wrap(err, "failed to decode build info")
+	}
+
+	if bi.OK != 1 {
+		return bi, errors.Errorf("mongo says: %s", bi.Errmsg)
+	}
+
+	return bi, nil
+}
+
 func StepDown(ctx context.Context, client *mongo.Client) error {
 	resp := OKResponse{}
 
