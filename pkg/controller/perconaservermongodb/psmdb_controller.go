@@ -151,7 +151,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		RequeueAfter: r.reconcileIn,
 	}
 
-	// PerconaServerMongoDB object is also accessed and changed by a version service's corn job (that run concurrently)
+	// PerconaServerMongoDB object is also accessed and changed by a version service's cron job (that runs concurrently)
 	r.statusMutex.Lock()
 	defer r.statusMutex.Unlock()
 	// we have to be sure the reconcile loop will be run at least once
