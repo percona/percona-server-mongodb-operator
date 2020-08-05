@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -42,21 +43,43 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
 	}
 
+	secretName := internalPrefix + cr.Name + "-users"
+	internalSysSecretObj := corev1.Secret{}
+
+	err = r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      secretName,
+		},
+		&internalSysSecretObj,
+	)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get internal sys users secret")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		internalSysUsersSecret := sysUsersSecretObj.DeepCopy()
+		internalSysUsersSecret.ObjectMeta = metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: cr.Namespace,
+		}
+		err = r.client.Create(context.TODO(), internalSysUsersSecret)
+		if err != nil {
+			return errors.Wrap(err, "create internal sys users secret")
+		}
+		return nil
+	}
+
+	// we do this check after work with secret objects because in case of upgrade cluster we need to be sure that internal secret exist
+	if cr.Status.State != api.AppStateReady {
+		return nil
+	}
+
 	newSysData, err := json.Marshal(sysUsersSecretObj.Data)
 	if err != nil {
 		return errors.Wrap(err, "marshal sys secret data")
 	}
 	newSecretDataHash := sha256Hash(newSysData)
-
-	internalSysSecretObj, err := r.getInternalSysUsersSecret(cr, &sysUsersSecretObj)
-	if err != nil {
-		return errors.Wrap(err, "get internal sys users secret")
-	}
-
-	if cr.Status.State != api.AppStateReady {
-		return nil
-	}
-
 	dataChanged, err := sysUsersSecretDataChanged(newSecretDataHash, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "check sys users data changes")
@@ -71,9 +94,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "manage sys users")
 	}
 
-	err = r.updateInternalSysUsersSecret(cr, &sysUsersSecretObj)
+	internalSysSecretObj.Data = sysUsersSecretObj.Data
+	err = r.client.Update(context.TODO(), &internalSysSecretObj)
 	if err != nil {
-		return errors.Wrap(err, "update internal sys users secret")
+		return errors.Wrap(err, "create internal sys users secret")
 	}
 
 	if restartSfs {
@@ -93,7 +117,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 	)
 	restartSfs := false
 	for key := range sysUsersSecretObj.Data {
-		if string(sysUsersSecretObj.Data[key]) == string(internalSysSecretObj.Data[key]) {
+		if bytes.Compare(sysUsersSecretObj.Data[key], internalSysSecretObj.Data[key]) == 0 {
 			continue
 		}
 		switch key {
@@ -144,15 +168,16 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
-	for i, repleset := range cr.Spec.Replsets {
+	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
+			log.Info("sharded cluster not supported")
 			return nil
 		}
 
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
 			"app.kubernetes.io/instance":   cr.Name,
-			"app.kubernetes.io/replset":    repleset.Name,
+			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		}
@@ -166,16 +191,17 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 			},
 		)
 		if err != nil {
-			return errors.Errorf("get pods list for replset %s: %v", repleset.Name, err)
+			return errors.Wrapf(err, "get pods list for replset %s", replset.Name)
 		}
-		rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, repleset, pods.Items)
+		rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
 		if err != nil {
 			return errors.Wrap(err, "get replset addr")
 		}
-
-		client, err := mongo.Dial(rsAddrs, repleset.Name, internalSysSecretObj, true, true)
+		password := string(internalSysSecretObj.Data[envMongoDBUserAdminPassword])
+		username := string(internalSysSecretObj.Data[envMongoDBUserAdminUser])
+		client, err := mongo.Dial(rsAddrs, replset.Name, username, password, true)
 		if err != nil {
-			client, err = mongo.Dial(rsAddrs, repleset.Name, internalSysSecretObj, false, true)
+			client, err = mongo.Dial(rsAddrs, replset.Name, username, password, false)
 			if err != nil {
 				return errors.Wrap(err, "dial:")
 			}
@@ -191,64 +217,6 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 	}
 
 	return nil
-}
-
-// getInternalSysUsersSecret return secret created by operator for storing system users data
-func (r *ReconcilePerconaServerMongoDB) getInternalSysUsersSecret(cr *api.PerconaServerMongoDB, sysUsersSecretObj *corev1.Secret) (corev1.Secret, error) {
-	secretName := internalPrefix + cr.Name + "-users"
-	internalSysUsersSecretObj, err := r.getInternalSysUsersSecretObj(cr, sysUsersSecretObj)
-	if err != nil {
-		return internalSysUsersSecretObj, errors.Wrap(err, "create internal sys users secret object")
-	}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      secretName,
-		},
-		&internalSysUsersSecretObj,
-	)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return internalSysUsersSecretObj, errors.Wrap(err, "get internal sys users secret")
-	}
-
-	if k8serrors.IsNotFound(err) {
-		err = r.client.Create(context.TODO(), &internalSysUsersSecretObj)
-		if err != nil {
-			return internalSysUsersSecretObj, errors.Wrap(err, "create internal sys users secret")
-		}
-	}
-
-	return internalSysUsersSecretObj, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) updateInternalSysUsersSecret(cr *api.PerconaServerMongoDB, sysUsersSecretObj *corev1.Secret) error {
-	internalAppUsersSecretObj, err := r.getInternalSysUsersSecretObj(cr, sysUsersSecretObj)
-	if err != nil {
-		return errors.Wrap(err, "get internal sys users secret object")
-	}
-	err = r.client.Update(context.TODO(), &internalAppUsersSecretObj)
-	if err != nil {
-		return errors.Wrap(err, "create internal sys users secret")
-	}
-
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) getInternalSysUsersSecretObj(cr *api.PerconaServerMongoDB, sysUsersSecretObj *corev1.Secret) (corev1.Secret, error) {
-	internalSysUsersSecretObj := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      internalPrefix + cr.Name + "-users",
-			Namespace: cr.Namespace,
-		},
-		Data: sysUsersSecretObj.Data,
-		Type: corev1.SecretTypeOpaque,
-	}
-	err := setControllerReference(cr, &internalSysUsersSecretObj, r.scheme)
-	if err != nil {
-		return internalSysUsersSecretObj, errors.Wrap(err, "set owner refs")
-	}
-
-	return internalSysUsersSecretObj, nil
 }
 
 func sysUsersSecretDataChanged(newHash string, usersSecret *corev1.Secret) (bool, error) {
