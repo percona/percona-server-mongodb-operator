@@ -97,7 +97,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
 	err = r.client.Update(context.TODO(), &internalSysSecretObj)
 	if err != nil {
-		return errors.Wrap(err, "create internal sys users secret")
+		return errors.Wrap(err, "update internal sys users secret")
 	}
 
 	if restartSfs {
@@ -234,27 +234,28 @@ func sha256Hash(data []byte) string {
 }
 
 func (r *ReconcilePerconaServerMongoDB) restartStatefulset(cr *api.PerconaServerMongoDB, newSecretDataHash string) error {
-	sfs := appsv1.StatefulSet{}
-	err := r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      cr.Name + "-rs0",
-		},
-		&sfs,
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to get stetefulset")
-	}
+	for _, rs := range cr.Spec.Replsets {
+		sfs := appsv1.StatefulSet{}
+		err := r.client.Get(context.TODO(),
+			types.NamespacedName{
+				Namespace: cr.Namespace,
+				Name:      cr.Name + rs.Name,
+			},
+			&sfs,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get stetefulset '%s'", rs.Name)
+		}
 
-	if sfs.Annotations == nil {
-		sfs.Annotations = make(map[string]string)
-	}
-	sfs.Spec.Template.Annotations["last-applied-secret"] = newSecretDataHash
+		if sfs.Annotations == nil {
+			sfs.Annotations = make(map[string]string)
+		}
+		sfs.Spec.Template.Annotations["last-applied-secret"] = newSecretDataHash
 
-	err = r.client.Update(context.TODO(), &sfs)
-	if err != nil {
-		return errors.Wrap(err, "update sfs last-applied annotation")
+		err = r.client.Update(context.TODO(), &sfs)
+		if err != nil {
+			return errors.Wrapf(err, "update sfs '%s' last-applied annotation", rs.Name)
+		}
 	}
-
 	return nil
 }
