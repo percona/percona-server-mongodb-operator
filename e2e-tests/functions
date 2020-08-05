@@ -638,7 +638,7 @@ getSecretData() {
     echo "$data"
 }
 
-compare_mongo_ping() {
+check_mongo_auth() {
     local command="$1"
     local uri="$2"
     local postfix="$3"
