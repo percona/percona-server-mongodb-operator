@@ -142,7 +142,12 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr)
 	if err != nil {
-		log.Error(err, "failed to get CR")
+		return fmt.Errorf("failed to get CR: %v", err)
+	}
+
+	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
+	if err != nil {
+		return fmt.Errorf("failed to set defaults for CR: %v", err)
 	}
 
 	cr.Status.PMMVersion = newVersion.PMMVersion
