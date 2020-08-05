@@ -138,8 +138,14 @@ func StepDown(ctx context.Context, client *mongo.Client) error {
 	resp := OKResponse{}
 
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: 60}})
-	if res.Err() != nil {
-		return errors.Wrap(res.Err(), "replSetStepDown")
+	err := res.Err()
+	if err != nil {
+		cErr, ok := err.(mongo.CommandError)
+		if ok && cErr.HasErrorLabel("NetworkError") {
+			// https://docs.mongodb.com/manual/reference/method/rs.stepDown/#client-connections
+			return nil
+		}
+		return errors.Wrap(err, "replSetStepDown")
 	}
 
 	if err := res.Decode(&resp); err != nil {
