@@ -11,14 +11,14 @@ import (
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func (vs VersionServiceClient) GetExactVersion(vm VersionMeta) (DepVersion, error) {
+func (vs VersionServiceClient) GetExactVersion(endpoint string, vm VersionMeta) (DepVersion, error) {
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
 
 	requestURL, err := url.Parse(
 		fmt.Sprintf("%s/v1/psmdb-operator/%s/%s",
-			strings.TrimRight(vs.URL, "/"),
+			strings.TrimRight(endpoint, "/"),
 			vs.OpVersion,
 			vm.Apply,
 		),
@@ -115,11 +115,10 @@ type DepVersion struct {
 }
 
 type VersionService interface {
-	GetExactVersion(vm VersionMeta) (DepVersion, error)
+	GetExactVersion(endpoint string, vm VersionMeta) (DepVersion, error)
 }
 
 type VersionServiceClient struct {
-	URL       string
 	OpVersion string
 }
 

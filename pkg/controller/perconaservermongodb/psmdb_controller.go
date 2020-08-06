@@ -192,7 +192,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
 		err := r.ensureVersion(cr, VersionServiceClient{
-			URL:       cr.Spec.UpgradeOptions.VersionServiceEndpoint,
 			OpVersion: version.String(),
 		})
 		if err != nil {
@@ -364,7 +363,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
-		URL:       cr.Spec.UpgradeOptions.VersionServiceEndpoint,
 		OpVersion: version.String(),
 	})
 	if err != nil {
