@@ -170,7 +170,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
 	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
-			log.Info("sharded cluster not supported")
+			log.Info("update users: multiple replica sets is not yet supported")
 			return nil
 		}
 
@@ -197,11 +197,11 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 		if err != nil {
 			return errors.Wrap(err, "get replset addr")
 		}
-		password := string(internalSysSecretObj.Data[envMongoDBUserAdminPassword])
-		username := string(internalSysSecretObj.Data[envMongoDBUserAdminUser])
-		client, err := mongo.Dial(rsAddrs, replset.Name, username, password, true)
+		adminPass := string(internalSysSecretObj.Data[envMongoDBUserAdminPassword])
+		adminUser := string(internalSysSecretObj.Data[envMongoDBUserAdminUser])
+		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, true)
 		if err != nil {
-			client, err = mongo.Dial(rsAddrs, replset.Name, username, password, false)
+			client, err = mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, false)
 			if err != nil {
 				return errors.Wrap(err, "dial:")
 			}
