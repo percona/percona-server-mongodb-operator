@@ -79,7 +79,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: m.Spec.Secrets.Users,
+						Name: "internal-" + m.Name + "-users",
 					},
 					Optional: &fvar,
 				},

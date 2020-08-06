@@ -71,7 +71,7 @@ spec:
           value: rs0
         envFrom:
         - secretRef:
-            name: some-users
+            name: internal-arbiter-users
             optional: false
         imagePullPolicy: Always
         livenessProbe:
