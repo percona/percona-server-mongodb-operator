@@ -79,7 +79,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "internal-" + m.Name + "-users",
+						Name: m.Spec.Secrets.Users,
 					},
 					Optional: &fvar,
 				},
@@ -91,6 +91,19 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		Resources:       resources,
 		SecurityContext: replset.ContainerSecurityContext,
 		VolumeMounts:    volumes,
+	}
+
+	if ok, _ := m.VersionGreaterThanOrEqual("1.5.0"); ok {
+		container.EnvFrom = []corev1.EnvFromSource{
+			{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "internal-" + m.Name + "-users",
+					},
+					Optional: &fvar,
+				},
+			},
+		}
 	}
 
 	gte, err := m.VersionGreaterThanOrEqual("1.5.0")
