@@ -146,11 +146,6 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 				Pass: string(sysUsersSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]),
 			}
 		case "PMM_SERVER_PASSWORD":
-			sysUsers = append(sysUsers, sysUser{
-				Name: string(sysUsersSecretObj.Data["PMM_SERVER_USER"]),
-				Pass: string(sysUsersSecretObj.Data["PMM_SERVER_PASSWORD"]),
-			},
-			)
 			restartSfs = true
 		}
 	}
