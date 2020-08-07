@@ -121,36 +121,36 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 			continue
 		}
 		switch key {
-		case "MONGODB_BACKUP_PASSWORD":
+		case envMongoDBBackupPassword:
 			sysUsers = append(sysUsers, sysUser{
-				Name: string(sysUsersSecretObj.Data["MONGODB_BACKUP_USER"]),
-				Pass: string(sysUsersSecretObj.Data["MONGODB_BACKUP_PASSWORD"]),
+				Name: string(sysUsersSecretObj.Data[envMongoDBBackupUser]),
+				Pass: string(sysUsersSecretObj.Data[envMongoDBBackupPassword]),
 			},
 			)
 			restartSfs = true
-		case "MONGODB_CLUSTER_ADMIN_PASSWORD":
+		case envMongoDBClusterAdminPassword:
 			sysUsers = append(sysUsers, sysUser{
-				Name: string(sysUsersSecretObj.Data["MONGODB_CLUSTER_ADMIN_USER"]),
-				Pass: string(sysUsersSecretObj.Data["MONGODB_CLUSTER_ADMIN_PASSWORD"]),
+				Name: string(sysUsersSecretObj.Data[envMongoDBClusterAdminUser]),
+				Pass: string(sysUsersSecretObj.Data[envMongoDBClusterAdminPassword]),
 			},
 			)
-		case "MONGODB_CLUSTER_MONITOR_PASSWORD":
+		case envMongoDBClusterMonitorPassword:
 			sysUsers = append(sysUsers, sysUser{
-				Name: string(sysUsersSecretObj.Data["MONGODB_CLUSTER_MONITOR_USER"]),
-				Pass: string(sysUsersSecretObj.Data["MONGODB_CLUSTER_MONITOR_PASSWORD"]),
+				Name: string(sysUsersSecretObj.Data[envMongoDBClusterMonitorUser]),
+				Pass: string(sysUsersSecretObj.Data[envMongoDBClusterMonitorPassword]),
 			},
 			)
-		case "MONGODB_USER_ADMIN_PASSWORD":
+		case envMongoDBUserAdminPassword:
 			userAdmin = &sysUser{
-				Name: string(sysUsersSecretObj.Data["MONGODB_USER_ADMIN_USER"]),
-				Pass: string(sysUsersSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]),
+				Name: string(sysUsersSecretObj.Data[envMongoDBUserAdminUser]),
+				Pass: string(sysUsersSecretObj.Data[envMongoDBUserAdminPassword]),
 			}
-		case "PMM_SERVER_PASSWORD":
+		case envPMMServerPassword:
 			restartSfs = true
 		}
 	}
 	if userAdmin != nil {
-		sysUsers = append(sysUsers, *userAdmin)
+		sysUsers = append(sysUsers, *userAdmin) // UserAdmin must be the last in array because we use him for mongo client connection
 	}
 	if len(sysUsers) > 0 {
 		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_USER"]), string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]), internalSysSecretObj)
@@ -249,7 +249,7 @@ func (r *ReconcilePerconaServerMongoDB) restartStatefulset(cr *api.PerconaServer
 
 		err = r.client.Update(context.TODO(), &sfs)
 		if err != nil {
-			return errors.Wrapf(err, "update sfs '%s' last-applied annotation", rs.Name)
+			return errors.Wrapf(err, "update sfs '%s'", rs.Name)
 		}
 	}
 	return nil
