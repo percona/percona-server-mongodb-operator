@@ -60,7 +60,7 @@ spec:
           value: rs0
         envFrom:
         - secretRef:
-            name: internal-one-pod-users
+            name: internal-hostpath-users
             optional: false
         imagePullPolicy: Always
         livenessProbe:
