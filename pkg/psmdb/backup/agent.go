@@ -18,6 +18,10 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSiz
 	}
 
 	fvar := false
+	usersSecretName := cr.Spec.Secrets.Users
+	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+		usersSecretName = "internal-" + cr.Name + "-users"
+	}
 	return corev1.Container{
 		Name:            agentContainerName,
 		Image:           cr.Spec.Backup.Image,
@@ -29,7 +33,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSiz
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key: "MONGODB_BACKUP_USER",
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: cr.Spec.Secrets.Users,
+							Name: usersSecretName,
 						},
 						Optional: &fvar,
 					},
@@ -41,7 +45,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSiz
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key: "MONGODB_BACKUP_PASSWORD",
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: cr.Spec.Secrets.Users,
+							Name: usersSecretName,
 						},
 						Optional: &fvar,
 					},
