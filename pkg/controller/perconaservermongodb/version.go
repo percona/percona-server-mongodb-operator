@@ -119,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	}
 
 	if cr.Spec.Image != newVersion.MongoImage {
-		if cr.Spec.Image == "" {
+		if cr.Status.MongoVersion == "" {
 			log.Info(fmt.Sprintf("set Mongo version to %s", newVersion.MongoVersion))
 		} else {
 			log.Info(fmt.Sprintf("update Mongo version from %s to %s", cr.Status.MongoVersion, newVersion.MongoVersion))
@@ -128,7 +128,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	}
 
 	if cr.Spec.Backup.Image != newVersion.BackupImage {
-		if cr.Spec.Backup.Image == "" {
+		if cr.Status.BackupVersion == "" {
 			log.Info(fmt.Sprintf("set Backup version to %s", newVersion.BackupVersion))
 		} else {
 			log.Info(fmt.Sprintf("update Backup version from %s to %s", cr.Status.BackupVersion, newVersion.BackupVersion))
@@ -137,7 +137,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	}
 
 	if cr.Spec.PMM.Image != newVersion.PMMImage {
-		if cr.Spec.PMM.Image == "" {
+		if cr.Status.PMMVersion == "" {
 			log.Info(fmt.Sprintf("set PMM version to %s", newVersion.PMMVersion))
 		} else {
 			log.Info(fmt.Sprintf("update PMM version from %s to %s", cr.Status.PMMVersion, newVersion.PMMVersion))
