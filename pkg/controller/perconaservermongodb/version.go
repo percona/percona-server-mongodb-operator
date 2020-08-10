@@ -113,7 +113,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		vm.Platform = string(*cr.Spec.Platform)
 	}
 
-	newVersion, err := vs.GetExactVersion(vm)
+	newVersion, err := vs.GetExactVersion(cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
 	if err != nil {
 		return fmt.Errorf("failed to check version: %v", err)
 	}
