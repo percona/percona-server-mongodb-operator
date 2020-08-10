@@ -65,7 +65,7 @@ spec:
           value: rs0
         envFrom:
         - secretRef:
-            name: internal-some-name-users
+            name: some-users
             optional: false
         imagePullPolicy: Always
         livenessProbe:
