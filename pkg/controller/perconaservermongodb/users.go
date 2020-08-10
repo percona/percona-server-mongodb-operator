@@ -153,7 +153,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 		sysUsers = append(sysUsers, *userAdmin) // UserAdmin must be the last in array because we use him for mongo client connection
 	}
 	if len(sysUsers) > 0 {
-		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_USER"]), string(internalSysSecretObj.Data["MONGODB_USER_ADMIN_PASSWORD"]), internalSysSecretObj)
+		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data[envMongoDBUserAdminUser]), string(internalSysSecretObj.Data[envMongoDBUserAdminPassword]), internalSysSecretObj)
 		if err != nil {
 			return restartSfs, errors.Wrap(err, "update sys users pass")
 		}
