@@ -11,6 +11,7 @@ newpassencrypted=$(echo -n "$newpass" | base64)
 create_namespace $namespace
 deploy_operator
 
+psmdb="some-name"
 cluster="some-name-rs0"
 
 kubectl_bin apply -f "${conf_dir}/client.yml" \
@@ -23,7 +24,7 @@ wait_for_running $cluster 3
 desc 'test MONGODB_BACKUP_USER'
 patch_secret "some-users" "MONGODB_BACKUP_PASSWORD" "$newpassencrypted"
 sleep 15
-wait_for_running $cluster 3
+wait_cluster_consistency $psmdb 
 user=$(getSecretData "some-users" "MONGODB_BACKUP_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -32,7 +33,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 desc 'test MONGODB_USER_ADMIN_USER'
 patch_secret "some-users" "MONGODB_USER_ADMIN_PASSWORD" "$newpassencrypted"
 sleep 15
-wait_for_running $cluster 3
+wait_cluster_consistency $psmdb 
 user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -41,7 +42,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 desc 'test MONGODB_CLUSTER_ADMIN_USER'
 patch_secret "some-users" "MONGODB_CLUSTER_ADMIN_PASSWORD" "$newpassencrypted"
 sleep 15
-wait_for_running $cluster 3
+wait_cluster_consistency $psmdb 
 user=$(getSecretData "some-users" "MONGODB_CLUSTER_ADMIN_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -50,7 +51,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 desc 'test MONGODB_CLUSTER_MONITOR_USER'
 patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_PASSWORD" "$newpassencrypted"
 sleep 15
-wait_for_running $cluster 3
+wait_cluster_consistency $psmdb 
 user=$(getSecretData "some-users" "MONGODB_CLUSTER_MONITOR_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -59,7 +60,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 desc 'Remove users secret'
 kubectl_bin delete secret some-users
 sleep 15
-wait_for_running $cluster 3
+wait_cluster_consistency $psmdb 
 user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
 pass=$(getSecretData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
 check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"

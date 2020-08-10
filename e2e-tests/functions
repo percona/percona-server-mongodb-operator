@@ -644,7 +644,17 @@ check_mongo_auth() {
 
     ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
     desc "ping return"
-    if [ ${ping} != 1 ]; then
+    if [ "${ping}" != "1" ]; then
         return 1
     fi
+}
+
+wait_cluster_consistency() {
+    cluster_name=$1
+
+    sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
+    until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
+        echo 'waiting for cluster readyness'
+        sleep 20
+    done
 }
