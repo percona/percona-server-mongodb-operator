@@ -464,7 +464,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
-
+	if sfsSpec.Template.Annotations == nil {
+		sfsSpec.Template.Annotations = make(map[string]string)
+	}
+	for k, v := range sfs.Spec.Template.Annotations {
+		sfsSpec.Template.Annotations[k] = v
+	}
 	// add TLS/SSL Volume
 	t := true
 	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
@@ -569,9 +574,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, fmt.Errorf("get secret hash error: %v", err)
 	}
-	if len(sfsSpec.Template.Annotations) == 0 {
-		sfsSpec.Template.Annotations = make(map[string]string)
-	}
+
 	is110 := cr.CompareVersion("1.1.0") >= 0
 	if is110 {
 		sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
