@@ -175,7 +175,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 	usersSecretName = cr.Spec.Secrets.Users
-	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+	if cr.CompareVersion("1.5.0") >= 0 {
 		usersSecretName = internalPrefix + cr.Name + "-users"
 	}
 	isClusterLive := clusterInit
@@ -209,7 +209,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
 
-	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+	if cr.CompareVersion("1.5.0") >= 0 {
 		err = r.reconcileUsers(cr)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
