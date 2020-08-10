@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -90,7 +89,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return nil
 	}
 
-	restartPods, err := r.manageSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
+	restartSfs, err := r.manageSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
 	}
@@ -101,10 +100,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "update internal sys users secret")
 	}
 
-	if restartPods {
-		err = r.restartPods(cr, newSecretDataHash)
+	if restartSfs {
+		err = r.restartStatefulset(cr, newSecretDataHash)
 		if err != nil {
-			return errors.Wrap(err, "restart pods")
+			return errors.Wrap(err, "restart statefulset")
 		}
 	}
 
@@ -116,7 +115,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 		sysUsers  []sysUser
 		userAdmin *sysUser
 	)
-	restartPods := false
+	restartSfs := false
 	for key := range sysUsersSecretObj.Data {
 		if bytes.Compare(sysUsersSecretObj.Data[key], internalSysSecretObj.Data[key]) == 0 {
 			continue
@@ -128,7 +127,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 				Pass: string(sysUsersSecretObj.Data[envMongoDBBackupPassword]),
 			},
 			)
-			restartPods = true
+			restartSfs = true
 		case envMongoDBClusterAdminPassword:
 			sysUsers = append(sysUsers, sysUser{
 				Name: string(sysUsersSecretObj.Data[envMongoDBClusterAdminUser]),
@@ -141,13 +140,16 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 				Pass: string(sysUsersSecretObj.Data[envMongoDBClusterMonitorPassword]),
 			},
 			)
+			if cr.Spec.PMM.Enabled {
+				restartSfs = true
+			}
 		case envMongoDBUserAdminPassword:
 			userAdmin = &sysUser{
 				Name: string(sysUsersSecretObj.Data[envMongoDBUserAdminUser]),
 				Pass: string(sysUsersSecretObj.Data[envMongoDBUserAdminPassword]),
 			}
 		case envPMMServerPassword:
-			restartPods = true
+			restartSfs = true
 		}
 	}
 	if userAdmin != nil {
@@ -156,11 +158,11 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 	if len(sysUsers) > 0 {
 		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data[envMongoDBUserAdminUser]), string(internalSysSecretObj.Data[envMongoDBUserAdminPassword]), internalSysSecretObj)
 		if err != nil {
-			return restartPods, errors.Wrap(err, "update sys users pass")
+			return restartSfs, errors.Wrap(err, "update sys users pass")
 		}
 	}
 
-	return restartPods, nil
+	return restartSfs, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
@@ -229,7 +231,7 @@ func sha256Hash(data []byte) string {
 	return fmt.Sprintf("%x", sha256.Sum256(data))
 }
 
-func (r *ReconcilePerconaServerMongoDB) restartPods(cr *api.PerconaServerMongoDB, newSecretDataHash string) error {
+func (r *ReconcilePerconaServerMongoDB) restartStatefulset(cr *api.PerconaServerMongoDB, newSecretDataHash string) error {
 	for _, rs := range cr.Spec.Replsets {
 		sfs := appsv1.StatefulSet{}
 		err := r.client.Get(context.TODO(),
@@ -243,17 +245,15 @@ func (r *ReconcilePerconaServerMongoDB) restartPods(cr *api.PerconaServerMongoDB
 			return errors.Wrapf(err, "failed to get stetefulset '%s'", rs.Name)
 		}
 
-		for i := 0; i < int(*sfs.Spec.Replicas); i++ {
-			pod := corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Name + "-" + rs.Name + "-" + strconv.Itoa(i),
-					Namespace: cr.Namespace,
-				},
-			}
-			err = r.client.Delete(context.TODO(), &pod)
-			if err != nil {
-				return errors.Wrapf(err, "delete pod '%s'", cr.Name+"-"+rs.Name+"-"+strconv.Itoa(int(i)))
-			}
+		if sfs.Spec.Template.Annotations == nil {
+			sfs.Spec.Template.Annotations = make(map[string]string)
+		}
+
+		sfs.Spec.Template.Annotations["last-applied-secret"] = newSecretDataHash
+
+		err = r.client.Update(context.TODO(), &sfs)
+		if err != nil {
+			return errors.Wrapf(err, "update sfs '%s'", rs.Name)
 		}
 	}
 	return nil
