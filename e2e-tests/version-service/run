@@ -1,0 +1,66 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+desc 'test when version service is reachable'
+cluster="version-service"
+create_namespace $namespace
+deploy_operator
+
+kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+
+IMAGE_MONGOD="percona/percona-server-mongodb:4.2.7-7"
+IMAGE_MONGOD_TO_UPDATE="percona/percona-server-mongodb:4.2.8-8"
+
+desc 'create PSMDB cluster'
+spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
+compare_kubectl "statefulset/${cluster}-rs0"
+
+pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
+if ${#pods[@]} == 0; then
+	echo "pods not found"
+	exit 1
+fi
+
+for pod in "${pods[@]}"; do
+	img=$(kubectl get $pod -o jsonpath='{.spec.containers[0].image}')
+	if [ "$img" != "$IMAGE_MONGOD_TO_UPDATE" ]; then
+		echo "image was not updated"
+		exit 1
+	fi
+done
+
+destroy $namespace
+
+namespace="${test_name}-${RANDOM}"
+tmp_dir=$(mktemp -d)
+desc 'test when version service is unreachable'
+cluster="version-service-unreachable"
+create_namespace $namespace
+deploy_operator
+
+kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+
+desc 'create PSMDB cluster'
+spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
+compare_kubectl "statefulset/${cluster}-rs0"
+
+pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
+if ${#pods[@]} == 0; then
+	echo "pods not found"
+	exit 1
+fi
+
+for pod in "${pods[@]}"; do
+	img=$(kubectl get $pod -o jsonpath='{.spec.containers[0].image}')
+	if [ "$img" != "$IMAGE_MONGOD" ]; then
+		echo "wrong image"
+		exit 1
+	fi
+done
+
+destroy $namespace

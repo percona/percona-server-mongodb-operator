@@ -258,6 +258,7 @@ pipeline {
                         runTest('service-per-pod', 'basic')
                         runTest('liveness', 'basic')
                         runTest('smart-update', 'basic')
+                        runTest('version-service', 'basic')
                         ShutdownCluster('basic')
                     }
                 }
