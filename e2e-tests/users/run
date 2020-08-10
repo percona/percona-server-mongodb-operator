@@ -56,5 +56,15 @@ check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
+desc 'Remove users secret'
+kubectl_bin delete secret some-users
+sleep 15
+wait_for_running $cluster 3
+user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
+pass=$(getSecretData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
+check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
+
 
 destroy $namespace
