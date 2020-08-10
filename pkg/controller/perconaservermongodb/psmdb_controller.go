@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
@@ -71,6 +73,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		serverVersion: sv,
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
+		statusMutex:   new(sync.Mutex),
 
 		clientcmd: cli,
 	}, nil
@@ -127,7 +130,15 @@ type ReconcilePerconaServerMongoDB struct {
 	clientcmd     *clientcmd.Client
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
+
+	statusMutex *sync.Mutex
+	updateSync  int32
 }
+
+const (
+	updateDone = 0
+	updateWait = 1
+)
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDB object and makes changes based on the state read
 // and what is in the PerconaServerMongoDB.Spec
@@ -140,6 +151,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	rr := reconcile.Result{
 		RequeueAfter: r.reconcileIn,
 	}
+
+	// PerconaServerMongoDB object is also accessed and changed by a version service's cron job (that runs concurrently)
+	r.statusMutex.Lock()
+	defer r.statusMutex.Unlock()
+	// we have to be sure the reconcile loop will be run at least once
+	// in-between any version service jobs (hence any two vs jobs shouldn't be run sequentially).
+	// the version service job sets the state to  `updateWait` and the next job can be run only
+	// after the state was dropped to`updateDone` again
+	defer atomic.StoreInt32(&r.updateSync, updateDone)
 
 	// Fetch the PerconaServerMongoDB instance
 	cr := &api.PerconaServerMongoDB{}
@@ -172,8 +192,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	version := cr.Version()
+
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		err := r.ensureVersion(cr, VersionServiceMock{})
+		err := r.ensureVersion(cr, VersionServiceClient{
+			URL:       cr.Spec.UpgradeOptions.VersionServiceEndpoint,
+			OpVersion: version.String(),
+		})
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 		}
@@ -339,13 +364,19 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 
 		isClusterLive, err = r.reconcileCluster(cr, replset, *pods, secrets)
-
 		if err != nil {
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
+
+		if err := r.fetchVersionFromMongo(cr, replset, *pods, secrets); err != nil {
+			return rr, errors.Wrap(err, "update CR version")
+		}
 	}
 
-	err = r.sheduleEnsureVersion(cr, VersionServiceMock{})
+	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
+		URL:       cr.Spec.UpgradeOptions.VersionServiceEndpoint,
+		OpVersion: version.String(),
+	})
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}
@@ -421,7 +452,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	inits := []corev1.Container{}
-	if ok, _ := cr.VersionGreaterThanOrEqual("1.5.0"); ok {
+	if cr.CompareVersion("1.5.0") >= 0 {
 		operatorPod, err := r.operatorPod()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get operator pod: %v", err)
@@ -502,10 +533,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 			_, okl := pmmsec.Data[psmdb.PMMUserKey]
 			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
-			is120, err := cr.VersionGreaterThanOrEqual("1.2.0")
-			if err != nil {
-				return nil, fmt.Errorf("check version error: %v", err)
-			}
+			is120 := cr.CompareVersion("1.2.0") >= 0
 
 			pmmC := psmdb.PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120)
 			if is120 {
@@ -544,10 +572,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if len(sfsSpec.Template.Annotations) == 0 {
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
-	is110, err := cr.VersionGreaterThanOrEqual("1.1.0")
-	if err != nil {
-		return nil, fmt.Errorf("detect version error: %v", err)
-	}
+	is110 := cr.CompareVersion("1.1.0") >= 0
 	if is110 {
 		sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
 	}

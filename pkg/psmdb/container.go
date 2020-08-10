@@ -93,6 +93,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		VolumeMounts:    volumes,
 	}
 
+<<<<<<< HEAD
 	if ok, _ := m.VersionGreaterThanOrEqual("1.5.0"); ok {
 		container.EnvFrom = []corev1.EnvFromSource{
 			{
@@ -112,6 +113,9 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 	}
 
 	if gte {
+=======
+	if m.CompareVersion("1.5.0") >= 0 {
+>>>>>>> master
 		container.Command = []string{"/data/db/ps-entry.sh"}
 	}
 

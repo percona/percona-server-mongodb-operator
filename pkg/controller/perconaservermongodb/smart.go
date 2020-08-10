@@ -29,8 +29,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	if ok, err := cr.VersionGreaterThanOrEqual("1.4.0"); !ok || err != nil {
-		return errors.Wrap(err, "failed to compare version")
+	if cr.CompareVersion("1.4.0") < 0 {
+		return nil
 	}
 
 	log.Info("statefullSet was changed, run smart update")
@@ -108,6 +108,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	if err := r.applyNWait(cr, sfs.Status.UpdateRevision, &primaryPod, waitLimit); err != nil {
 		return fmt.Errorf("failed to apply changes: %v", err)
 	}
+
+	log.Info("smart update finished")
 
 	return nil
 }

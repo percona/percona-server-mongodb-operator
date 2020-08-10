@@ -114,12 +114,37 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	return status, nil
 }
 
+func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {
+	bi := BuildInfo{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "buildinfo", Value: 1}})
+	if resp.Err() != nil {
+		return bi, errors.Wrap(resp.Err(), "buildinfo")
+	}
+
+	if err := resp.Decode(&bi); err != nil {
+		return bi, errors.Wrap(err, "failed to decode build info")
+	}
+
+	if bi.OK != 1 {
+		return bi, errors.Errorf("mongo says: %s", bi.Errmsg)
+	}
+
+	return bi, nil
+}
+
 func StepDown(ctx context.Context, client *mongo.Client) error {
 	resp := OKResponse{}
 
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: 60}})
-	if res.Err() != nil {
-		return errors.Wrap(res.Err(), "replSetStepDown")
+	err := res.Err()
+	if err != nil {
+		cErr, ok := err.(mongo.CommandError)
+		if ok && cErr.HasErrorLabel("NetworkError") {
+			// https://docs.mongodb.com/manual/reference/method/rs.stepDown/#client-connections
+			return nil
+		}
+		return errors.Wrap(err, "replSetStepDown")
 	}
 
 	if err := res.Decode(&resp); err != nil {
