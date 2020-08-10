@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -89,7 +90,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return nil
 	}
 
-	restartSfs, err := r.manageSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
+	restartPods, err := r.manageSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
 	}
@@ -100,10 +101,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "update internal sys users secret")
 	}
 
-	if restartSfs {
-		err = r.restartStatefulset(cr, newSecretDataHash)
+	if restartPods {
+		err = r.restartPods(cr, newSecretDataHash)
 		if err != nil {
-			return errors.Wrap(err, "restart statefulset")
+			return errors.Wrap(err, "restart pods")
 		}
 	}
 
@@ -115,7 +116,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 		sysUsers  []sysUser
 		userAdmin *sysUser
 	)
-	restartSfs := false
+	restartPods := false
 	for key := range sysUsersSecretObj.Data {
 		if bytes.Compare(sysUsersSecretObj.Data[key], internalSysSecretObj.Data[key]) == 0 {
 			continue
@@ -127,7 +128,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 				Pass: string(sysUsersSecretObj.Data[envMongoDBBackupPassword]),
 			},
 			)
-			restartSfs = true
+			restartPods = true
 		case envMongoDBClusterAdminPassword:
 			sysUsers = append(sysUsers, sysUser{
 				Name: string(sysUsersSecretObj.Data[envMongoDBClusterAdminUser]),
@@ -146,7 +147,7 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 				Pass: string(sysUsersSecretObj.Data[envMongoDBUserAdminPassword]),
 			}
 		case envPMMServerPassword:
-			restartSfs = true
+			restartPods = true
 		}
 	}
 	if userAdmin != nil {
@@ -155,11 +156,11 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 	if len(sysUsers) > 0 {
 		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data[envMongoDBUserAdminUser]), string(internalSysSecretObj.Data[envMongoDBUserAdminPassword]), internalSysSecretObj)
 		if err != nil {
-			return restartSfs, errors.Wrap(err, "update sys users pass")
+			return restartPods, errors.Wrap(err, "update sys users pass")
 		}
 	}
 
-	return restartSfs, nil
+	return restartPods, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
@@ -228,13 +229,13 @@ func sha256Hash(data []byte) string {
 	return fmt.Sprintf("%x", sha256.Sum256(data))
 }
 
-func (r *ReconcilePerconaServerMongoDB) restartStatefulset(cr *api.PerconaServerMongoDB, newSecretDataHash string) error {
+func (r *ReconcilePerconaServerMongoDB) restartPods(cr *api.PerconaServerMongoDB, newSecretDataHash string) error {
 	for _, rs := range cr.Spec.Replsets {
 		sfs := appsv1.StatefulSet{}
 		err := r.client.Get(context.TODO(),
 			types.NamespacedName{
 				Namespace: cr.Namespace,
-				Name:      cr.Name + rs.Name,
+				Name:      cr.Name + "-" + rs.Name,
 			},
 			&sfs,
 		)
@@ -242,14 +243,17 @@ func (r *ReconcilePerconaServerMongoDB) restartStatefulset(cr *api.PerconaServer
 			return errors.Wrapf(err, "failed to get stetefulset '%s'", rs.Name)
 		}
 
-		if sfs.Annotations == nil {
-			sfs.Annotations = make(map[string]string)
-		}
-		sfs.Spec.Template.Annotations["last-applied-secret"] = newSecretDataHash
-
-		err = r.client.Update(context.TODO(), &sfs)
-		if err != nil {
-			return errors.Wrapf(err, "update sfs '%s'", rs.Name)
+		for i := 0; i < int(*sfs.Spec.Replicas); i++ {
+			pod := corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cr.Name + "-" + rs.Name + "-" + strconv.Itoa(i),
+					Namespace: cr.Namespace,
+				},
+			}
+			err = r.client.Delete(context.TODO(), &pod)
+			if err != nil {
+				return errors.Wrapf(err, "delete pod '%s'", cr.Name+"-"+rs.Name+"-"+strconv.Itoa(int(i)))
+			}
 		}
 	}
 	return nil
