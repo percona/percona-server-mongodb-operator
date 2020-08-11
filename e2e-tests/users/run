@@ -67,5 +67,21 @@ check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
+desc 'Update all users'
+kubectl_bin apply -f "${conf_dir}/secrets.yml"
+sleep 15
+wait_cluster_consistency $psmdb 
+user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
+pass=$(getSecretData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
+check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
+
+desc 'Secret without userAdmin'
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+sleep 15
+check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 destroy $namespace
