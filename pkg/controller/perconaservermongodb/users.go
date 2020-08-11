@@ -116,10 +116,20 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 		userAdmin *sysUser
 	)
 	restartSfs := false
+	userAdminUserExist := false
+	userAdminPasswordExist := false
 	for key := range sysUsersSecretObj.Data {
+		switch key {
+		case envMongoDBUserAdminPassword:
+			userAdminPasswordExist = true
+		case envMongoDBUserAdminUser:
+			userAdminUserExist = true
+		}
+
 		if bytes.Compare(sysUsersSecretObj.Data[key], internalSysSecretObj.Data[key]) == 0 {
 			continue
 		}
+
 		switch key {
 		case envMongoDBBackupPassword:
 			sysUsers = append(sysUsers, sysUser{
@@ -151,6 +161,9 @@ func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMong
 		case envPMMServerPassword:
 			restartSfs = true
 		}
+	}
+	if !userAdminUserExist || !userAdminPasswordExist {
+		return restartSfs, errors.New("userAdminUser or userAdminPassword not exist in secret " + sysUsersSecretObj.Name)
 	}
 	if userAdmin != nil {
 		sysUsers = append(sysUsers, *userAdmin) // UserAdmin must be the last in array because we use him for mongo client connection
