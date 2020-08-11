@@ -18,6 +18,7 @@ The following platforms are supported:
 * GKE 1.15
 * Amazon Elastic Container Service for Kubernetes (EKS) 1.15
 * Minikube 1.16
+* VMWare Tanzu
 
 Other Kubernetes platforms may also work but have not been tested.
 
