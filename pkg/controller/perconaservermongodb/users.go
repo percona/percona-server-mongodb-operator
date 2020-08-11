@@ -12,7 +12,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -101,10 +100,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 	}
 
 	if restartSfs {
-		err = r.restartStatefulset(cr, newSecretDataHash)
-		if err != nil {
-			return errors.Wrap(err, "restart statefulset")
-		}
+		sfsTemplateAnnotations["last-applied-secret"] = newSecretDataHash
 	}
 
 	return nil
@@ -242,32 +238,4 @@ func sysUsersSecretDataChanged(newHash string, usersSecret *corev1.Secret) (bool
 
 func sha256Hash(data []byte) string {
 	return fmt.Sprintf("%x", sha256.Sum256(data))
-}
-
-func (r *ReconcilePerconaServerMongoDB) restartStatefulset(cr *api.PerconaServerMongoDB, newSecretDataHash string) error {
-	for _, rs := range cr.Spec.Replsets {
-		sfs := appsv1.StatefulSet{}
-		err := r.client.Get(context.TODO(),
-			types.NamespacedName{
-				Namespace: cr.Namespace,
-				Name:      cr.Name + "-" + rs.Name,
-			},
-			&sfs,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "failed to get stetefulset '%s'", rs.Name)
-		}
-
-		if sfs.Spec.Template.Annotations == nil {
-			sfs.Spec.Template.Annotations = make(map[string]string)
-		}
-
-		sfs.Spec.Template.Annotations["last-applied-secret"] = newSecretDataHash
-
-		err = r.client.Update(context.TODO(), &sfs)
-		if err != nil {
-			return errors.Wrapf(err, "update sfs '%s'", rs.Name)
-		}
-	}
-	return nil
 }
