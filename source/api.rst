@@ -40,7 +40,7 @@ Prerequisites
 
    .. code-block:: yaml
 
-      # set correct API adress
+      # set correct API address
       KUBE_CLUSTER=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
       API_SERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$KUBE_CLUSTER\")].cluster.server}" | tr -d 'https://')
 
