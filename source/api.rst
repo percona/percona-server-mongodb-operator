@@ -36,17 +36,30 @@ The following subsections describe the Percona XtraDB Cluster API provided by th
 Prerequisites
 -------------
 
-Prepare:
+1. Prepare:
 
    .. code-block:: yaml
 
       # set correct API adress
       KUBE_CLUSTER=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
-      API_SERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$KUBE_CLUSTER\")].cluster.server}")
+      API_SERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$KUBE_CLUSTER\")].cluster.server}" | tr -d 'https://')
 
       # create service account and get token
-      kubectl apply -f deploy/crd.yaml -f deploy/rbac.yaml
-      KUBE_TOKEN=$(kubectl get secret $(kubectl get serviceaccount percona-server-mongodb-operator -o jsonpath='{.secrets[0].name}') -o jsonpath='{.data.token}' | base64 --decode )
+      kubectl apply -f deploy/crd.yaml -f deploy/rbac.yaml -n default
+      KUBE_TOKEN=$(kubectl get secret $(kubectl get serviceaccount percona-server-mongodb-operator -o jsonpath='{.secrets[0].name}') -o jsonpath='{.data.token}' -n default | base64 --decode )
+
+2. Create the namespace name you will use, if not exist: 
+
+   .. code-block:: yaml
+
+      kubectl create namespace my-namespace-name
+
+   Trying to create an already-existing namespace will show you a
+   self-explanatory error message. Also, you can use the ``defalut`` namespace.
+
+   .. note:: In this document ``default`` namespace is used in all examples.
+      Substitute ``default`` with your namespace name if you use a different
+      one.
 
 Create new PSMDB cluster
 ------------------------
@@ -67,7 +80,7 @@ Create new PSMDB cluster
 
 .. code-block:: bash
 
-   https://$API_SERVER/apis/psmdb.percona.com/v1-4-0/namespaces/default/perconaservermongodbs
+   https://$API_SERVER/apis/psmdb.percona.com/v{{{apiversion}}}/namespaces/default/perconaservermongodbs
 
 **Authentication:**
 
@@ -80,7 +93,7 @@ Create new PSMDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPOST 'https://$API_SERVER/apis/psmdb.percona.com/v1-4-0/namespaces/default/perconaservermongodbs' \
+   curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v{{{apiversion}}}/namespaces/default/perconaservermongodbs" \
                -H "Content-Type: application/json" \
                -H "Accept: application/json" \
                -H "Authorization: Bearer $KUBE_TOKEN" \
@@ -187,7 +200,7 @@ List PSMDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XGET 'https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs?limit=500' \
+   curl -k -v -XGET "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs?limit=500" \
                -H "Accept: application/json;as=Table;v=v1;g=meta.k8s.io,application/json;as=Table;v=v1beta1;g=meta.k8s.io,application/json" \
                -H "Authorization: Bearer $KUBE_TOKEN"
 
@@ -238,7 +251,7 @@ Get status of PSMDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XGET 'https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name' \
+   curl -k -v -XGET "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
                -H "Accept: application/json" \
                -H "Authorization: Bearer $KUBE_TOKEN"
 
@@ -432,7 +445,7 @@ Backup PSMDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPOST 'https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbbackups' \
+   curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbbackups" \
                -H "Accept: application/json" \
                -H "Content-Type: application/json" \
                -d "@backup.json" -H "Authorization: Bearer $KUBE_TOKEN"
@@ -502,7 +515,7 @@ Restore PSMDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPOST 'https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbrestores' \
+   curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbrestores" \
                -H "Accept: application/json" \
                -H "Content-Type: application/json" \
                -d "@restore.json" \
