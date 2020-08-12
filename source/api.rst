@@ -36,19 +36,7 @@ The following subsections describe the Percona XtraDB Cluster API provided by th
 Prerequisites
 -------------
 
-1. Prepare:
-
-   .. code-block:: yaml
-
-      # set correct API address
-      KUBE_CLUSTER=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
-      API_SERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$KUBE_CLUSTER\")].cluster.server}" | tr -d 'https://')
-
-      # create service account and get token
-      kubectl apply -f deploy/crd.yaml -f deploy/rbac.yaml -n default
-      KUBE_TOKEN=$(kubectl get secret $(kubectl get serviceaccount percona-server-mongodb-operator -o jsonpath='{.secrets[0].name}') -o jsonpath='{.data.token}' -n default | base64 --decode )
-
-2. Create the namespace name you will use, if not exist: 
+1. Create the namespace name you will use, if not exist:
 
    .. code-block:: yaml
 
@@ -60,6 +48,19 @@ Prerequisites
    .. note:: In this document ``default`` namespace is used in all examples.
       Substitute ``default`` with your namespace name if you use a different
       one.
+
+2. Prepare:
+
+   .. code-block:: yaml
+
+      # set correct API address
+      KUBE_CLUSTER=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
+      API_SERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$KUBE_CLUSTER\")].cluster.server}" | tr -d 'https://')
+
+      # create service account and get token
+      kubectl apply -f deploy/crd.yaml -f deploy/rbac.yaml -n default
+      KUBE_TOKEN=$(kubectl get secret $(kubectl get serviceaccount percona-server-mongodb-operator -o jsonpath='{.secrets[0].name}') -o jsonpath='{.data.token}' -n default | base64 --decode )
+
 
 Create new PSMDB cluster
 ------------------------
