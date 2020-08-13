@@ -41,7 +41,6 @@ import (
 var secretFileMode int32 = 288
 var log = logf.Log.WithName("controller_psmdb")
 var usersSecretName string
-var sfsTemplateAnnotations = make(map[string]string)
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -132,8 +131,9 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
 
-	statusMutex *sync.Mutex
-	updateSync  int32
+	statusMutex            *sync.Mutex
+	updateSync             int32
+	sfsTemplateAnnotations map[string]string
 }
 
 const (
@@ -162,6 +162,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	// after the state was dropped to`updateDone` again
 	defer atomic.StoreInt32(&r.updateSync, updateDone)
 
+	r.sfsTemplateAnnotations = make(map[string]string)
 	// Fetch the PerconaServerMongoDB instance
 	cr := &api.PerconaServerMongoDB{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, cr)
@@ -468,7 +469,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if sfsSpec.Template.Annotations == nil {
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
-	for k, v := range sfsTemplateAnnotations {
+	for k, v := range r.sfsTemplateAnnotations {
 		sfsSpec.Template.Annotations[k] = v
 	}
 	// add TLS/SSL Volume
