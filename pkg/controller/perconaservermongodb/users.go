@@ -108,29 +108,29 @@ type systemUser struct {
 }
 
 type systemUsers struct {
-	curr  map[string][]byte
-	new   map[string][]byte
-	users []systemUser
+	currData map[string][]byte // data stored in internal secret
+	newData  map[string][]byte // data stored in users secret
+	users    []systemUser
 }
 
-// add checks if user should be changed
-func (su *systemUsers) add(name, pass string) (changed bool, err error) {
-	if len(su.new[name]) == 0 {
-		return false, errors.New("undefined user name " + name)
+// add appends user to su.users by given keys if user should be changed
+func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
+	if _, ok := su.newData[nameKey]; !ok || len(su.newData[nameKey]) == 0 {
+		return false, errors.New("undefined or not exist user name " + nameKey)
 	}
-	if len(su.new[pass]) == 0 {
-		return false, errors.New("undefined user pass " + name)
+	if _, ok := su.newData[passKey]; !ok || len(su.newData[passKey]) == 0 {
+		return false, errors.New("undefined or not exist user pass " + nameKey)
 	}
 
 	// no changes, nothing to do with that user
-	if bytes.Compare(su.new[name], su.curr[name]) == 0 || bytes.Compare(su.new[pass], su.curr[pass]) == 0 {
+	if bytes.Compare(su.newData[nameKey], su.currData[nameKey]) == 0 && bytes.Compare(su.newData[passKey], su.currData[passKey]) == 0 {
 		return false, nil
 	}
 
 	su.users = append(su.users, systemUser{
-		currName: su.curr[name],
-		name:     su.new[name],
-		pass:     su.new[pass],
+		currName: su.currData[nameKey],
+		name:     su.newData[nameKey],
+		pass:     su.newData[passKey],
 	})
 
 	return true, nil
@@ -140,34 +140,34 @@ func (su *systemUsers) len() int {
 	return len(su.users)
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, usersSec, currUsersSec *corev1.Secret) (restartSfs bool, err error) {
+func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret) (restartSfs bool, err error) {
 	su := systemUsers{
-		curr: currUsersSec.Data,
-		new:  usersSec.Data,
+		currData: currUsersSec.Data,
+		newData:  newUsersSec.Data,
 	}
 
 	type user struct {
-		name, pass  string
-		needRestart bool
+		nameKey, passKey string
+		needRestart      bool
 	}
 	users := []user{
 		{
-			name: envMongoDBClusterAdminUser,
-			pass: envMongoDBClusterAdminPassword,
+			nameKey: envMongoDBClusterAdminUser,
+			passKey: envMongoDBClusterAdminPassword,
 		},
 		{
-			name: envMongoDBClusterMonitorUser,
-			pass: envMongoDBClusterMonitorPassword,
+			nameKey: envMongoDBClusterMonitorUser,
+			passKey: envMongoDBClusterMonitorPassword,
 		},
 		{
-			name:        envMongoDBBackupUser,
-			pass:        envMongoDBBackupPassword,
+			nameKey:     envMongoDBBackupUser,
+			passKey:     envMongoDBBackupPassword,
 			needRestart: true,
 		},
 		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
 		{
-			name:        envMongoDBUserAdminUser,
-			pass:        envMongoDBUserAdminPassword,
+			nameKey:     envMongoDBUserAdminUser,
+			passKey:     envMongoDBUserAdminPassword,
 			needRestart: true,
 		},
 	}
@@ -175,19 +175,19 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		// insert in front
 		users = append([]user{
 			{
-				name:        envPMMServerUser,
-				pass:        envPMMServerPassword,
+				nameKey:     envPMMServerUser,
+				passKey:     envPMMServerPassword,
 				needRestart: true,
 			},
 		}, users...)
 	}
 
 	for _, u := range users {
-		changed, err := su.add(u.name, u.pass)
+		changed, err := su.add(u.nameKey, u.passKey)
 		if err != nil {
 			return false, err
 		}
-		if !restartSfs && u.needRestart && changed {
+		if u.needRestart && changed {
 			restartSfs = true
 		}
 	}
@@ -196,12 +196,12 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		return false, nil
 	}
 
-	err = r.updateUsersPass(cr, su.users, string(currUsersSec.Data[envMongoDBUserAdminUser]), string(currUsersSec.Data[envMongoDBUserAdminPassword]))
+	err = r.updateUsers(cr, su.users, string(currUsersSec.Data[envMongoDBUserAdminUser]), string(currUsersSec.Data[envMongoDBUserAdminPassword]))
 
 	return restartSfs, errors.Wrap(err, "mongo: update system users")
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []systemUser, adminUser, adminPass string) error {
+func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, adminUser, adminPass string) error {
 	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
 			log.Info("update users: multiple replica sets is not yet supported")
@@ -241,7 +241,11 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 		defer client.Disconnect(context.TODO())
 
 		for _, user := range users {
-			res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "updateUser", Value: user.name}, {Key: "pwd", Value: user.pass}})
+			if bytes.Compare(user.currName, user.name) != 0 {
+				// update user here
+				continue
+			}
+			res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "updateUser", Value: string(user.name)}, {Key: "pwd", Value: string(user.pass)}})
 			if res.Err() != nil {
 				return errors.Wrap(res.Err(), "change pass")
 			}
