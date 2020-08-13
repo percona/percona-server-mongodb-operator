@@ -22,12 +22,6 @@ import (
 
 const internalPrefix = "internal-"
 
-type sysUser struct {
-	oldName string
-	name    string
-	pass    string
-}
-
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB) error {
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(context.TODO(),
@@ -89,7 +83,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return nil
 	}
 
-	restartSfs, err := r.manageSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
+	restartSfs, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
 	}
@@ -107,92 +101,107 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) manageSysUsers(cr *api.PerconaServerMongoDB, sysUsersSecretObj, internalSysSecretObj *corev1.Secret) (bool, error) {
-	var (
-		sysUsers   []sysUser
-		restartSfs bool
-	)
+type systemUser struct {
+	currName []byte
+	name     []byte
+	pass     []byte
+}
 
-	userAdmin, err := getSysUser(envMongoDBUserAdminUser, envMongoDBUserAdminPassword, sysUsersSecretObj, internalSysSecretObj)
-	if err != nil {
-		return false, errors.Wrap(err, "get userAdmin")
+type systemUsers struct {
+	curr  map[string][]byte
+	new   map[string][]byte
+	users []systemUser
+}
+
+// add checks if user should be changed
+func (su *systemUsers) add(name, pass string) (changed bool, err error) {
+	if len(su.new[name]) == 0 {
+		return false, errors.New("undefined user name " + name)
 	}
-	backupUser, err := getSysUser(envMongoDBBackupUser, envMongoDBBackupPassword, sysUsersSecretObj, internalSysSecretObj)
-	if err != nil {
-		return false, errors.Wrap(err, "get backup user")
-	}
-	if backupUser != nil {
-		restartSfs = true
-		sysUsers = append(sysUsers, *backupUser)
-	}
-	clusterAdminUser, err := getSysUser(envMongoDBClusterAdminUser, envMongoDBClusterAdminPassword, sysUsersSecretObj, internalSysSecretObj)
-	if err != nil {
-		return false, errors.Wrap(err, "get clusterAdminUser")
-	}
-	if clusterAdminUser != nil {
-		sysUsers = append(sysUsers, *clusterAdminUser)
-	}
-	clusterMonitorUser, err := getSysUser(envMongoDBClusterMonitorUser, envMongoDBClusterMonitorPassword, sysUsersSecretObj, internalSysSecretObj)
-	if err != nil {
-		return false, errors.Wrap(err, "get clusterMonitorUser")
-	}
-	if clusterMonitorUser != nil {
-		sysUsers = append(sysUsers, *clusterMonitorUser)
+	if len(su.new[pass]) == 0 {
+		return false, errors.New("undefined user pass " + name)
 	}
 
+	// no changes, nothing to do with that user
+	if bytes.Compare(su.new[name], su.curr[name]) == 0 || bytes.Compare(su.new[pass], su.curr[pass]) == 0 {
+		return false, nil
+	}
+
+	su.users = append(su.users, systemUser{
+		currName: su.curr[name],
+		name:     su.new[name],
+		pass:     su.new[pass],
+	})
+
+	return true, nil
+}
+
+func (su *systemUsers) len() int {
+	return len(su.users)
+}
+
+func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, usersSec, currUsersSec *corev1.Secret) (restartSfs bool, err error) {
+	su := systemUsers{
+		curr: currUsersSec.Data,
+		new:  usersSec.Data,
+	}
+
+	type user struct {
+		name, pass  string
+		needRestart bool
+	}
+	users := []user{
+		{
+			name: envMongoDBClusterAdminUser,
+			pass: envMongoDBClusterAdminPassword,
+		},
+		{
+			name: envMongoDBClusterMonitorUser,
+			pass: envMongoDBClusterMonitorPassword,
+		},
+		{
+			name:        envMongoDBBackupUser,
+			pass:        envMongoDBBackupPassword,
+			needRestart: true,
+		},
+		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
+		{
+			name:        envMongoDBUserAdminUser,
+			pass:        envMongoDBUserAdminPassword,
+			needRestart: true,
+		},
+	}
 	if cr.Spec.PMM.Enabled {
-		pmmUser, err := getSysUser(envPMMServerUser, envPMMServerPassword, sysUsersSecretObj, internalSysSecretObj)
+		// insert in front
+		users = append([]user{
+			{
+				name:        envPMMServerUser,
+				pass:        envPMMServerPassword,
+				needRestart: true,
+			},
+		}, users...)
+	}
+
+	for _, u := range users {
+		changed, err := su.add(u.name, u.pass)
 		if err != nil {
-			return restartSfs, errors.Wrap(err, "get backup user")
+			return false, err
 		}
-		if pmmUser != nil {
+		if !restartSfs && u.needRestart && changed {
 			restartSfs = true
 		}
 	}
 
-	if userAdmin != nil {
-		sysUsers = append(sysUsers, *userAdmin) // userAdmin must be the last user to update since we're using it for the mongo connection
-	}
-	if len(sysUsers) > 0 {
-		err := r.updateUsersPass(cr, sysUsers, string(internalSysSecretObj.Data[envMongoDBUserAdminUser]), string(internalSysSecretObj.Data[envMongoDBUserAdminPassword]), internalSysSecretObj)
-		if err != nil {
-			return restartSfs, errors.Wrap(err, "update sys users pass")
-		}
+	if su.len() == 0 {
+		return false, nil
 	}
 
-	return restartSfs, nil
+	err = r.updateUsersPass(cr, su.users, string(currUsersSec.Data[envMongoDBUserAdminUser]), string(currUsersSec.Data[envMongoDBUserAdminPassword]))
+
+	return restartSfs, errors.Wrap(err, "mongo: update system users")
 }
 
-func getSysUser(userNameKey, userPassKey string, sysUsersSecretObj, internalSysSecretObj *corev1.Secret) (*sysUser, error) {
-	var user sysUser
-	var oldUser, oldPassword []byte
-	if _, ok := sysUsersSecretObj.Data[userNameKey]; !ok || len(sysUsersSecretObj.Data[userNameKey]) == 0 {
-		return nil, errors.New("not exist or empty value for user " + userNameKey)
-	}
-	if _, ok := sysUsersSecretObj.Data[userPassKey]; !ok || len(sysUsersSecretObj.Data[userPassKey]) == 0 {
-		return nil, errors.New("not exist or empty value for pass " + userPassKey)
-	}
-	oldUser = sysUsersSecretObj.Data[userNameKey]
-	oldPassword = sysUsersSecretObj.Data[userPassKey]
-	if _, ok := internalSysSecretObj.Data[userNameKey]; ok {
-		oldUser = internalSysSecretObj.Data[userNameKey]
-	}
-
-	if _, ok := internalSysSecretObj.Data[userPassKey]; ok {
-		oldPassword = internalSysSecretObj.Data[userPassKey]
-	}
-	if bytes.Compare(sysUsersSecretObj.Data[userNameKey], oldUser) == 0 && bytes.Compare(sysUsersSecretObj.Data[userPassKey], oldPassword) == 0 {
-		return nil, nil
-	}
-
-	user.name = string(sysUsersSecretObj.Data[userNameKey])
-	user.oldName = string(oldUser)
-	user.pass = string(sysUsersSecretObj.Data[userPassKey])
-
-	return &user, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []sysUser, adminUser, adminPass string, internalSysSecretObj *corev1.Secret) error {
+func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMongoDB, users []systemUser, adminUser, adminPass string) error {
 	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
 			log.Info("update users: multiple replica sets is not yet supported")
@@ -222,8 +231,6 @@ func (r *ReconcilePerconaServerMongoDB) updateUsersPass(cr *api.PerconaServerMon
 		if err != nil {
 			return errors.Wrap(err, "get replset addr")
 		}
-		adminPass := string(internalSysSecretObj.Data[envMongoDBUserAdminPassword])
-		adminUser := string(internalSysSecretObj.Data[envMongoDBUserAdminUser])
 		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, true)
 		if err != nil {
 			client, err = mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, false)
