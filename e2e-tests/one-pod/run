@@ -68,6 +68,7 @@ main() {
     spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
 
     run_backup         "$cluster" "backup-minio"
+    sleep 20
     run_recovery_check "$cluster" "backup-minio"
 
     destroy $namespace
