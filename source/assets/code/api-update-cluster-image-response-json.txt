@@ -314,7 +314,7 @@
 		 "tasks":null
 	      },
 	      "image":"percona/percona-server-mongodb-operator:1.5.0-mongod4.2",
-	      "image ":"percona/percona-server-mongodb-operator:1.5.0-mongod4.2",
+	      "image ":"percona/percona-server-mongodb:4.2.8-8",
 	      "imagePullPolicy":"Always",
 	      "mongod":{
 		 "net":{
@@ -450,4 +450,3 @@
 	      "state":"ready"
 	   }
 	}
-
