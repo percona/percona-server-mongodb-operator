@@ -1,5 +1,5 @@
 .. code-block:: json
 
 	{
-	"spec": { "image ": "percona/percona-server-mongodb-operator:1.5.0-mongod4.2" }
+	"spec": { "image ": "percona/percona-server-mongodb:4.2.8-8" }
 	}}
