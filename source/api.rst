@@ -305,7 +305,7 @@ Scale up/down PSMDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPATCH 'https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name' \
+   curl -k -v -XPATCH "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
                -H "Authorization: Bearer $KUBE_TOKEN" \
                -H "Content-Type: application/merge-patch+json" 
                -H "Accept: application/json" \
@@ -552,5 +552,4 @@ Restore PSMDB cluster
       JSON:
 
    .. include:: ./assets/code/api-restore-cluster-response-json.txt
-
 
