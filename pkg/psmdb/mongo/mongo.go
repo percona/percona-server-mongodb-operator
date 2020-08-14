@@ -158,6 +158,42 @@ func StepDown(ctx context.Context, client *mongo.Client) error {
 	return nil
 }
 
+// UpdateUserPass updates user's password
+func UpdateUserPass(ctx context.Context, client *mongo.Client, name, pass string) error {
+	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()
+}
+
+// UpdateUser recreates user with new name and password
+// should be used only when username was changed
+func UpdateUser(ctx context.Context, client *mongo.Client, currName, newName, pass string) error {
+	mu := struct {
+		Users []struct {
+			Roles interface{} `bson:"roles"`
+		} `bson:"users"`
+	}{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "usersInfo", Value: currName}})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "get user")
+	}
+	err := res.Decode(mu)
+	if err != nil {
+		return errors.Wrap(err, "decode user")
+	}
+
+	if len(mu.Users) == 0 {
+		return errors.New("empty user data")
+	}
+
+	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "createUser", Value: newName}, {Key: "pwd", Value: pass}, {Key: "roles", Value: mu.Users[0].Roles}}).Err()
+	if err != nil {
+		return errors.Wrap(err, "create user")
+	}
+
+	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "dropUser", Value: currName}}).Err()
+	return errors.Wrap(err, "drop user")
+}
+
 // RemoveOld removes from the list those members which are not present in the given list.
 // It always should leave at least one element. The config won't be valid for mongo otherwise.
 // Better, if the last element has the smallest ID in order not to produce defragmentation

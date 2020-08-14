@@ -7,17 +7,18 @@ import (
 	"encoding/json"
 	"fmt"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
+	mongod "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 const internalPrefix = "internal-"
@@ -240,46 +241,25 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		}
 		defer client.Disconnect(context.TODO())
 
-		type mUsers struct {
-			Users []struct {
-				Roles interface{} `bson:"roles"`
-			} `bson:"users"`
-		}
-
 		for _, user := range users {
-			switch bytes.Compare(user.currName, user.name) {
-			case 0:
-				res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "updateUser", Value: string(user.name)}, {Key: "pwd", Value: string(user.pass)}})
-				if res.Err() != nil {
-					return errors.Wrapf(res.Err(), "change password for user %s", user.currName)
-				}
-			default:
-				mu := &mUsers{}
-				res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "usersInfo", Value: string(user.currName)}})
-				if res.Err() != nil {
-					return errors.Wrapf(res.Err(), "get infor for user %s", user.currName)
-				}
-				err = res.Decode(mu)
-				if err != nil {
-					return errors.Wrapf(err, "decode info for user %s", user.currName)
-				}
-				var roles interface{}
-				if len(mu.Users) > 0 {
-					roles = mu.Users[0].Roles
-				}
-				res = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "createUser", Value: string(user.name)}, {Key: "pwd", Value: string(user.pass)}, {Key: "roles", Value: roles}})
-				if res.Err() != nil {
-					return errors.Wrapf(res.Err(), "create user %s", string(user.name))
-				}
-				res = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "dropUser", Value: string(user.currName)}})
-				if res.Err() != nil {
-					return errors.Wrapf(res.Err(), "drop user %s", string(user.currName))
-				}
+			err := user.updateMongo(client)
+			if err != nil {
+				return errors.Wrapf(err, "updateUsers in mongo for replset %s", replset.Name)
 			}
 		}
 	}
 
 	return nil
+}
+
+func (u *systemUser) updateMongo(c *mongod.Client) error {
+	if bytes.Compare(u.currName, u.name) == 0 {
+		err := mongo.UpdateUserPass(context.TODO(), c, string(u.name), string(u.pass))
+		return errors.Wrapf(err, "change password for user %s", u.name)
+	}
+
+	err := mongo.UpdateUser(context.TODO(), c, string(u.currName), string(u.name), string(u.pass))
+	return errors.Wrapf(err, "update user %s -> %s", u.currName, u.name)
 }
 
 func sysUsersSecretDataChanged(newHash string, usersSecret *corev1.Secret) (bool, error) {
