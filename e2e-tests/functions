@@ -385,10 +385,10 @@ compare_mongo_user() {
     local user=$(echo $uri | cut -d : -f 1)
     local expected_result=${test_dir}/compare/$user.json
 
-    if [[ "$IMAGE_MONGOD" =~ 4\.0$ ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
+    if [[ "$IMAGE_MONGOD" =~ 4\.0 ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
         expected_result=${test_dir}/compare/$user-40.json
     fi
-    if [[ "$IMAGE_MONGOD" =~ 4\.2$ ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
+    if [[ "$IMAGE_MONGOD" =~ 4\.2 ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
         expected_result=${test_dir}/compare/$user-42.json
     fi
 
