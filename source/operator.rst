@@ -1170,9 +1170,10 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-storages-s3-region:								|
+|                 | .. _backup-storages-s3-credentialssecret:							|
 |                 |												|
-| **Key**         | `backup.storages.<storage-name>.s3.region <operator.html#backup-storages-s3-region>`_	|
+| **Key**         | `backup.storages.<storage-name>.s3.credentialsSecret					| 	
+|                 | <operator.html#backup-storages-s3-credentialssecret>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
