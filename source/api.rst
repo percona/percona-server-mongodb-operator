@@ -59,7 +59,7 @@ Prerequisites
 
       # create service account and get token
       kubectl apply -f deploy/crd.yaml -f deploy/rbac.yaml -n default
-      KUBE_TOKEN=$(kubectl get secret $(kubectl get serviceaccount percona-server-mongodb-operator -o jsonpath='{.secrets[0].name}') -o jsonpath='{.data.token}' -n default | base64 --decode )
+      KUBE_TOKEN=$(kubectl get secret $(kubectl get serviceaccount percona-server-mongodb-operator -o jsonpath='{.secrets[0].name}' -n default) -o jsonpath='{.data.token}' -n default | base64 --decode )
 
 
 Create new PSMDB cluster
