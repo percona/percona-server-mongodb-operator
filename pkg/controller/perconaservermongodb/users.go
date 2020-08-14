@@ -115,10 +115,10 @@ type systemUsers struct {
 
 // add appends user to su.users by given keys if user should be changed
 func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
-	if _, ok := su.newData[nameKey]; !ok || len(su.newData[nameKey]) == 0 {
+	if len(su.newData[nameKey]) == 0 {
 		return false, errors.New("undefined or not exist user name " + nameKey)
 	}
-	if _, ok := su.newData[passKey]; !ok || len(su.newData[passKey]) == 0 {
+	if len(su.newData[passKey]) == 0 {
 		return false, errors.New("undefined or not exist user pass " + nameKey)
 	}
 
@@ -240,14 +240,41 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		}
 		defer client.Disconnect(context.TODO())
 
+		type mUsers struct {
+			Users []struct {
+				Roles interface{} `bson:"roles"`
+			} `bson:"users"`
+		}
+
 		for _, user := range users {
-			if bytes.Compare(user.currName, user.name) != 0 {
-				// update user here
-				continue
-			}
-			res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "updateUser", Value: string(user.name)}, {Key: "pwd", Value: string(user.pass)}})
-			if res.Err() != nil {
-				return errors.Wrap(res.Err(), "change pass")
+			switch bytes.Compare(user.currName, user.name) {
+			case 0:
+				res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "updateUser", Value: string(user.name)}, {Key: "pwd", Value: string(user.pass)}})
+				if res.Err() != nil {
+					return errors.Wrapf(res.Err(), "change password for user %s", user.currName)
+				}
+			default:
+				mu := &mUsers{}
+				res := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "usersInfo", Value: string(user.currName)}})
+				if res.Err() != nil {
+					return errors.Wrapf(res.Err(), "get infor for user %s", user.currName)
+				}
+				err = res.Decode(mu)
+				if err != nil {
+					return errors.Wrapf(err, "decode info for user %s", user.currName)
+				}
+				var roles interface{}
+				if len(mu.Users) > 0 {
+					roles = mu.Users[0].Roles
+				}
+				res = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "createUser", Value: string(user.name)}, {Key: "pwd", Value: string(user.pass)}, {Key: "roles", Value: roles}})
+				if res.Err() != nil {
+					return errors.Wrapf(res.Err(), "create user %s", string(user.name))
+				}
+				res = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "dropUser", Value: string(user.currName)}})
+				if res.Err() != nil {
+					return errors.Wrapf(res.Err(), "drop user %s", string(user.currName))
+				}
 			}
 		}
 	}

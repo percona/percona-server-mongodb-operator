@@ -466,9 +466,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
+	sfsSpec.Template.Annotations = sfs.Spec.Template.Annotations
 	if sfsSpec.Template.Annotations == nil {
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
+
 	for k, v := range r.sfsTemplateAnnotations {
 		sfsSpec.Template.Annotations[k] = v
 	}
