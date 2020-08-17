@@ -176,7 +176,7 @@ func UpdateUser(ctx context.Context, client *mongo.Client, currName, newName, pa
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "get user")
 	}
-	err := res.Decode(mu)
+	err := res.Decode(&mu)
 	if err != nil {
 		return errors.Wrap(err, "decode user")
 	}

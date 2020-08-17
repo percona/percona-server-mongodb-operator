@@ -131,9 +131,8 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
 
-	statusMutex            *sync.Mutex
-	updateSync             int32
-	sfsTemplateAnnotations map[string]string
+	statusMutex *sync.Mutex
+	updateSync  int32
 }
 
 const (
@@ -162,7 +161,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	// after the state was dropped to`updateDone` again
 	defer atomic.StoreInt32(&r.updateSync, updateDone)
 
-	r.sfsTemplateAnnotations = make(map[string]string)
 	// Fetch the PerconaServerMongoDB instance
 	cr := &api.PerconaServerMongoDB{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, cr)
@@ -210,9 +208,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
-
+	var sfsTemplateAnnotations map[string]string
 	if cr.CompareVersion("1.5.0") >= 0 {
-		err = r.reconcileUsers(cr)
+		sfsTemplateAnnotations, err = r.reconcileUsers(cr)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
 		}
@@ -294,14 +292,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, err
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, secrets)
+		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, secrets, sfsTemplateAnnotations)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, secrets)
+			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, secrets, sfsTemplateAnnotations)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -426,7 +424,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 }
 
 // TODO: reduce cyclomatic complexity
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret) (*appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret, sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
@@ -471,8 +469,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
 
-	for k, v := range r.sfsTemplateAnnotations {
-		sfsSpec.Template.Annotations[k] = v
+	if sfsTemplateAnnotations != nil {
+		for k, v := range sfsTemplateAnnotations {
+			sfsSpec.Template.Annotations[k] = v
+		}
 	}
 	// add TLS/SSL Volume
 	t := true

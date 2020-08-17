@@ -23,7 +23,7 @@ import (
 
 const internalPrefix = "internal-"
 
-func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(context.TODO(),
 		types.NamespacedName{
@@ -33,9 +33,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&sysUsersSecretObj,
 	)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return nil
+		return nil, nil
 	} else if err != nil {
-		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
+		return nil, errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
 	}
 
 	secretName := internalPrefix + cr.Name + "-users"
@@ -49,7 +49,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&internalSysSecretObj,
 	)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "get internal sys users secret")
+		return nil, errors.Wrap(err, "get internal sys users secret")
 	}
 
 	if k8serrors.IsNotFound(err) {
@@ -60,46 +60,48 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		}
 		err = r.client.Create(context.TODO(), internalSysUsersSecret)
 		if err != nil {
-			return errors.Wrap(err, "create internal sys users secret")
+			return nil, errors.Wrap(err, "create internal sys users secret")
 		}
-		return nil
+		return nil, nil
 	}
 
 	// we do this check after work with secret objects because in case of upgrade cluster we need to be sure that internal secret exist
 	if cr.Status.State != api.AppStateReady {
-		return nil
+		return nil, nil
 	}
 
 	newSysData, err := json.Marshal(sysUsersSecretObj.Data)
 	if err != nil {
-		return errors.Wrap(err, "marshal sys secret data")
+		return nil, errors.Wrap(err, "marshal sys secret data")
 	}
 	newSecretDataHash := sha256Hash(newSysData)
 	dataChanged, err := sysUsersSecretDataChanged(newSecretDataHash, &internalSysSecretObj)
 	if err != nil {
-		return errors.Wrap(err, "check sys users data changes")
+		return nil, errors.Wrap(err, "check sys users data changes")
 	}
 
 	if !dataChanged {
-		return nil
+		return nil, nil
 	}
 
 	restartSfs, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
 	if err != nil {
-		return errors.Wrap(err, "manage sys users")
+		return nil, errors.Wrap(err, "manage sys users")
 	}
 
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
 	err = r.client.Update(context.TODO(), &internalSysSecretObj)
 	if err != nil {
-		return errors.Wrap(err, "update internal sys users secret")
+		return nil, errors.Wrap(err, "update internal sys users secret")
 	}
 
 	if restartSfs {
-		r.sfsTemplateAnnotations["last-applied-secret"] = newSecretDataHash
+		return map[string]string{
+			"last-applied-secret": newSecretDataHash,
+		}, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
 type systemUser struct {
