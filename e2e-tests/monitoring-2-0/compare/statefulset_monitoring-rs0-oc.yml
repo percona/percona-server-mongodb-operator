@@ -60,7 +60,7 @@ spec:
           value: rs0
         envFrom:
         - secretRef:
-            name: some-users
+            name: internal-monitoring-users
             optional: false
         imagePullPolicy: Always
         livenessProbe:
@@ -119,12 +119,12 @@ spec:
           valueFrom:
             secretKeyRef:
               key: MONGODB_CLUSTER_MONITOR_USER
-              name: some-users
+              name: internal-monitoring-users
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               key: MONGODB_CLUSTER_MONITOR_PASSWORD
-              name: some-users
+              name: internal-monitoring-users
         - name: DB_HOST
           value: localhost
         - name: DB_CLUSTER
@@ -139,12 +139,12 @@ spec:
           valueFrom:
             secretKeyRef:
               key: PMM_SERVER_USER
-              name: some-users
+              name: internal-monitoring-users
         - name: PMM_PASSWORD
           valueFrom:
             secretKeyRef:
               key: PMM_SERVER_PASSWORD
-              name: some-users
+              name: internal-monitoring-users
         imagePullPolicy: Always
         name: pmm-client
         ports:

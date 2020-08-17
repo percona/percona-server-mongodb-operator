@@ -60,7 +60,7 @@ spec:
           value: rs0
         envFrom:
         - secretRef:
-            name: some-users
+            name: internal-local-balancer-users
             optional: false
         imagePullPolicy: Always
         livenessProbe:
