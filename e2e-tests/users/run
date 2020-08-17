@@ -5,23 +5,30 @@ set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+
 newpass="test-password"
 newpassencrypted=$(echo -n "$newpass" | base64)
 
 create_namespace $namespace
 deploy_operator
 
+deploy_minio
+
 psmdb="some-name"
 cluster="some-name-rs0"
 
 kubectl_bin apply -f "${conf_dir}/client.yml" \
                 -f "${conf_dir}/secrets.yml" \
+                -f "${conf_dir}/cloud-secret.yml" \
+                -f "${conf_dir}/minio-secret.yml" 
 
-apply_cluster $conf_dir/$cluster.yml
-desc 'check if all 3 Pods started'
+apply_cluster $test_dir/conf/$cluster.yml
+desc 'Check if all 3 Pods started'
 wait_for_running $cluster 3
 
-desc 'test MONGODB_BACKUP_USER'
+backup_name_aws="backup-aws-s3"
+
+desc 'Change MONGODB_BACKUP_PASSWORD'
 patch_secret "some-users" "MONGODB_BACKUP_PASSWORD" "$newpassencrypted"
 sleep 25
 wait_cluster_consistency $psmdb 
@@ -31,7 +38,11 @@ check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
-desc 'test new MONGODB_BACKUP_USER'
+desc 'Run backup'
+run_backup aws-s3
+wait_backup "$backup_name_aws"
+
+desc 'Change MONGODB_BACKUP_USER'
 newnameencrypted=$(echo -n "backup2" | base64)
 patch_secret "some-users" "MONGODB_BACKUP_USER" "$newnameencrypted"
 sleep 25
@@ -42,7 +53,7 @@ check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
-desc 'test MONGODB_USER_ADMIN_USER'
+desc 'Change MONGODB_USER_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_USER_ADMIN_PASSWORD" "$newpassencrypted"
 sleep 25
 wait_cluster_consistency $psmdb 
@@ -52,7 +63,19 @@ check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
-desc 'test MONGODB_CLUSTER_ADMIN_USER'
+
+desc 'Change MONGODB_USER_ADMIN_USER'
+newnameencrypted=$(echo -n "userAdmin2" | base64)
+patch_secret "some-users" "MONGODB_USER_ADMIN_USER" "$newnameencrypted"
+sleep 25
+wait_cluster_consistency $psmdb 
+sleep 15
+user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
+check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+desc 'Change MONGODB_CLUSTER_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_CLUSTER_ADMIN_PASSWORD" "$newpassencrypted"
 sleep 25
 wait_cluster_consistency $psmdb 
@@ -62,7 +85,7 @@ check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
-desc 'test MONGODB_CLUSTER_MONITOR_USER'
+desc 'Change MONGODB_CLUSTER_MONITOR_PASSWORD'
 patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_PASSWORD" "$newpassencrypted"
 sleep 25
 wait_cluster_consistency $psmdb 

@@ -663,3 +663,9 @@ wait_cluster_consistency() {
         sleep 10
     done
 }
+
+run_backup() {
+    local storage=$1
+
+    kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
+}

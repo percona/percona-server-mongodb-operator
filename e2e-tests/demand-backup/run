@@ -6,12 +6,6 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-run_backup() {
-    local storage=$1
-
-    kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
-}
-
 create_namespace $namespace
 deploy_operator
 
