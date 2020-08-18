@@ -18,6 +18,7 @@ test_name=$(basename $test_dir)
 namespace="${test_name}-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
+K8SAPI=$(($(kubectl version -o json | jq -r .serverVersion.major) * 100 + $(kubectl version -o json | jq -r .serverVersion.minor | grep -Eo '\d+')))
 if oc projects 2>&1 | egrep -q 'You have access to the following projects|You are not a member of any projects|You have one project on this server'; then
     OPENSHIFT=1
 fi
@@ -291,12 +292,18 @@ compare_kubectl() {
     local postfix="$2"
     local expected_result=${test_dir}/compare/${resource//\//_}${postfix}.yml
     local new_result="${tmp_dir}/${resource//\//_}.yml"
+    local extra_arg='tee'
 
     if [ "$OPENSHIFT" = 1 -a -f ${expected_result//.yml/-oc.yml} ]; then
         expected_result=${expected_result//.yml/-oc.yml}
     fi
+    if [[ "${K8SAPI}" -ge 118 ]]; then
+        expected_result=${expected_result//.yml/-1.18.yml}
+        extra_arg="yq d - metadata.managedFields"
+    fi
 
     kubectl_bin get -o yaml ${resource} \
+        | ${extra_arg} \
         | egrep -v "service.kubernetes.io/load-balancer-cleanup" \
         | egrep -v "namespace:|uid:|resourceVersion:|selfLink:|creationTimestamp:|image:|clusterIP:|dataSource:|procMount:" \
         | egrep -v "^  storageClassName:|finalizers:|kubernetes.io/pvc-protection|volumeName:|storage-provisioner:|status: \{\}|volumeMode: Filesystem" \
@@ -628,7 +635,7 @@ patch_secret() {
     local secret=$1
     local key=$2
     local value=$3
-    
+
     kubectl patch secret $secret -p="{\"data\":{\"$key\": \"$value\"}}"
 }
 
