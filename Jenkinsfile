@@ -91,6 +91,12 @@ void installRpms() {
         sudo yum install -y https://repo.percona.com/yum/percona-release-latest.noarch.rpm || true
         sudo percona-release enable-only tools
         sudo yum install -y percona-xtrabackup-80 jq | true
+
+        sudo yum install epel-release
+        sudo yum install snapd
+        sudo systemctl enable --now snapd.socket
+        sudo ln -s /var/lib/snapd/snap /snap
+        sudo snap install yq
     '''
 }
 
@@ -138,14 +144,14 @@ pipeline {
                         | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
                     curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
                         | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
-                    
+
                     curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
                         | sudo tar -C /usr/local/bin --wildcards -zxvpf -
                   #  curl -s -L https://github.com/src-d/go-license-detector/releases/latest/download/license-detector.linux_amd64.gz \
                   #      | gunzip | sudo tee /usr/local/bin/license-detector > /dev/null
                     curl -s -L https://github.com/src-d/go-license-detector/releases/download/v3.0.2/license-detector.linux_amd64.gz \
                         | gunzip | sudo tee /usr/local/bin/license-detector > /dev/null
-                    sudo chmod +x /usr/local/bin/license-detector 
+                    sudo chmod +x /usr/local/bin/license-detector
                 '''
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''
