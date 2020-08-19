@@ -28,7 +28,7 @@ To create your cluster, you will need the following data:
 * name of your EKS cluster,
 * AWS region in which you wish to deploy your cluster,
 * the amount of nodes you would like tho have,
-* the amount of `on-demand <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-on-demand-instances.html>`_ and `spot <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-spot-instances.html>`_ instances to use.
+* the desired ratio between `on-demand <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-on-demand-instances.html>`_ and `spot <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-spot-instances.html>`_ instances in the total number of nodes.
 
 .. note:: `spot <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-spot-instances.html>`_ instances 
    are not recommended for production environment, but may be useful e.g. for testing purposes.
