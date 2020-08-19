@@ -24,6 +24,7 @@ Installation
    kubernetes
    openshift
    minikube
+   helm
    scaling
    update
    custom-registry
