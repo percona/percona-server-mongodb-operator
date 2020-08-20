@@ -13,10 +13,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
-	corev1 "k8s.io/api/core/v1"
 )
 
-func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS bool) (*mongo.Client, error) {
+func Dial(addrs []string, replset, username, password string, useTLS bool) (*mongo.Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer connectcancel()
 
@@ -24,8 +23,8 @@ func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS boo
 		SetHosts(addrs).
 		SetReplicaSet(replset).
 		SetAuth(options.Credential{
-			Password: string(usersSecret.Data[envMongoDBClusterAdminPassword]),
-			Username: string(usersSecret.Data[envMongoDBClusterAdminUser]),
+			Password: password,
+			Username: username,
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
 		SetReadPreference(readpref.Primary())
@@ -157,6 +156,42 @@ func StepDown(ctx context.Context, client *mongo.Client) error {
 	}
 
 	return nil
+}
+
+// UpdateUserPass updates user's password
+func UpdateUserPass(ctx context.Context, client *mongo.Client, name, pass string) error {
+	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()
+}
+
+// UpdateUser recreates user with new name and password
+// should be used only when username was changed
+func UpdateUser(ctx context.Context, client *mongo.Client, currName, newName, pass string) error {
+	mu := struct {
+		Users []struct {
+			Roles interface{} `bson:"roles"`
+		} `bson:"users"`
+	}{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "usersInfo", Value: currName}})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "get user")
+	}
+	err := res.Decode(&mu)
+	if err != nil {
+		return errors.Wrap(err, "decode user")
+	}
+
+	if len(mu.Users) == 0 {
+		return errors.New("empty user data")
+	}
+
+	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "createUser", Value: newName}, {Key: "pwd", Value: pass}, {Key: "roles", Value: mu.Users[0].Roles}}).Err()
+	if err != nil {
+		return errors.Wrap(err, "create user")
+	}
+
+	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "dropUser", Value: currName}}).Err()
+	return errors.Wrap(err, "drop user")
 }
 
 // RemoveOld removes from the list those members which are not present in the given list.

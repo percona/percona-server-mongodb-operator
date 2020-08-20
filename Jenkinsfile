@@ -259,6 +259,7 @@ pipeline {
                         runTest('liveness', 'basic')
                         runTest('smart-update', 'basic')
                         runTest('version-service', 'basic')
+                        runTest('users', 'basic')
                         ShutdownCluster('basic')
                     }
                 }

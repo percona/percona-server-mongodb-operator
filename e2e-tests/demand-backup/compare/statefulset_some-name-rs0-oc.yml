@@ -70,7 +70,7 @@ spec:
           value: rs0
         envFrom:
         - secretRef:
-            name: some-users
+            name: internal-some-name-users
             optional: false
         imagePullPolicy: Always
         livenessProbe:
@@ -131,13 +131,13 @@ spec:
           valueFrom:
             secretKeyRef:
               key: MONGODB_BACKUP_USER
-              name: some-users
+              name: internal-some-name-users
               optional: false
         - name: PBM_AGENT_MONGODB_PASSWORD
           valueFrom:
             secretKeyRef:
               key: MONGODB_BACKUP_PASSWORD
-              name: some-users
+              name: internal-some-name-users
               optional: false
         - name: PBM_MONGODB_REPLSET
           value: rs0

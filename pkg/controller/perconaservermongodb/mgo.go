@@ -14,6 +14,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	envMongoDBClusterAdminUser       = "MONGODB_CLUSTER_ADMIN_USER"
+	envMongoDBClusterAdminPassword   = "MONGODB_CLUSTER_ADMIN_PASSWORD"
+	envMongoDBUserAdminUser          = "MONGODB_USER_ADMIN_USER"
+	envMongoDBUserAdminPassword      = "MONGODB_USER_ADMIN_PASSWORD"
+	envMongoDBBackupUser             = "MONGODB_BACKUP_USER"
+	envMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
+	envMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
+	envMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
+	envPMMServerUser                 = "PMM_SERVER_USER"
+	envPMMServerPassword             = "PMM_SERVER_PASSWORD"
+)
+
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
@@ -21,9 +34,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	if err != nil {
 		return clusterError, errors.Wrap(err, "get replset addr")
 	}
-	session, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, true)
+	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
+	session, err := mongo.Dial(rsAddrs, replset.Name, username, password, true)
 	if err != nil {
-		session, err = mongo.Dial(rsAddrs, replset.Name, usersSecret, false)
+		session, err = mongo.Dial(rsAddrs, replset.Name, username, password, false)
 		if err != nil {
 			// try to init replset and if succseed
 			// we'll go further on the next reconcile iteration

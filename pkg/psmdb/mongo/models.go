@@ -77,11 +77,6 @@ type WriteConcern struct {
 	Journal      bool        `bson:"j,omitempty" json:"j,omitempty"`
 }
 
-const (
-	envMongoDBClusterAdminUser     = "MONGODB_CLUSTER_ADMIN_USER"
-	envMongoDBClusterAdminPassword = "MONGODB_CLUSTER_ADMIN_PASSWORD"
-)
-
 type Status struct {
 	Set                     string         `bson:"set" json:"set"`
 	Date                    time.Time      `bson:"date" json:"date"`

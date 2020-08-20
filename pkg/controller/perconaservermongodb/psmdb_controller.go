@@ -40,6 +40,7 @@ import (
 
 var secretFileMode int32 = 288
 var log = logf.Log.WithName("controller_psmdb")
+var usersSecretName string
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -173,7 +174,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		// Error reading the object - requeue the request.
 		return rr, err
 	}
-
+	usersSecretName = cr.Spec.Secrets.Users
+	if cr.CompareVersion("1.5.0") >= 0 {
+		usersSecretName = internalPrefix + cr.Name + "-users"
+	}
 	isClusterLive := clusterInit
 	defer func() {
 		err = r.updateStatus(cr, err, isClusterLive)
@@ -203,7 +207,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
-
+	var sfsTemplateAnnotations map[string]string
+	if cr.CompareVersion("1.5.0") >= 0 {
+		sfsTemplateAnnotations, err = r.reconcileUsers(cr)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
+		}
+	}
 	if !cr.Spec.UnsafeConf {
 		err = r.reconsileSSL(cr)
 		if err != nil {
@@ -236,7 +246,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	secrets := &corev1.Secret{}
 	err = r.client.Get(
 		context.TODO(),
-		types.NamespacedName{Name: cr.Spec.Secrets.Users, Namespace: cr.Namespace},
+		types.NamespacedName{Name: usersSecretName, Namespace: cr.Namespace},
 		secrets,
 	)
 	if err != nil {
@@ -281,14 +291,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, err
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, secrets)
+		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, secrets, sfsTemplateAnnotations)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, secrets)
+			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, secrets, sfsTemplateAnnotations)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -412,7 +422,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 }
 
 // TODO: reduce cyclomatic complexity
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret) (*appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret, sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
@@ -452,7 +462,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
+	sfsSpec.Template.Annotations = sfs.Spec.Template.Annotations
+	if sfsSpec.Template.Annotations == nil {
+		sfsSpec.Template.Annotations = make(map[string]string)
+	}
 
+	if sfsTemplateAnnotations != nil {
+		for k, v := range sfsTemplateAnnotations {
+			sfsSpec.Template.Annotations[k] = v
+		}
+	}
 	// add TLS/SSL Volume
 	t := true
 	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
@@ -514,7 +533,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 		if cr.Spec.PMM.Enabled {
 			pmmsec := corev1.Secret{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.Secrets.Users, Namespace: cr.Namespace}, &pmmsec)
+			err := r.client.Get(context.TODO(), types.NamespacedName{Name: usersSecretName, Namespace: cr.Namespace}, &pmmsec)
 			if err != nil {
 				return nil, fmt.Errorf("check pmm secrets: %v", err)
 			}
@@ -523,7 +542,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
 			is120 := cr.CompareVersion("1.2.0") >= 0
 
-			pmmC := psmdb.PMMContainer(cr.Spec.PMM, cr.Spec.Secrets.Users, okl && okp, cr.Name, is120)
+			pmmC := psmdb.PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120)
 			if is120 {
 				res, err := psmdb.CreateResources(cr.Spec.PMM.Resources)
 				if err != nil {
@@ -557,9 +576,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, fmt.Errorf("get secret hash error: %v", err)
 	}
-	if len(sfsSpec.Template.Annotations) == 0 {
-		sfsSpec.Template.Annotations = make(map[string]string)
-	}
+
 	is110 := cr.CompareVersion("1.1.0") >= 0
 	if is110 {
 		sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
