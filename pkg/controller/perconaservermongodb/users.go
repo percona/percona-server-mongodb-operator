@@ -129,7 +129,9 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 	if bytes.Compare(su.newData[nameKey], su.currData[nameKey]) == 0 && bytes.Compare(su.newData[passKey], su.currData[passKey]) == 0 {
 		return false, nil
 	}
-
+	if nameKey == envPMMServerUser {
+		return true, nil
+	}
 	su.users = append(su.users, systemUser{
 		currName: su.currData[nameKey],
 		name:     su.newData[nameKey],
