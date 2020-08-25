@@ -3,16 +3,16 @@ kind: Service
 metadata:
   name: some-name-rs0
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1
-    controller: true
-    kind: PerconaServerMongoDB
-    name: some-name
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: some-name
 spec:
   ports:
-  - name: mongodb
-    port: 27017
-    protocol: TCP
-    targetPort: 27017
+    - name: mongodb
+      port: 27017
+      protocol: TCP
+      targetPort: 27017
   selector:
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator

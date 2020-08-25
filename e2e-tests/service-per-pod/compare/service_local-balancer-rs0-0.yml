@@ -10,17 +10,17 @@ metadata:
     app.kubernetes.io/replset: rs0
   name: local-balancer-rs0-0
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1
-    controller: true
-    kind: PerconaServerMongoDB
-    name: local-balancer
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: local-balancer
 spec:
   externalTrafficPolicy: Cluster
   ports:
-  - name: mongodb
-    port: 27017
-    protocol: TCP
-    targetPort: 27017
+    - name: mongodb
+      port: 27017
+      protocol: TCP
+      targetPort: 27017
   selector:
     statefulset.kubernetes.io/pod-name: local-balancer-rs0-0
   sessionAffinity: None
