@@ -14,7 +14,7 @@ metadata:
   name: mongod-data-some-name-rs0-3
 spec:
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   resources:
     requests:
       storage: 1Gi

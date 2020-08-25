@@ -18,7 +18,7 @@ main() {
     # test 1.0.0
     API="psmdb.percona.com/v1"
     apply_cluster "$test_dir/conf/${CLUSTER}-rs0.yml"
-    wait_for_running "${CLUSTER}-rs0" "1"
+    wait_for_running "${CLUSTER}-rs0" "1" "false"
 
     compare_kubectl service/${CLUSTER}-rs0 "-100"
     compare_kubectl statefulset/${CLUSTER}-rs0 "-100"
@@ -28,7 +28,7 @@ main() {
     kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"'"$API"'\"}" }}
     }'
-    wait_for_running "${CLUSTER}-rs0" "1"
+    wait_for_running "${CLUSTER}-rs0" "1" "false"
 
     compare_kubectl service/${CLUSTER}-rs0 "-110"
     compare_kubectl statefulset/${CLUSTER}-rs0 "-110"
@@ -38,7 +38,7 @@ main() {
     kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"'"$API"'\"}" }}
     }'
-    wait_for_running "${CLUSTER}-rs0" "1"
+    wait_for_running "${CLUSTER}-rs0" "1" "false"
 
     compare_kubectl service/${CLUSTER}-rs0 "-120"
     compare_kubectl statefulset/${CLUSTER}-rs0 "-120"
@@ -48,7 +48,7 @@ main() {
     kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"'"$API"'\"}" }}
     }'
-    wait_for_running "${CLUSTER}-rs0" "1"
+    wait_for_running "${CLUSTER}-rs0" "1" "false"
 
     compare_kubectl service/${CLUSTER}-rs0 "-130"
     compare_kubectl statefulset/${CLUSTER}-rs0 "-130"
@@ -58,7 +58,7 @@ main() {
     kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"'"$API"'\"}" }}
     }'
-    wait_for_running "${CLUSTER}-rs0" "1"
+    wait_for_running "${CLUSTER}-rs0" "1" "false"
 
     compare_kubectl service/${CLUSTER}-rs0 "-140"
     compare_kubectl statefulset/${CLUSTER}-rs0 "-140"
@@ -68,7 +68,7 @@ main() {
     kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"'"$API"'\"}" }}
     }'
-    wait_for_running "${CLUSTER}-rs0" "1"
+    wait_for_running "${CLUSTER}-rs0" "1" "false"
 
     compare_kubectl service/${CLUSTER}-rs0 "-150"
     compare_kubectl statefulset/${CLUSTER}-rs0 "-150"

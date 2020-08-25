@@ -14,7 +14,7 @@ check_cr_config() {
 
     # check if at least 1 Pod started
     wait_pod $cluster-arbiter-0
-    wait_for_running $cluster 2
+    wait_for_running $cluster 2 "false"
 
     # check if statefulset created with expected config
     compare_kubectl statefulset/$cluster-arbiter
@@ -47,7 +47,7 @@ check_cr_config() {
     sleep 10
     changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$URI" "$cluster")
     [ "$initial_primary" != "$changed_primary" ]
-    wait_for_running $cluster 2
+    wait_for_running $cluster 2 false
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 
