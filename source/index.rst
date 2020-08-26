@@ -26,6 +26,7 @@ Installation
    minikube
    gke
    eks
+   helm
    scaling
    update
    custom-registry
