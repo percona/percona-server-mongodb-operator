@@ -75,7 +75,7 @@ Create new PSMDB cluster
 
 .. code-block:: bash
 
-   kubectl --v=9 apply -f percona-server-mongodb-operator/deploy/cr.yaml
+   kubectl apply -f percona-server-mongodb-operator/deploy/cr.yaml
 
 **URL:**
 
@@ -183,7 +183,7 @@ List PSMDB cluster
 
 .. code-block:: bash
 
-   kubectl --v=9 get psmdb
+   kubectl get psmdb
 
 **URL:**
 
@@ -234,7 +234,7 @@ Get status of PSMDB cluster
 
 .. code-block:: bash
 
-   kubectl --v=9 get psmdb/my-cluster-name -o json
+   kubectl get psmdb/my-cluster-name -o json
 
 **URL:**
 
@@ -285,7 +285,7 @@ Scale up/down PSMDB cluster
 
 .. code-block:: bash
 
-   kubectl --v=9 patch psmdb my-cluster-name --type=merge --patch '{
+   kubectl patch psmdb my-cluster-name --type=merge --patch '{
    "spec": {"replsets":{ "size": "5" }
    }}'
 
@@ -354,7 +354,7 @@ Update PSMDB cluster image
 
 .. code-block:: bash
 
-   kubectl --v=9 patch psmdb my-cluster-name --type=merge --patch '{  
+   kubectl patch psmdb my-cluster-name --type=merge --patch '{  
    "spec": {"psmdb":{ "image": "percona/percona-server-mongodb-operator:1.4.0-mongod4.2" }  
    }}'
 
@@ -425,7 +425,7 @@ Backup PSMDB cluster
 
 .. code-block:: bash
 
-   kubectl --v=9 apply -f percona-server-mongodb-operator/deploy/backup/backup.yaml
+   kubectl apply -f percona-server-mongodb-operator/deploy/backup/backup.yaml
 
 
 **URL:**
@@ -496,7 +496,7 @@ Restore PSMDB cluster
 
 .. code-block:: bash
 
-   kubectl --v=9 apply -f percona-server-mongodb-operator/deploy/backup/restore.yaml
+   kubectl apply -f percona-server-mongodb-operator/deploy/backup/restore.yaml
 
 
 **URL:**
