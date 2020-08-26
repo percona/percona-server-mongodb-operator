@@ -345,20 +345,6 @@ compare_kubectl() {
         | yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
         | yq d - 'spec.volumeClaimTemplates.*.kind' \
         > ${new_result}
-
-
-        # | egrep -v "service.kubernetes.io/load-balancer-cleanup" \
-        # | egrep -v "namespace:|uid:|resourceVersion:|selfLink:|creationTimestamp:|image:|clusterIP:|dataSource:|procMount:" \
-        # | egrep -v "^  storageClassName:|finalizers:|kubernetes.io/pvc-protection|volumeName:|storage-provisioner:|status: \{\}|volumeMode: Filesystem" \
-        # | egrep -v "percona.com/.*-hash:|control-plane.alpha.kubernetes.io/leader:|volume.kubernetes.io/selected-node:" \
-        # | egrep -v "healthCheckNodePort:|nodePort:" \
-        # | $sed -e '/^status:$/,+100500d' \
-        # | $sed -e '/NAMESPACE/,+1d' \
-        # | $sed -e '/PBM_AGENT_SERVER_ADDRESS/,+1d' \
-        # | $sed -e '/name: suffix/,+1d' \
-        # | $sed -e '/volumeClaimTemplates:/,/metadata:/d' \
-        # | $sed -e '/volumeClaimTemplates:$/{N;/  \- apiVersion.*$/ {N;/  kind.*$/ {N;/    metadata:$/{s/volumeClaimTemplates.*metadata:$/volumeClaimTemplates:\n  \- metadata:/}}}}' \
-
     diff -u ${expected_result} ${new_result}
 }
 
