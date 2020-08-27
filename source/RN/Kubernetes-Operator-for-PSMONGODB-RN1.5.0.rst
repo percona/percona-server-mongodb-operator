@@ -29,8 +29,6 @@ Bugs Fixed
 ================================================================================
 
 * :jirabug:`K8SPSMDB-213`: Installation instruction not reflecting recent changes in git tags (Thanks to user geraintj for reporting this issue)
-* :jirabug:`K8SPSMDB-246`: backup failing if backup user's password rotated
-* :jirabug:`K8SPSMDB-245`: users password rotation - error on updating PMM server user in PSMDB
 * :jirabug:`K8SPSMDB-210`: Backup documentation not reflecting changes in PBM
 * :jirabug:`K8SPSMDB-180`: Replset and cluster having "ready" status set before mongo initialization and replicasets configuration finished
 * :jirabug:`K8SPSMDB-179`: The "error" cluster status instead of the "initializing" one during the replset initialization
