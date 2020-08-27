@@ -172,6 +172,7 @@ type MultiAZ struct {
 	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
 	Tolerations         []corev1.Toleration      `json:"tolerations,omitempty"`
 	PriorityClassName   string                   `json:"priorityClassName,omitempty"`
+	ServiceAccountName  string                   `json:"serviceAccountName,omitempty"`
 	Annotations         map[string]string        `json:"annotations,omitempty"`
 	Labels              map[string]string        `json:"labels,omitempty"`
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`

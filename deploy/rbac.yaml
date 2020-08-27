@@ -105,3 +105,8 @@ roleRef:
   kind: Role
   name: percona-server-mongodb-operator
   apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: percona-server-mongodb-operator-workload

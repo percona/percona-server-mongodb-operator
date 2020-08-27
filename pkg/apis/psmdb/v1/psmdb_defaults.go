@@ -17,6 +17,7 @@ const DefaultDNSSuffix = "svc.cluster.local"
 
 // ConfigReplSetName is the only possible name for config replica set
 const ConfigReplSetName = "cfg"
+const WorkloadSA = "default"
 
 var (
 	defaultRunUID                   int64 = 1001
@@ -291,6 +292,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 		if replset.ReadinessProbe.FailureThreshold == 0 {
 			replset.ReadinessProbe.FailureThreshold = int32(8)
+		}
+
+		gte150 := cr.CompareVersion("1.5.0") >= 0
+		if gte150 && len(replset.ServiceAccountName) == 0 {
+			replset.ServiceAccountName = WorkloadSA
 		}
 
 		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
