@@ -20,7 +20,7 @@ Improvements
 
 * :jirabug:`K8SPSMDB-192`: The ability to set the mongod cursorTimeoutMillis parameter in YAML (Thanks to user xprt64 for the contribution)
 * :jirabug:`K8SPSMDB-197`: Adding additional certificate SANS useful for reverse DNS lookups (Thanks to user phin1x for the contribution)
-* :jirabug:`K8SPSMDB-190`: Direct API quering with "curl" instead of using "kubectl" tool in scheduled backup jobs
+* :jirabug:`K8SPSMDB-190`: Direct API quering with "curl" instead of using "kubectl" tool in scheduled backup jobs (Thanks to user phin1x for the contribution)
 * :jirabug:`K8SPSMDB-133`: A special PSMDB debug image which avoids restarting on fail and contains additional tools useful for debugging
 * :jirabug:`K8SPSMDB-146`: PSMDB backup operator needs to have tar binary added (Thanks to user sdotel for reporting this issue)
 * :jirabug:`CLOUD-556`: Kubernetes 1.17 added to the list of supported platforms
