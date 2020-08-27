@@ -18,7 +18,7 @@ New Features
 Improvements
 ================================================================================
 
-* :jirabug:`K8SPSMDB-192`: The ability to set the mongod cursorTimeoutMillis parameter in YAML (Thanks to user xprt64 for reporting this issue)
+* :jirabug:`K8SPSMDB-192`: The ability to set the mongod cursorTimeoutMillis parameter in YAML (Thanks to user xprt64 for the contribution)
 * :jirabug:`K8SPSMDB-197`: Adding additional certificate SANS useful for reverse DNS lookups
 * :jirabug:`K8SPSMDB-190`: Direct API quering with "curl" instead of using "kubectl" tool in scheduled backup jobs
 * :jirabug:`K8SPSMDB-133`: A special PSMDB debug image which avoids restarting on fail and contains additional tools useful for debugging
