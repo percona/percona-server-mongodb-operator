@@ -1,6 +1,8 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  annotations:
+    openshift.io/scc: privileged
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
@@ -29,7 +31,8 @@ spec:
   serviceName: sec-context-rs0
   template:
     metadata:
-      annotations: {}
+      annotations:
+        openshift.io/scc: privileged
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: sec-context
@@ -158,6 +161,8 @@ spec:
           - 1001
           - 1002
           - 1003
+      serviceAccount: percona-server-mongodb-operator-workload
+      serviceAccountName: percona-server-mongodb-operator-workload
       terminationGracePeriodSeconds: 30
       volumes:
         - name: sec-context-mongodb-keyfile
