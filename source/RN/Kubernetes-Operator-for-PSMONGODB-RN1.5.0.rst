@@ -4,7 +4,7 @@
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.5.0
 ================================================================================
 
-:Date: September 10, 2020
+:Date: September 7, 2020
 :Installation: `Installing Percona Kubernetes Operator for Percona Server for MongoDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
 New Features
@@ -23,7 +23,7 @@ Improvements
 * :jirabug:`K8SPSMDB-197`: Adding additional certificate SANS useful for reverse DNS lookups (Thanks to user phin1x for the contribution)
 * :jirabug:`K8SPSMDB-190`: Direct API quering with "curl" instead of using "kubectl" tool in scheduled backup jobs (Thanks to user phin1x for the contribution)
 * :jirabug:`K8SPSMDB-133`: A special PSMDB debug image which avoids restarting on fail and contains additional tools useful for debugging
-* :jirabug:`CLOUD-556`: Kubernetes 1.17 added to the list of supported platforms
+* :jirabug:`CLOUD-556`: Kubernetes 1.17 / Google Kubernetes Engine 1.17 support
 
 Bugs Fixed
 ================================================================================
