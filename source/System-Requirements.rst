@@ -10,15 +10,14 @@ Server for MongoDB sharding.
 Officially supported platforms
 --------------------------------
 
-The following platforms are supported:
+The following platforms were tested and are officially supported by the Operator
+{{{release}}}: 
 
-* Kubernetes 1.17
 * OpenShift 3.11
 * OpenShift 4.5
-* Google Kubernetes Engine (GKE) 1.13
-* GKE 1.15
+* Google Kubernetes Engine (GKE) 1.15 - 1.17
 * Amazon Elastic Container Service for Kubernetes (EKS) 1.15
-* Minikube 1.16
+* Minikube 1.18
 
 Other Kubernetes platforms may also work but have not been tested.
 
