@@ -140,6 +140,14 @@ values for each key/value pair must be encoded in base64. To do this you can
 simply run ``echo -n "password" | base64`` in your local shell to get valid
 values.
 
+.. note:: The operator creates and updates an additional Secrets object named
+   based on the cluster name, like ``internal-my-cluster-name-users``. It is
+   used only by the Operator and should undergo no manual changes by the user.
+   This object contains secrets with the same passwords as the one specified
+   in ``spec.secrets.users`` (e.g. ``my-cluster-name-secrets``). When the user
+   updates ``my-cluster-name-secrets``, the Operator propagates these changes to
+   the internal ``internal-my-cluster-name-users`` Secrets object.
+
 Password Rotation Policies and Timing
 *************************************
 
