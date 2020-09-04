@@ -102,7 +102,7 @@ wait_backup_agent() {
     set +o xtrace
     retry=0
     echo -n $agent_pod
-    until [ "$(kubectl_bin logs $agent_pod -c backup-agent | tail -n 1)" == "pbm agent is listening for the commands" ]; do
+    until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
         sleep 5
         echo -n .
         let retry+=1
