@@ -24,7 +24,7 @@ default. If you need general purpose users, please run commands below:
 
 .. code:: bash
 
-   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:4.2 --restart=Never -- bash -il
+   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
    mongodb@percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
    rs0:PRIMARY> db.createUser({
        user: "myApp",
@@ -42,7 +42,7 @@ Now check the newly created user:
 
 .. code:: bash
 
-   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:4.0 --restart=Never -- bash -il
+   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
    mongodb@percona-client:/$ mongo "mongodb+srv://myApp:myAppPassword@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
    rs0:PRIMARY> use myApp
    rs0:PRIMARY> db.test.insert({ x: 1 })
