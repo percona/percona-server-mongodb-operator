@@ -22,7 +22,7 @@ Semi-automatic upgrade
 **********************
 
 .. note:: Only the incremental update to a nearest minor version is supported
-   (for example, update from 1.3.0 to 1.4.0).
+   (for example, update from 1.4.0 to 1.5.0).
    To update to a newer version, which differs from the current version by more
    than one, make several incremental updates sequentially.
 
@@ -49,7 +49,7 @@ Semi-automatic upgrade
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
         "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"psmdb.percona.com/v{{{apiversion}}}\"}" }},
         "spec": {
-            "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0",
+            "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-pmm" }
         }}'
@@ -92,8 +92,8 @@ Manual upgrade
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
         "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"psmdb.percona.com/v{{{apiversion}}}\"}" }},
-        "spec": {"replsets":{ "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0" },
-            "mongod": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-mongod4.0" },
+        "spec": {"replsets":{ "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
+            "mongod": { "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
             "backup":   { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-pmm" }
         }}'
