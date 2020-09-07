@@ -3,20 +3,28 @@
 Users
 =====
 
-During installation, the Operator requires
-Kubernetes Secrets to be deployed before the Operator is started. The name of the
-required secrets can be set in ``deploy/cr.yaml`` under the
-``spec.secrets`` section.
+MongoDB user accounts within the Cluster can be divided into two different groups:
 
-Unprivileged users
-------------------
+* *application-level users*: the unprivileged user accounts,
+* *system-level users*: the accounts needed to automate the cluster deployment
+  and management tasks, such as MongoDB Health checks.
+
+As these two groups of user accounts serve different purposes, they are
+considered separately in the following sections.
+
+.. contents:: :local:
+
+.. _users.unprivileged-users:
+
+`Unprivileged users <users.html#unprivileged-users>`_
+------------------------------------------------------
 
 There are no unprivileged (general purpose) user accounts created by
 default. If you need general purpose users, please run commands below:
 
 .. code:: bash
 
-   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:4.0 --restart=Never -- bash -il
+   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:4.2 --restart=Never -- bash -il
    mongodb@percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
    rs0:PRIMARY> db.createUser({
        user: "myApp",
@@ -40,15 +48,22 @@ Now check the newly created user:
    rs0:PRIMARY> db.test.insert({ x: 1 })
    rs0:PRIMARY> db.test.findOne()
 
-MongoDB System Users
---------------------
+.. _users.system-users:
 
-*Default Secret name:* ``my-cluster-name-mongodb-users``
+`System Users <users.html#system-users>`_
+-----------------------------------------
+
+To automate the deployment and management of the cluster components,
+the Operator requires system-level MongoDB users.
+
+During installation, the Operator requires
+Kubernetes Secrets to be deployed before the Operator is started. The name of the
+required secrets can be set in ``deploy/cr.yaml`` under the
+``spec.secrets`` section.
+
+*Default Secret name:* ``my-cluster-name-secrets``
 
 *Secret name field:* ``spec.secrets.users``
-
-The operator requires system-level MongoDB users to automate the MongoDB
-deployment.
 
 .. warning:: These users should not be used to run an application.
 
@@ -75,6 +90,10 @@ deployment.
      - MONGODB_USER_ADMIN_USER
      - MONGODB_USER_ADMIN_PASSWORD
 
+   * - PMM Server
+     - PMM_SERVER_USER
+     - PMM_SERVER_PASSWORD
+
 `Backup/Restore` - MongoDB Role: `backup <https://docs.mongodb.com/manual/reference/built-in-roles/#backup>`__, `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__, `restore <https://docs.mongodb.com/manual/reference/built-in-roles/#restore>`__   
 
 `Cluster Admin` - MongoDB Role: `clusterAdmin <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin>`__  
@@ -83,14 +102,72 @@ deployment.
 
 `User Admin` - MongoDB Role: `userAdmin <https://docs.mongodb.com/manual/reference/built-in-roles/#userAdmin>`__
 
+YAML Object Format
+******************
 
-Development Mode
-----------------
+The default name of the Secrets object for these users is
+``my-cluster-name-secrets`` and can be set in the CR for your cluster in
+``spec.secrets.users`` to something different. When you create the object
+yourself, it should match the following simple format:
 
-To make development and testing easier, ``deploy/mongodb-users.yaml``
-secrets file contains default passwords for MongoDB system users.
+.. code:: yaml
 
-The development-mode credentials from ``deploy/mongodb-users.yaml`` are:
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: my-cluster-name-secrets
+   type: Opaque
+   data:
+     MONGODB_BACKUP_USER: YmFja3Vw
+     MONGODB_BACKUP_PASSWORD: YmFja3VwMTIzNDU2
+     MONGODB_CLUSTER_ADMIN_USER: Y2x1c3RlckFkbWlu
+     MONGODB_CLUSTER_ADMIN_PASSWORD: Y2x1c3RlckFkbWluMTIzNDU2
+     MONGODB_CLUSTER_MONITOR_USER: Y2x1c3Rlck1vbml0b3I=
+     MONGODB_CLUSTER_MONITOR_PASSWORD: Y2x1c3Rlck1vbml0b3IxMjM0NTY=
+     MONGODB_USER_ADMIN_USER: dXNlckFkbWlu
+     MONGODB_USER_ADMIN_PASSWORD: dXNlckFkbWluMTIzNDU2
+     PMM_SERVER_USER: cG1t
+     PMM_SERVER_PASSWORD: c3VwYXxefHBheno=
+
+The example above matches
+:ref:`what is shipped in deploy/secrets.yaml<users.development-mode>` which
+contains default passwords. You should NOT use these in production, but they are
+present to assist in automated testing or simple use in a development
+environment.
+
+As you can see, because we use the ``data`` type in the Secrets object, all
+values for each key/value pair must be encoded in base64. To do this you can
+simply run ``echo -n "password" | base64`` in your local shell to get valid
+values.
+
+.. note:: The operator creates and updates an additional Secrets object named
+   based on the cluster name, like ``internal-my-cluster-name-users``. It is
+   used only by the Operator and should undergo no manual changes by the user.
+   This object contains secrets with the same passwords as the one specified
+   in ``spec.secrets.users`` (e.g. ``my-cluster-name-secrets``). When the user
+   updates ``my-cluster-name-secrets``, the Operator propagates these changes to
+   the internal ``internal-my-cluster-name-users`` Secrets object.
+
+Password Rotation Policies and Timing
+*************************************
+
+When there is a change in user secrets, the Operator
+creates the necessary transaction to change passwords. This rotation happens
+almost instantly (the delay can be up to a few seconds), and it's not needed to
+take any action beyond changing the password.
+
+.. note:: Please don't change ``secrets.users`` option in CR, make changes
+   inside the secrets object itself.
+
+.. _users.development-mode:
+
+`Development Mode <users.html#development-mode>`_
+--------------------------------------------------
+
+To make development and testing easier, ``deploy/secrets.yaml`` secrets
+file contains default passwords for MongoDB system users.
+
+These development-mode credentials from ``deploy/secrets.yaml`` are:
 
 ================================ ====================
 Secret Key                       Secret Value
@@ -103,12 +180,16 @@ MONGODB_CLUSTER_MONITOR_USER     clusterMonitor
 MONGODB_CLUSTER_MONITOR_PASSWORD clusterMonitor123456
 MONGODB_USER_ADMIN_USER          userAdmin
 MONGODB_USER_ADMIN_PASSWORD      userAdmin123456
+PMM_SERVER_USER                  pmm
+PMM_SERVER_PASSWORD              supa|^|pazz
 ================================ ====================
 
 .. warning:: Do not use the default MongoDB Users in production!
 
-MongoDB Internal Authentication Key (optional)
-----------------------------------------------
+.. _users.internal-authentication-key:
+
+`MongoDB Internal Authentication Key (optional) <users.html#internal-authentication-key>`_
+-------------------------------------------------------------------------------------------
 
 *Default Secret name:* ``my-cluster-name-mongodb-key``
 

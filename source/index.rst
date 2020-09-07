@@ -1,8 +1,3 @@
-.. K8s-PSMDB-docs documentation master file, created by
-   sphinx-quickstart on Thu May  9 09:17:34 2019.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Percona Kubernetes Operator for Percona Server for MongoDB
 ==========================================================
 
