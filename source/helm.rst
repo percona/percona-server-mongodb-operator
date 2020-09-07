@@ -31,8 +31,8 @@ Installation
       helm install my-op percona/psmdb-operator
 
    The ``my-op`` parameter in the above example is the name of `a new release object <https://helm.sh/docs/intro/using_helm/#three-big-concepts>`_ 
-   which is created for the Operator when you install its Helm chart. Any
-   arbitrary name is OK.
+   which is created for the Operator when you install its Helm chart. Use any
+   arbitrary name with Helm 3.x or omit it with Helm 2.x.
 
    .. note:: If nothing explicitly specified, ``helm install`` command will work
       with ``default`` namespace. To use different namespace, provide it with
@@ -46,7 +46,7 @@ Installation
 
    The ``my-db`` parameter in the above example is the name of `a new release object <https://helm.sh/docs/intro/using_helm/#three-big-concepts>`_ 
    which is created for the Percona Server for MongoDB when you install its Helm
-   chart. Any arbitrary name is OK.
+   chart. Use any arbitrary name with Helm 3.x or omit it with Helm 2.x.
 
 Installing Percona Server for MongoDB with customized parameters
 ----------------------------------------------------------------
