@@ -1,3 +1,5 @@
+.. _custom-registry:
+
 Use Docker images from a custom registry
 ========================================
 
@@ -86,6 +88,8 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
 9. Now follow the standard `Percona Server for MongoDB Operator
    installation instruction <./openshift.html>`__.
+
+.. _custom-registry-images:
 
 Percona certified images
 ------------------------

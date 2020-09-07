@@ -21,16 +21,31 @@ file. This file contains the following spec sections:
      - kubernetes
      - Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set openshift on OpenShift 3.11+
 
-   * - version
+   * - image
      - string
-     - ``3.6.8``
-     - The Dockerhub tag of `percona/percona-server-mongodb <https://hub.docker.com/r/perconalab/percona-server-mongodb-operator/tags/>`_ to deploy
+     - ``percona/percona-server-mongodb:4.2.8-8``
+     - The Docker image of `Percona Server for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html>`_ to deploy (actual image names can be found :ref:`in the list of certified images<custom-registry-images>`) 
+
+   * - imagePullSecrets.name
+     - string
+     - ``private-registry-credentials``
+     - The `Kubernetes ImagePullSecret <https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets>`_ to access the :ref:`custom registry<custom-registry>`
+
+   * - imagePullPolicy
+     - string
+     - ``Always``
+     - The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/#updating-images>`_
 
    * - ClusterServiceDNSSuffix
      - string
      - ``svc.cluster.local``
      - The (non-standard) cluster domain to be used as a suffix of the Service
-       name.
+       name
+
+   * - runUid
+     - int
+     - 1001
+     - The (non-standard) user ID
 
    * - secrets
      - subdoc
@@ -57,8 +72,71 @@ file. This file contains the following spec sections:
      - 
      - Percona Server for MongoDB backups section
 
-Secrets section
----------------
+   * - allowUnsafeConfigurations
+     - boolean
+     - ``false``
+     - Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 nodes or starting the cluster without TLS/SSL certificates
+
+   * - updateStrategy
+     - string
+     - ``SmartUpdate``
+     - A strategy the Operator uses for :ref:`upgrades<operator-update>`
+
+.. _operator.upgradeoptions-section:
+
+`Upgrade Options Section <operator.html#operator-upgradeoptions-section>`_
+--------------------------------------------------------------------------------
+
+The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_ file contains various configuration options to control Percona Server for MongoDB upgrades.
+
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
+
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _upgradeoptions-versionserviceendpoint:                                                |
+|                 |                                                                                           |
+| **Key**         | `upgradeOptions.versionServiceEndpoint                                                    |
+|                 | <operator.html#upgradeoptions-versionserviceendpoint>`_                                   |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``https://check.percona.com/versions``                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The Version Service URL used to check versions compatibility for upgrade                  |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _upgradeoptions-apply:                                                                 |
+|                 |                                                                                           |
+| **Key**         | `upgradeOptions.apply <operator.html#upgradeoptions-apply>`_                              |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``Recommended``                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator. |
+|                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be |
+|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of PSMDB (e.g.       |
+|                 | ``4.2.8-8``) that is wished to be version-locked (so that the user can control the        |
+|                 | version running, but use automatic upgrades to move between them).                        |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _upgradeoptions-schedule:                                                              |
+|                 |                                                                                           |
+| **Key**         | `upgradeOptions.schedule <operator.html#upgradeoptions-schedule>`_                        |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``0 2 * * *``                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Scheduled time to check for updates, specified in the                                     |
+|                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+
+.. _operator.secrets-section:
+
+`Secrets section <operator.html#operator-secrets-section>`_
+------------------------------------------------------------
 
 Each spec in its turn may contain some key-value pairs. The secrets one
 has only two of them:
@@ -92,8 +170,10 @@ has only two of them:
 |                 | **This secret is required to run the operator.**						|
 +-----------------+---------------------------------------------------------------------------------------------+
 
-Replsets section
-----------------
+.. _operator.replsets-section:
+
+`Replsets section <operator.html#operator-replsets-section>`_
+-------------------------------------------------------------
 
 The replsets section controls the MongoDB Replica Set.
 
@@ -641,8 +721,11 @@ The replsets section controls the MongoDB Replica Set.
 |                 | size for the MongoDB container								|
 +-----------------+---------------------------------------------------------------------------------------------+
 
-PMM Section
------------
+
+.. _operator.pmm-section:
+
+`PMM Section <operator.html#operator-pmm-section>`_
+----------------------------------------------------
 
 The ``pmm`` section in the deploy/cr.yaml file contains configuration
 options for Percona Monitoring and Management.
@@ -687,8 +770,10 @@ options for Percona Monitoring and Management.
 | **Description** | Address of the PMM Server to collect data from the Cluster					|
 +-----------------+---------------------------------------------------------------------------------------------+
 
-Mongod Section
---------------
+.. _operator.mongod-section:
+
+`Mongod Section <operator.html#operator-mongod-section>`_
+----------------------------------------------------------
 
 The largest section in the deploy/cr.yaml file contains the Mongod
 configuration options.
@@ -1030,8 +1115,10 @@ configuration options.
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 
-backup section
---------------
+.. _operator.backup-section:
+
+`Backup Section <operator.html#operator-backup-section>`_
+----------------------------------------------------------
 
 The ``backup`` section in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
