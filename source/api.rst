@@ -541,7 +541,7 @@ Restore PSMDB cluster
 
 2. **spec**:
 
-     1. сlusterName(String, min-length:1) : ``name of PSMDB cluster``
+     1. clusterName(String, min-length:1) : ``name of PSMDB cluster``
      2. backupName(String, min-length:1) : ``name of backup to restore from``
 
 **Response:**
