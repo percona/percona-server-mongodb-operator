@@ -16,18 +16,24 @@ Install Helm following its `official installation instructions <https://docs.hel
 Installation
 -------------
 
-#. Add the Percona's Helm charts repository:
+#. Add the Percona's Helm charts repository and make your Helm client up to
+   date with it:
 
    .. code:: bash
 
-      helm repo add percona https://percona-lab.github.io/percona-helm-charts/
+      helm repo add percona https://percona.github.io/percona-helm-charts/
+      helm repo update
 
 #. Install Percona Operator for Percona Server for MongoDB:
 
    .. code:: bash
 
-      helm install percona/psmdb-operator
-  
+      helm install my-op percona/psmdb-operator
+
+   The ``my-op`` in the above example is the name of `a new release object <https://helm.sh/docs/intro/using_helm/#three-big-concepts>`_ 
+   which is created for the Operator when you install its Helm chart. Any
+   arbitrary name is OK.
+
    .. note:: If nothing explicitly specified, ``helm install`` command will work
       with ``default`` namespace. To use different namespace, provide it with
       the following additional parameter: ``--namespace my-namespace``.
@@ -36,7 +42,11 @@ Installation
 
    .. code:: bash
 
-      helm install percona/psmdb-db
+      helm install my-db percona/psmdb-db
+
+   The ``my-db`` in the above example is the name of `a new release object <https://helm.sh/docs/intro/using_helm/#three-big-concepts>`_ 
+   which is created for Percona Server for MongoDB when you install its Helm
+   chart. Any arbitrary name is OK.
 
 Installing Percona Server for MongoDB with customized parameters
 ----------------------------------------------------------------
@@ -51,6 +61,6 @@ The following example will deploy a Percona Server for MongoDB Cluster in the
 
 .. code:: bash
 
-   helm install dev  --namespace psmdb . \
+   helm install my-db percona/psmdb-db --namespace psmdb \
      --set replset.volumeSpec.pvc.resources.requests.storage=20Gi \
      --set backup.enabled=false
