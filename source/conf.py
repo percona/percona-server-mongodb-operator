@@ -248,7 +248,7 @@ htmlhelp_basename = 'PSMDBOperator'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes for Percona Server for MongoDB Documentation',
+  ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes Operator for Percona Server for MongoDB Documentation',
    u'Percona LLC and/or its affiliates 2009-2020', 'manual'),
 ]
 
