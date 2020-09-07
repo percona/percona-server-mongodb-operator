@@ -5,32 +5,36 @@ The `Percona Kubernetes Operator for Percona Server for MongoDB <https://github.
 
 The Percona Kubernetes Operators are based on best practices for the configuration of a Percona Server for MongoDB replica set. The Operator provides many benefits but saving time, a consistent environment are the most important.
 
-Overview
-========
+Requirements
+============
 
 .. toctree::
    :maxdepth: 1
 
-   architecture
    System-Requirements
+   architecture
 
+Quickstart guides
+=================
 
-Installation
-============
+.. toctree::
+   :maxdepth: 1
+
+   minikube
+   gke
+   eks
+
+Advanced Installation Guides
+============================
 
 .. toctree::
    :maxdepth: 1
 
    kubernetes
    openshift
-   minikube
-   gke
-   eks
-   helm
-   scaling
-   update
    custom-registry
    broker
+   helm
 
 Configuration
 =============
@@ -39,22 +43,31 @@ Configuration
    :maxdepth: 1
 
    users
-   operator
-   backups
-   private
-   arbiter
-   expose
-   constraints
    storage
+   constraints
+   expose
+   arbiter
    TLS
    encryption
+
+Management
+==========
+
+.. toctree::
+   :maxdepth: 1
+
+   backups
+   private
+   update
+   scaling
    debug
 
 Reference
 =========
 
 .. toctree::
-  :maxdepth: 1
+   :maxdepth: 1
 
-  api
-  Release Notes <RN/index.rst>
+   operator
+   api
+   Release Notes <RN/index.rst>
