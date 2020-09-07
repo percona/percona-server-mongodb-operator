@@ -172,8 +172,8 @@ has only two of them:
 
 .. _operator.replsets-section:
 
-`Replsets section <operator.html#operator-replsets-section>`_
--------------------------------------------------------------
+`Replsets Section <operator.html#operator-replsets-section>`_
+--------------------------------------------------------------
 
 The replsets section controls the MongoDB Replica Set.
 
