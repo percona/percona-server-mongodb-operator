@@ -7,6 +7,8 @@ spec:
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+  upgradeOptions:
+    apply: Disabled
   mongod:
     net:
       hostPort: 0
