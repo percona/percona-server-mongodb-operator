@@ -36,7 +36,7 @@ for pod in "${pods[@]}"; do
 	fi
 done
 
-echo "wait for primary $initial_primary update"
+desc "wait for primary $initial_primary update"
 sleep 10
 wait_pod "$initial_primary"
 img=$(kubectl get pod/$initial_primary -o jsonpath='{.spec.containers[0].image}')
