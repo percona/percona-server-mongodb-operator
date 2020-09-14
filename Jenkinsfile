@@ -5,7 +5,7 @@ void CreateCluster(String CLUSTER_PREFIX) {
             source $HOME/google-cloud-sdk/path.bash.inc
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
-            gcloud container clusters create --zone us-central1-a $CLUSTER_NAME-${CLUSTER_PREFIX} --cluster-version 1.14 --machine-type n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_PREFIX} --no-enable-autoupgrade
+            gcloud container clusters create --zone us-central1-a $CLUSTER_NAME-${CLUSTER_PREFIX} --cluster-version 1.15 --machine-type n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_PREFIX} --no-enable-autoupgrade
             kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com
         """
    }
@@ -62,27 +62,35 @@ void setTestsresults() {
 }
 
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
-    try {
-        echo "The $TEST_NAME test was started!"
-        testsReportMap[TEST_NAME] = 'failed'
-        popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
+    def retryCount = 0
+    waitUntil {
+        try {
+            echo "The $TEST_NAME test was started!"
+            testsReportMap[TEST_NAME] = 'failed'
+            popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
 
-        sh """
-            if [ -f "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME" ]; then
-                echo Skip $TEST_NAME test
-            else
-                export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
-                source $HOME/google-cloud-sdk/path.bash.inc
-                ./e2e-tests/$TEST_NAME/run
-            fi
-        """
-        testsReportMap[TEST_NAME] = 'passed'
-        testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
+            sh """
+                if [ -f "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME" ]; then
+                    echo Skip $TEST_NAME test
+                else
+                    export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
+                    source $HOME/google-cloud-sdk/path.bash.inc
+                    ./e2e-tests/$TEST_NAME/run
+                fi
+            """
+            testsReportMap[TEST_NAME] = 'passed'
+            testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
+            return true
+        }
+        catch (exc) {
+            if (retryCount >= 2) {
+                currentBuild.result = 'FAILURE'
+                return true
+            }
+            retryCount++
+            return false
+        }
     }
-    catch (exc) {
-        currentBuild.result = 'FAILURE'
-    }
-
     echo "The $TEST_NAME test was finished!"
 }
 
@@ -138,14 +146,17 @@ pipeline {
                         | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
                     curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
                         | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
-                    
+
                     curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
                         | sudo tar -C /usr/local/bin --wildcards -zxvpf -
                   #  curl -s -L https://github.com/src-d/go-license-detector/releases/latest/download/license-detector.linux_amd64.gz \
                   #      | gunzip | sudo tee /usr/local/bin/license-detector > /dev/null
                     curl -s -L https://github.com/src-d/go-license-detector/releases/download/v3.0.2/license-detector.linux_amd64.gz \
                         | gunzip | sudo tee /usr/local/bin/license-detector > /dev/null
-                    sudo chmod +x /usr/local/bin/license-detector 
+                    sudo chmod +x /usr/local/bin/license-detector
+
+                    sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/3.3.2/yq_linux_amd64 > /usr/local/bin/yq"
+                    sudo chmod +x /usr/local/bin/yq
                 '''
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''

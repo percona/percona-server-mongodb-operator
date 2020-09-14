@@ -10,10 +10,10 @@ metadata:
     app.kubernetes.io/replset: general
   name: some-name-backup-every-min-gcp-cs
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1
-    controller: true
-    kind: PerconaServerMongoDB
-    name: some-name
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: some-name
 spec:
   concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
@@ -28,31 +28,25 @@ spec:
         app.kubernetes.io/replset: general
     spec:
       template:
-        metadata:
+        metadata: {}
         spec:
           containers:
-          - args:
-            - -c
-            - "curl \\\n\t\t\t-vvv \\\n\t\t\t-X POST \\\n\t\t\t--cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt
-              \\\n\t\t\t-H \"Content-Type: application/json\" \\\n\t\t\t-H \"Authorization:
-              Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)\" \\\n\t\t\t--data
-              \"{ \n\t\t\t\t\\\"kind\\\":\\\"PerconaServerMongoDBBackup\\\",\n\t\t\t\t\\\"apiVersion\\\":\\\"psmdb.percona.com/v1\\\",\n\t\t\t\t\\\"metadata\\\":{\n\t\t\t\t\t\\\"generateName\\\":\\\"cron-${psmdbCluster:0:16}-$(date
-              -u \"+%Y%m%d%H%M%S\")-\\\",\n\t\t\t\t\t\\\"labels\\\":{\n\t\t\t\t\t\t\\\"ancestor\\\":\\\"every-min-gcp-cs\\\",\n\t\t\t\t\t\t\\\"cluster\\\":\\\"${psmdbCluster}\\\",\n\t\t\t\t\t\t\\\"type\\\":\\\"cron\\\"\n\t\t\t\t\t}\n\t\t\t\t},\n\t\t\t\t\\\"spec\\\":{\n\t\t\t\t\t\\\"psmdbCluster\\\":\\\"${psmdbCluster}\\\",\n\t\t\t\t\t\\\"storageName\\\":\\\"gcp-cs\\\"\n\t\t\t\t}\n\t\t\t}\"
-            - sh
-            env:
-            - name: psmdbCluster
-              value: some-name
-                fieldRef:
-                  apiVersion: v1
-                  fieldPath: metadata.namespace
-            imagePullPolicy: IfNotPresent
-            name: backup
-            resources: {}
-            securityContext:
-              runAsNonRoot: true
-              runAsUser: 1001
-            terminationMessagePath: /dev/termination-log
-            terminationMessagePolicy: File
+            - args:
+                - -c
+                - "curl \\\n\t\t\t-vvv \\\n\t\t\t-X POST \\\n\t\t\t--cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt \\\n\t\t\t-H \"Content-Type: application/json\" \\\n\t\t\t-H \"Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)\" \\\n\t\t\t--data \"{ \n\t\t\t\t\\\"kind\\\":\\\"PerconaServerMongoDBBackup\\\",\n\t\t\t\t\\\"apiVersion\\\":\\\"psmdb.percona.com/v1\\\",\n\t\t\t\t\\\"metadata\\\":{\n\t\t\t\t\t\\\"generateName\\\":\\\"cron-${psmdbCluster:0:16}-$(date -u \"+%Y%m%d%H%M%S\")-\\\",\n\t\t\t\t\t\\\"labels\\\":{\n\t\t\t\t\t\t\\\"ancestor\\\":\\\"every-min-gcp-cs\\\",\n\t\t\t\t\t\t\\\"cluster\\\":\\\"${psmdbCluster}\\\",\n\t\t\t\t\t\t\\\"type\\\":\\\"cron\\\"\n\t\t\t\t\t}\n\t\t\t\t},\n\t\t\t\t\\\"spec\\\":{\n\t\t\t\t\t\\\"psmdbCluster\\\":\\\"${psmdbCluster}\\\",\n\t\t\t\t\t\\\"storageName\\\":\\\"gcp-cs\\\"\n\t\t\t\t}\n\t\t\t}\" \\\n\t\t\thttps://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/apis/psmdb.percona.com/v1/namespaces/${NAMESPACE}/perconaservermongodbbackups"
+              command:
+                - sh
+              env:
+                - name: psmdbCluster
+                  value: some-name
+              imagePullPolicy: IfNotPresent
+              name: backup
+              resources: {}
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1001
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
           restartPolicy: Never
           schedulerName: default-scheduler

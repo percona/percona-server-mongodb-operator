@@ -10,16 +10,16 @@ metadata:
     app.kubernetes.io/replset: rs0
   name: cluster-ip-rs0-0
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1
-    controller: true
-    kind: PerconaServerMongoDB
-    name: cluster-ip
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: cluster-ip
 spec:
   ports:
-  - name: mongodb
-    port: 27017
-    protocol: TCP
-    targetPort: 27017
+    - name: mongodb
+      port: 27017
+      protocol: TCP
+      targetPort: 27017
   selector:
     statefulset.kubernetes.io/pod-name: cluster-ip-rs0-0
   sessionAffinity: None

@@ -16,6 +16,9 @@ spec:
     - name: v1
       storage: true
       served: true
+    - name: v1-1-0
+      storage: false
+      served: true
     - name: v1-2-0
       storage: false
       served: true
@@ -23,6 +26,9 @@ spec:
       storage: false
       served: true
     - name: v1-4-0
+      storage: false
+      served: true
+    - name: v1-5-0
       storage: false
       served: true
     - name: v1alpha1
@@ -144,6 +150,7 @@ rules:
   - services
   - persistentvolumeclaims
   - secrets
+  - configmaps
   verbs:
   - get
   - list
@@ -239,7 +246,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.4.0
+          image: percona/percona-server-mongodb-operator:1.5.0
           ports:
           - containerPort: 60000
             name: metrics
@@ -251,6 +258,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: percona-server-mongodb-operator
             - name: RESYNC_PERIOD

@@ -13,7 +13,7 @@ check_cr_config() {
     apply_cluster $test_dir/conf/$cluster.yml
 
     # check if at least 1 Pod started
-    wait_for_running $cluster 1
+    wait_for_running $cluster 1 "false"
 
     # check if statefulset created with expected config
     compare_kubectl statefulset/$cluster
