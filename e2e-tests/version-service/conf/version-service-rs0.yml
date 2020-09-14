@@ -8,7 +8,7 @@ spec:
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   upgradeOptions:
-    versionServiceEndpoint: http://c50d6b98e433.ngrok.io/versions/
+    versionServiceEndpoint: https://check.percona.com/versions
     apply: 4.2.8-8
     schedule: "0 2 * * *"
   mongod:
