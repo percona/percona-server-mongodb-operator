@@ -70,7 +70,7 @@ spec:
               value: rs0
           envFrom:
             - secretRef:
-                name: some-users
+                name: internal-smart-update-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
