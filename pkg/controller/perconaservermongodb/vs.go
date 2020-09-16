@@ -28,15 +28,21 @@ func (vs VersionServiceClient) GetExactVersion(endpoint string, vm VersionMeta) 
 	}
 
 	q := requestURL.Query()
-	q.Add("databaseVersion", vm.MongoVersion)
-	q.Add("kubeVersion", vm.KubeVersion)
-	q.Add("platform", vm.Platform)
-	q.Add("customResourceUID", vm.CRUID)
-
+	if vm.MongoVersion != "" {
+		q.Add("databaseVersion", vm.MongoVersion)
+	}
+	if vm.KubeVersion != "" {
+		q.Add("kubeVersion", vm.KubeVersion)
+	}
+	if vm.Platform != "" {
+		q.Add("platform", vm.Platform)
+	}
+	if vm.CRUID != "" {
+		q.Add("customResourceUID", vm.CRUID)
+	}
 	if vm.PMMVersion != "" {
 		q.Add("pmmVersion", vm.PMMVersion)
 	}
-
 	if vm.BackupVersion != "" {
 		q.Add("backupVersion", vm.BackupVersion)
 	}

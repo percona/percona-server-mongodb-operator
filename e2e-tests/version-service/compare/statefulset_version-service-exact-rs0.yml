@@ -2,12 +2,12 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: version-service-rs0
+  name: version-service-exact-rs0
   ownerReferences:
     - apiVersion: psmdb.percona.com/v1
       controller: true
       kind: PerconaServerMongoDB
-      name: version-service
+      name: version-service-exact
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -15,18 +15,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: version-service
+      app.kubernetes.io/instance: version-service-exact
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: version-service-rs0
+  serviceName: version-service-exact-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: version-service
+        app.kubernetes.io/instance: version-service-exact
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
@@ -63,14 +63,14 @@ spec:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: version-service
+              value: version-service-exact
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: some-users
+                name: internal-version-service-exact-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -115,7 +115,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: version-service-mongodb-keyfile
+              name: version-service-exact-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -124,7 +124,7 @@ spec:
               name: ssl-internal
               readOnly: true
             - mountPath: /etc/mongodb-encryption
-              name: version-service-mongodb-encryption-key
+              name: version-service-exact-mongodb-encryption-key
               readOnly: true
           workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -151,26 +151,26 @@ spec:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: version-service-mongodb-keyfile
+        - name: version-service-exact-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: version-service-mongodb-keyfile
-        - name: version-service-mongodb-encryption-key
+            secretName: version-service-exact-mongodb-keyfile
+        - name: version-service-exact-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: version-service-mongodb-encryption-key
+            secretName: version-service-exact-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: version-service-ssl
+            secretName: version-service-exact-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: version-service-ssl-internal
+            secretName: version-service-exact-ssl-internal
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
