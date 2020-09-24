@@ -60,12 +60,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 	}
 
-	defer func() {
-		err := session.Disconnect(context.TODO())
-		if err != nil {
-			log.Error(err, "failed to disconnect")
-		}
-	}()
+	defer session.Disconnect(context.TODO())
 
 	cnf, err := mongo.ReadConfig(context.TODO(), session)
 	if err != nil {
