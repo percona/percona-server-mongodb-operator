@@ -199,7 +199,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			OpVersion: version.String(),
 		})
 		if err != nil {
-			log.Info(fmt.Sprintf("failed to ensure version: %v; running with default", err))
+			reqLogger.Info(fmt.Sprintf("failed to ensure version: %v; running with default", err))
 		}
 	}
 
