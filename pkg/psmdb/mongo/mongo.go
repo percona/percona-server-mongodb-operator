@@ -39,6 +39,12 @@ func Dial(addrs []string, replset, username, password string, useTLS bool) (*mon
 		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
 	}
 
+	defer func() {
+		if err != nil {
+			_ = client.Disconnect(ctx)
+		}
+	}()
+
 	ctx, pingcancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer pingcancel()
 
