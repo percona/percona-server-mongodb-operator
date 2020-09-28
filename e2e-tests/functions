@@ -317,6 +317,7 @@ compare_kubectl() {
     fi
 
     kubectl_bin get -o yaml ${resource} \
+        | yq d - 'metadata.ownerReferences.*.apiVersion' \
         | yq d - 'metadata.managedFields' \
         | yq d - '**.creationTimestamp' \
         | yq d - '**.namespace' \

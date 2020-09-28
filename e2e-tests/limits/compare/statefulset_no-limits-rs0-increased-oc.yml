@@ -4,8 +4,7 @@ metadata:
   generation: 2
   name: no-limits-rs0
   ownerReferences:
-    - apiVersion: psmdb.percona.com/v1
-      controller: true
+    - controller: true
       kind: PerconaServerMongoDB
       name: no-limits
 spec:

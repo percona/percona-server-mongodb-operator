@@ -5,6 +5,7 @@ metadata:
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
+#  crVersion: 1.5.0
   image: percona/percona-server-mongodb:4.2.8-8
   imagePullPolicy: Always
 #  imagePullSecrets:
