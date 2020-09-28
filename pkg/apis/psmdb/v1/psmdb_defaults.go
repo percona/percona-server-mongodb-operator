@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -31,6 +32,11 @@ var (
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
 func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
+	err := cr.setVersion()
+	if err != nil {
+		return errors.Wrap(err, "set version")
+	}
+
 	if cr.Spec.Image == "" {
 		return fmt.Errorf("Required value for spec.image")
 	}
@@ -62,10 +68,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
 	if cr.Spec.Mongod.Security.EnableEncryption == nil {
-		is120, err := cr.VersionGreaterThanOrEqual("1.2.0")
-		if err != nil {
-			return fmt.Errorf("check version error: %v", err)
-		}
+		is120 := cr.CompareVersion("1.2.0") >= 0
 		cr.Spec.Mongod.Security.EnableEncryption = &is120
 	}
 
@@ -126,10 +129,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
-	gte140, err := cr.VersionGreaterThanOrEqual("1.4.0")
-	if err != nil {
-		return fmt.Errorf("failed to check version %v", err)
-	}
+	gte140 := cr.CompareVersion("1.4.0") >= 0
 
 	timeoutSecondsDefault := int32(5)
 	initialDelaySecondsDefault := int32(90)

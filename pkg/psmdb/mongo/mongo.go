@@ -13,10 +13,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
-	corev1 "k8s.io/api/core/v1"
 )
 
-func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS bool) (*mongo.Client, error) {
+func Dial(addrs []string, replset, username, password string, useTLS bool) (*mongo.Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer connectcancel()
 
@@ -24,8 +23,8 @@ func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS boo
 		SetHosts(addrs).
 		SetReplicaSet(replset).
 		SetAuth(options.Credential{
-			Password: string(usersSecret.Data[envMongoDBClusterAdminPassword]),
-			Username: string(usersSecret.Data[envMongoDBClusterAdminUser]),
+			Password: password,
+			Username: username,
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
 		SetReadPreference(readpref.Primary())
@@ -39,6 +38,12 @@ func Dial(addrs []string, replset string, usersSecret *corev1.Secret, useTLS boo
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
 	}
+
+	defer func() {
+		if err != nil {
+			_ = client.Disconnect(ctx)
+		}
+	}()
 
 	ctx, pingcancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer pingcancel()
@@ -115,12 +120,37 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	return status, nil
 }
 
+func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {
+	bi := BuildInfo{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "buildinfo", Value: 1}})
+	if resp.Err() != nil {
+		return bi, errors.Wrap(resp.Err(), "buildinfo")
+	}
+
+	if err := resp.Decode(&bi); err != nil {
+		return bi, errors.Wrap(err, "failed to decode build info")
+	}
+
+	if bi.OK != 1 {
+		return bi, errors.Errorf("mongo says: %s", bi.Errmsg)
+	}
+
+	return bi, nil
+}
+
 func StepDown(ctx context.Context, client *mongo.Client) error {
 	resp := OKResponse{}
 
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: 60}})
-	if res.Err() != nil {
-		return errors.Wrap(res.Err(), "replSetStepDown")
+	err := res.Err()
+	if err != nil {
+		cErr, ok := err.(mongo.CommandError)
+		if ok && cErr.HasErrorLabel("NetworkError") {
+			// https://docs.mongodb.com/manual/reference/method/rs.stepDown/#client-connections
+			return nil
+		}
+		return errors.Wrap(err, "replSetStepDown")
 	}
 
 	if err := res.Decode(&resp); err != nil {
@@ -132,6 +162,42 @@ func StepDown(ctx context.Context, client *mongo.Client) error {
 	}
 
 	return nil
+}
+
+// UpdateUserPass updates user's password
+func UpdateUserPass(ctx context.Context, client *mongo.Client, name, pass string) error {
+	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()
+}
+
+// UpdateUser recreates user with new name and password
+// should be used only when username was changed
+func UpdateUser(ctx context.Context, client *mongo.Client, currName, newName, pass string) error {
+	mu := struct {
+		Users []struct {
+			Roles interface{} `bson:"roles"`
+		} `bson:"users"`
+	}{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "usersInfo", Value: currName}})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "get user")
+	}
+	err := res.Decode(&mu)
+	if err != nil {
+		return errors.Wrap(err, "decode user")
+	}
+
+	if len(mu.Users) == 0 {
+		return errors.New("empty user data")
+	}
+
+	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "createUser", Value: newName}, {Key: "pwd", Value: pass}, {Key: "roles", Value: mu.Users[0].Roles}}).Err()
+	if err != nil {
+		return errors.Wrap(err, "create user")
+	}
+
+	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "dropUser", Value: currName}}).Err()
+	return errors.Wrap(err, "drop user")
 }
 
 // RemoveOld removes from the list those members which are not present in the given list.

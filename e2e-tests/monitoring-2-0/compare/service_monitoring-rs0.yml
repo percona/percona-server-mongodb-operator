@@ -3,16 +3,16 @@ kind: Service
 metadata:
   name: monitoring-rs0
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1
-    controller: true
-    kind: PerconaServerMongoDB
-    name: monitoring
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: monitoring
 spec:
   ports:
-  - name: mongodb
-    port: 27017
-    protocol: TCP
-    targetPort: 27017
+    - name: mongodb
+      port: 27017
+      protocol: TCP
+      targetPort: 27017
   selector:
     app.kubernetes.io/instance: monitoring
     app.kubernetes.io/managed-by: percona-server-mongodb-operator

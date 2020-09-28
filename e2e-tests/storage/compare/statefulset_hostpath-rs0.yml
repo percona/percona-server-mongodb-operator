@@ -4,10 +4,10 @@ metadata:
   generation: 1
   name: hostpath-rs0
   ownerReferences:
-  - apiVersion: psmdb.percona.com/v1
-    controller: true
-    kind: PerconaServerMongoDB
-    name: hostpath
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: hostpath
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -23,7 +23,7 @@ spec:
   serviceName: hostpath-rs0
   template:
     metadata:
-      annotations:
+      annotations: {}
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: hostpath
@@ -33,126 +33,126 @@ spec:
         app.kubernetes.io/replset: rs0
     spec:
       containers:
-      - args:
-        - --bind_ip_all
-        - --auth
-        - --dbpath=/data/db
-        - --port=27017
-        - --replSet=rs0
-        - --storageEngine=wiredTiger
-        - --relaxPermChecks
-        - --sslAllowInvalidCertificates
-        - --sslMode=preferSSL
-        - --clusterAuthMode=x509
-        - --slowms=0
-        - --profile=1
-        - --enableEncryption
-        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-        - --wiredTigerIndexPrefixCompression=true
-        command:
-        - /data/db/ps-entry.sh
-        env:
-        - name: SERVICE_NAME
-          value: hostpath
-        - name: MONGODB_PORT
-          value: "27017"
-        - name: MONGODB_REPLSET
-          value: rs0
-        envFrom:
-        - secretRef:
-            name: some-users
-            optional: false
-        imagePullPolicy: Always
-        livenessProbe:
-          exec:
-            command:
-            - mongodb-healthcheck
-            - k8s
-            - liveness
-            - --startupDelaySeconds
-            - "7200"
-          failureThreshold: 4
-          initialDelaySeconds: 60
-          periodSeconds: 30
-          successThreshold: 1
-          timeoutSeconds: 5
-        name: mongod
-        ports:
-        - containerPort: 27017
-          name: mongodb
-          protocol: TCP
-        readinessProbe:
-          failureThreshold: 8
-          initialDelaySeconds: 10
-          periodSeconds: 3
-          successThreshold: 1
-          tcpSocket:
-            port: 27017
-          timeoutSeconds: 2
-        resources: {}
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /data/db
-          name: mongod-data
-        - mountPath: /etc/mongodb-secrets
-          name: hostpath-mongodb-keyfile
-          readOnly: true
-        - mountPath: /etc/mongodb-ssl
-          name: ssl
-          readOnly: true
-        - mountPath: /etc/mongodb-ssl-internal
-          name: ssl-internal
-          readOnly: true
-        - mountPath: /etc/mongodb-encryption
-          name: hostpath-mongodb-encryption-key
-          readOnly: true
-        workingDir: /data/db
+        - args:
+            - --bind_ip_all
+            - --auth
+            - --dbpath=/data/db
+            - --port=27017
+            - --replSet=rs0
+            - --storageEngine=wiredTiger
+            - --relaxPermChecks
+            - --sslAllowInvalidCertificates
+            - --sslMode=preferSSL
+            - --clusterAuthMode=x509
+            - --slowms=0
+            - --profile=1
+            - --enableEncryption
+            - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+            - --wiredTigerIndexPrefixCompression=true
+          command:
+            - /data/db/ps-entry.sh
+          env:
+            - name: SERVICE_NAME
+              value: hostpath
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: MONGODB_REPLSET
+              value: rs0
+          envFrom:
+            - secretRef:
+                name: internal-hostpath-users
+                optional: false
+          imagePullPolicy: Always
+          livenessProbe:
+            exec:
+              command:
+                - mongodb-healthcheck
+                - k8s
+                - liveness
+                - --startupDelaySeconds
+                - "7200"
+            failureThreshold: 4
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: mongod
+          ports:
+            - containerPort: 27017
+              name: mongodb
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 8
+            initialDelaySeconds: 10
+            periodSeconds: 3
+            successThreshold: 1
+            tcpSocket:
+              port: 27017
+            timeoutSeconds: 2
+          resources: {}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /etc/mongodb-secrets
+              name: hostpath-mongodb-keyfile
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl-internal
+              name: ssl-internal
+              readOnly: true
+            - mountPath: /etc/mongodb-encryption
+              name: hostpath-mongodb-encryption-key
+              readOnly: true
+          workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
-      - command:
-        - /init-entrypoint.sh
-        imagePullPolicy: Always
-        name: mongo-init
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /data/db
-          name: mongod-data
+        - command:
+            - /init-entrypoint.sh
+          imagePullPolicy: Always
+          name: mongo-init
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: hostpath-mongodb-keyfile
-        secret:
-          defaultMode: 288
-          optional: false
-          secretName: hostpath-mongodb-keyfile
-      - name: hostpath-mongodb-encryption-key
-        secret:
-          defaultMode: 288
-          optional: false
-          secretName: hostpath-mongodb-encryption-key
-      - name: ssl
-        secret:
-          defaultMode: 288
-          optional: false
-          secretName: hostpath-ssl
-      - name: ssl-internal
-        secret:
-          defaultMode: 288
-          optional: true
-          secretName: hostpath-ssl-internal
-      - hostPath:
-          path: /run/data-dir
-          type: Directory
-        name: mongod-data
+        - name: hostpath-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: hostpath-mongodb-keyfile
+        - name: hostpath-mongodb-encryption-key
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: hostpath-mongodb-encryption-key
+        - name: ssl
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: hostpath-ssl
+        - name: ssl-internal
+          secret:
+            defaultMode: 288
+            optional: true
+            secretName: hostpath-ssl-internal
+        - hostPath:
+            path: /run/data-dir
+            type: Directory
+          name: mongod-data
   updateStrategy:
     rollingUpdate:
       partition: 0

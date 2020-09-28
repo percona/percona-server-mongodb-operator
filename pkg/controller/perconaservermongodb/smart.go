@@ -29,8 +29,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	if ok, err := cr.VersionGreaterThanOrEqual("1.4.0"); !ok || err != nil {
-		return errors.Wrap(err, "failed to compare version")
+	if cr.CompareVersion("1.4.0") < 0 {
+		return nil
 	}
 
 	log.Info("statefullSet was changed, run smart update")
@@ -109,6 +109,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("failed to apply changes: %v", err)
 	}
 
+	log.Info("smart update finished")
+
 	return nil
 }
 
@@ -178,7 +180,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongoClient(cr *api.PerconaServerMong
 		return nil, errors.Wrap(err, "failed to get replset addr")
 	}
 
-	client, err := mongo.Dial(rsAddrs, replset.Name, usersSecret, false)
+	client, err := mongo.Dial(rsAddrs, replset.Name, string(usersSecret.Data[envMongoDBClusterAdminUser]), string(usersSecret.Data[envMongoDBClusterAdminPassword]), false)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to dial mongo")
 	}

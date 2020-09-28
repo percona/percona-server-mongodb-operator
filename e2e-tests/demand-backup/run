@@ -6,12 +6,6 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-run_backup() {
-    local storage=$1
-
-    kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
-}
-
 create_namespace $namespace
 deploy_operator
 
@@ -40,6 +34,7 @@ sleep 2
 run_mongo \
     'use myApp\n db.test.insert({ x: 100500 })' \
     "myApp:myPass@$cluster.$namespace"
+sleep 10            # for minikube
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
