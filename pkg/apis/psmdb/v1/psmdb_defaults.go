@@ -199,14 +199,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ReadinessProbe.FailureThreshold = int32(8)
 		}
 
-		if cr.Spec.Pause {
-			replset.Size = 0
-			replset.Arbiter.Enabled = false
-			continue
-		}
 		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
 		if err != nil {
 			return err
+		}
+		if cr.Spec.Pause {
+			replset.Size = 0
+			replset.Arbiter.Enabled = false
 		}
 	}
 
