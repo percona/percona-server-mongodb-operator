@@ -6,7 +6,7 @@ import (
 
 	cmmeta "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
 
-	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha3"
+	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha2"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	corev1 "k8s.io/api/core/v1"
