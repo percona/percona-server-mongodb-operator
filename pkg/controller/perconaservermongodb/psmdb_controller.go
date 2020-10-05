@@ -262,13 +262,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	for i, replset := range cr.Spec.Replsets {
+	for _, replset := range cr.Spec.Replsets {
 		// multiple replica sets is not supported until sharding is
 		// added to the operator
-		if i > 0 {
-			reqLogger.Error(nil, "multiple replica sets is not yet supported, skipping replset %s", replset.Name)
-			continue
-		}
+		// if i > 0 {
+		// 	reqLogger.Error(nil, "multiple replica sets is not yet supported, skipping replset %s", replset.Name)
+		// 	continue
+		// }
 
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
@@ -372,6 +372,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
+	_, err = r.reconcileDeployment(cr, make(map[string]string), internalKey, secrets, make(map[string]string))
+	if err != nil {
+		err = errors.Errorf("reconcile Deployment for: %v", err)
+		return reconcile.Result{}, err
+	}
+
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
 		OpVersion: version.String(),
 	})
@@ -421,8 +427,126 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	return created, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) reconcileDeployment(cr *api.PerconaServerMongoDB,
+	matchLabels map[string]string, internalKeyName string, secret *corev1.Secret,
+	dpTemplateAnnotations map[string]string) (*appsv1.Deployment, error) {
+
+	deploymentName := cr.Name + "-" + "mongos"
+	var size int32 = 3
+	containerName := "mongos"
+	matchLabels["app.kubernetes.io/component"] = "mongos"
+
+	dp := psmdb.NewDeployment(deploymentName, cr.Namespace)
+	err := setControllerReference(cr, dp, r.scheme)
+	if err != nil {
+		return nil, fmt.Errorf("set owner ref for Deployment %s: %v", dp.Name, err)
+	}
+
+	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: dp.Name, Namespace: dp.Namespace}, dp)
+	if errGet != nil && !k8serrors.IsNotFound(errGet) {
+		return nil, fmt.Errorf("get Deployment %s: %v", dp.Name, err)
+	}
+
+	inits := []corev1.Container{}
+	if cr.CompareVersion("1.5.0") >= 0 {
+		operatorPod, err := r.operatorPod()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get operator pod: %v", err)
+		}
+		inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
+	}
+
+	dpSpec, err := psmdb.DeploymentSpec(cr, int32(size), internalKeyName, containerName,
+		matchLabels, inits)
+	if err != nil {
+		return nil, fmt.Errorf("create Deployment.Spec %s: %v", dp.Name, err)
+	}
+	dpSpec.Template.Annotations = dp.Spec.Template.Annotations
+	if dpSpec.Template.Annotations == nil {
+		dpSpec.Template.Annotations = make(map[string]string)
+	}
+
+	for k, v := range dpTemplateAnnotations {
+		dpSpec.Template.Annotations[k] = v
+	}
+	// add TLS/SSL Volume
+	t := true
+	dpSpec.Template.Spec.Volumes = append(dpSpec.Template.Spec.Volumes,
+		corev1.Volume{
+			Name: "ssl",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  cr.Spec.Secrets.SSL,
+					Optional:    &cr.Spec.UnsafeConf,
+					DefaultMode: &secretFileMode,
+				},
+			},
+		},
+		corev1.Volume{
+			Name: "ssl-internal",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  cr.Spec.Secrets.SSLInternal,
+					Optional:    &t,
+					DefaultMode: &secretFileMode,
+				},
+			},
+		},
+	)
+
+	dpSpec.Template.Spec.Volumes = append(dpSpec.Template.Spec.Volumes,
+		corev1.Volume{
+			Name: psmdb.MongodDataVolClaimName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	)
+
+	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
+	if err != nil {
+		return nil, fmt.Errorf("get secret hash error: %v", err)
+	}
+
+	is110 := cr.CompareVersion("1.1.0") >= 0
+	if is110 {
+		dpSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
+	}
+	sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return nil, fmt.Errorf("get secret hash error: %v", err)
+	} else if err == nil {
+		if is110 {
+			dpSpec.Template.Annotations["percona.com/ssl-internal-hash"] = sslInternalHash
+		}
+	}
+
+	dp.Spec = dpSpec
+	if k8serrors.IsNotFound(errGet) {
+		err = r.client.Create(context.TODO(), dp)
+		if err != nil && !k8serrors.IsAlreadyExists(err) {
+			return nil, fmt.Errorf("create StatefulSet %s: %v", dp.Name, err)
+		}
+	} else {
+		// err := r.reconcilePDB(pdbspec, matchLabels, cr.Namespace, dp)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("PodDisruptionBudget for %s: %v", dp.Name, err)
+		// }
+		dp.Spec.Replicas = &size
+		err = r.client.Update(context.TODO(), dp)
+		if err != nil {
+			return nil, fmt.Errorf("update Deployment %s: %v", dp.Name, err)
+		}
+	}
+
+	return dp, nil
+}
+
 // TODO: reduce cyclomatic complexity
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret, sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret,
+	sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
+
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
@@ -467,10 +591,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
 
-	if sfsTemplateAnnotations != nil {
-		for k, v := range sfsTemplateAnnotations {
-			sfsSpec.Template.Annotations[k] = v
-		}
+	for k, v := range sfsTemplateAnnotations {
+		sfsSpec.Template.Annotations[k] = v
 	}
 	// add TLS/SSL Volume
 	t := true

@@ -78,7 +78,7 @@ github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
-# github.com/google/go-cmp v0.4.0
+# github.com/google/go-cmp v0.5.1
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
@@ -216,12 +216,12 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
+# golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+# golang.org/x/net v0.0.0-20200822124328-c89045814202
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
@@ -235,9 +235,9 @@ golang.org/x/oauth2/google
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+# golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20200122134326-e047566fdf82
+# golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows

@@ -23,8 +23,23 @@ spec:
     image: percona/percona-server-mongodb-operator:1.5.0-pmm
     serverHost: monitoring-service
   replsets:
+  - name: cfg0
+    size: 3
+    clusterRole: "configsvr"
+    volumeSpec:
+#      emptyDir: {}
+#      hostPath:
+#        path: /data
+#        type: Directory
+      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 3Gi
   - name: rs0
     size: 3
+    clusterRole: "shardsvr"
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
 #      advanced:
