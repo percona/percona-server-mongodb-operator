@@ -433,14 +433,6 @@ type Expose struct {
 	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 }
 
-// type Platform string
-
-// const (
-// 	PlatformUndef      Platform = ""
-// 	PlatformKubernetes Platform = "kubernetes"
-// 	PlatformOpenshift  Platform = "openshift"
-// )
-
 // ServerVersion represents info about k8s / openshift server version
 type ServerVersion struct {
 	Platform version.Platform
