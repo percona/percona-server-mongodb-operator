@@ -29,7 +29,8 @@ const (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList,
+	usersSecret *corev1.Secret, mongosPods []corev1.Pod) (mongoClusterState, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
 	if err != nil {
 		return clusterError, errors.Wrap(err, "get replset addr")
@@ -58,6 +59,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			}
 			return clusterError, errors.Wrap(err, "dial:")
 		}
+	}
+
+	if cr.Status.Replsets[replset.Name].Initialized &&
+		replset.ClusterRole == api.ClusterRoleShardSvr &&
+		!cr.Status.Replsets[replset.Name].AddedAsShard {
+
+		log.Info("adding rs to shard", "rs", replset.Name)
+		err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods)
+		if err != nil {
+			return clusterError, errors.Wrap(err, "add shard")
+		}
+
+		cr.Status.Replsets[replset.Name].AddedAsShard = true
+
+		return clusterAddShard, nil
 	}
 
 	defer session.Disconnect(context.TODO())
@@ -192,6 +208,44 @@ const (
 	)
 	`
 )
+
+func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
+	mongosPods []corev1.Pod) error {
+	for _, pod := range mongosPods {
+		if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
+			return fmt.Errorf("rsPod is not redy")
+		}
+		if !isContainerAndPodRunning(pod, "mongos") || !isPodReady(pod) {
+			return fmt.Errorf("mongos pod is not ready")
+		}
+
+		host := psmdb.GetAddr(m, rspod.Name, replset.Name)
+
+		cmd := []string{
+			"sh", "-c",
+			fmt.Sprintf(
+				`
+				cat <<-EOF | mongo "mongodb://${MONGODB_CLUSTER_ADMIN_USER}:${MONGODB_CLUSTER_ADMIN_PASSWORD}@localhost"
+				sh.addShard("%s/%s")
+				EOF
+			`, replset.Name, host),
+		}
+
+		log.Info("Command", ":", cmd)
+
+		var errb, outb bytes.Buffer
+		err := r.clientcmd.Exec(&pod, "mongos", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
+		}
+
+		log.Info("Add shard result", "result", outb.String(), "err", errb.String())
+
+		time.Sleep(time.Second * 5)
+	}
+
+	return nil
+}
 
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
 // This must be ran from within the running container to utilise the MongoDB Localhost Exeception.

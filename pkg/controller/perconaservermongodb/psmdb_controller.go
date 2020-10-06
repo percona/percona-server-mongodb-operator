@@ -263,13 +263,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	for _, replset := range cr.Spec.Replsets {
-		// multiple replica sets is not supported until sharding is
-		// added to the operator
-		// if i > 0 {
-		// 	reqLogger.Error(nil, "multiple replica sets is not yet supported, skipping replset %s", replset.Name)
-		// 	continue
-		// }
-
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
 			"app.kubernetes.io/instance":   cr.Name,
@@ -291,6 +284,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, err
 		}
 
+		mongosPods := corev1.PodList{}
+		err = r.client.List(context.TODO(),
+			&mongosPods,
+			&client.ListOptions{
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/component": "mongos"}),
+			},
+		)
+		if err != nil {
+			err = errors.Errorf("get pods list for mongos: %v", err)
+			return reconcile.Result{}, err
+		}
 		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, secrets, sfsTemplateAnnotations)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
@@ -362,7 +367,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
 		}
 
-		isClusterLive, err = r.reconcileCluster(cr, replset, *pods, secrets)
+		isClusterLive, err = r.reconcileCluster(cr, replset, *pods, secrets, mongosPods.Items)
 		if err != nil {
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
@@ -372,7 +377,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	_, err = r.reconcileDeployment(cr, make(map[string]string), internalKey, secrets, make(map[string]string))
+	_, err = r.reconcileMongos(cr, make(map[string]string), internalKey, secrets, make(map[string]string))
 	if err != nil {
 		err = errors.Errorf("reconcile Deployment for: %v", err)
 		return reconcile.Result{}, err
@@ -427,7 +432,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	return created, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileDeployment(cr *api.PerconaServerMongoDB,
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB,
 	matchLabels map[string]string, internalKeyName string, secret *corev1.Secret,
 	dpTemplateAnnotations map[string]string) (*appsv1.Deployment, error) {
 

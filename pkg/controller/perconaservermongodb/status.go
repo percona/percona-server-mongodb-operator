@@ -22,6 +22,7 @@ type mongoClusterState int
 const (
 	clusterReady mongoClusterState = iota
 	clusterInit
+	clusterAddShard
 	clusterError
 )
 
@@ -65,6 +66,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		status.Initialized = currentRSstatus.Initialized
+		status.AddedAsShard = currentRSstatus.AddedAsShard
 
 		if status.Status == api.AppStateReady {
 			replsetsReady++

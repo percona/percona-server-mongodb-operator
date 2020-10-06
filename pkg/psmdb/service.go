@@ -207,7 +207,7 @@ func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, replset *api.Repls
 		return getExtAddr(cl, m.Namespace, pod)
 	}
 
-	return getAddr(m, pod.Name, replset.Name), nil
+	return GetAddr(m, pod.Name, replset.Name), nil
 }
 
 func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
@@ -224,7 +224,8 @@ func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, err
 	return hostname.String(), nil
 }
 
-func getAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
+// GetAddr returns replicaSet pod address in cluster
+func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }
