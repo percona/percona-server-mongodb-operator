@@ -97,9 +97,9 @@ type AppState string
 
 const (
 	AppStatePending AppState = "pending"
-	AppStateInit             = "initializing"
-	AppStateReady            = "ready"
-	AppStateError            = "error"
+	AppStateInit    AppState = "initializing"
+	AppStateReady   AppState = "ready"
+	AppStateError   AppState = "error"
 )
 
 type UpgradeStrategy string
@@ -132,18 +132,18 @@ type ConditionStatus string
 
 const (
 	ConditionTrue    ConditionStatus = "True"
-	ConditionFalse                   = "False"
-	ConditionUnknown                 = "Unknown"
+	ConditionFalse   ConditionStatus = "False"
+	ConditionUnknown ConditionStatus = "Unknown"
 )
 
 type ClusterConditionType string
 
 const (
 	ClusterReady   ClusterConditionType = "ClusterReady"
-	ClusterInit                         = "ClusterInitializing"
-	ClusterRSInit                       = "ReplsetInitialized"
-	ClusterRSReady                      = "ReplsetReady"
-	ClusterError                        = "Error"
+	ClusterInit    ClusterConditionType = "ClusterInitializing"
+	ClusterRSInit  ClusterConditionType = "ReplsetInitialized"
+	ClusterRSReady ClusterConditionType = "ReplsetReady"
+	ClusterError   ClusterConditionType = "Error"
 )
 
 type ClusterCondition struct {
@@ -277,8 +277,8 @@ type MongodChiperMode string
 
 const (
 	MongodChiperModeUnset MongodChiperMode = ""
-	MongodChiperModeCBC                    = "AES256-CBC"
-	MongodChiperModeGCM                    = "AES256-GCM"
+	MongodChiperModeCBC   MongodChiperMode = "AES256-CBC"
+	MongodChiperModeGCM   MongodChiperMode = "AES256-GCM"
 )
 
 type MongodSpecSecurity struct {
@@ -433,17 +433,17 @@ type Expose struct {
 	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 }
 
-type Platform string
+// type Platform string
 
-const (
-	PlatformUndef      Platform = ""
-	PlatformKubernetes          = "kubernetes"
-	PlatformOpenshift           = "openshift"
-)
+// const (
+// 	PlatformUndef      Platform = ""
+// 	PlatformKubernetes Platform = "kubernetes"
+// 	PlatformOpenshift  Platform = "openshift"
+// )
 
 // ServerVersion represents info about k8s / openshift server version
 type ServerVersion struct {
-	Platform Platform
+	Platform version.Platform
 	Info     k8sversion.Info
 }
 

@@ -194,7 +194,12 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 		return errors.Wrap(err, "dial")
 	}
 
-	defer session.Disconnect(context.TODO())
+	defer func() {
+		err := session.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
 
 	info, err := mongo.RSBuildInfo(context.Background(), session)
 	if err != nil {
