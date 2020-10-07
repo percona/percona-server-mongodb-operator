@@ -5,18 +5,16 @@ set -o xtrace
 
 test_dir="$(dirname $0)"
 . $(dirname $0)/functions
-src_dir="$(realpath $test_dir/..)"
+src_dir="$(realpath ${test_dir}/..)"
 IMAGE=$(echo "$IMAGE" | sed -e 's#percona/#perconalab/#')
 
 build_operator() {
-    if [ "${RELEASE:-0}" = 0 ]; then
+    if [ "${RELEASE:-1}" = 0 ]; then
         GO_LDFLAGS="-race"
-        $sed -i -e 's^"percona/percona-server-mongodb-operator:"^"perconalab/percona-server-mongodb-operator:"^' ${src_dir}/pkg/psmdb/container.go
-        $sed -i -e "s/master/$GIT_BRANCH/" ${src_dir}/version/version.go
     fi
 
     export IMAGE
-    export GO_LDFLAGS="-w -s $GO_LDFLAGS"
+    export GO_LDFLAGS="-w -s -trimpath $GO_LDFLAGS"
     pushd ${src_dir}
         docker build \
             --build-arg GIT_COMMIT=$GIT_COMMIT \
@@ -27,11 +25,6 @@ build_operator() {
             -t "${IMAGE}" -f build/Dockerfile .
     popd
     docker push ${IMAGE}
-
-    if [ "${RELEASE:-0}" = 0 ]; then
-        $sed -i -e 's^"perconalab/percona-server-mongodb-operator:"^"percona/percona-server-mongodb-operator:"^' ${src_dir}/pkg/psmdb/container.go
-        $sed -i -e "s/$GIT_BRANCH/master/" ${src_dir}/version/version.go
-    fi
 }
 
 until docker ps;

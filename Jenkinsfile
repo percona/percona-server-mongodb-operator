@@ -181,6 +181,7 @@ pipeline {
 
                             sg docker -c "
                                 docker login -u '${USER}' -p '${PASS}'
+                                export RELEASE=0
                                 export IMAGE=\$DOCKER_TAG
                                 ./e2e-tests/build
                                 docker logout
