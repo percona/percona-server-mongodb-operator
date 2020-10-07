@@ -336,12 +336,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 					}
 				}
 				srvs = lbsvc
-				for _, svc := range srvs {
-					err := r.createOrUpdate(&svc, svc.Name, svc.Namespace)
-					if err != nil {
-						return reconcile.Result{}, err
-					}
-				}
 			}
 		} else {
 			service := psmdb.Service(cr, replset)
