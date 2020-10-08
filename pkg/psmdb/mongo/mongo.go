@@ -13,7 +13,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("mongo")
 
 func Dial(addrs []string, replset, username, password string, useTLS bool) (*mongo.Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -41,7 +44,10 @@ func Dial(addrs []string, replset, username, password string, useTLS bool) (*mon
 
 	defer func() {
 		if err != nil {
-			_ = client.Disconnect(ctx)
+			derr := client.Disconnect(ctx)
+			if derr != nil {
+				log.Error(err, "failed to disconnect")
+			}
 		}
 	}()
 
