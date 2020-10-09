@@ -3,16 +3,19 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-
-	cmmeta "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
+	"time"
 
 	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha2"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	cmmeta "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoDB) error {
@@ -31,7 +34,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	}
 	err = r.createSSLByCertManager(cr)
 	if err != nil {
-		log.Info("using cert-manger: " + err.Error())
+		log.Error(err, "issue cert with cert-manager")
 		err = r.createSSLManualy(cr)
 		if err != nil {
 			return fmt.Errorf("create ssl manualy: %v", err)
@@ -76,10 +79,13 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
+			Subject: &cm.X509Subject{
+				OrganizationalUnits: []string{"PSMDB"},
+			},
 			SecretName: cr.Spec.Secrets.SSL,
-			CommonName: cr.Name,
 			DNSNames:   certificateDNSNames,
 			IsCA:       true,
+			Usages:     []cm.KeyUsage{cm.UsageSigning, cm.UsageKeyEncipherment, cm.UsageServerAuth, cm.UsageClientAuth},
 			IssuerRef: cmmeta.ObjectReference{
 				Name: issuerName,
 				Kind: issuerKind,
@@ -100,10 +106,13 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
+			Subject: &cm.X509Subject{
+				OrganizationalUnits: []string{"PSMDB"},
+			},
 			SecretName: cr.Spec.Secrets.SSLInternal,
-			CommonName: cr.Name,
 			DNSNames:   certificateDNSNames,
 			IsCA:       true,
+			Usages:     []cm.KeyUsage{cm.UsageSigning, cm.UsageKeyEncipherment, cm.UsageServerAuth, cm.UsageClientAuth},
 			IssuerRef: cmmeta.ObjectReference{
 				Name: issuerName,
 				Kind: issuerKind,
@@ -113,7 +122,38 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create internal certificate: %v", err)
 	}
-	return nil
+
+	return r.waitForCerts(cr.Namespace, cr.Spec.Secrets.SSL, cr.Spec.Secrets.SSLInternal)
+}
+
+func (r *ReconcilePerconaServerMongoDB) waitForCerts(namespace string, secretsList ...string) error {
+	ticker := time.NewTicker(3 * time.Second)
+	timeoutTimer := time.NewTimer(30 * time.Second)
+	defer timeoutTimer.Stop()
+	defer ticker.Stop()
+	for {
+		select {
+		case <-timeoutTimer.C:
+			return errors.Errorf("timeout: can't get tls certificates from certmanager, %s", secretsList)
+		case <-ticker.C:
+			sucessCount := 0
+			for _, secretName := range secretsList {
+				secret := &corev1.Secret{}
+				err := r.client.Get(context.TODO(), types.NamespacedName{
+					Name:      secretName,
+					Namespace: namespace,
+				}, secret)
+				if err != nil && !k8serr.IsNotFound(err) {
+					return err
+				} else if err == nil {
+					sucessCount++
+				}
+			}
+			if sucessCount == len(secretsList) {
+				return nil
+			}
+		}
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMongoDB) error {
