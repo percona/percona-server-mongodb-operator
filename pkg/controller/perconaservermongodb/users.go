@@ -126,7 +126,8 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 	}
 
 	// no changes, nothing to do with that user
-	if bytes.Compare(su.newData[nameKey], su.currData[nameKey]) == 0 && bytes.Compare(su.newData[passKey], su.currData[passKey]) == 0 {
+	if bytes.Equal(su.newData[nameKey], su.currData[nameKey]) &&
+		bytes.Equal(su.newData[passKey], su.currData[passKey]) {
 		return false, nil
 	}
 	if nameKey == envPMMServerUser {
@@ -240,7 +241,12 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}
-		defer client.Disconnect(context.TODO())
+		defer func() {
+			err := client.Disconnect(context.TODO())
+			if err != nil {
+				log.Error(err, "failed to close connection")
+			}
+		}()
 
 		for _, user := range users {
 			err := user.updateMongo(client)
@@ -254,7 +260,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 }
 
 func (u *systemUser) updateMongo(c *mongod.Client) error {
-	if bytes.Compare(u.currName, u.name) == 0 {
+	if bytes.Equal(u.currName, u.name) {
 		err := mongo.UpdateUserPass(context.TODO(), c, string(u.name), string(u.pass))
 		return errors.Wrapf(err, "change password for user %s", u.name)
 	}
