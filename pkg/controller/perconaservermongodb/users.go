@@ -236,12 +236,9 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrap(err, "get replset addr")
 		}
-		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, true)
+		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass)
 		if err != nil {
-			client, err = mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, false)
-			if err != nil {
-				return errors.Wrap(err, "dial:")
-			}
+			return errors.Wrap(err, "dial:")
 		}
 		defer client.Disconnect(context.TODO())
 

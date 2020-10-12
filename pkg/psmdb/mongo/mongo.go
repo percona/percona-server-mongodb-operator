@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
 
-func Dial(addrs []string, replset, username, password string, useTLS bool) (*mongo.Client, error) {
+func Dial(addrs []string, replset, username, password string) (*mongo.Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer connectcancel()
 
@@ -28,11 +28,6 @@ func Dial(addrs []string, replset, username, password string, useTLS bool) (*mon
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
 		SetReadPreference(readpref.Primary())
-
-	if useTLS {
-		tlsCfg := tls.Config{InsecureSkipVerify: true}
-		opts = opts.SetTLSConfig(&tlsCfg).SetDialer(tlsDialer{cfg: &tlsCfg})
-	}
 
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {

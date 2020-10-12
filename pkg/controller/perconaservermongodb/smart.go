@@ -180,7 +180,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongoClient(cr *api.PerconaServerMong
 		return nil, errors.Wrap(err, "failed to get replset addr")
 	}
 
-	client, err := mongo.Dial(rsAddrs, replset.Name, string(usersSecret.Data[envMongoDBClusterAdminUser]), string(usersSecret.Data[envMongoDBClusterAdminPassword]), false)
+	client, err := mongo.Dial(rsAddrs, replset.Name, string(usersSecret.Data[envMongoDBClusterAdminUser]), string(usersSecret.Data[envMongoDBClusterAdminPassword]))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to dial mongo")
 	}

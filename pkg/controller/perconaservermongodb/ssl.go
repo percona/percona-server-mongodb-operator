@@ -79,13 +79,11 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
-			Subject: &cm.X509Subject{
-				OrganizationalUnits: []string{"PSMDB"},
-			},
-			SecretName: cr.Spec.Secrets.SSL,
-			DNSNames:   certificateDNSNames,
-			IsCA:       true,
-			Usages:     []cm.KeyUsage{cm.UsageSigning, cm.UsageKeyEncipherment, cm.UsageServerAuth, cm.UsageClientAuth},
+			Organization: []string{"PSMDB"},
+			CommonName:   cr.Name,
+			SecretName:   cr.Spec.Secrets.SSL,
+			DNSNames:     certificateDNSNames,
+			IsCA:         true,
 			IssuerRef: cmmeta.ObjectReference{
 				Name: issuerName,
 				Kind: issuerKind,
@@ -106,13 +104,11 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
-			Subject: &cm.X509Subject{
-				OrganizationalUnits: []string{"PSMDB"},
-			},
-			SecretName: cr.Spec.Secrets.SSLInternal,
-			DNSNames:   certificateDNSNames,
-			IsCA:       true,
-			Usages:     []cm.KeyUsage{cm.UsageSigning, cm.UsageKeyEncipherment, cm.UsageServerAuth, cm.UsageClientAuth},
+			Organization: []string{"PSMDB"},
+			CommonName:   cr.Name,
+			SecretName:   cr.Spec.Secrets.SSLInternal,
+			DNSNames:     certificateDNSNames,
+			IsCA:         true,
 			IssuerRef: cmmeta.ObjectReference{
 				Name: issuerName,
 				Kind: issuerKind,
