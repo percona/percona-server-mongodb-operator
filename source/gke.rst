@@ -115,7 +115,7 @@ Installing the Operator
 
    .. code:: text
 
-      perconaservermongodb.psmdb.percona.com/cluster1 created
+      perconaservermongodb.psmdb.percona.com/my-cluster-name created
 
 6. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_, including the password for the ``root`` user, which you will need to access the cluster.
 
@@ -141,9 +141,9 @@ It may take ten minutes to get the cluster started. You  can verify its creation
 
    $ kubectl get pods
    NAME                                               READY   STATUS    RESTARTS   AGE
-   cluster1-rs0-0                                     2/2     Running   0          8m
-   cluster1-rs0-1                                     2/2     Running   0          8m
-   cluster1-rs0-2                                     2/2     Running   0          7m
+   my-cluster-name-rs0-0                                     2/2     Running   0          8m
+   my-cluster-name-rs0-1                                     2/2     Running   0          8m
+   my-cluster-name-rs0-2                                     2/2     Running   0          7m
    percona-server-mongodb-operator-5bcc66fb65-lxzw5   1/1     Running   0          9m
 
 Also, you can see the same information when browsing Pods of your cluster in Google Cloud console via the *Object Browser*:
@@ -174,7 +174,7 @@ If ``kubectl get pods`` command had shown some errors, you can examine the probl
 
 .. code:: bash
 
-   kubectl describe pod cluster1-rs0-2
+   kubectl describe pod my-cluster-name-rs0-2
 
 Review the detailed information for ``Warning`` statements and then correct the configuration. An example of a warning is as follows:
 

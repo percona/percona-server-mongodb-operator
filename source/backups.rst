@@ -129,7 +129,7 @@ passing its content to the ``kubectl apply`` command as follows:
       metadata:
         name: backup1
       spec:
-        psmdbCluster: cluster1
+        psmdbCluster: my-cluster-name
         storageName: s3-us-west
       EOF
 
