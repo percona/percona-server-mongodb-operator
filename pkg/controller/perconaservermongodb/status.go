@@ -32,7 +32,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	}
 	if reconcileErr != nil {
-		if cr.Status.State != api.ClusterError {
+		if cr.Status.State != api.AppStateError {
 			clusterCondition = api.ClusterCondition{
 				Status:             api.ConditionTrue,
 				Type:               api.ClusterError,
@@ -44,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
-		cr.Status.State = api.ClusterError
+		cr.Status.State = api.AppStateError
 
 		return r.writeStatus(cr)
 	}
@@ -115,14 +115,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			Type:               api.ClusterInit,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.State = api.ClusterInit
+		cr.Status.State = api.AppStateInit
 	} else {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterError,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		}
-		cr.Status.State = api.ClusterError
+		cr.Status.State = api.AppStateError
 	}
 
 	if len(cr.Status.Conditions) == 0 {
