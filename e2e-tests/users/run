@@ -43,11 +43,12 @@ newnameencrypted=$(echo -n "backup2" | base64)
 patch_secret "some-users" "MONGODB_BACKUP_USER" "$newnameencrypted"
 sleep 25
 wait_cluster_consistency $psmdb 
-sleep 15
 user=$(getSecretData "some-users" "MONGODB_BACKUP_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+sleep 120
 
 desc 'Run backup'
 run_backup aws-s3
