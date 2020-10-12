@@ -14,7 +14,7 @@ func NewDeployment(name, namespace string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
+			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
