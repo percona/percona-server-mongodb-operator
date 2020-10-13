@@ -24,11 +24,11 @@ If you would like to use *your local shell*, install the following:
 Configuring default settings for the cluster
 ============================================
 
-You can configure the settings using the ``gcloud`` tool. You can run it either in the `Cloud Shell <https://cloud.google.com/shell/docs/quickstart>`_ or in your local shell (if you have installed Google Cloud SDK locally on the previous step). The following command will create a cluster named ``my-cluster-1``:
+You can configure the settings using the ``gcloud`` tool. You can run it either in the `Cloud Shell <https://cloud.google.com/shell/docs/quickstart>`_ or in your local shell (if you have installed Google Cloud SDK locally on the previous step). The following command will create a cluster named ``my-cluster-name``:
 
 .. code:: bash
 
-   $ gcloud container clusters create my-cluster-1 --project <project name> --zone us-central1-a --cluster-version 1.15 --machine-type n1-standard-4 --num-nodes=3
+   $ gcloud container clusters create my-cluster-name --project <project name> --zone us-central1-a --cluster-version 1.15 --machine-type n1-standard-4 --num-nodes=3
 
 .. note:: You must edit the following command and other command-line statements to replace the ``<project name>`` placeholder with your project name. You may also be required to edit the *zone location*, which is set to ``us-central1`` in the above example. Other parameters specify that we are creating a cluster with 3 nodes and with machine type of 4 vCPUs and 45 GB memory.
 
@@ -45,7 +45,7 @@ In the Google Cloud Console, select your cluster and then click the *Connect* sh
 
 .. code:: bash
 
-   $ gcloud container clusters get-credentials my-cluster-1 --zone us-central1-a --project <project name>
+   $ gcloud container clusters get-credentials my-cluster-name --zone us-central1-a --project <project name>
 
 Installing the Operator
 =======================
@@ -115,7 +115,7 @@ Installing the Operator
 
    .. code:: text
 
-      perconaservermongodb.psmdb.percona.com/cluster1 created
+      perconaservermongodb.psmdb.percona.com/my-cluster-name created
 
 6. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_, including the password for the ``root`` user, which you will need to access the cluster.
 
@@ -140,11 +140,11 @@ It may take ten minutes to get the cluster started. You  can verify its creation
 .. code:: text
 
    $ kubectl get pods
-   NAME                                               READY   STATUS    RESTARTS   AGE
-   cluster1-rs0-0                                     2/2     Running   0          8m
-   cluster1-rs0-1                                     2/2     Running   0          8m
-   cluster1-rs0-2                                     2/2     Running   0          7m
-   percona-server-mongodb-operator-5bcc66fb65-lxzw5   1/1     Running   0          9m
+   NAME                                                      READY   STATUS    RESTARTS   AGE
+   my-cluster-name-rs0-0                                     2/2     Running   0          8m
+   my-cluster-name-rs0-1                                     2/2     Running   0          8m
+   my-cluster-name-rs0-2                                     2/2     Running   0          7m
+   percona-server-mongodb-operator-5bcc66fb65-lxzw5          1/1     Running   0          9m
 
 Also, you can see the same information when browsing Pods of your cluster in Google Cloud console via the *Object Browser*:
 
@@ -174,7 +174,7 @@ If ``kubectl get pods`` command had shown some errors, you can examine the probl
 
 .. code:: bash
 
-   kubectl describe pod cluster1-rs0-2
+   kubectl describe pod my-cluster-name-rs0-2
 
 Review the detailed information for ``Warning`` statements and then correct the configuration. An example of a warning is as follows:
 

@@ -83,10 +83,16 @@ You should generate certificates twice: one set is for external communications, 
 
 Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to generate certificates manually are as follows::
 
-	CLUSTER_NAME=my-cluster-name-rs0
+	CLUSTER_NAME=my-cluster-name
+	NAMESPACE=default
 	cat <<EOF | cfssl gencert -initca - | cfssljson -bare ca
 	  {
 	    "CN": "Root CA",
+	    "names": [
+	      {
+	        "O": "PSMDB"
+	      }
+	    ],
 	    "key": {
 	      "algo": "rsa",
 	      "size": 2048
@@ -108,8 +114,18 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare server
 	  {
 	    "hosts": [
-	      "${CLUSTER_NAME}",
-	      "*.${CLUSTER_NAME}"
+	      "localhost",
+	      "${CLUSTER_NAME}-rs0",
+	      "${CLUSTER_NAME}-rs0.${NAMESPACE}",
+	      "${CLUSTER_NAME}-rs0.${NAMESPACE}.svc.cluster.local",
+	      "*.${CLUSTER_NAME}-rs0",
+	      "*.${CLUSTER_NAME}-rs0.${NAMESPACE}",
+	      "*.${CLUSTER_NAME}-rs0.${NAMESPACE}.svc.cluster.local"
+	    ],
+	    "names": [
+	      {
+	        "O": "PSMDB"
+	      }
 	    ],
 	    "CN": "${CLUSTER_NAME/-rs0}",
 	    "key": {
@@ -125,8 +141,17 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare client
 	  {
 	    "hosts": [
-	      "${CLUSTER_NAME}",
-	      "*.${CLUSTER_NAME}"
+	      "${CLUSTER_NAME}-rs0",
+	      "${CLUSTER_NAME}-rs0.${NAMESPACE}",
+	      "${CLUSTER_NAME}-rs0.${NAMESPACE}.svc.cluster.local",
+	      "*.${CLUSTER_NAME}-rs0",
+	      "*.${CLUSTER_NAME}-rs0.${NAMESPACE}",
+	      "*.${CLUSTER_NAME}-rs0.${NAMESPACE}.svc.cluster.local"
+	    ],
+	    "names": [
+	      {
+	        "O": "PSMDB"
+	      }
 	    ],
 	    "CN": "${CLUSTER_NAME/-rs0}",
 	    "key": {

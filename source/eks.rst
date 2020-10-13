@@ -131,7 +131,7 @@ Install the Operator
 
    .. code:: text
 
-      perconaservermongodb.psmdb.percona.com/cluster1 created
+      perconaservermongodb.psmdb.percona.com/my-cluster-name created
 
 5. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_, including the password for the ``root`` user, which you will need to access the cluster.
 
