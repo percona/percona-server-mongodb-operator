@@ -382,6 +382,22 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err = errors.Errorf("reconcile Deployment for: %v", err)
 		return reconcile.Result{}, err
 	}
+	mongosSvc := psmdb.MongosService(cr)
+	err = setControllerReference(cr, mongosSvc, r.scheme)
+	if err != nil {
+		err = errors.Errorf("set owner ref for Service %s: %v", mongosSvc.Name, err)
+		return reconcile.Result{}, err
+	}
+
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, &corev1.Service{})
+	if err != nil && k8serrors.IsNotFound(err) {
+		err := r.client.Create(context.TODO(), mongosSvc)
+		if err != nil {
+			return reconcile.Result{}, errors.Errorf("failed to create service for mongos: %v", err)
+		}
+	} else if err != nil {
+		return reconcile.Result{}, errors.Errorf("failed to check service for mongos: %v", err)
+	}
 
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
 		OpVersion: version.String(),

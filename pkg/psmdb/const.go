@@ -15,4 +15,5 @@ const (
 	mongodRESTencryptDir = "/etc/mongodb-encryption"
 	EncryptionKeyName    = "encryption-key"
 	mongodPortName       = "mongodb"
+	mongosPortName       = "mongos"
 )

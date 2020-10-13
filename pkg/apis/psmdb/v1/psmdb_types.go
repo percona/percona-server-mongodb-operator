@@ -54,8 +54,9 @@ type PerconaServerMongoDBSpec struct {
 	Image                   string                               `json:"image,omitempty"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	RunUID                  int64                                `json:"runUid,omitempty"`
-	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations"`
+	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
+	Mongos                  *MongosSpec                          `json:"mongos,omitempty"`
 	Replsets                []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                 *SecretsSpec                         `json:"secrets,omitempty"`
 	Backup                  BackupSpec                           `json:"backup,omitempty"`
@@ -247,9 +248,12 @@ type SecretsSpec struct {
 }
 
 type MongosSpec struct {
-	*ResourcesSpec `json:"resources,omitempty"`
-	Port           int32 `json:"port,omitempty"`
-	HostPort       int32 `json:"hostPort,omitempty"`
+	*ResourcesSpec           `json:"resources,omitempty"`
+	Port                     int32             `json:"port,omitempty"`
+	HostPort                 int32             `json:"hostPort,omitempty"`
+	ServiceAnnotations       map[string]string `json:"serviceAnnotations,omitempty"`
+	LoadBalancerSourceRanges []string          `json:"loadBalancerSourceRanges,omitempty"`
+	Expose                   Expose            `json:"expose,omitempty"`
 }
 
 type MongodSpec struct {
