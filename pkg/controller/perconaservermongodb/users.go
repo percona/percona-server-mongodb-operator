@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 
@@ -237,7 +238,14 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrap(err, "get replset addr")
 		}
-		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass)
+		var tlsConf *tls.Config
+		if !cr.Spec.UnsafeConf {
+			tlsConf, err = r.mongoTLSConf(cr.Spec.Secrets.SSL, cr.Namespace)
+			if err != nil {
+				return errors.Wrap(err, "get mongo tls config")
+			}
+		}
+		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, tlsConf)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}

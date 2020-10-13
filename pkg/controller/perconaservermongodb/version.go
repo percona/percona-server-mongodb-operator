@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -188,8 +189,16 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 	if err != nil {
 		return errors.Wrap(err, "get replset addr")
 	}
-
-	session, err := mongo.Dial(rsAddrs, replset.Name, string(usersSecret.Data[envMongoDBClusterAdminUser]), string(usersSecret.Data[envMongoDBClusterAdminPassword]))
+	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
+	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	var tlsConf *tls.Config
+	if !cr.Spec.UnsafeConf {
+		tlsConf, err = r.mongoTLSConf(cr.Spec.Secrets.SSL, cr.Namespace)
+		if err != nil {
+			return errors.Wrap(err, "get mongo tls config")
+		}
+	}
+	session, err := mongo.Dial(rsAddrs, replset.Name, username, password, tlsConf)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}

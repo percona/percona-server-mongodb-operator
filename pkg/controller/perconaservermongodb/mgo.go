@@ -3,8 +3,12 @@ package perconaservermongodb
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"time"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -36,7 +40,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	}
 	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
 	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
-	session, err := mongo.Dial(rsAddrs, replset.Name, username, password)
+	var tlsConf *tls.Config
+	if !cr.Spec.UnsafeConf {
+		tlsConf, err = r.mongoTLSConf(cr.Spec.Secrets.SSL, cr.Namespace)
+		if err != nil {
+			return clusterError, errors.Wrap(err, "get mongo tls config")
+		}
+	}
+	session, err := mongo.Dial(rsAddrs, replset.Name, username, password, tlsConf)
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
@@ -268,6 +279,32 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 		return nil
 	}
 	return errNoRunningMongodContainers
+}
+
+func (r *ReconcilePerconaServerMongoDB) mongoTLSConf(secretName, namespace string) (*tls.Config, error) {
+	secret := &corev1.Secret{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name:      secretName,
+		Namespace: namespace,
+	}, secret)
+	if err != nil {
+		return nil, errors.Wrap(err, "get ssl secret")
+	}
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(secret.Data["ca.crt"])
+
+	var clientCerts []tls.Certificate
+	cert, err := tls.X509KeyPair(secret.Data["tls.crt"], secret.Data["tls.key"])
+	if err != nil {
+		return nil, errors.Wrap(err, "load keypair")
+	}
+	clientCerts = append(clientCerts, cert)
+
+	return &tls.Config{
+		InsecureSkipVerify: true,
+		RootCAs:            pool,
+		Certificates:       clientCerts,
+	}, nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod
