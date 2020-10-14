@@ -4,8 +4,7 @@ metadata:
   generation: 3
   name: some-name-rs0
   ownerReferences:
-    - apiVersion: psmdb.percona.com/v1
-      controller: true
+    - controller: true
       kind: PerconaServerMongoDB
       name: some-name
 spec:
