@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	mgo "go.mongodb.org/mongo-driver/mongo"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -34,20 +36,7 @@ const (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
-	if err != nil {
-		return clusterError, errors.Wrap(err, "get replset addr")
-	}
-	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
-	var tlsConf *tls.Config
-	if !cr.Spec.UnsafeConf {
-		tlsConf, err = r.mongoTLSConf(cr.Spec.Secrets.SSL, cr.Namespace)
-		if err != nil {
-			return clusterError, errors.Wrap(err, "get mongo tls config")
-		}
-	}
-	session, err := mongo.Dial(rsAddrs, replset.Name, username, password, tlsConf)
+	session, err := r.mongoClient(cr, pods, usersSecret)
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
@@ -151,6 +140,42 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return clusterReady, nil
 	}
 	return clusterInit, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
+	certSecret := &corev1.Secret{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name:      cr.Spec.Secrets.SSL,
+		Namespace: cr.Namespace,
+	}, certSecret)
+	if err != nil {
+		return nil, errors.Wrap(err, "get ssl certSecret")
+	}
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
+
+	var clientCerts []tls.Certificate
+	cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
+	if err != nil {
+		return nil, errors.Wrap(err, "load keypair")
+	}
+	clientCerts = append(clientCerts, cert)
+
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, cr.Spec.Replsets[0], pods.Items)
+	if err != nil {
+		return nil, errors.Wrap(err, "get replset addr")
+	}
+
+	return mongo.Dial(&mongo.Config{
+		ReplSetName: cr.Spec.Replsets[0].Name,
+		Hosts:       rsAddrs,
+		Password:    string(usersSecret.Data[envMongoDBClusterAdminPassword]),
+		Username:    string(usersSecret.Data[envMongoDBClusterAdminUser]),
+		TLSConf: &tls.Config{
+			InsecureSkipVerify: true,
+			RootCAs:            pool,
+			Certificates:       clientCerts,
+		}})
 }
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
@@ -281,30 +306,40 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 	return errNoRunningMongodContainers
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoTLSConf(secretName, namespace string) (*tls.Config, error) {
-	secret := &corev1.Secret{}
+func (r *ReconcilePerconaServerMongoDB) mongoConf(cr *api.PerconaServerMongoDB, pods corev1.PodList, usersSecret *corev1.Secret) (*mongo.Config, error) {
+	certSecret := &corev1.Secret{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      secretName,
-		Namespace: namespace,
-	}, secret)
+		Name:      cr.Spec.Secrets.SSL,
+		Namespace: cr.Namespace,
+	}, certSecret)
 	if err != nil {
-		return nil, errors.Wrap(err, "get ssl secret")
+		return nil, errors.Wrap(err, "get ssl certSecret")
 	}
 	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM(secret.Data["ca.crt"])
+	pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
 
 	var clientCerts []tls.Certificate
-	cert, err := tls.X509KeyPair(secret.Data["tls.crt"], secret.Data["tls.key"])
+	cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
 	if err != nil {
 		return nil, errors.Wrap(err, "load keypair")
 	}
 	clientCerts = append(clientCerts, cert)
 
-	return &tls.Config{
-		InsecureSkipVerify: true,
-		RootCAs:            pool,
-		Certificates:       clientCerts,
-	}, nil
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, cr.Spec.Replsets[0], pods.Items)
+	if err != nil {
+		return nil, errors.Wrap(err, "get replset addr")
+	}
+
+	return &mongo.Config{
+		ReplSetName: cr.Spec.Replsets[0].Name,
+		Hosts:       rsAddrs,
+		Password:    string(usersSecret.Data[envMongoDBClusterAdminPassword]),
+		Username:    string(usersSecret.Data[envMongoDBClusterAdminUser]),
+		TLSConf: &tls.Config{
+			InsecureSkipVerify: true,
+			RootCAs:            pool,
+			Certificates:       clientCerts,
+		}}, nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod

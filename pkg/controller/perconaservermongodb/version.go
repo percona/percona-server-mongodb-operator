@@ -2,14 +2,12 @@ package perconaservermongodb
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
@@ -185,20 +183,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 		return nil
 	}
 
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
-	if err != nil {
-		return errors.Wrap(err, "get replset addr")
-	}
-	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
-	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	var tlsConf *tls.Config
-	if !cr.Spec.UnsafeConf {
-		tlsConf, err = r.mongoTLSConf(cr.Spec.Secrets.SSL, cr.Namespace)
-		if err != nil {
-			return errors.Wrap(err, "get mongo tls config")
-		}
-	}
-	session, err := mongo.Dial(rsAddrs, replset.Name, username, password, tlsConf)
+	session, err := r.mongoClient(cr, pods, usersSecret)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}

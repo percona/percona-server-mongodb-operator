@@ -2,14 +2,12 @@ package perconaservermongodb
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -67,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	client, err := r.getMongoClient(cr, replset, list, secret)
+	client, err := r.mongoClient(cr, list, secret)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}
@@ -179,28 +177,6 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, po
 	}
 
 	return fmt.Errorf("reach pod wait limit")
-}
-
-func (r *ReconcilePerconaServerMongoDB) getMongoClient(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get replset addr")
-	}
-	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
-	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	var tlsConf *tls.Config
-	if !cr.Spec.UnsafeConf {
-		tlsConf, err = r.mongoTLSConf(cr.Spec.Secrets.SSL, cr.Namespace)
-		if err != nil {
-			return nil, errors.Wrap(err, "get mongo tls config")
-		}
-	}
-	client, err := mongo.Dial(rsAddrs, replset.Name, username, password, tlsConf)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to dial mongo")
-	}
-
-	return client, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(client *mgo.Client) (string, error) {

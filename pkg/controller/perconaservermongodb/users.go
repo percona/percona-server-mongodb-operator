@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 
@@ -18,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -203,12 +201,12 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		return false, nil
 	}
 
-	err = r.updateUsers(cr, su.users, string(currUsersSec.Data[envMongoDBUserAdminUser]), string(currUsersSec.Data[envMongoDBUserAdminPassword]))
+	err = r.updateUsers(cr, su.users, currUsersSec)
 
 	return restartSfs, errors.Wrap(err, "mongo: update system users")
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, adminUser, adminPass string) error {
+func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, usersSecret *corev1.Secret) error {
 	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
 			log.Info("update users: multiple replica sets is not yet supported")
@@ -223,9 +221,9 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		}
 
-		pods := &corev1.PodList{}
+		pods := corev1.PodList{}
 		err := r.client.List(context.TODO(),
-			pods,
+			&pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(matchLabels),
@@ -234,18 +232,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrapf(err, "get pods list for replset %s", replset.Name)
 		}
-		rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
-		if err != nil {
-			return errors.Wrap(err, "get replset addr")
-		}
-		var tlsConf *tls.Config
-		if !cr.Spec.UnsafeConf {
-			tlsConf, err = r.mongoTLSConf(cr.Spec.Secrets.SSL, cr.Namespace)
-			if err != nil {
-				return errors.Wrap(err, "get mongo tls config")
-			}
-		}
-		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, tlsConf)
+		client, err := r.mongoClient(cr, pods, usersSecret)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}

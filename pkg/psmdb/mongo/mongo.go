@@ -18,19 +18,27 @@ import (
 
 var log = logf.Log.WithName("mongo")
 
-func Dial(addrs []string, replset, username, password string, tlsConf *tls.Config) (*mongo.Client, error) {
+type Config struct {
+	Hosts       []string
+	ReplSetName string
+	Username    string
+	Password    string
+	TLSConf     *tls.Config
+}
+
+func Dial(conf *Config) (*mongo.Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer connectcancel()
 
 	opts := options.Client().
-		SetHosts(addrs).
-		SetReplicaSet(replset).
+		SetHosts(conf.Hosts).
+		SetReplicaSet(conf.ReplSetName).
 		SetAuth(options.Credential{
-			Password: password,
-			Username: username,
+			Password: conf.Username,
+			Username: conf.Password,
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
-		SetReadPreference(readpref.Primary()).SetTLSConfig(tlsConf)
+		SetReadPreference(readpref.Primary()).SetTLSConfig(conf.TLSConf)
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
