@@ -380,7 +380,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	err = r.reconcileMongos(cr)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for: %v")
+		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
 	}
 
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
@@ -473,9 +473,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrapf(err, "set owner ref for Service %s", mongosSvc.Name)
 	}
 
-	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, mongosSvc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get Deployment %s", mongosSvc.Name)
+	}
+
+	err = r.createOrUpdate(mongosSvc, mongosSvc.Name, mongosSvc.Namespace)
 	if err != nil {
-		return errors.Wrapf(err, "update or create Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "update or create Service %s", mongosSvc.Name)
 	}
 
 	return nil

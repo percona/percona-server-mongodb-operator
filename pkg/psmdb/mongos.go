@@ -193,10 +193,10 @@ func findCfgReplset(replsets []*api.ReplsetSpec) (*api.ReplsetSpec, error) {
 	return nil, errors.New("failed to find config server replset configuration")
 }
 
-func mongosContainerArgs(m *api.PerconaServerMongoDB, resources corev1.ResourceRequirements) ([]string, error) {
-	mdSpec := m.Spec.Mongod
-	msSpec := m.Spec.Mongos
-	cfgRs, err := findCfgReplset(m.Spec.Replsets)
+func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements) ([]string, error) {
+	mdSpec := cr.Spec.Mongod
+	msSpec := cr.Spec.Mongos
+	cfgRs, err := findCfgReplset(cr.Spec.Replsets)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func mongosContainerArgs(m *api.PerconaServerMongoDB, resources corev1.ResourceR
 	for i := 0; i < int(cfgRs.Size); i++ {
 		cfgInstanses = append(cfgInstanses,
 			fmt.Sprintf("%s-%s-%d.%s-%s.%s.svc.cluster.local:%d",
-				m.Name, cfgRs.Name, i, m.Name, cfgRs.Name, m.Namespace, msSpec.Port))
+				cr.Name, cfgRs.Name, i, cr.Name, cfgRs.Name, cr.Namespace, msSpec.Port))
 	}
 
 	configDB := fmt.Sprintf("cfg0/%s", strings.Join(cfgInstanses, ","))
@@ -218,7 +218,7 @@ func mongosContainerArgs(m *api.PerconaServerMongoDB, resources corev1.ResourceR
 		configDB,
 	}
 
-	if m.Spec.UnsafeConf {
+	if cr.Spec.UnsafeConf {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
@@ -323,7 +323,7 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 	return volumes
 }
 
-func MongosService(m *api.PerconaServerMongoDB) *corev1.Service {
+func MongosService(cr *api.PerconaServerMongoDB) *corev1.Service {
 	ls := map[string]string{
 		"app.kubernetes.io/component": "mongos",
 	}
@@ -334,27 +334,27 @@ func MongosService(m *api.PerconaServerMongoDB) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        m.Name + "-" + "mongos",
-			Namespace:   m.Namespace,
-			Annotations: m.Spec.Mongos.ServiceAnnotations,
+			Name:        cr.Name + "-" + "mongos",
+			Namespace:   cr.Namespace,
+			Annotations: cr.Spec.Mongos.ServiceAnnotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
 					Name:       mongosPortName,
-					Port:       m.Spec.Mongos.Port,
-					TargetPort: intstr.FromInt(int(m.Spec.Mongos.Port)),
+					Port:       cr.Spec.Mongos.Port,
+					TargetPort: intstr.FromInt(int(cr.Spec.Mongos.Port)),
 				},
 			},
 			Selector:                 ls,
-			LoadBalancerSourceRanges: m.Spec.Mongos.LoadBalancerSourceRanges,
+			LoadBalancerSourceRanges: cr.Spec.Mongos.LoadBalancerSourceRanges,
 		},
 	}
 
-	if !m.Spec.Mongos.Expose.Enabled {
+	if !cr.Spec.Mongos.Expose.Enabled {
 		svc.Spec.ClusterIP = "None"
 	} else {
-		switch m.Spec.Mongos.Expose.ExposeType {
+		switch cr.Spec.Mongos.Expose.ExposeType {
 		case corev1.ServiceTypeNodePort:
 			svc.Spec.Type = corev1.ServiceTypeNodePort
 			svc.Spec.ExternalTrafficPolicy = "Local"
