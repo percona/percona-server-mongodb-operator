@@ -293,10 +293,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/component": "mongos"}),
 			},
 		)
-		if err != nil {
-			err = errors.Errorf("get pods list for mongos: %v", err)
-			return reconcile.Result{}, err
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return reconcile.Result{}, errors.Wrap(err, "get pods list for mongos")
 		}
+
 		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, secrets, sfsTemplateAnnotations)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
@@ -433,6 +433,10 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Mongos == nil {
+		return nil
+	}
+
 	msDepl := psmdb.MongosDeployment(cr)
 	err := setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
