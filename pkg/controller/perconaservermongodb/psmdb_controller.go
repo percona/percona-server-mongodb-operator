@@ -222,12 +222,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	internalKey := cr.Name + "-mongodb-keyfile"
+	internalKey := psmdb.InternalKey(cr)
 	ikCreated, err := r.ensureSecurityKey(cr, internalKey, "mongodb-key", 768, true)
 	if err != nil {
 		err = errors.Wrapf(err, "ensure mongo Key %s", internalKey)
 		return reconcile.Result{}, err
 	}
+
 	if ikCreated {
 		reqLogger.Info("Created a new mongo key", "KeyName", internalKey)
 	}
@@ -377,7 +378,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	_, err = r.reconcileMongos(cr, make(map[string]string), internalKey, secrets, make(map[string]string))
+	_, err = r.reconcileMongos(cr)
 	if err != nil {
 		err = errors.Errorf("reconcile Deployment for: %v", err)
 		return reconcile.Result{}, err
@@ -448,111 +449,63 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	return created, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB,
-	matchLabels map[string]string, internalKeyName string, secret *corev1.Secret,
-	dpTemplateAnnotations map[string]string) (*appsv1.Deployment, error) {
-
-	deploymentName := cr.Name + "-" + "mongos"
-	matchLabels["app.kubernetes.io/component"] = "mongos"
-
-	dp := psmdb.NewDeployment(deploymentName, cr.Namespace)
-	err := setControllerReference(cr, dp, r.scheme)
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) (*appsv1.Deployment, error) {
+	msDepl := psmdb.MongosDeployment(cr)
+	err := setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
-		return nil, fmt.Errorf("set owner ref for Deployment %s: %v", dp.Name, err)
+		return nil, fmt.Errorf("set owner ref for Deployment %s: %v", msDepl.Name, err)
 	}
 
-	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: dp.Name, Namespace: dp.Namespace}, dp)
+	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
 	if errGet != nil && !k8serrors.IsNotFound(errGet) {
-		return nil, fmt.Errorf("get Deployment %s: %v", dp.Name, err)
+		return nil, fmt.Errorf("get Deployment %s: %v", msDepl.Name, err)
 	}
 
-	inits := []corev1.Container{}
-	if cr.CompareVersion("1.5.0") >= 0 {
-		operatorPod, err := r.operatorPod()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get operator pod: %v", err)
-		}
-		inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
-	}
-
-	dpSpec, err := psmdb.DeploymentSpec(cr, internalKeyName, matchLabels, inits)
+	opPod, err := r.operatorPod()
 	if err != nil {
-		return nil, fmt.Errorf("create Deployment.Spec %s: %v", dp.Name, err)
-	}
-	dpSpec.Template.Annotations = dp.Spec.Template.Annotations
-	if dpSpec.Template.Annotations == nil {
-		dpSpec.Template.Annotations = make(map[string]string)
+		return nil, errors.Wrap(err, "failed to get operator pod")
 	}
 
-	for k, v := range dpTemplateAnnotations {
-		dpSpec.Template.Annotations[k] = v
-	}
-	// add TLS/SSL Volume
-	t := true
-	dpSpec.Template.Spec.Volumes = append(dpSpec.Template.Spec.Volumes,
-		corev1.Volume{
-			Name: "ssl",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSL,
-					Optional:    &cr.Spec.UnsafeConf,
-					DefaultMode: &secretFileMode,
-				},
-			},
-		},
-		corev1.Volume{
-			Name: "ssl-internal",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSLInternal,
-					Optional:    &t,
-					DefaultMode: &secretFileMode,
-				},
-			},
-		},
-	)
-
-	dpSpec.Template.Spec.Volumes = append(dpSpec.Template.Spec.Volumes,
-		corev1.Volume{
-			Name: psmdb.MongodDataVolClaimName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-	)
-
-	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod)
 	if err != nil {
-		return nil, fmt.Errorf("get secret hash error: %v", err)
+		return nil, fmt.Errorf("create Deployment.Spec %s: %v", msDepl.Name, err)
 	}
+
+	sslAnn, err := r.sslAnnotation(cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get ssl annotations")
+	}
+	deplSpec.Template.Annotations = sslAnn
+
+	msDepl.Spec = deplSpec
+	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("update or create Deployment %s: %v", msDepl.Name, err)
+	}
+
+	return msDepl, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongoDB) (map[string]string, error) {
+	annotation := make(map[string]string)
 
 	is110 := cr.CompareVersion("1.1.0") >= 0
 	if is110 {
-		dpSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
-	}
-	sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return nil, fmt.Errorf("get secret hash error: %v", err)
-	} else if err == nil {
-		if is110 {
-			dpSpec.Template.Annotations["percona.com/ssl-internal-hash"] = sslInternalHash
-		}
-	}
-
-	dp.Spec = dpSpec
-	if k8serrors.IsNotFound(errGet) {
-		err = r.client.Create(context.TODO(), dp)
-		if err != nil && !k8serrors.IsAlreadyExists(err) {
-			return nil, fmt.Errorf("create StatefulSet %s: %v", dp.Name, err)
-		}
-	} else {
-		err = r.client.Update(context.TODO(), dp)
+		sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
 		if err != nil {
-			return nil, fmt.Errorf("update Deployment %s: %v", dp.Name, err)
+			return nil, fmt.Errorf("get secret hash error: %v", err)
 		}
+
+		sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
+		if err != nil {
+			return nil, fmt.Errorf("get secret hash error: %v", err)
+		}
+
+		annotation["percona.com/ssl-internal-hash"] = sslInternalHash
+		annotation["percona.com/ssl-hash"] = sslHash
 	}
 
-	return dp, nil
+	return annotation, nil
 }
 
 // TODO: reduce cyclomatic complexity
@@ -708,23 +661,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		}
 	}
 
-	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
+	sslAnn, err := r.sslAnnotation(cr)
 	if err != nil {
-		return nil, fmt.Errorf("get secret hash error: %v", err)
+		return nil, errors.Wrap(err, "failed to get ssl annotations")
 	}
-
-	is110 := cr.CompareVersion("1.1.0") >= 0
-	if is110 {
-		sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
-	}
-	sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return nil, fmt.Errorf("get secret hash error: %v", err)
-	} else if err == nil {
-		if is110 {
-			sfsSpec.Template.Annotations["percona.com/ssl-internal-hash"] = sslInternalHash
-		}
-	}
+	sfsSpec.Template.Annotations = sslAnn
 
 	sfs.Spec = sfsSpec
 	if k8serrors.IsNotFound(errGet) {

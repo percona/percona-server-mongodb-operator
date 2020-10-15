@@ -1,5 +1,7 @@
 package psmdb
 
+import api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+
 const (
 	gigaByte                 int64   = 1 << 30
 	minWiredTigerCacheSizeGB float64 = 0.25
@@ -17,3 +19,7 @@ const (
 	mongodPortName       = "mongodb"
 	mongosPortName       = "mongos"
 )
+
+func InternalKey(cr *api.PerconaServerMongoDB) string {
+	return cr.Name + "-mongodb-keyfile"
+}
