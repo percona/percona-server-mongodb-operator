@@ -3,8 +3,10 @@ package psmdb
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,9 +25,8 @@ func NewDeployment(name, namespace string) *appsv1.Deployment {
 	}
 }
 
-func DeploymentSpec(m *api.PerconaServerMongoDB, size int32, ikeyName string,
-	containerName string, ls map[string]string,
-	initContainers []corev1.Container) (appsv1.DeploymentSpec, error) {
+func DeploymentSpec(cr *api.PerconaServerMongoDB, ikeyName string,
+	ls map[string]string, initContainers []corev1.Container) (appsv1.DeploymentSpec, error) {
 	fvar := false
 
 	volumes := []corev1.Volume{
@@ -41,14 +42,14 @@ func DeploymentSpec(m *api.PerconaServerMongoDB, size int32, ikeyName string,
 		},
 	}
 
-	if *m.Spec.Mongod.Security.EnableEncryption {
+	if *cr.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.Volume{
-				Name: m.Spec.Mongod.Security.EncryptionKeySecret,
+				Name: cr.Spec.Mongod.Security.EncryptionKeySecret,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						DefaultMode: &secretFileMode,
-						SecretName:  m.Spec.Mongod.Security.EncryptionKeySecret,
+						SecretName:  cr.Spec.Mongod.Security.EncryptionKeySecret,
 						Optional:    &fvar,
 					},
 				},
@@ -56,12 +57,7 @@ func DeploymentSpec(m *api.PerconaServerMongoDB, size int32, ikeyName string,
 		)
 	}
 
-	resources, err := CreateResources(nil)
-	if err != nil {
-		return appsv1.DeploymentSpec{}, fmt.Errorf("resource creation: %v", err)
-	}
-
-	c, err := mongosContainer(m, containerName, resources, ikeyName)
+	c, err := mongosContainer(cr, ikeyName)
 	if err != nil {
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -72,36 +68,39 @@ func DeploymentSpec(m *api.PerconaServerMongoDB, size int32, ikeyName string,
 	}
 
 	return appsv1.DeploymentSpec{
-		// ServiceName: m.Name + "-" + replset.Name,
-		Replicas: &size,
+		Replicas: &cr.Spec.Mongos.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: ls,
-				// Annotations: multiAZ.Annotations,
+				Labels:      ls,
+				Annotations: cr.Spec.Mongos.MultiAZ.Annotations,
 			},
 			Spec: corev1.PodSpec{
-				// SecurityContext:   replset.PodSecurityContext,
-				// Affinity: PodAffinity(multiAZ.Affinity, ls),
-				// NodeSelector:      multiAZ.NodeSelector,
-				// Tolerations:       multiAZ.Tolerations,
-				// PriorityClassName: multiAZ.PriorityClassName,
-				RestartPolicy:    corev1.RestartPolicyAlways,
-				ImagePullSecrets: m.Spec.ImagePullSecrets,
-				Containers:       []corev1.Container{c},
-				InitContainers:   initContainers,
-				Volumes:          volumes,
-				SchedulerName:    m.Spec.SchedulerName,
+				SecurityContext:   cr.Spec.Mongos.PodSecurityContext,
+				Affinity:          PodAffinity(cr.Spec.Mongos.MultiAZ.Affinity, ls),
+				NodeSelector:      cr.Spec.Mongos.MultiAZ.NodeSelector,
+				Tolerations:       cr.Spec.Mongos.MultiAZ.Tolerations,
+				PriorityClassName: cr.Spec.Mongos.MultiAZ.PriorityClassName,
+				RestartPolicy:     corev1.RestartPolicyAlways,
+				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
+				Containers:        []corev1.Container{c},
+				InitContainers:    initContainers,
+				Volumes:           volumes,
+				SchedulerName:     cr.Spec.SchedulerName,
 			},
 		},
 	}, nil
 }
 
-func mongosContainer(m *api.PerconaServerMongoDB, name string,
-	resources corev1.ResourceRequirements, ikeyName string) (corev1.Container, error) {
+func mongosContainer(cr *api.PerconaServerMongoDB, ikeyName string) (corev1.Container, error) {
 	fvar := false
+
+	resources, err := CreateResources(cr.Spec.Mongos.ResourcesSpec)
+	if err != nil {
+		return corev1.Container{}, fmt.Errorf("resource creation: %v", err)
+	}
 
 	volumes := []corev1.VolumeMount{
 		{
@@ -125,70 +124,70 @@ func mongosContainer(m *api.PerconaServerMongoDB, name string,
 		},
 	}
 
-	if *m.Spec.Mongod.Security.EnableEncryption {
+	if *cr.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.VolumeMount{
-				Name:      m.Spec.Mongod.Security.EncryptionKeySecret,
+				Name:      cr.Spec.Mongod.Security.EncryptionKeySecret,
 				MountPath: mongodRESTencryptDir,
 				ReadOnly:  true,
 			},
 		)
 	}
 
+	mongosArgs, err := mongosContainerArgs(cr, resources)
+	if err != nil {
+		return corev1.Container{}, err
+	}
 	container := corev1.Container{
-		Name:            name,
-		Image:           m.Spec.Image,
-		ImagePullPolicy: m.Spec.ImagePullPolicy,
-		Args:            mongosContainerArgs(m, resources),
+		Name:            "mongos",
+		Image:           cr.Spec.Image,
+		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Args:            mongosArgs,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          mongodPortName,
-				HostPort:      m.Spec.Mongod.Net.HostPort,
-				ContainerPort: m.Spec.Mongod.Net.Port,
+				Name:          mongosPortName,
+				HostPort:      cr.Spec.Mongos.HostPort,
+				ContainerPort: cr.Spec.Mongos.Port,
 			},
 		},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "SERVICE_NAME",
-				Value: m.Name,
+				Value: cr.Name,
 			},
 			{
 				Name:  "NAMESPACE",
-				Value: m.Namespace,
+				Value: cr.Namespace,
 			},
 			{
 				Name:  "MONGODB_PORT",
-				Value: strconv.Itoa(int(m.Spec.Mongod.Net.Port)),
+				Value: strconv.Itoa(int(cr.Spec.Mongos.Port)),
 			},
-			// {
-			// 	Name:  "MONGODB_REPLSET",
-			// 	Value: replset.Name,
-			// },
 		},
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: m.Spec.Secrets.Users,
+						Name: cr.Spec.Secrets.Users,
 					},
 					Optional: &fvar,
 				},
 			},
 		},
-		WorkingDir: MongodContainerDataDir,
-		// LivenessProbe:   &replset.LivenessProbe.Probe,
-		// ReadinessProbe:  replset.ReadinessProbe,
-		// Resources:       resources,
-		// SecurityContext: replset.ContainerSecurityContext,
-		VolumeMounts: volumes,
+		WorkingDir:      MongodContainerDataDir,
+		LivenessProbe:   &cr.Spec.Mongos.LivenessProbe.Probe,
+		ReadinessProbe:  cr.Spec.Mongos.ReadinessProbe,
+		SecurityContext: cr.Spec.Mongos.ContainerSecurityContext,
+		Resources:       resources,
+		VolumeMounts:    volumes,
 	}
 
-	if m.CompareVersion("1.5.0") >= 0 {
+	if cr.CompareVersion("1.5.0") >= 0 {
 		container.EnvFrom = []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "internal-" + m.Name + "-users",
+						Name: "internal-" + cr.Name + "-users",
 					},
 					Optional: &fvar,
 				},
@@ -200,13 +199,36 @@ func mongosContainer(m *api.PerconaServerMongoDB, name string,
 	return container, nil
 }
 
-func mongosContainerArgs(m *api.PerconaServerMongoDB, resources corev1.ResourceRequirements) []string {
-	mSpec := m.Spec.Mongod
-	configDB := fmt.Sprintf("cfg0/my-cluster-name-cfg0-0.my-cluster-name-cfg0.%s.svc.cluster.local:27017,my-cluster-name-cfg0-1.my-cluster-name-cfg0.%s.svc.cluster.local:27017,my-cluster-name-cfg0-2.my-cluster-name-cfg0.%s.svc.cluster.local:27017", m.Namespace, m.Namespace, m.Namespace)
+func findCfgReplset(replsets []*api.ReplsetSpec) (*api.ReplsetSpec, error) {
+	for _, rs := range replsets {
+		if rs.ClusterRole == "configsvr" {
+			return rs, nil
+		}
+	}
+
+	return nil, errors.New("failed to find config server replset configuration")
+}
+
+func mongosContainerArgs(m *api.PerconaServerMongoDB, resources corev1.ResourceRequirements) ([]string, error) {
+	mdSpec := m.Spec.Mongod
+	msSpec := m.Spec.Mongos
+	cfgRs, err := findCfgReplset(m.Spec.Replsets)
+	if err != nil {
+		return nil, err
+	}
+
+	cfgInstanses := make([]string, 0, cfgRs.Size)
+	for i := 0; i < int(cfgRs.Size); i++ {
+		cfgInstanses = append(cfgInstanses,
+			fmt.Sprintf("%s-%s-%d.%s-%s.%s.svc.cluster.local:%d",
+				m.Name, cfgRs.Name, i, m.Name, cfgRs.Name, m.Namespace, msSpec.Port))
+	}
+
+	configDB := fmt.Sprintf("cfg0/%s", strings.Join(cfgInstanses, ","))
 	args := []string{
 		"mongos",
 		"--bind_ip_all",
-		// "--port=" + strconv.Itoa(int(mSpec.Net.Port)),
+		"--port=" + strconv.Itoa(int(msSpec.Port)),
 		"--sslAllowInvalidCertificates",
 		"--configdb",
 		configDB,
@@ -224,32 +246,29 @@ func mongosContainerArgs(m *api.PerconaServerMongoDB, resources corev1.ResourceR
 		)
 	}
 
-	// security
-	if mSpec.Security != nil && mSpec.Security.RedactClientLogData {
+	if mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
 		args = append(args, "--redactClientLogData")
 	}
 
-	// setParameter
-	if mSpec.SetParameter != nil {
-		if mSpec.SetParameter.CursorTimeoutMillis > 0 {
+	if msSpec.SetParameter != nil {
+		if msSpec.SetParameter.CursorTimeoutMillis > 0 {
 			args = append(args,
 				"--setParameter",
-				"cursorTimeoutMillis="+strconv.Itoa(mSpec.SetParameter.CursorTimeoutMillis),
+				"cursorTimeoutMillis="+strconv.Itoa(msSpec.SetParameter.CursorTimeoutMillis),
 			)
 		}
 	}
 
-	// auditLog
-	if mSpec.AuditLog != nil && mSpec.AuditLog.Destination == api.AuditLogDestinationFile {
-		if mSpec.AuditLog.Filter == "" {
-			mSpec.AuditLog.Filter = "{}"
+	if msSpec.AuditLog != nil && msSpec.AuditLog.Destination == api.AuditLogDestinationFile {
+		if msSpec.AuditLog.Filter == "" {
+			msSpec.AuditLog.Filter = "{}"
 		}
 		args = append(args,
 			"--auditDestination=file",
-			"--auditFilter="+mSpec.AuditLog.Filter,
-			"--auditFormat="+string(mSpec.AuditLog.Format),
+			"--auditFilter="+msSpec.AuditLog.Filter,
+			"--auditFormat="+string(msSpec.AuditLog.Format),
 		)
-		switch mSpec.AuditLog.Format {
+		switch msSpec.AuditLog.Format {
 		case api.AuditLogFormatBSON:
 			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
 		default:
@@ -257,5 +276,5 @@ func mongosContainerArgs(m *api.PerconaServerMongoDB, resources corev1.ResourceR
 		}
 	}
 
-	return args
+	return args, nil
 }

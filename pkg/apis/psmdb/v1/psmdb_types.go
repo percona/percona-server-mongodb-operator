@@ -248,17 +248,25 @@ type SecretsSpec struct {
 }
 
 type MongosSpec struct {
+	MultiAZ
+	Port                     int32                      `json:"port,omitempty"`
+	HostPort                 int32                      `json:"hostPort,omitempty"`
+	ServiceAnnotations       map[string]string          `json:"serviceAnnotations,omitempty"`
+	LoadBalancerSourceRanges []string                   `json:"loadBalancerSourceRanges,omitempty"`
+	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
+	AuditLog                 *MongoSpecAuditLog         `json:"auditLog,omitempty"`
+	Expose                   Expose                     `json:"expose,omitempty"`
+	Size                     int32                      `json:"size,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	*ResourcesSpec           `json:"resources,omitempty"`
-	Port                     int32             `json:"port,omitempty"`
-	HostPort                 int32             `json:"hostPort,omitempty"`
-	ServiceAnnotations       map[string]string `json:"serviceAnnotations,omitempty"`
-	LoadBalancerSourceRanges []string          `json:"loadBalancerSourceRanges,omitempty"`
-	Expose                   Expose            `json:"expose,omitempty"`
 }
 
 type MongodSpec struct {
 	Net                      *MongodSpecNet                `json:"net,omitempty"`
-	AuditLog                 *MongodSpecAuditLog           `json:"auditLog,omitempty"`
+	AuditLog                 *MongoSpecAuditLog            `json:"auditLog,omitempty"`
 	OperationProfiling       *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
 	Replication              *MongodSpecReplication        `json:"replication,omitempty"`
 	Security                 *MongodSpecSecurity           `json:"security,omitempty"`
@@ -294,6 +302,13 @@ type MongodSpecSecurity struct {
 }
 
 type MongodSpecSetParameter struct {
+	TTLMonitorSleepSecs                   int `json:"ttlMonitorSleepSecs,omitempty"`
+	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
+	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
+	CursorTimeoutMillis                   int `json:"cursorTimeoutMillis,omitempty"`
+}
+
+type MongosSpecSetParameter struct {
 	TTLMonitorSleepSecs                   int `json:"ttlMonitorSleepSecs,omitempty"`
 	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
 	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
@@ -369,7 +384,7 @@ var (
 	AuditLogFormatJSON AuditLogFormat = "JSON"
 )
 
-type MongodSpecAuditLog struct {
+type MongoSpecAuditLog struct {
 	Destination AuditLogDestination `json:"destination,omitempty"`
 	Format      AuditLogFormat      `json:"format,omitempty"`
 	Filter      string              `json:"filter,omitempty"`

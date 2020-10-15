@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -62,6 +63,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	}
 
 	if cr.Status.Replsets[replset.Name].Initialized &&
+		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		!cr.Status.Replsets[replset.Name].AddedAsShard {
 
@@ -245,6 +247,11 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 		}
 
 		log.Info("Add shard result", "result", outb.String(), "err", errb.String())
+
+		var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
+		if !re.Match(outb.Bytes()) {
+			return errors.New("failed to add shard")
+		}
 
 		time.Sleep(time.Second * 5)
 	}

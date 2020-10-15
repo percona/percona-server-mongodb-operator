@@ -141,6 +141,60 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		failureThresholdDefault = int32(4)
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
+
+	if cr.Spec.Mongos != nil && cr.Spec.Mongos.LivenessProbe == nil {
+		if cr.Spec.Mongos.LivenessProbe == nil {
+			cr.Spec.Mongos.LivenessProbe = new(LivenessProbeExtended)
+			cr.Spec.Mongos.LivenessProbe.Probe = corev1.Probe{
+				Handler: corev1.Handler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(cr.Spec.Mongos.Port)),
+					},
+				},
+			}
+		}
+
+		if cr.Spec.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
+			cr.Spec.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+		}
+		if cr.Spec.Mongos.LivenessProbe.TimeoutSeconds == 0 {
+			cr.Spec.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+		}
+		if cr.Spec.Mongos.LivenessProbe.PeriodSeconds == 0 {
+			cr.Spec.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDeafult
+		}
+		if cr.Spec.Mongos.LivenessProbe.FailureThreshold == 0 {
+			cr.Spec.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
+		}
+		if cr.Spec.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
+			cr.Spec.Mongos.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
+		}
+	}
+
+	if cr.Spec.Mongos != nil && cr.Spec.Mongos.ReadinessProbe == nil {
+		if cr.Spec.Mongos.ReadinessProbe == nil {
+			cr.Spec.Mongos.ReadinessProbe = &corev1.Probe{
+				Handler: corev1.Handler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(cr.Spec.Mongos.Port)),
+					},
+				},
+			}
+		}
+		if cr.Spec.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
+			cr.Spec.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
+		}
+		if cr.Spec.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
+			cr.Spec.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)
+		}
+		if cr.Spec.Mongos.ReadinessProbe.PeriodSeconds == 0 {
+			cr.Spec.Mongos.ReadinessProbe.PeriodSeconds = int32(3)
+		}
+		if cr.Spec.Mongos.ReadinessProbe.FailureThreshold == 0 {
+			cr.Spec.Mongos.ReadinessProbe.FailureThreshold = int32(8)
+		}
+	}
+
 	for _, replset := range cr.Spec.Replsets {
 		if replset.LivenessProbe == nil {
 			replset.LivenessProbe = new(LivenessProbeExtended)

@@ -124,6 +124,7 @@ spec:
           requests:
             storage: 3Gi
   mongos:
+    size: 3
     port: 27017
     hostPort: 0
     setParameter:

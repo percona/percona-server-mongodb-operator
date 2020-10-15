@@ -453,8 +453,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	dpTemplateAnnotations map[string]string) (*appsv1.Deployment, error) {
 
 	deploymentName := cr.Name + "-" + "mongos"
-	var size int32 = 3
-	containerName := "mongos"
 	matchLabels["app.kubernetes.io/component"] = "mongos"
 
 	dp := psmdb.NewDeployment(deploymentName, cr.Namespace)
@@ -477,8 +475,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
 	}
 
-	dpSpec, err := psmdb.DeploymentSpec(cr, int32(size), internalKeyName, containerName,
-		matchLabels, inits)
+	dpSpec, err := psmdb.DeploymentSpec(cr, internalKeyName, matchLabels, inits)
 	if err != nil {
 		return nil, fmt.Errorf("create Deployment.Spec %s: %v", dp.Name, err)
 	}
@@ -549,11 +546,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 			return nil, fmt.Errorf("create StatefulSet %s: %v", dp.Name, err)
 		}
 	} else {
-		// err := r.reconcilePDB(pdbspec, matchLabels, cr.Namespace, dp)
-		// if err != nil {
-		// 	return nil, fmt.Errorf("PodDisruptionBudget for %s: %v", dp.Name, err)
-		// }
-		dp.Spec.Replicas = &size
 		err = r.client.Update(context.TODO(), dp)
 		if err != nil {
 			return nil, fmt.Errorf("update Deployment %s: %v", dp.Name, err)
