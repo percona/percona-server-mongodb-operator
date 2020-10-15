@@ -378,26 +378,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	_, err = r.reconcileMongos(cr)
+	err = r.reconcileMongos(cr)
 	if err != nil {
-		err = errors.Errorf("reconcile Deployment for: %v", err)
-		return reconcile.Result{}, err
-	}
-	mongosSvc := psmdb.MongosService(cr)
-	err = setControllerReference(cr, mongosSvc, r.scheme)
-	if err != nil {
-		err = errors.Errorf("set owner ref for Service %s: %v", mongosSvc.Name, err)
-		return reconcile.Result{}, err
-	}
-
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, &corev1.Service{})
-	if err != nil && k8serrors.IsNotFound(err) {
-		err := r.client.Create(context.TODO(), mongosSvc)
-		if err != nil {
-			return reconcile.Result{}, errors.Errorf("failed to create service for mongos: %v", err)
-		}
-	} else if err != nil {
-		return reconcile.Result{}, errors.Errorf("failed to check service for mongos: %v", err)
+		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for: %v")
 	}
 
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
@@ -449,41 +432,53 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	return created, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) (*appsv1.Deployment, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
 	msDepl := psmdb.MongosDeployment(cr)
 	err := setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
-		return nil, fmt.Errorf("set owner ref for Deployment %s: %v", msDepl.Name, err)
+		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
 	}
 
-	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
-	if errGet != nil && !k8serrors.IsNotFound(errGet) {
-		return nil, fmt.Errorf("get Deployment %s: %v", msDepl.Name, err)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get Deployment %s", msDepl.Name)
 	}
 
 	opPod, err := r.operatorPod()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get operator pod")
+		return errors.Wrap(err, "failed to get operator pod")
 	}
 
 	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod)
 	if err != nil {
-		return nil, fmt.Errorf("create Deployment.Spec %s: %v", msDepl.Name, err)
+		return errors.Wrapf(err, "create Deployment.Spec %s", msDepl.Name)
 	}
 
 	sslAnn, err := r.sslAnnotation(cr)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get ssl annotations")
+		return errors.Wrap(err, "failed to get ssl annotations")
 	}
+
 	deplSpec.Template.Annotations = sslAnn
 
 	msDepl.Spec = deplSpec
 	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
 	if err != nil {
-		return nil, fmt.Errorf("update or create Deployment %s: %v", msDepl.Name, err)
+		return errors.Wrapf(err, "update or create Deployment %s", msDepl.Name)
 	}
 
-	return msDepl, nil
+	mongosSvc := psmdb.MongosService(cr)
+	err = setControllerReference(cr, mongosSvc, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "set owner ref for Service %s", mongosSvc.Name)
+	}
+
+	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
+	if err != nil {
+		return errors.Wrapf(err, "update or create Deployment %s", msDepl.Name)
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongoDB) (map[string]string, error) {
