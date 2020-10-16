@@ -143,39 +143,44 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
-	certSecret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      cr.Spec.Secrets.SSL,
-		Namespace: cr.Namespace,
-	}, certSecret)
-	if err != nil {
-		return nil, errors.Wrap(err, "get ssl certSecret")
-	}
-	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
-
-	var clientCerts []tls.Certificate
-	cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
-	if err != nil {
-		return nil, errors.Wrap(err, "load keypair")
-	}
-	clientCerts = append(clientCerts, cert)
-
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, cr.Spec.Replsets[0], pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
-	return mongo.Dial(&mongo.Config{
+	conf := &mongo.Config{
 		ReplSetName: cr.Spec.Replsets[0].Name,
 		Hosts:       rsAddrs,
 		Password:    string(usersSecret.Data[envMongoDBClusterAdminPassword]),
 		Username:    string(usersSecret.Data[envMongoDBClusterAdminUser]),
-		TLSConf: &tls.Config{
+	}
+
+	if !cr.Spec.UnsafeConf {
+		certSecret := &corev1.Secret{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{
+			Name:      cr.Spec.Secrets.SSL,
+			Namespace: cr.Namespace,
+		}, certSecret)
+		if err != nil {
+			return nil, errors.Wrap(err, "get ssl certSecret")
+		}
+		pool := x509.NewCertPool()
+		pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
+
+		var clientCerts []tls.Certificate
+		cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
+		if err != nil {
+			return nil, errors.Wrap(err, "load keypair")
+		}
+		clientCerts = append(clientCerts, cert)
+		conf.TLSConf = &tls.Config{
 			InsecureSkipVerify: true,
 			RootCAs:            pool,
 			Certificates:       clientCerts,
-		}})
+		}
+	}
+
+	return mongo.Dial(conf)
 }
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
