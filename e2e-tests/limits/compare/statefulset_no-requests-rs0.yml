@@ -4,8 +4,7 @@ metadata:
   generation: 1
   name: no-requests-rs0
   ownerReferences:
-    - apiVersion: psmdb.percona.com/v1
-      controller: true
+    - controller: true
       kind: PerconaServerMongoDB
       name: no-requests
 spec:
