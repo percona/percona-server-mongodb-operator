@@ -70,7 +70,13 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}
-	defer client.Disconnect(context.TODO())
+
+	defer func() {
+		err := client.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
 
 	primary, err := r.getPrimaryPod(client)
 	if err != nil {
