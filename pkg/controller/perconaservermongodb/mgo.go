@@ -36,7 +36,9 @@ const (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
-	session, err := r.mongoClient(cr, replset, pods, usersSecret)
+	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
+	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	session, err := r.mongoClient(cr, replset, pods, username, password)
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
@@ -142,7 +144,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return clusterInit, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList, username, password string) (*mgo.Client, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replSet, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
@@ -151,8 +153,8 @@ func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB
 	conf := &mongo.Config{
 		ReplSetName: replSet.Name,
 		Hosts:       rsAddrs,
-		Username:    string(usersSecret.Data[envMongoDBClusterAdminUser]),
-		Password:    string(usersSecret.Data[envMongoDBClusterAdminPassword]),
+		Username:    username,
+		Password:    password,
 	}
 
 	if !cr.Spec.UnsafeConf {
@@ -309,42 +311,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 		return nil
 	}
 	return errNoRunningMongodContainers
-}
-
-func (r *ReconcilePerconaServerMongoDB) mongoConf(cr *api.PerconaServerMongoDB, pods corev1.PodList, usersSecret *corev1.Secret) (*mongo.Config, error) {
-	certSecret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      cr.Spec.Secrets.SSL,
-		Namespace: cr.Namespace,
-	}, certSecret)
-	if err != nil {
-		return nil, errors.Wrap(err, "get ssl certSecret")
-	}
-	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
-
-	var clientCerts []tls.Certificate
-	cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
-	if err != nil {
-		return nil, errors.Wrap(err, "load keypair")
-	}
-	clientCerts = append(clientCerts, cert)
-
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, cr.Spec.Replsets[0], pods.Items)
-	if err != nil {
-		return nil, errors.Wrap(err, "get replset addr")
-	}
-
-	return &mongo.Config{
-		ReplSetName: cr.Spec.Replsets[0].Name,
-		Hosts:       rsAddrs,
-		Password:    string(usersSecret.Data[envMongoDBClusterAdminPassword]),
-		Username:    string(usersSecret.Data[envMongoDBClusterAdminUser]),
-		TLSConf: &tls.Config{
-			InsecureSkipVerify: true,
-			RootCAs:            pool,
-			Certificates:       clientCerts,
-		}}, nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod

@@ -229,10 +229,13 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 				LabelSelector: labels.SelectorFromSet(matchLabels),
 			},
 		)
+
+		username := string(usersSecret.Data[envMongoDBUserAdminUser])
+		password := string(usersSecret.Data[envMongoDBUserAdminPassword])
 		if err != nil {
 			return errors.Wrapf(err, "get pods list for replset %s", replset.Name)
 		}
-		client, err := r.mongoClient(cr, replset, pods, usersSecret)
+		client, err := r.mongoClient(cr, replset, pods, username, password)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}
