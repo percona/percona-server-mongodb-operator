@@ -499,14 +499,14 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 		if err != nil {
 			return nil, fmt.Errorf("get secret hash error: %v", err)
 		}
+		annotation["percona.com/ssl-hash"] = sslHash
 
 		sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
-		if err != nil {
+		if err != nil && !k8serrors.IsNotFound(err) {
 			return nil, fmt.Errorf("get secret hash error: %v", err)
+		} else if err == nil {
+			annotation["percona.com/ssl-internal-hash"] = sslInternalHash
 		}
-
-		annotation["percona.com/ssl-internal-hash"] = sslInternalHash
-		annotation["percona.com/ssl-hash"] = sslHash
 	}
 
 	return annotation, nil
