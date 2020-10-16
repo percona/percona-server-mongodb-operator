@@ -232,7 +232,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrapf(err, "get pods list for replset %s", replset.Name)
 		}
-		client, err := r.mongoClient(cr, pods, usersSecret)
+		client, err := r.mongoClient(cr, replset, pods, usersSecret)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}

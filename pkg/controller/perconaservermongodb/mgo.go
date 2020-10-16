@@ -36,7 +36,7 @@ const (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
-	session, err := r.mongoClient(cr, pods, usersSecret)
+	session, err := r.mongoClient(cr, replset, pods, usersSecret)
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
@@ -142,17 +142,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return clusterInit, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, cr.Spec.Replsets[0], pods.Items)
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replSet, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
 	conf := &mongo.Config{
-		ReplSetName: cr.Spec.Replsets[0].Name,
+		ReplSetName: replSet.Name,
 		Hosts:       rsAddrs,
-		Password:    string(usersSecret.Data[envMongoDBClusterAdminPassword]),
 		Username:    string(usersSecret.Data[envMongoDBClusterAdminUser]),
+		Password:    string(usersSecret.Data[envMongoDBClusterAdminPassword]),
 	}
 
 	if !cr.Spec.UnsafeConf {

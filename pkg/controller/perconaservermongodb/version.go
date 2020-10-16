@@ -183,7 +183,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 		return nil
 	}
 
-	session, err := r.mongoClient(cr, pods, usersSecret)
+	session, err := r.mongoClient(cr, replset, pods, usersSecret)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
