@@ -8,7 +8,7 @@ spec:
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   upgradeOptions:
-    versionServiceEndpoint: http://version-service:11000/versions
+    versionServiceEndpoint: http://version-service:11000
     apply: latest
     schedule: "0 2 * * *"
   mongod:

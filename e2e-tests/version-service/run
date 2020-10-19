@@ -11,7 +11,9 @@ API='psmdb.percona.com/v9-9-9'
 create_namespace $namespace
 
 desc 'install version service'
-kubectl_bin create configmap versions --from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json --from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
+kubectl_bin create configmap versions \
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json \
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
 kubectl_bin apply -f $test_dir/conf/vs.yml
 sleep 10
 

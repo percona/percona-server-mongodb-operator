@@ -8,7 +8,7 @@ spec:
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   upgradeOptions:
-    versionServiceEndpoint: https://wrong-check.percona.com/versions/
+    versionServiceEndpoint: https://wrong-check.percona.com
     apply: 4.2.7-7
     schedule: "0 2 * * *"
   mongod:
