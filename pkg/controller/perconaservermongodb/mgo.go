@@ -73,6 +73,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			return clusterError, errors.Wrap(err, "add shard")
 		}
 
+		log.Info("added to shard", "rs", replset.Name)
+
 		cr.Status.Replsets[replset.Name].AddedAsShard = true
 
 		return clusterAddShard, nil
@@ -218,12 +220,16 @@ const (
 
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPods []corev1.Pod) error {
+	if len(mongosPods) != int(m.Spec.Mongos.Size) {
+		return errors.New("not all mongos pods run")
+	}
+
 	for _, pod := range mongosPods {
 		if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
-			return fmt.Errorf("rsPod is not redy")
+			return errors.New("rsPod is not redy")
 		}
 		if !isContainerAndPodRunning(pod, "mongos") || !isPodReady(pod) {
-			return fmt.Errorf("mongos pod is not ready")
+			return errors.New("mongos pod is not ready")
 		}
 
 		host := psmdb.GetAddr(m, rspod.Name, replset.Name)
