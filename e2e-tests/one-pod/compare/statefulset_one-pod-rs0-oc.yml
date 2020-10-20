@@ -4,8 +4,7 @@ metadata:
   generation: 1
   name: one-pod-rs0
   ownerReferences:
-    - apiVersion: psmdb.percona.com/v1
-      controller: true
+    - controller: true
       kind: PerconaServerMongoDB
       name: one-pod
 spec:

@@ -3,9 +3,15 @@ package perconaservermongodb
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"regexp"
 	"time"
+
+	mgo "go.mongodb.org/mongo-driver/mongo"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -30,36 +36,29 @@ const (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList,
-	usersSecret *corev1.Secret, mongosPods []corev1.Pod) (mongoClusterState, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
-	if err != nil {
-		return clusterError, errors.Wrap(err, "get replset addr")
-	}
-	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
+	pods corev1.PodList, usersSecret *corev1.Secret, mongosPods []corev1.Pod) (mongoClusterState, error) {
 	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
-	session, err := mongo.Dial(rsAddrs, replset.Name, username, password, true)
+	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	session, err := r.mongoClient(cr, replset, pods, username, password)
 	if err != nil {
-		session, err = mongo.Dial(rsAddrs, replset.Name, username, password, false)
-		if err != nil {
-			// try to init replset and if succseed
-			// we'll go further on the next reconcile iteration
-			if !cr.Status.Replsets[replset.Name].Initialized {
-				err = r.handleReplsetInit(cr, replset, pods.Items)
-				if err != nil {
-					return clusterInit, errors.Wrap(err, "handleReplsetInit:")
-				}
-				cr.Status.Replsets[replset.Name].Initialized = true
-				cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Type:               api.ClusterRSInit,
-					Message:            replset.Name,
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				})
-				return clusterInit, nil
+		// try to init replset and if succseed
+		// we'll go further on the next reconcile iteration
+		if !cr.Status.Replsets[replset.Name].Initialized {
+			err = r.handleReplsetInit(cr, replset, pods.Items)
+			if err != nil {
+				return clusterInit, errors.Wrap(err, "handleReplsetInit:")
 			}
-			return clusterError, errors.Wrap(err, "dial:")
+			cr.Status.Replsets[replset.Name].Initialized = true
+			cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+				Status:             api.ConditionTrue,
+				Type:               api.ClusterRSInit,
+				Message:            replset.Name,
+				LastTransitionTime: metav1.NewTime(time.Now()),
+			})
+			return clusterInit, nil
 		}
+		return clusterError, errors.Wrap(err, "dial:")
 	}
 
 	if cr.Status.Replsets[replset.Name].Initialized &&
@@ -163,6 +162,47 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return clusterReady, nil
 	}
 	return clusterInit, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList, username, password string) (*mgo.Client, error) {
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replSet, pods.Items)
+	if err != nil {
+		return nil, errors.Wrap(err, "get replset addr")
+	}
+
+	conf := &mongo.Config{
+		ReplSetName: replSet.Name,
+		Hosts:       rsAddrs,
+		Username:    username,
+		Password:    password,
+	}
+
+	if !cr.Spec.UnsafeConf {
+		certSecret := &corev1.Secret{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{
+			Name:      cr.Spec.Secrets.SSL,
+			Namespace: cr.Namespace,
+		}, certSecret)
+		if err != nil {
+			return nil, errors.Wrap(err, "get ssl certSecret")
+		}
+		pool := x509.NewCertPool()
+		pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
+
+		var clientCerts []tls.Certificate
+		cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
+		if err != nil {
+			return nil, errors.Wrap(err, "load keypair")
+		}
+		clientCerts = append(clientCerts, cert)
+		conf.TLSConf = &tls.Config{
+			InsecureSkipVerify: true,
+			RootCAs:            pool,
+			Certificates:       clientCerts,
+		}
+	}
+
+	return mongo.Dial(conf)
 }
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")

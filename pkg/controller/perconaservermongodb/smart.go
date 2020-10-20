@@ -8,7 +8,6 @@ import (
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -66,7 +65,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	client, err := r.getMongoClient(cr, replset, list, secret)
+	username := string(secret.Data[envMongoDBClusterAdminUser])
+	password := string(secret.Data[envMongoDBClusterAdminPassword])
+	client, err := r.mongoClient(cr, replset, list, username, password)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}
@@ -178,20 +179,6 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, po
 	}
 
 	return fmt.Errorf("reach pod wait limit")
-}
-
-func (r *ReconcilePerconaServerMongoDB) getMongoClient(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (*mgo.Client, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get replset addr")
-	}
-
-	client, err := mongo.Dial(rsAddrs, replset.Name, string(usersSecret.Data[envMongoDBClusterAdminUser]), string(usersSecret.Data[envMongoDBClusterAdminPassword]), false)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to dial mongo")
-	}
-
-	return client, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(client *mgo.Client) (string, error) {
