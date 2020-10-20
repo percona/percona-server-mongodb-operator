@@ -8,7 +8,6 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
@@ -184,12 +183,9 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 		return nil
 	}
 
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
-	if err != nil {
-		return errors.Wrap(err, "get replset addr")
-	}
-
-	session, err := mongo.Dial(rsAddrs, replset.Name, string(usersSecret.Data[envMongoDBClusterAdminUser]), string(usersSecret.Data[envMongoDBClusterAdminPassword]), false)
+	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
+	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	session, err := r.mongoClient(cr, replset, pods, username, password)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}

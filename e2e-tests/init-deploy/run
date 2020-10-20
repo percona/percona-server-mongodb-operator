@@ -6,6 +6,8 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
+max_conn=10
+
 create_namespace $namespace
 deploy_operator
 
@@ -43,6 +45,12 @@ run_mongo \
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+
+desc 'check number of connections'
+conn_count=$(run_mongo 'db.serverStatus().connections.current' "clusterAdmin:clusterAdmin123456@$cluster.$namespace" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
+if [ ${conn_count} -gt ${max_conn} ];then
+  exit 1
+fi
 
 desc 'kill Primary Pod, check reelection, check data'
 initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$cluster.$namespace" "$cluster")

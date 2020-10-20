@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -202,12 +201,12 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		return false, nil
 	}
 
-	err = r.updateUsers(cr, su.users, string(currUsersSec.Data[envMongoDBUserAdminUser]), string(currUsersSec.Data[envMongoDBUserAdminPassword]))
+	err = r.updateUsers(cr, su.users, currUsersSec)
 
 	return restartSfs, errors.Wrap(err, "mongo: update system users")
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, adminUser, adminPass string) error {
+func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, usersSecret *corev1.Secret) error {
 	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
 			log.Info("update users: multiple replica sets is not yet supported")
@@ -222,27 +221,23 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		}
 
-		pods := &corev1.PodList{}
+		pods := corev1.PodList{}
 		err := r.client.List(context.TODO(),
-			pods,
+			&pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(matchLabels),
 			},
 		)
+
+		username := string(usersSecret.Data[envMongoDBUserAdminUser])
+		password := string(usersSecret.Data[envMongoDBUserAdminPassword])
 		if err != nil {
 			return errors.Wrapf(err, "get pods list for replset %s", replset.Name)
 		}
-		rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
+		client, err := r.mongoClient(cr, replset, pods, username, password)
 		if err != nil {
-			return errors.Wrap(err, "get replset addr")
-		}
-		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, true)
-		if err != nil {
-			client, err = mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, false)
-			if err != nil {
-				return errors.Wrap(err, "dial:")
-			}
+			return errors.Wrap(err, "dial:")
 		}
 		defer func() {
 			err := client.Disconnect(context.TODO())
