@@ -61,7 +61,7 @@ func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err er
 		return nil, nil, nil, errors.Wrap(err, "generate serial number for client")
 	}
 	subject = pkix.Name{
-		Organization: []string{"PXC"},
+		Organization: []string{"PSMDB"},
 	}
 	tlsTemplate := x509.Certificate{
 		SerialNumber:          serialNumber,
