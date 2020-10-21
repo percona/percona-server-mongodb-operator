@@ -210,12 +210,18 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 }
 
 func getCertificateSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) []string {
-	return []string{
+	externalHostNames := []string{}
+	if replset.Connectivity != nil {
+		for _, mapping := range replset.Connectivity.Mapping {
+			externalHostNames = append(externalHostNames, mapping.External)
+		}
+	}
+	return append([]string{
 		cr.Name + "-" + replset.Name,
 		cr.Name + "-" + replset.Name + "." + cr.Namespace,
 		cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
 		"*." + cr.Name + "-" + replset.Name,
 		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace,
 		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-	}
+	}, externalHostNames...)
 }

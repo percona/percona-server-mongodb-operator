@@ -276,6 +276,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		_mongod_hack_ensure_no_arg --auth "${mongodHackedArgs[@]}"
 		if [ "$MONGO_INITDB_ROOT_USERNAME" ] && [ "$MONGO_INITDB_ROOT_PASSWORD" ]; then
 			_mongod_hack_ensure_no_arg_val --replSet "${mongodHackedArgs[@]}"
+			_mongod_hack_ensure_no_arg_val --clusterAuthMode "${mongodHackedArgs[@]}"
 		fi
 
 		# "BadValue: need sslPEMKeyFile when SSL is enabled" vs "BadValue: need to enable SSL via the sslMode flag when using SSL configuration parameters"
