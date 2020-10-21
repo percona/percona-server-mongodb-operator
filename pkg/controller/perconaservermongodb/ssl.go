@@ -52,26 +52,35 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 		certificateDNSNames = append(certificateDNSNames, getCertificateSans(cr, replset)...)
 	}
 	owner, err := OwnerRef(cr, r.scheme)
+	ownerReferences := []metav1.OwnerReference{owner}
+
 	if err != nil {
 		return err
 	}
-	ownerReferences := []metav1.OwnerReference{owner}
-	err = r.client.Create(context.TODO(), &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            issuerName,
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerReferences,
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
+	if cr.Spec.Secrets.ExistingIssuer == nil {
+		err = r.client.Create(context.TODO(), &cm.Issuer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            issuerName,
+				Namespace:       cr.Namespace,
+				OwnerReferences: ownerReferences,
 			},
-		},
-	})
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		return fmt.Errorf("create issuer: %v", err)
+			Spec: cm.IssuerSpec{
+				IssuerConfig: cm.IssuerConfig{
+					SelfSigned: &cm.SelfSignedIssuer{},
+				},
+			},
+		})
+		if err != nil && !k8serrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create issuer: %v", err)
+		}
+	} else {
+		if cr.Spec.Secrets.ExistingIssuer.Kind != "" && cr.Spec.Secrets.ExistingIssuer.Name != "" {
+			issuerName = cr.Spec.Secrets.ExistingIssuer.Name
+			issuerKind = cr.Spec.Secrets.ExistingIssuer.Kind
+		} else {
+			return fmt.Errorf("error setting existing issuer: %v", cr.Spec.Secrets.ExistingIssuer)
+		}
 	}
-
 	err = r.client.Create(context.TODO(), &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Name + "-ssl",
