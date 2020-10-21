@@ -24,6 +24,7 @@ spec:
     image: percona/percona-server-mongodb-operator:1.5.0-pmm
     serverHost: monitoring-service
   replsets:
+
   - name: cfg0
     size: 3
     clusterRole: "configsvr"
@@ -38,6 +39,7 @@ spec:
         resources:
           requests:
             storage: 3Gi
+
   - name: rs0
     size: 3
     clusterRole: "shardsvr"
@@ -124,6 +126,7 @@ spec:
         resources:
           requests:
             storage: 3Gi
+
   mongos:
     size: 3
     port: 27017
@@ -145,6 +148,7 @@ spec:
 #      destination: file
 #      format: BSON
 #      filter: '{}'
+ 
   mongod:
     net:
       port: 27017
@@ -187,6 +191,7 @@ spec:
 #      destination: file
 #      format: BSON
 #      filter: '{}'
+
   backup:
     enabled: true
     restartOnFailure: true

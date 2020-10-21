@@ -9,16 +9,14 @@ import (
 	"regexp"
 	"time"
 
-	mgo "go.mongodb.org/mongo-driver/mongo"
-
-	"k8s.io/apimachinery/pkg/types"
-
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
+	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -284,22 +282,16 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 			`, replset.Name, host),
 		}
 
-		log.Info("Command", ":", cmd)
-
 		var errb, outb bytes.Buffer
 		err := r.clientcmd.Exec(&pod, "mongos", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		log.Info("Add shard result", "result", outb.String(), "err", errb.String())
-
 		var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
 		if !re.Match(outb.Bytes()) {
 			return errors.New("failed to add shard")
 		}
-
-		time.Sleep(time.Second * 5)
 	}
 
 	return nil

@@ -323,48 +323,56 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 	return volumes
 }
 
-func MongosService(cr *api.PerconaServerMongoDB) *corev1.Service {
-	ls := map[string]string{
-		"app.kubernetes.io/component": "mongos",
-	}
-
+func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
 	svc := corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.Name + "-" + "mongos",
-			Namespace:   cr.Namespace,
-			Annotations: cr.Spec.Mongos.ServiceAnnotations,
+			Name:      cr.Name + "-" + "mongos",
+			Namespace: cr.Namespace,
 		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				{
-					Name:       mongosPortName,
-					Port:       cr.Spec.Mongos.Port,
-					TargetPort: intstr.FromInt(int(cr.Spec.Mongos.Port)),
-				},
+	}
+
+	if cr.Spec.Mongos != nil {
+		svc.Annotations = cr.Spec.Mongos.ServiceAnnotations
+	}
+
+	return svc
+}
+
+func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
+	ls := map[string]string{
+		"app.kubernetes.io/component": "mongos",
+	}
+
+	spec := corev1.ServiceSpec{
+		Ports: []corev1.ServicePort{
+			{
+				Name:       mongosPortName,
+				Port:       cr.Spec.Mongos.Port,
+				TargetPort: intstr.FromInt(int(cr.Spec.Mongos.Port)),
 			},
-			Selector:                 ls,
-			LoadBalancerSourceRanges: cr.Spec.Mongos.LoadBalancerSourceRanges,
 		},
+		Selector:                 ls,
+		LoadBalancerSourceRanges: cr.Spec.Mongos.LoadBalancerSourceRanges,
 	}
 
 	if !cr.Spec.Mongos.Expose.Enabled {
-		svc.Spec.ClusterIP = "None"
+		spec.ClusterIP = "None"
 	} else {
 		switch cr.Spec.Mongos.Expose.ExposeType {
 		case corev1.ServiceTypeNodePort:
-			svc.Spec.Type = corev1.ServiceTypeNodePort
-			svc.Spec.ExternalTrafficPolicy = "Local"
+			spec.Type = corev1.ServiceTypeNodePort
+			spec.ExternalTrafficPolicy = "Local"
 		case corev1.ServiceTypeLoadBalancer:
-			svc.Spec.Type = corev1.ServiceTypeLoadBalancer
-			svc.Spec.ExternalTrafficPolicy = "Cluster"
+			spec.Type = corev1.ServiceTypeLoadBalancer
+			spec.ExternalTrafficPolicy = "Cluster"
 		default:
-			svc.Spec.Type = corev1.ServiceTypeClusterIP
+			spec.Type = corev1.ServiceTypeClusterIP
 		}
 	}
 
-	return &svc
+	return spec
 }

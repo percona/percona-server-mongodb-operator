@@ -378,6 +378,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
+	err = r.deleteMongos(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "delete mongos")
+	}
+
 	err = r.reconcileMongos(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
@@ -432,6 +437,26 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	return created, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Mongos != nil {
+		return nil
+	}
+
+	msDepl := psmdb.MongosDeployment(cr)
+	err := r.client.Delete(context.TODO(), msDepl)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete mongos deployment")
+	}
+
+	mongosSvc := psmdb.MongosService(cr)
+	err = r.client.Delete(context.TODO(), &mongosSvc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete mongos service")
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Mongos == nil {
 		return nil
@@ -472,17 +497,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	}
 
 	mongosSvc := psmdb.MongosService(cr)
-	err = setControllerReference(cr, mongosSvc, r.scheme)
+	err = setControllerReference(cr, &mongosSvc, r.scheme)
 	if err != nil {
 		return errors.Wrapf(err, "set owner ref for Service %s", mongosSvc.Name)
 	}
 
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, mongosSvc)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, &mongosSvc)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get Deployment %s", mongosSvc.Name)
+		return errors.Wrapf(err, "get monogs Service %s", mongosSvc.Name)
 	}
 
-	err = r.createOrUpdate(mongosSvc, mongosSvc.Name, mongosSvc.Namespace)
+	mongosSvcSpec := psmdb.MongosServiceSpec(cr)
+	mongosSvc.Spec = mongosSvcSpec
+
+	err = r.createOrUpdate(&mongosSvc, mongosSvc.Name, mongosSvc.Namespace)
 	if err != nil {
 		return errors.Wrapf(err, "update or create Service %s", mongosSvc.Name)
 	}
