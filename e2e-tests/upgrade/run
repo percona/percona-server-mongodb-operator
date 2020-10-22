@@ -28,6 +28,11 @@ IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.1.0-backup'
 
 if [[ "${MONGO_VER}" == "4.2" ]]; then
     IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod4.0"
+elif [[ "${MONGO_VER}" == "4.4" ]]; then
+    API='psmdb.percona.com/v1-4-0'
+    IMAGE='percona/percona-server-mongodb-operator:1.4.0'
+    IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.4.0-mongod4.2"
+    IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.4.0-backup'
 fi
 
 compare_generation() {
@@ -81,7 +86,7 @@ main() {
         echo 'Operator image has not been updated'
         exit 1
     fi
-    
+
     compare_generation 1 statefulset "${CLUSTER}-rs0"
 
     sleep 10
@@ -106,13 +111,13 @@ main() {
         echo 'MongoDB image has not been updated'
         exit 1
     fi
-    
+
     sleep 10
 
     wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
     sleep 10
     wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
-    sleep 10 
+    sleep 10
     wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
 
     wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"

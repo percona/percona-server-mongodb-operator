@@ -312,6 +312,10 @@ compare_kubectl() {
     local expected_result=${test_dir}/compare/${resource//\//_}${postfix}.yml
     local new_result="${tmp_dir}/${resource//\//_}.yml"
 
+    if [ ! -z "$MONGO_VER" -a -f ${expected_result//.yml/-$MONGO_VER.yml} ]; then
+        expected_result=${expected_result//.yml/-$MONGO_VER.yml}
+    fi
+
     if [ "$OPENSHIFT" = 1 -a -f ${expected_result//.yml/-oc.yml} ]; then
         expected_result=${expected_result//.yml/-oc.yml}
     fi
@@ -428,6 +432,9 @@ compare_mongo_user() {
     fi
     if [[ "$IMAGE_MONGOD" =~ 4\.2 ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
         expected_result=${test_dir}/compare/$user-42.json
+    fi
+    if [[ "$IMAGE_MONGOD" =~ 4\.4 ]] && [ -f ${test_dir}/compare/$user-44.json ]; then
+        expected_result=${test_dir}/compare/$user-44.json
     fi
 
     run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
