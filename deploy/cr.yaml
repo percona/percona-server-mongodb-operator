@@ -27,7 +27,6 @@ spec:
 
   - name: rs0
     size: 3
-    clusterRole: "shardsvr"
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
 #      advanced:
