@@ -132,7 +132,6 @@ spec:
     mongos:
       size: 3
       port: 27017
-      hostPort: 0
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
