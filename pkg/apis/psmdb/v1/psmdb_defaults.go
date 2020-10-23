@@ -37,6 +37,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		return errors.Wrap(err, "set version")
 	}
 
+	if cr.Spec.Replsets == nil {
+		return errors.New("at least one replica set should be specified")
+	}
+
 	if cr.Spec.Image == "" {
 		return fmt.Errorf("Required value for spec.image")
 	}
@@ -142,60 +146,81 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 
-	if cr.Spec.Mongos != nil && cr.Spec.Mongos.LivenessProbe == nil {
-		if cr.Spec.Mongos.LivenessProbe == nil {
-			cr.Spec.Mongos.LivenessProbe = new(LivenessProbeExtended)
-			cr.Spec.Mongos.LivenessProbe.Probe = corev1.Probe{
-				Handler: corev1.Handler{
-					TCPSocket: &corev1.TCPSocketAction{
-						Port: intstr.FromInt(int(cr.Spec.Mongos.Port)),
+	if cr.Spec.Sharding.Enabled {
+		if cr.Spec.Sharding.ConfigsvrReplSet == nil {
+			return errors.New("config replica set should be specified")
+		}
+
+		if cr.Spec.Sharding.Mongos == nil {
+			return errors.New("mongos should be specified")
+		}
+
+		for i := range cr.Spec.Replsets {
+			cr.Spec.Replsets[i].ClusterRole = ClusterRoleShardSvr
+		}
+
+		cr.Spec.Sharding.ConfigsvrReplSet.ClusterRole = ClusterRoleConfigSvr
+
+		if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
+			if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
+				cr.Spec.Sharding.Mongos.LivenessProbe = new(LivenessProbeExtended)
+				cr.Spec.Sharding.Mongos.LivenessProbe.Probe = corev1.Probe{
+					Handler: corev1.Handler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+						},
 					},
-				},
+				}
+			}
+
+			if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDeafult
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
 			}
 		}
 
-		if cr.Spec.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
-			cr.Spec.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
-		}
-		if cr.Spec.Mongos.LivenessProbe.TimeoutSeconds == 0 {
-			cr.Spec.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
-		}
-		if cr.Spec.Mongos.LivenessProbe.PeriodSeconds == 0 {
-			cr.Spec.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDeafult
-		}
-		if cr.Spec.Mongos.LivenessProbe.FailureThreshold == 0 {
-			cr.Spec.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
-		}
-		if cr.Spec.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
-			cr.Spec.Mongos.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
-		}
-	}
-
-	if cr.Spec.Mongos != nil && cr.Spec.Mongos.ReadinessProbe == nil {
-		if cr.Spec.Mongos.ReadinessProbe == nil {
-			cr.Spec.Mongos.ReadinessProbe = &corev1.Probe{
-				Handler: corev1.Handler{
-					TCPSocket: &corev1.TCPSocketAction{
-						Port: intstr.FromInt(int(cr.Spec.Mongos.Port)),
+		if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
+			if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
+				cr.Spec.Sharding.Mongos.ReadinessProbe = &corev1.Probe{
+					Handler: corev1.Handler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+						},
 					},
-				},
+				}
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = int32(3)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(8)
 			}
 		}
-		if cr.Spec.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
-			cr.Spec.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
-		}
-		if cr.Spec.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
-			cr.Spec.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)
-		}
-		if cr.Spec.Mongos.ReadinessProbe.PeriodSeconds == 0 {
-			cr.Spec.Mongos.ReadinessProbe.PeriodSeconds = int32(3)
-		}
-		if cr.Spec.Mongos.ReadinessProbe.FailureThreshold == 0 {
-			cr.Spec.Mongos.ReadinessProbe.FailureThreshold = int32(8)
-		}
 	}
 
-	for _, replset := range cr.Spec.Replsets {
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled {
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	for _, replset := range repls {
 		if replset.LivenessProbe == nil {
 			replset.LivenessProbe = new(LivenessProbeExtended)
 		}

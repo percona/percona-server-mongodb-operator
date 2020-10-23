@@ -263,7 +263,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	for _, replset := range cr.Spec.Replsets {
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	for _, replset := range repls {
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
 			"app.kubernetes.io/instance":   cr.Name,
@@ -438,7 +443,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Mongos != nil {
+	if cr.Spec.Sharding.Enabled {
 		return nil
 	}
 
@@ -458,7 +463,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoD
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Mongos == nil {
+	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
 

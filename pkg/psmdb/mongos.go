@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,21 +42,21 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 	}
 
 	return appsv1.DeploymentSpec{
-		Replicas: &cr.Spec.Mongos.Size,
+		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      ls,
-				Annotations: cr.Spec.Mongos.MultiAZ.Annotations,
+				Annotations: cr.Spec.Sharding.Mongos.MultiAZ.Annotations,
 			},
 			Spec: corev1.PodSpec{
-				SecurityContext:   cr.Spec.Mongos.PodSecurityContext,
-				Affinity:          PodAffinity(cr.Spec.Mongos.MultiAZ.Affinity, ls),
-				NodeSelector:      cr.Spec.Mongos.MultiAZ.NodeSelector,
-				Tolerations:       cr.Spec.Mongos.MultiAZ.Tolerations,
-				PriorityClassName: cr.Spec.Mongos.MultiAZ.PriorityClassName,
+				SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
+				Affinity:          PodAffinity(cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
+				NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
+				Tolerations:       cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
+				PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
 				RestartPolicy:     corev1.RestartPolicyAlways,
 				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
 				Containers:        []corev1.Container{c},
@@ -81,7 +80,7 @@ func initContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []core
 func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 	fvar := false
 
-	resources, err := CreateResources(cr.Spec.Mongos.ResourcesSpec)
+	resources, err := CreateResources(cr.Spec.Sharding.Mongos.ResourcesSpec)
 	if err != nil {
 		return corev1.Container{}, fmt.Errorf("resource creation: %v", err)
 	}
@@ -118,20 +117,16 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 		)
 	}
 
-	mongosArgs, err := mongosContainerArgs(cr, resources)
-	if err != nil {
-		return corev1.Container{}, err
-	}
 	container := corev1.Container{
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args:            mongosArgs,
+		Args:            mongosContainerArgs(cr, resources),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongosPortName,
-				HostPort:      cr.Spec.Mongos.HostPort,
-				ContainerPort: cr.Spec.Mongos.Port,
+				HostPort:      cr.Spec.Sharding.Mongos.HostPort,
+				ContainerPort: cr.Spec.Sharding.Mongos.Port,
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -145,7 +140,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 			},
 			{
 				Name:  "MONGODB_PORT",
-				Value: strconv.Itoa(int(cr.Spec.Mongos.Port)),
+				Value: strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port)),
 			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
@@ -159,9 +154,9 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 			},
 		},
 		WorkingDir:      MongodContainerDataDir,
-		LivenessProbe:   &cr.Spec.Mongos.LivenessProbe.Probe,
-		ReadinessProbe:  cr.Spec.Mongos.ReadinessProbe,
-		SecurityContext: cr.Spec.Mongos.ContainerSecurityContext,
+		LivenessProbe:   &cr.Spec.Sharding.Mongos.LivenessProbe.Probe,
+		ReadinessProbe:  cr.Spec.Sharding.Mongos.ReadinessProbe,
+		SecurityContext: cr.Spec.Sharding.Mongos.ContainerSecurityContext,
 		Resources:       resources,
 		VolumeMounts:    volumes,
 	}
@@ -183,23 +178,10 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 	return container, nil
 }
 
-func findCfgReplset(replsets []*api.ReplsetSpec) (*api.ReplsetSpec, error) {
-	for _, rs := range replsets {
-		if rs.ClusterRole == "configsvr" {
-			return rs, nil
-		}
-	}
-
-	return nil, errors.New("failed to find config server replset configuration")
-}
-
-func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements) ([]string, error) {
+func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements) []string {
 	mdSpec := cr.Spec.Mongod
-	msSpec := cr.Spec.Mongos
-	cfgRs, err := findCfgReplset(cr.Spec.Replsets)
-	if err != nil {
-		return nil, err
-	}
+	msSpec := cr.Spec.Sharding.Mongos
+	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
 	cfgInstanses := make([]string, 0, cfgRs.Size)
 	for i := 0; i < int(cfgRs.Size); i++ {
@@ -208,7 +190,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 				cr.Name, cfgRs.Name, i, cr.Name, cfgRs.Name, cr.Namespace, msSpec.Port))
 	}
 
-	configDB := fmt.Sprintf("cfg0/%s", strings.Join(cfgInstanses, ","))
+	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstanses, ","))
 	args := []string{
 		"mongos",
 		"--bind_ip_all",
@@ -260,7 +242,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		}
 	}
 
-	return args, nil
+	return args
 }
 
 func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
@@ -335,8 +317,8 @@ func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
 		},
 	}
 
-	if cr.Spec.Mongos != nil {
-		svc.Annotations = cr.Spec.Mongos.ServiceAnnotations
+	if cr.Spec.Sharding.Mongos != nil {
+		svc.Annotations = cr.Spec.Sharding.Mongos.ServiceAnnotations
 	}
 
 	return svc
@@ -351,18 +333,18 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
 		Ports: []corev1.ServicePort{
 			{
 				Name:       mongosPortName,
-				Port:       cr.Spec.Mongos.Port,
-				TargetPort: intstr.FromInt(int(cr.Spec.Mongos.Port)),
+				Port:       cr.Spec.Sharding.Mongos.Port,
+				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
 			},
 		},
 		Selector:                 ls,
-		LoadBalancerSourceRanges: cr.Spec.Mongos.LoadBalancerSourceRanges,
+		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.LoadBalancerSourceRanges,
 	}
 
-	if !cr.Spec.Mongos.Expose.Enabled {
+	if !cr.Spec.Sharding.Mongos.Expose.Enabled {
 		spec.ClusterIP = "None"
 	} else {
-		switch cr.Spec.Mongos.Expose.ExposeType {
+		switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
 		case corev1.ServiceTypeNodePort:
 			spec.Type = corev1.ServiceTypeNodePort
 			spec.ExternalTrafficPolicy = "Local"

@@ -54,7 +54,6 @@ type PerconaServerMongoDBSpec struct {
 	RunUID                  int64                                `json:"runUid,omitempty"`
 	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
-	Mongos                  *MongosSpec                          `json:"mongos,omitempty"`
 	Replsets                []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                 *SecretsSpec                         `json:"secrets,omitempty"`
 	Backup                  BackupSpec                           `json:"backup,omitempty"`
@@ -64,11 +63,18 @@ type PerconaServerMongoDBSpec struct {
 	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	Sharding                Sharding                             `json:"sharding,omitempty"`
 }
 
 const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 )
+
+type Sharding struct {
+	Enabled          bool         `json:"enabled"`
+	ConfigsvrReplSet *ReplsetSpec `json:"configsvrReplSet,omitempty"`
+	Mongos           *MongosSpec  `json:"mongos,omitempty"`
+}
 
 type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`

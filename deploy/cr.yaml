@@ -25,21 +25,6 @@ spec:
     serverHost: monitoring-service
   replsets:
 
-  - name: cfg0
-    size: 3
-    clusterRole: "configsvr"
-    volumeSpec:
-#      emptyDir: {}
-#      hostPath:
-#        path: /data
-#        type: Directory
-      persistentVolumeClaim:
-#        storageClassName: standard
-#        accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: 3Gi
-
   - name: rs0
     size: 3
     clusterRole: "shardsvr"
@@ -127,17 +112,35 @@ spec:
           requests:
             storage: 3Gi
 
-  mongos:
-    size: 3
-    port: 27017
-    hostPort: 0
-    operationProfiling:
-      mode: slowOp
-      slowOpThresholdMs: 100
-      rateLimit: 100
-    expose:
-      enabled: false
-      exposeType: ClusterIP
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      name: cfg
+      size: 3
+      volumeSpec:
+#       emptyDir: {}
+#       hostPath:
+#         path: /data
+#         type: Directory
+        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      port: 27017
+      hostPort: 0
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+        rateLimit: 100
+      expose:
+        enabled: false
+        exposeType: ClusterIP
 #    loadBalancerSourceRanges:
 #      - 10.0.0.0/8
 #    serviceAnnotations:

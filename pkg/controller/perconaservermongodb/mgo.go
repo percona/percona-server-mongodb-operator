@@ -258,7 +258,7 @@ const (
 
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPods []corev1.Pod) error {
-	if len(mongosPods) != int(m.Spec.Mongos.Size) {
+	if len(mongosPods) != int(m.Spec.Sharding.Mongos.Size) {
 		return errors.New("not all mongos pods run")
 	}
 
