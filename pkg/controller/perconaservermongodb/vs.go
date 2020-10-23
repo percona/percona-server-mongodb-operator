@@ -7,11 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/models"
-
-	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/version_service"
-
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient"
+	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/models"
+	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/version_service"
 )
 
 const productName = "psmdb-operator"
@@ -38,7 +36,7 @@ func (vs VersionServiceClient) GetExactVersion(endpoint string, vm VersionMeta) 
 		CustomResourceUID: &vm.CRUID,
 		DatabaseVersion:   &vm.MongoVersion,
 		KubeVersion:       &vm.KubeVersion,
-		OperatorVersion:   "1.5.0",
+		OperatorVersion:   vs.OpVersion,
 		Platform:          &vm.Platform,
 		PmmVersion:        &vm.PMMVersion,
 		Product:           productName,

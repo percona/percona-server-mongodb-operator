@@ -1,0 +1,56 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+API='psmdb.percona.com/v9-9-9'
+
+create_namespace $namespace
+
+desc 'install version service'
+kubectl_bin create configmap versions \
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json \
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
+kubectl_bin apply -f $test_dir/conf/vs.yml
+sleep 10
+
+deploy_operator
+
+cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-unreachable")
+expected_images=("percona/percona-server-mongodb:4.2.7-7" "percona/percona-server-mongodb:4.0.20-13" "percona/percona-server-mongodb:4.2.8-8" "$IMAGE_MONGOD")
+
+for i in "${!cases[@]}"; do
+	desc "test ${cases[$i]}"
+
+	cluster="${cases[$i]}"
+	expected_image="${expected_images[$i]}"
+
+	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+
+	desc 'create PSMDB cluster'
+	spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
+	compare_kubectl "statefulset/${cluster}-rs0"
+
+	pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
+	if ${#pods[@]} == 0; then
+		echo "pods not found"
+		exit 1
+	fi
+
+	for pod in "${pods[@]}"; do
+		img=$(kubectl get $pod -o jsonpath='{.spec.containers[0].image}')
+		if [ "$img" != "$expected_image" ]; then
+			echo "image was not updated"
+			exit 1
+		fi
+	done
+
+	kubectl delete pod/$(kubectl get pods | grep operator | awk '{print $1}')
+	kubectl_bin delete psmdb --all
+	sleep 10
+done
+
+destroy $namespace

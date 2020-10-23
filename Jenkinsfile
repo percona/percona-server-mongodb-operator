@@ -269,6 +269,8 @@ pipeline {
                         runTest('arbiter', 'basic')
                         runTest('service-per-pod', 'basic')
                         runTest('liveness', 'basic')
+                        runTest('smart-update', 'basic')
+                        runTest('version-service', 'basic')
                         runTest('users', 'basic')
                         ShutdownCluster('basic')
                     }
