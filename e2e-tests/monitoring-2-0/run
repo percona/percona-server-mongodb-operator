@@ -32,14 +32,13 @@ wait_for_running $cluster 3
 
 # wait for prometheus
 sleep 90
-
 desc 'check if pmm-client container enabled'
 compare_kubectl statefulset/$cluster
 compare_kubectl service/$cluster
 
 desc 'check mongod metrics'
-get_metric_values node_boot_time_seconds $cluster-1 admin:admin
-get_metric_values mongodb_connections $cluster-1 admin:admin
+get_metric_values node_boot_time_seconds $namespace-$cluster-1 admin:admin
+get_metric_values mongodb_connections $namespace-$cluster-1 admin:admin
 
 #desc 'check mongos metrics'
 #get_metric_values node_boot_time ${cluster%%-rs0}-mongos-0

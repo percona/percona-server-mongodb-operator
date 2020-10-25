@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -12,7 +13,7 @@ const (
 )
 
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool) corev1.Container {
+func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v170OrGreater bool) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 
 	for i := 30100; i <= 30105; i++ {
@@ -142,5 +143,131 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 		}...)
 	}
 
+	if v170OrGreater {
+		pmm.LivenessProbe = &corev1.Probe{
+			InitialDelaySeconds: 60,
+			TimeoutSeconds:      5,
+			PeriodSeconds:       10,
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Port: intstr.FromInt(7777),
+					Path: "/local/Status",
+				},
+			},
+		}
+		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec.ServerHost, customLogin, secrets)...)
+	}
+
 	return pmm
+}
+
+func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets string) []corev1.EnvVar {
+	pmmAgentEnvs := []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "POD_NAMESPASE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		{
+			Name:  "PMM_AGENT_SERVER_ADDRESS",
+			Value: pmmServerHost,
+		},
+		{
+			Name:  "PMM_AGENT_LISTEN_PORT",
+			Value: "7777",
+		},
+		{
+			Name:  "PMM_AGENT_PORTS_MIN",
+			Value: "30100",
+		},
+		{
+			Name:  "PMM_AGENT_PORTS_MAX",
+			Value: "30105",
+		},
+		{
+			Name:  "PMM_AGENT_CONFIG_FILE",
+			Value: "/usr/local/percona/pmm2/config/pmm-agent.yaml",
+		},
+		{
+			Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
+			Value: "1",
+		},
+		{
+			Name:  "PMM_AGENT_LISTEN_ADDRESS",
+			Value: "0.0.0.0",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP_NODE_NAME",
+			Value: "$(POD_NAMESPASE)-$(POD_NAME)",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP",
+			Value: "1",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP_FORCE",
+			Value: "1",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP_NODE_TYPE",
+			Value: "container",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP_METRICS_MODE",
+			Value: "push",
+		},
+	}
+
+	if customLogin {
+		pmmAgentEnvs = append(pmmAgentEnvs, []corev1.EnvVar{
+			{
+				Name: "PMM_AGENT_SERVER_USERNAME",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: PMMUserKey,
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secrets,
+						},
+					},
+				},
+			},
+			{
+				Name: "PMM_AGENT_SERVER_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: PMMPasswordKey,
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secrets,
+						},
+					},
+				},
+			},
+		}...)
+	}
+
+	return pmmAgentEnvs
+}
+
+func PMMAgentScript() []corev1.EnvVar {
+	pmmServerArgs := " --skip-connection-check --metrics-mode=push "
+	pmmServerArgs = pmmServerArgs + " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
+	pmmServerArgs = pmmServerArgs + "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
+
+	return []corev1.EnvVar{
+		{
+			Name:  "PMM_AGENT_PRERUN_SCRIPT",
+			Value: "pmm-admin status --wait=10s; pmm-admin add $(DB_TYPE)" + pmmServerArgs + "; pmm-admin annotate restart",
+		},
+	}
 }
