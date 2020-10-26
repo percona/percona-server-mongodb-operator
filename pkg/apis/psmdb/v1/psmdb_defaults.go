@@ -160,6 +160,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		cr.Spec.Sharding.ConfigsvrReplSet.ClusterRole = ClusterRoleConfigSvr
+		if cr.Spec.Sharding.ConfigsvrReplSet.Name == "" {
+			cr.Spec.Sharding.ConfigsvrReplSet.Name = "cfg"
+		}
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
 			if cr.Spec.Sharding.Mongos.LivenessProbe == nil {

@@ -115,7 +115,6 @@ spec:
     enabled: true
 
     configsvrReplSet:
-      name: cfg
       size: 3
       volumeSpec:
 #       emptyDir: {}
