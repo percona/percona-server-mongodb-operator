@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -59,30 +60,53 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return clusterError, errors.Wrap(err, "dial:")
 	}
 
-	if cr.Status.Replsets[replset.Name].Initialized &&
-		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
-		replset.ClusterRole == api.ClusterRoleShardSvr &&
-		!cr.Status.Replsets[replset.Name].AddedAsShard {
-
-		log.Info("adding rs to shard", "rs", replset.Name)
-		err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods)
-		if err != nil {
-			return clusterError, errors.Wrap(err, "add shard")
-		}
-
-		log.Info("added to shard", "rs", replset.Name)
-
-		cr.Status.Replsets[replset.Name].AddedAsShard = true
-
-		return clusterAddShard, nil
-	}
-
 	defer func() {
 		err := session.Disconnect(context.TODO())
 		if err != nil {
 			log.Error(err, "failed to close connection")
 		}
 	}()
+
+	if cr.Status.Replsets[replset.Name].Initialized &&
+		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
+		replset.ClusterRole == api.ClusterRoleShardSvr {
+
+		conf := mongo.Config{
+			Hosts:    []string{cr.Name + "-" + "mongos"},
+			Username: username,
+			Password: password,
+		}
+
+		mongosSession, err := mongo.Dial(&conf)
+		if err != nil {
+			return clusterError, errors.Wrap(err, "failed to connect to mongos")
+		}
+
+		defer func() {
+			err := mongosSession.Disconnect(context.TODO())
+			if err != nil {
+				log.Error(err, "failed to close mongos connection")
+			}
+		}()
+
+		in, err := inShard(mongosSession, pods.Items[0].Name)
+		if err != nil {
+			return clusterError, errors.Wrap(err, "add shard")
+		}
+
+		if !in {
+			log.Info("adding rs to shard", "rs", replset.Name)
+
+			err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods)
+			if err != nil {
+				return clusterError, errors.Wrap(err, "add shard")
+			}
+
+			log.Info("added to shard", "rs", replset.Name)
+
+			cr.Status.Replsets[replset.Name].AddedAsShard = true
+		}
+	}
 
 	cnf, err := mongo.ReadConfig(context.TODO(), session)
 	if err != nil {
@@ -162,7 +186,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return clusterInit, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList, username, password string) (*mgo.Client, error) {
+func inShard(client *mgo.Client, podName string) (bool, error) {
+	shardList, err := mongo.ListShard(context.TODO(), client)
+	if err != nil {
+		return false, errors.Wrap(err, "unable to get shard list")
+	}
+
+	for _, shard := range shardList.Shards {
+		if strings.Contains(shard.Host, podName) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList,
+	username, password string) (*mgo.Client, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replSet, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
