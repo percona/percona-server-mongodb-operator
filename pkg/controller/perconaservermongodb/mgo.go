@@ -262,6 +262,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 		return errors.New("not all mongos pods run")
 	}
 
+	var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
 	for _, pod := range mongosPods {
 		if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
 			return errors.New("rsPod is not redy")
@@ -288,7 +289,6 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 			return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
 		if !re.Match(outb.Bytes()) {
 			return errors.New("failed to add shard")
 		}
