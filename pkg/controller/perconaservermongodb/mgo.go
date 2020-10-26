@@ -69,7 +69,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 	if cr.Status.Replsets[replset.Name].Initialized &&
 		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
-		replset.ClusterRole == api.ClusterRoleShardSvr {
+		replset.ClusterRole == api.ClusterRoleShardSvr &&
+		len(mongosPods) > 0 {
 
 		conf := mongo.Config{
 			Hosts:    []string{cr.Name + "-" + "mongos"},
@@ -97,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		if !in {
 			log.Info("adding rs to shard", "rs", replset.Name)
 
-			err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods)
+			err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods[0])
 			if err != nil {
 				return clusterError, errors.Wrap(err, "add shard")
 			}
@@ -297,41 +298,36 @@ const (
 )
 
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
-	mongosPods []corev1.Pod) error {
-	if len(mongosPods) != int(m.Spec.Sharding.Mongos.Size) {
-		return errors.New("not all mongos pods run")
-	}
+	mongosPod corev1.Pod) error {
 
 	var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
-	for _, pod := range mongosPods {
-		if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
-			return errors.New("rsPod is not redy")
-		}
-		if !isContainerAndPodRunning(pod, "mongos") || !isPodReady(pod) {
-			return errors.New("mongos pod is not ready")
-		}
+	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
+		return errors.New("rsPod is not redy")
+	}
+	if !isContainerAndPodRunning(mongosPod, "mongos") || !isPodReady(mongosPod) {
+		return errors.New("mongos pod is not ready")
+	}
 
-		host := psmdb.GetAddr(m, rspod.Name, replset.Name)
+	host := psmdb.GetAddr(m, rspod.Name, replset.Name)
 
-		cmd := []string{
-			"sh", "-c",
-			fmt.Sprintf(
-				`
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf(
+			`
 				cat <<-EOF | mongo "mongodb://${MONGODB_CLUSTER_ADMIN_USER}:${MONGODB_CLUSTER_ADMIN_PASSWORD}@localhost"
 				sh.addShard("%s/%s")
 				EOF
 			`, replset.Name, host),
-		}
+	}
 
-		var errb, outb bytes.Buffer
-		err := r.clientcmd.Exec(&pod, "mongos", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
-		}
+	var errb, outb bytes.Buffer
+	err := r.clientcmd.Exec(&mongosPod, "mongos", cmd, nil, &outb, &errb, false)
+	if err != nil {
+		return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
+	}
 
-		if !re.Match(outb.Bytes()) {
-			return errors.New("failed to add shard")
-		}
+	if !re.Match(outb.Bytes()) {
+		return errors.New("failed to add shard")
 	}
 
 	return nil
