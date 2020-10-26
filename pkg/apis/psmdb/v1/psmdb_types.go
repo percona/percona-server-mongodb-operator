@@ -64,6 +64,7 @@ type PerconaServerMongoDBSpec struct {
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 	Sharding                Sharding                             `json:"sharding,omitempty"`
+	InitImage               string                               `json:"initImage,omitempty"`
 }
 
 const (
