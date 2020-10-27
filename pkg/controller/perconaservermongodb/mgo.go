@@ -73,7 +73,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		len(mongosPods) > 0 {
 
 		conf := mongo.Config{
-			Hosts:    []string{cr.Name + "-" + "mongos"},
+			Hosts:    strings.Join([]string{cr.Name + "-mongos", m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") + ":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port),
 			Username: username,
 			Password: password,
 		}
