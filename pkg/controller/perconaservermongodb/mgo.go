@@ -92,7 +92,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			}
 		}()
 
-		in, err := inShard(mongosSession, GetAddr(cr, pods.Items[0].Name, replset.Name))
+		in, err := inShard(mongosSession, psmdb.GetAddr(cr, pods.Items[0].Name, replset.Name))
 		if err != nil {
 			return clusterError, errors.Wrap(err, "add shard")
 		}
