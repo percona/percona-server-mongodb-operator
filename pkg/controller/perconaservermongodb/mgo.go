@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,7 +74,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		len(mongosPods) > 0 {
 
 		conf := mongo.Config{
-			Hosts:    strings.Join([]string{cr.Name + "-mongos", m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") + ":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port),
+			Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
+				":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
 			Username: username,
 			Password: password,
 		}
