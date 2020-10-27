@@ -189,7 +189,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
 			}
 			if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
-				cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
+				cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
 			}
 		}
 

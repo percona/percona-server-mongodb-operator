@@ -131,13 +131,13 @@ spec:
     mongos:
       size: 3
       port: 27017
+      expose:
+        enabled: false
+        exposeType: ClusterIP
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
         rateLimit: 100
-      expose:
-        enabled: false
-        exposeType: ClusterIP
 #    loadBalancerSourceRanges:
 #      - 10.0.0.0/8
 #    serviceAnnotations:
