@@ -388,6 +388,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "delete mongos")
 	}
 
+	err = r.deleteCfg(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "delete config server")
+	}
+
 	err = r.reconcileMongos(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
@@ -440,6 +445,22 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	}
 
 	return created, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteCfg(cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	sfsName := cr.Name + "-" + cr.Spec.Sharding.ConfigsvrReplSet.Name
+	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
+
+	err := r.client.Delete(context.TODO(), sfs)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {

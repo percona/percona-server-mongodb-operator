@@ -5,12 +5,11 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
@@ -146,6 +145,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 
+	if cr.Spec.Sharding.ConfigsvrReplSet.Name == "" {
+		cr.Spec.Sharding.ConfigsvrReplSet.Name = "cfg"
+	}
+
 	if cr.Spec.Sharding.Enabled {
 		if cr.Spec.Sharding.ConfigsvrReplSet == nil {
 			return errors.New("config replica set should be specified")
@@ -160,9 +163,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		cr.Spec.Sharding.ConfigsvrReplSet.ClusterRole = ClusterRoleConfigSvr
-		if cr.Spec.Sharding.ConfigsvrReplSet.Name == "" {
-			cr.Spec.Sharding.ConfigsvrReplSet.Name = "cfg"
-		}
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
 			if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
