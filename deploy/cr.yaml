@@ -130,7 +130,6 @@ spec:
 
     mongos:
       size: 3
-      port: 27017
       expose:
         enabled: false
         exposeType: ClusterIP
