@@ -158,6 +158,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.ConfigsvrReplSet.Name = "cfg"
 		}
 
+		if cr.Spec.Sharding.Mongos.Port == 0 {
+			cr.Spec.Sharding.Mongos.Port = 27017
+		}
+
 		for i := range cr.Spec.Replsets {
 			cr.Spec.Replsets[i].ClusterRole = ClusterRoleShardSvr
 		}
