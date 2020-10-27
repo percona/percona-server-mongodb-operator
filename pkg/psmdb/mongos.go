@@ -28,6 +28,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) (appsv1.DeploymentSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/component": "mongos",
+		"app.kubernetes.io/instance":  cr.Name,
 	}
 
 	c, err := mongosContainer(cr)

@@ -294,8 +294,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		err = r.client.List(context.TODO(),
 			&mongosPods,
 			&client.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/component": "mongos"}),
+				Namespace: cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(map[string]string{
+					"app.kubernetes.io/component": "mongos",
+					"app.kubernetes.io/instance":  cr.Name,
+				}),
 			},
 		)
 		if err != nil && !k8serrors.IsNotFound(err) {
