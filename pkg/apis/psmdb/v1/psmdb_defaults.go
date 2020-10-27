@@ -145,10 +145,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 
-	if cr.Spec.Sharding.ConfigsvrReplSet.Name == "" {
-		cr.Spec.Sharding.ConfigsvrReplSet.Name = "cfg"
-	}
-
 	if cr.Spec.Sharding.Enabled {
 		if cr.Spec.Sharding.ConfigsvrReplSet == nil {
 			return errors.New("config replica set should be specified")
@@ -156,6 +152,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.Sharding.Mongos == nil {
 			return errors.New("mongos should be specified")
+		}
+
+		if cr.Spec.Sharding.ConfigsvrReplSet.Name == "" {
+			cr.Spec.Sharding.ConfigsvrReplSet.Name = "cfg"
 		}
 
 		for i := range cr.Spec.Replsets {

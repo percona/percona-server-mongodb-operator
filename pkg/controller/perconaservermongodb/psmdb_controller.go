@@ -455,7 +455,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfg(cr *api.PerconaServerMongoDB) 
 		return nil
 	}
 
-	sfsName := cr.Name + "-" + cr.Spec.Sharding.ConfigsvrReplSet.Name
+	sfsName := cr.Name + "-" + "cfg"
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
 
 	err := r.client.Delete(context.TODO(), sfs)
