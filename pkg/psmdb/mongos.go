@@ -111,16 +111,6 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 		},
 	}
 
-	if *cr.Spec.Mongod.Security.EnableEncryption {
-		volumes = append(volumes,
-			corev1.VolumeMount{
-				Name:      cr.Spec.Mongod.Security.EncryptionKeySecret,
-				MountPath: mongodRESTencryptDir,
-				ReadOnly:  true,
-			},
-		)
-	}
-
 	container := corev1.Container{
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
@@ -133,25 +123,19 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 				ContainerPort: cr.Spec.Sharding.Mongos.Port,
 			},
 		},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "SERVICE_NAME",
-				Value: cr.Name,
-			},
-			{
-				Name:  "NAMESPACE",
-				Value: cr.Namespace,
-			},
-			{
-				Name:  "MONGODB_PORT",
-				Value: strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port)),
-			},
-		},
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: cr.Spec.Secrets.Users,
+					},
+					Optional: &fvar,
+				},
+			},
+			{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "internal-" + cr.Name + "-users",
 					},
 					Optional: &fvar,
 				},
@@ -163,20 +147,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 		SecurityContext: cr.Spec.Sharding.Mongos.ContainerSecurityContext,
 		Resources:       resources,
 		VolumeMounts:    volumes,
-	}
-
-	if cr.CompareVersion("1.5.0") >= 0 {
-		container.EnvFrom = []corev1.EnvFromSource{
-			{
-				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "internal-" + cr.Name + "-users",
-					},
-					Optional: &fvar,
-				},
-			},
-		}
-		container.Command = []string{"/data/db/ps-entry.sh"}
+		Command:         []string{"/data/db/ps-entry.sh"},
 	}
 
 	return container, nil
@@ -289,21 +260,6 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-	}
-
-	if *cr.Spec.Mongod.Security.EnableEncryption {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: cr.Spec.Mongod.Security.EncryptionKeySecret,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &secretFileMode,
-						SecretName:  cr.Spec.Mongod.Security.EncryptionKeySecret,
-						Optional:    &fvar,
-					},
-				},
-			},
-		)
 	}
 
 	return volumes
