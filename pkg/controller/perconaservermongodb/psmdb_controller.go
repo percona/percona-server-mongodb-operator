@@ -268,7 +268,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 
-	for _, replset := range repls {
+	for i, replset := range repls {
+		if !cr.Spec.Sharding.Enabled && i > 0 {
+			reqLogger.Error(nil, "multiple replica sets is not supported for non sharded configuration, skipping replset %s", replset.Name)
+			continue
+		}
+
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
 			"app.kubernetes.io/instance":   cr.Name,
