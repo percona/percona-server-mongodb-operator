@@ -303,21 +303,18 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
 		},
 		Selector:                 ls,
 		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges,
+		ClusterIP:                "None",
 	}
 
-	if !cr.Spec.Sharding.Mongos.Expose.Enabled {
-		spec.ClusterIP = "None"
-	} else {
-		switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
-		case corev1.ServiceTypeNodePort:
-			spec.Type = corev1.ServiceTypeNodePort
-			spec.ExternalTrafficPolicy = "Local"
-		case corev1.ServiceTypeLoadBalancer:
-			spec.Type = corev1.ServiceTypeLoadBalancer
-			spec.ExternalTrafficPolicy = "Cluster"
-		default:
-			spec.Type = corev1.ServiceTypeClusterIP
-		}
+	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
+	case corev1.ServiceTypeNodePort:
+		spec.Type = corev1.ServiceTypeNodePort
+		spec.ExternalTrafficPolicy = "Local"
+	case corev1.ServiceTypeLoadBalancer:
+		spec.Type = corev1.ServiceTypeLoadBalancer
+		spec.ExternalTrafficPolicy = "Cluster"
+	default:
+		spec.Type = corev1.ServiceTypeClusterIP
 	}
 
 	return spec
