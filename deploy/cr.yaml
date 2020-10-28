@@ -64,6 +64,10 @@ spec:
     expose:
       enabled: false
       exposeType: LoadBalancer
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
+#      serviceAnnotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
     arbiter:
       enabled: false
       size: 1
@@ -133,14 +137,14 @@ spec:
       expose:
         enabled: false
         exposeType: ClusterIP
+#        loadBalancerSourceRanges:
+#          - 10.0.0.0/8
+#        serviceAnnotations:
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
         rateLimit: 100
-#    loadBalancerSourceRanges:
-#      - 10.0.0.0/8
-#    serviceAnnotations:
-#      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http   
 #    auditLog:
 #      destination: file
 #      format: BSON
@@ -180,10 +184,6 @@ spec:
       mode: slowOp
       slowOpThresholdMs: 100
       rateLimit: 100
-#    loadBalancerSourceRanges:
-#      - 10.0.0.0/8
-#    serviceAnnotations:
-#      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http   
 #    auditLog:
 #      destination: file
 #      format: BSON

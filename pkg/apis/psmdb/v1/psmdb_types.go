@@ -256,8 +256,6 @@ type MongosSpec struct {
 	MultiAZ
 	Port                     int32                      `json:"port,omitempty"`
 	HostPort                 int32                      `json:"hostPort,omitempty"`
-	ServiceAnnotations       map[string]string          `json:"serviceAnnotations,omitempty"`
-	LoadBalancerSourceRanges []string                   `json:"loadBalancerSourceRanges,omitempty"`
 	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
 	AuditLog                 *MongoSpecAuditLog         `json:"auditLog,omitempty"`
 	Expose                   Expose                     `json:"expose,omitempty"`
@@ -270,15 +268,13 @@ type MongosSpec struct {
 }
 
 type MongodSpec struct {
-	Net                      *MongodSpecNet                `json:"net,omitempty"`
-	AuditLog                 *MongoSpecAuditLog            `json:"auditLog,omitempty"`
-	OperationProfiling       *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
-	Replication              *MongodSpecReplication        `json:"replication,omitempty"`
-	Security                 *MongodSpecSecurity           `json:"security,omitempty"`
-	SetParameter             *MongodSpecSetParameter       `json:"setParameter,omitempty"`
-	Storage                  *MongodSpecStorage            `json:"storage,omitempty"`
-	LoadBalancerSourceRanges []string                      `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations       map[string]string             `json:"serviceAnnotations,omitempty"`
+	Net                *MongodSpecNet                `json:"net,omitempty"`
+	AuditLog           *MongoSpecAuditLog            `json:"auditLog,omitempty"`
+	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
+	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
+	Security           *MongodSpecSecurity           `json:"security,omitempty"`
+	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
+	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
 }
 
 type MongodSpecNet struct {
@@ -451,8 +447,10 @@ type Arbiter struct {
 }
 
 type Expose struct {
-	Enabled    bool               `json:"enabled"`
-	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
+	Enabled                  bool               `json:"enabled"`
+	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
+	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
+	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 }
 
 // ServerVersion represents info about k8s / openshift server version

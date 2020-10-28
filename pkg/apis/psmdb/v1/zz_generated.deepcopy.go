@@ -208,18 +208,6 @@ func (in *MongodSpec) DeepCopyInto(out *MongodSpec) {
 		*out = new(MongodSpecStorage)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.LoadBalancerSourceRanges != nil {
-		in, out := &in.LoadBalancerSourceRanges, &out.LoadBalancerSourceRanges
-		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
-	if in.ServiceAnnotations != nil {
-		in, out := &in.ServiceAnnotations, &out.ServiceAnnotations
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
-	}
 	return
 }
 

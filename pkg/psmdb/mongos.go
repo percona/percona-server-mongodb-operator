@@ -319,7 +319,7 @@ func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {
-		svc.Annotations = cr.Spec.Sharding.Mongos.ServiceAnnotations
+		svc.Annotations = cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations
 	}
 
 	return svc
@@ -339,7 +339,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
 			},
 		},
 		Selector:                 ls,
-		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.LoadBalancerSourceRanges,
+		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges,
 	}
 
 	if !cr.Spec.Sharding.Mongos.Expose.Enabled {
