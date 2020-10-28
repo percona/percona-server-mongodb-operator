@@ -280,6 +280,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
+			"app.kubernetes.io/component":  "mongod",
 		}
 
 		pods := &corev1.PodList{}
@@ -301,8 +302,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			&client.ListOptions{
 				Namespace: cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(map[string]string{
-					"app.kubernetes.io/component": "mongos",
-					"app.kubernetes.io/instance":  cr.Name,
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/instance":   cr.Name,
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/component":  "mongos",
 				}),
 			},
 		)
