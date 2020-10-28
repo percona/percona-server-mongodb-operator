@@ -274,6 +274,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			continue
 		}
 
+		if replset.ClusterRole != api.ClusterRoleConfigSvr && replset.Name == "cfg" {
+			return reconcile.Result{}, errors.New("cfg is reserved name for config server replset")
+		}
+
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
 			"app.kubernetes.io/instance":   cr.Name,
