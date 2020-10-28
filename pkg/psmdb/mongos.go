@@ -286,9 +286,9 @@ func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
 
 func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
 	ls := map[string]string{
-		"app.kubernetes.io/component": "mongos",
+		"app.kubernetes.io/component":  "mongos",
 		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   m.Name,
+		"app.kubernetes.io/instance":   cr.Name,
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
