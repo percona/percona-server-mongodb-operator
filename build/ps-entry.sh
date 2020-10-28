@@ -441,9 +441,7 @@ if [[ "$originalArgOne" == mongo* ]]; then
 	fi
 
 	set -- "${mongodHackedArgs[@]}"
-fi
 
-if [ "$originalArgOne" = 'mongod' ]; then
 	# MongoDB 3.6+ defaults to localhost-only binding
 	haveBindIp=
 	if _mongod_hack_have_arg --bind_ip "$@" || _mongod_hack_have_arg --bind_ip_all "$@"; then
