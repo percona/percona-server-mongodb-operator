@@ -1,0 +1,167 @@
+{
+  "authInfo": {
+    "authenticatedUsers": [
+      {
+        "user": "clusterMonitor",
+        "db": "admin"
+      }
+    ],
+    "authenticatedUserRoles": [
+      {
+        "role": "clusterMonitor",
+        "db": "admin"
+      }
+    ],
+    "authenticatedUserPrivileges": [
+      {
+        "resource": {
+          "db": "",
+          "collection": ""
+        },
+        "actions": [
+          "collStats",
+          "dbStats",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": "system.profile"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": ""
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": ""
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "replset.election"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "replset.minvalid"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.replset"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "cluster": true
+        },
+        "actions": [
+          "checkFreeMonitoringStatus",
+          "connPoolStats",
+          "getDefaultRWConcern",
+          "getCmdLineOpts",
+          "getLog",
+          "getParameter",
+          "getShardMap",
+          "hostInfo",
+          "inprog",
+          "listDatabases",
+          "listSessions",
+          "listShards",
+          "netstat",
+          "replSetGetConfig",
+          "replSetGetStatus",
+          "serverStatus",
+          "shardingState",
+          "top",
+          "useUUID"
+        ]
+      }
+    ]
+  }
+}
