@@ -93,8 +93,8 @@ func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error {
 	resp := OKResponse{}
 
-	// TODO The 'force' flag should be set to true if there is no PRIMARY in the replset (but this shouldn't ever happen).
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}, {Key: "force", Value: false}})
+	// Using force flag since mongo 4.4 forbids to add multiple members at a time.
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}, {Key: "force", Value: true}})
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "replSetReconfig")
 	}

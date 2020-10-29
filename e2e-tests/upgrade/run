@@ -20,15 +20,11 @@ if [[ "${IMAGE_MONGOD}" == *"percona-server-mongodb-operator"* ]]; then
 else
     MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 fi
-API='psmdb.percona.com/v1-1-0'
-IMAGE='percona/percona-server-mongodb-operator:1.1.0'
-IMAGE_PMM='percona/percona-server-mongodb-operator:1.1.0-pmm'
-IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod$MONGO_VER"
-IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.1.0-backup'
-
-if [[ "${MONGO_VER}" == "4.2" ]]; then
-    IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.1.0-mongod4.0"
-fi
+API='psmdb.percona.com/v1-4-0'
+IMAGE_PMM='percona/percona-server-mongodb-operator:1.4.0-pmm'
+IMAGE='percona/percona-server-mongodb-operator:1.4.0'
+IMAGE_MONGOD="percona/percona-server-mongodb-operator:1.4.0-mongod$MONGO_VER"
+IMAGE_BACKUP='percona/percona-server-mongodb-operator:1.4.0-backup'
 
 compare_generation() {
     generation=$1
@@ -81,7 +77,7 @@ main() {
         echo 'Operator image has not been updated'
         exit 1
     fi
-    
+
     compare_generation 1 statefulset "${CLUSTER}-rs0"
 
     sleep 10
@@ -106,13 +102,13 @@ main() {
         echo 'MongoDB image has not been updated'
         exit 1
     fi
-    
+
     sleep 10
 
     wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
     sleep 10
     wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
-    sleep 10 
+    sleep 10
     wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
 
     wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
