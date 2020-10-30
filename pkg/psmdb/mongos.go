@@ -73,10 +73,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 }
 
 func initContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []corev1.Container {
-	inits := []corev1.Container{}
-	if cr.CompareVersion("1.5.0") >= 0 {
-		inits = append(inits, EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
-	}
+	inits := []corev1.Container{EntrypointInitContainer(operatorPod.Spec.Containers[0].Image)}
 
 	return inits
 }
