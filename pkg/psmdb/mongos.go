@@ -157,9 +157,8 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 
 	cfgInstanses := make([]string, 0, cfgRs.Size)
 	for i := 0; i < int(cfgRs.Size); i++ {
-		cfgInstanses = append(cfgInstanses,
-			fmt.Sprintf("%s-%s-%d.%s-%s.%s.svc.cluster.local:%d",
-				cr.Name, cfgRs.Name, i, cr.Name, cfgRs.Name, cr.Namespace, msSpec.Port))
+		podName := cr.Name + "-" + cfgRs.Name + "-" + strconv.Itoa(i)
+		cfgInstanses = append(cfgInstanses, GetAddr(cr, podName, cfgRs.Name))
 	}
 
 	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstanses, ","))

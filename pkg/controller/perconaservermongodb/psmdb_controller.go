@@ -268,8 +268,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 
-	for i, replset := range repls {
-		if i > 0 {
+	shards := 0
+	for _, replset := range repls {
+		if replset.ClusterRole == api.ClusterRoleShardSvr {
+			shards++
+		}
+
+		if shards > 1 {
 			reqLogger.Error(nil, "multiple replica sets is not supported, skipping replset %s", replset.Name)
 			continue
 		}
