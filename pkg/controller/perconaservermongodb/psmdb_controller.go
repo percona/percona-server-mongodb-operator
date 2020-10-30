@@ -269,8 +269,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	for i, replset := range repls {
-		if !cr.Spec.Sharding.Enabled && i > 0 {
-			reqLogger.Error(nil, "multiple replica sets is not supported for non sharded configuration, skipping replset %s", replset.Name)
+		if i > 0 {
+			reqLogger.Error(nil, "multiple replica sets is not supported, skipping replset %s", replset.Name)
 			continue
 		}
 
