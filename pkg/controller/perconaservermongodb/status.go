@@ -22,7 +22,6 @@ type mongoClusterState int
 const (
 	clusterReady mongoClusterState = iota
 	clusterInit
-	clusterAddShard
 	clusterError
 )
 
