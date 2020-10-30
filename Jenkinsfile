@@ -181,6 +181,7 @@ pipeline {
 
                             sg docker -c "
                                 docker login -u '${USER}' -p '${PASS}'
+                                export RELEASE=0
                                 export IMAGE=\$DOCKER_TAG
                                 ./e2e-tests/build
                                 docker logout
@@ -268,6 +269,8 @@ pipeline {
                         runTest('arbiter', 'basic')
                         runTest('service-per-pod', 'basic')
                         runTest('liveness', 'basic')
+                        runTest('smart-update', 'basic')
+                        runTest('version-service', 'basic')
                         runTest('users', 'basic')
                         ShutdownCluster('basic')
                     }

@@ -13,27 +13,32 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func Dial(addrs []string, replset, username, password string, useTLS bool) (*mongo.Client, error) {
+var log = logf.Log.WithName("mongo")
+
+type Config struct {
+	Hosts       []string
+	ReplSetName string
+	Username    string
+	Password    string
+	TLSConf     *tls.Config
+}
+
+func Dial(conf *Config) (*mongo.Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer connectcancel()
 
 	opts := options.Client().
-		SetHosts(addrs).
-		SetReplicaSet(replset).
+		SetHosts(conf.Hosts).
+		SetReplicaSet(conf.ReplSetName).
 		SetAuth(options.Credential{
-			Password: password,
-			Username: username,
+			Password: conf.Password,
+			Username: conf.Username,
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
-		SetReadPreference(readpref.Primary())
-
-	if useTLS {
-		tlsCfg := tls.Config{InsecureSkipVerify: true}
-		opts = opts.SetTLSConfig(&tlsCfg).SetDialer(tlsDialer{cfg: &tlsCfg})
-	}
-
+		SetReadPreference(readpref.Primary()).SetTLSConfig(conf.TLSConf)
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
@@ -41,7 +46,10 @@ func Dial(addrs []string, replset, username, password string, useTLS bool) (*mon
 
 	defer func() {
 		if err != nil {
-			_ = client.Disconnect(ctx)
+			derr := client.Disconnect(ctx)
+			if derr != nil {
+				log.Error(err, "failed to disconnect")
+			}
 		}
 	}()
 
@@ -84,8 +92,8 @@ func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error {
 	resp := OKResponse{}
 
-	// TODO The 'force' flag should be set to true if there is no PRIMARY in the replset (but this shouldn't ever happen).
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}, {Key: "force", Value: false}})
+	// Using force flag since mongo 4.4 forbids to add multiple members at a time.
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}, {Key: "force", Value: true}})
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "replSetReconfig")
 	}

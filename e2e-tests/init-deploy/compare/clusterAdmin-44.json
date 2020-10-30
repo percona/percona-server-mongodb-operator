@@ -1,0 +1,233 @@
+{
+  "authInfo": {
+    "authenticatedUsers": [
+      {
+        "user": "clusterAdmin",
+        "db": "admin"
+      }
+    ],
+    "authenticatedUserRoles": [
+      {
+        "role": "clusterAdmin",
+        "db": "admin"
+      }
+    ],
+    "authenticatedUserPrivileges": [
+      {
+        "resource": {
+          "db": "",
+          "collection": ""
+        },
+        "actions": [
+          "clearJumboFlag",
+          "collStats",
+          "dbStats",
+          "dropDatabase",
+          "enableSharding",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "killCursors",
+          "moveChunk",
+          "refineCollectionShardKey",
+          "splitChunk",
+          "splitVector"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": "system.profile"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": ""
+        },
+        "actions": [
+          "changeStream",
+          "clearJumboFlag",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "enableSharding",
+          "find",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "moveChunk",
+          "planCacheRead",
+          "refineCollectionShardKey",
+          "remove",
+          "splitChunk",
+          "splitVector",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": ""
+        },
+        "actions": [
+          "changeStream",
+          "clearJumboFlag",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "enableSharding",
+          "find",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "moveChunk",
+          "planCacheRead",
+          "refineCollectionShardKey",
+          "remove",
+          "splitChunk",
+          "splitVector",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "replset.election"
+        },
+        "actions": [
+          "find",
+          "insert",
+          "remove",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "replset.minvalid"
+        },
+        "actions": [
+          "find",
+          "insert",
+          "remove",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.replset"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "cluster": true
+        },
+        "actions": [
+          "addShard",
+          "appendOplogNote",
+          "applicationMessage",
+          "checkFreeMonitoringStatus",
+          "cleanupOrphaned",
+          "connPoolStats",
+          "connPoolSync",
+          "dropConnections",
+          "flushRouterConfig",
+          "fsync",
+          "getDefaultRWConcern",
+          "getCmdLineOpts",
+          "getLog",
+          "getParameter",
+          "getShardMap",
+          "hostInfo",
+          "inprog",
+          "invalidateUserCache",
+          "killAnyCursor",
+          "killAnySession",
+          "killop",
+          "listDatabases",
+          "listSessions",
+          "listShards",
+          "logRotate",
+          "netstat",
+          "removeShard",
+          "replSetConfigure",
+          "replSetGetConfig",
+          "replSetGetStatus",
+          "replSetResizeOplog",
+          "replSetStateChange",
+          "resync",
+          "serverStatus",
+          "setDefaultRWConcern",
+          "setFeatureCompatibilityVersion",
+          "setFreeMonitoring",
+          "setParameter",
+          "shardingState",
+          "shutdown",
+          "top",
+          "touch",
+          "trafficRecord",
+          "unlock",
+          "useUUID"
+        ]
+      }
+    ]
+  }
+}

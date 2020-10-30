@@ -8,7 +8,7 @@ import (
 	"runtime"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/webhook"
-
+	_ "github.com/Percona-Lab/percona-version-service/api"
 	certmgrscheme "github.com/jetstack/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"

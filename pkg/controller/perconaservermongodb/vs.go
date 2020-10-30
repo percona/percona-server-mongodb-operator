@@ -1,100 +1,85 @@
 package perconaservermongodb
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/versionserviceclient"
+	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/models"
+	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/version_service"
 )
 
+const productName = "psmdb-operator"
+
 func (vs VersionServiceClient) GetExactVersion(endpoint string, vm VersionMeta) (DepVersion, error) {
-	client := http.Client{
-		Timeout: 5 * time.Second,
+	if strings.Contains(endpoint, "https://check.percona.com/versions") {
+		endpoint = "https://check.percona.com"
 	}
 
-	requestURL, err := url.Parse(
-		fmt.Sprintf("%s/v1/psmdb-operator/%s/%s",
-			strings.TrimRight(endpoint, "/"),
-			vs.OpVersion,
-			vm.Apply,
-		),
-	)
+	requestURL, err := url.Parse(endpoint)
 	if err != nil {
 		return DepVersion{}, err
 	}
 
-	q := requestURL.Query()
-	q.Add("databaseVersion", vm.MongoVersion)
-	q.Add("kubeVersion", vm.KubeVersion)
-	q.Add("platform", vm.Platform)
-	q.Add("customResourceUID", vm.CRUID)
+	vsClient := versionserviceclient.NewHTTPClientWithConfig(nil, &versionserviceclient.TransportConfig{
+		Host:     requestURL.Host,
+		BasePath: requestURL.Path,
+		Schemes:  []string{requestURL.Scheme},
+	})
 
-	if vm.PMMVersion != "" {
-		q.Add("pmmVersion", vm.PMMVersion)
+	applyParams := &version_service.VersionServiceApplyParams{
+		Apply:             vm.Apply,
+		BackupVersion:     &vm.BackupVersion,
+		CustomResourceUID: &vm.CRUID,
+		DatabaseVersion:   &vm.MongoVersion,
+		KubeVersion:       &vm.KubeVersion,
+		OperatorVersion:   vs.OpVersion,
+		Platform:          &vm.Platform,
+		PmmVersion:        &vm.PMMVersion,
+		Product:           productName,
+		HTTPClient:        &http.Client{Timeout: 10 * time.Second},
 	}
+	applyParams = applyParams.WithTimeout(10 * time.Second)
 
-	if vm.BackupVersion != "" {
-		q.Add("backupVersion", vm.BackupVersion)
-	}
+	resp, err := vsClient.VersionService.VersionServiceApply(applyParams)
 
-	requestURL.RawQuery = q.Encode()
-	req, err := http.NewRequest("GET", requestURL.String(), nil)
 	if err != nil {
 		return DepVersion{}, err
 	}
 
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return DepVersion{}, err
-	}
-
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return DepVersion{}, fmt.Errorf("received bad status code %s", resp.Status)
-	}
-
-	r := VersionResponse{}
-	err = json.NewDecoder(resp.Body).Decode(&r)
-	if err != nil {
-		return DepVersion{}, fmt.Errorf("failed to unmarshal response: %v", err)
-	}
-
-	if len(r.Versions) == 0 {
+	if len(resp.Payload.Versions) == 0 {
 		return DepVersion{}, fmt.Errorf("empty versions response")
 	}
 
-	mongoVersion, err := getVersion(r.Versions[0].Matrix.Mongo)
+	mongoVersion, err := getVersion(resp.Payload.Versions[0].Matrix.Mongod)
 	if err != nil {
 		return DepVersion{}, err
 	}
 
-	backupVersion, err := getVersion(r.Versions[0].Matrix.Backup)
+	backupVersion, err := getVersion(resp.Payload.Versions[0].Matrix.Backup)
 	if err != nil {
 		return DepVersion{}, err
 	}
 
-	pmmVersion, err := getVersion(r.Versions[0].Matrix.PMM)
+	pmmVersion, err := getVersion(resp.Payload.Versions[0].Matrix.Pmm)
 	if err != nil {
 		return DepVersion{}, err
 	}
 
 	return DepVersion{
-		MongoImage:    r.Versions[0].Matrix.Mongo[mongoVersion].ImagePath,
+		MongoImage:    resp.Payload.Versions[0].Matrix.Mongod[mongoVersion].ImagePath,
 		MongoVersion:  mongoVersion,
-		BackupImage:   r.Versions[0].Matrix.Backup[backupVersion].ImagePath,
+		BackupImage:   resp.Payload.Versions[0].Matrix.Backup[backupVersion].ImagePath,
 		BackupVersion: backupVersion,
-		PMMImage:      r.Versions[0].Matrix.PMM[pmmVersion].ImagePath,
+		PMMImage:      resp.Payload.Versions[0].Matrix.Mongod[pmmVersion].ImagePath,
 		PMMVersion:    pmmVersion,
 	}, nil
 }
 
-func getVersion(versions map[string]Version) (string, error) {
+func getVersion(versions map[string]models.VersionVersion) (string, error) {
 	if len(versions) != 1 {
 		return "", fmt.Errorf("response has multiple or zero versions")
 	}
@@ -147,7 +132,7 @@ type VersionResponse struct {
 }
 
 type VersionMeta struct {
-	Apply         v1.UpgradeStrategy
+	Apply         string
 	MongoVersion  string
 	KubeVersion   string
 	Platform      string

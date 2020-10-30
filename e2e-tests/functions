@@ -202,7 +202,7 @@ wait_restore_object() {
 deploy_operator() {
     desc 'start operator'
 
-    kubectl_bin apply -f ${src_dir}/deploy/crd.yaml || :
+    kubectl_bin apply -f ${test_dir}/conf/crd.yaml || kubectl_bin apply -f ${src_dir}/deploy/crd.yaml || :
     kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
 
     cat ${src_dir}/deploy/operator.yaml \
@@ -317,6 +317,7 @@ compare_kubectl() {
     fi
 
     kubectl_bin get -o yaml ${resource} \
+        | yq d - 'metadata.ownerReferences.*.apiVersion' \
         | yq d - 'metadata.managedFields' \
         | yq d - '**.creationTimestamp' \
         | yq d - '**.namespace' \
@@ -428,6 +429,9 @@ compare_mongo_user() {
     if [[ "$IMAGE_MONGOD" =~ 4\.2 ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
         expected_result=${test_dir}/compare/$user-42.json
     fi
+    if [[ "$IMAGE_MONGOD" =~ 4\.4 ]] && [ -f ${test_dir}/compare/$user-44.json ]; then
+        expected_result=${test_dir}/compare/$user-44.json
+    fi
 
     run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
         | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
@@ -457,7 +461,7 @@ run_pumba() {
 deploy_cert_manager() {
     kubectl_bin create namespace cert-manager || :
     kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-    kubectl_bin apply -f https://github.com/jetstack/cert-manager/releases/download/v0.14.1/cert-manager.yaml --validate=false || : 2>/dev/null
+    kubectl_bin apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false || : 2>/dev/null
 }
 
 destroy() {
@@ -481,7 +485,7 @@ destroy() {
     kubectl_bin delete psmdb-backup --all || :
     kubectl_bin delete psmdb-recovery --all || :
 
-    kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.10.1/cert-manager.yaml 2>/dev/null || :
+    kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml 2>/dev/null || :
     if [ "$OPENSHIFT" == 1 ]; then
         oc delete --grace-period=0 --force=true project "$namespace"
     else

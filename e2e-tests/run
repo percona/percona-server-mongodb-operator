@@ -6,9 +6,9 @@ set -o errexit
 dir=$(realpath $(dirname $0))
 
 fail() {
-    local test=$1
-    echo "test $test failed"
-    exit 1
+	local test=$1
+	echo "test $test failed"
+	exit 1
 }
 
 $dir/init-deploy/run || fail "init-deploy"
@@ -28,3 +28,5 @@ $dir/security-context/run || fail "security-context"
 $dir/storage/run || fail "storage"
 $dir/self-healing/run || fail "self-healing"
 $dir/operator-self-healing/run || fail "operator-self-healing"
+$dir/smart-update || fail "smart-update"
+$dir/version-service || fail "version-service"

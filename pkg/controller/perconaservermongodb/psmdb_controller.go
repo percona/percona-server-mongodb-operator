@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -455,7 +455,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		if err != nil {
 			return nil, fmt.Errorf("failed to get operator pod: %v", err)
 		}
-		inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
+		if len(cr.Spec.InitImage) > 0 {
+			inits = append(inits, psmdb.EntrypointInitContainer(cr.Spec.InitImage))
+		} else {
+			inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
+		}
 	}
 
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits)
@@ -467,11 +471,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
 
-	if sfsTemplateAnnotations != nil {
-		for k, v := range sfsTemplateAnnotations {
-			sfsSpec.Template.Annotations[k] = v
-		}
+	for k, v := range sfsTemplateAnnotations {
+		sfsSpec.Template.Annotations[k] = v
 	}
+
 	// add TLS/SSL Volume
 	t := true
 	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,

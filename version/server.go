@@ -15,8 +15,8 @@ type Platform string
 
 const (
 	PlatformUndef      Platform = ""
-	PlatformKubernetes          = "kubernetes"
-	PlatformOpenshift           = "openshift"
+	PlatformKubernetes Platform = "kubernetes"
+	PlatformOpenshift  Platform = "openshift"
 )
 
 // ServerVersion represents info about k8s / openshift server version
@@ -73,13 +73,13 @@ func GetServer() (*ServerVersion, error) {
 		return version, nil
 	}
 
-    // openshift 4.0
-    version.Info, err = probeAPI("/apis/quota.openshift.io", client)
-    if err == nil {
-        version.Platform = PlatformOpenshift
-        version.Info.GitVersion = "undefined (v4.0+)"
-        return version, nil
-    }
+	// openshift 4.0
+	version.Info, err = probeAPI("/apis/quota.openshift.io", client)
+	if err == nil {
+		version.Platform = PlatformOpenshift
+		version.Info.GitVersion = "undefined (v4.0+)"
+		return version, nil
+	}
 
 	// k8s
 	version.Info, err = probeAPI("/version", client)

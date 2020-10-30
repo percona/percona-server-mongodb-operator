@@ -199,14 +199,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ReadinessProbe.FailureThreshold = int32(8)
 		}
 
-		if cr.Spec.Pause {
-			replset.Size = 0
-			replset.Arbiter.Enabled = false
-			continue
-		}
 		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
 		if err != nil {
 			return err
+		}
+		if cr.Spec.Pause {
+			replset.Size = 0
+			replset.Arbiter.Enabled = false
 		}
 	}
 
@@ -230,7 +229,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		var fsgroup *int64
-		if platform == PlatformKubernetes {
+		if platform == version.PlatformKubernetes {
 			var tp int64 = 1001
 			fsgroup = &tp
 		}
@@ -286,7 +285,7 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 	}
 
 	var fsgroup *int64
-	if platform == PlatformKubernetes {
+	if platform == version.PlatformKubernetes {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
@@ -348,10 +347,10 @@ func (m *MultiAZ) reconcileOpts() {
 }
 
 var affinityValidTopologyKeys = map[string]struct{}{
-	AffinityOff:                                struct{}{},
-	"kubernetes.io/hostname":                   struct{}{},
-	"failure-domain.beta.kubernetes.io/zone":   struct{}{},
-	"failure-domain.beta.kubernetes.io/region": struct{}{},
+	AffinityOff:                                {},
+	"kubernetes.io/hostname":                   {},
+	"failure-domain.beta.kubernetes.io/zone":   {},
+	"failure-domain.beta.kubernetes.io/region": {},
 }
 
 var defaultAffinityTopologyKey = "kubernetes.io/hostname"

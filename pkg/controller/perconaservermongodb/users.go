@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -126,7 +125,8 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 	}
 
 	// no changes, nothing to do with that user
-	if bytes.Compare(su.newData[nameKey], su.currData[nameKey]) == 0 && bytes.Compare(su.newData[passKey], su.currData[passKey]) == 0 {
+	if bytes.Equal(su.newData[nameKey], su.currData[nameKey]) &&
+		bytes.Equal(su.newData[passKey], su.currData[passKey]) {
 		return false, nil
 	}
 	if nameKey == envPMMServerUser {
@@ -201,12 +201,12 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		return false, nil
 	}
 
-	err = r.updateUsers(cr, su.users, string(currUsersSec.Data[envMongoDBUserAdminUser]), string(currUsersSec.Data[envMongoDBUserAdminPassword]))
+	err = r.updateUsers(cr, su.users, currUsersSec)
 
 	return restartSfs, errors.Wrap(err, "mongo: update system users")
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, adminUser, adminPass string) error {
+func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, usersSecret *corev1.Secret) error {
 	for i, replset := range cr.Spec.Replsets {
 		if i > 0 {
 			log.Info("update users: multiple replica sets is not yet supported")
@@ -221,29 +221,30 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		}
 
-		pods := &corev1.PodList{}
+		pods := corev1.PodList{}
 		err := r.client.List(context.TODO(),
-			pods,
+			&pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(matchLabels),
 			},
 		)
+
+		username := string(usersSecret.Data[envMongoDBUserAdminUser])
+		password := string(usersSecret.Data[envMongoDBUserAdminPassword])
 		if err != nil {
 			return errors.Wrapf(err, "get pods list for replset %s", replset.Name)
 		}
-		rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replset, pods.Items)
+		client, err := r.mongoClient(cr, replset, pods, username, password)
 		if err != nil {
-			return errors.Wrap(err, "get replset addr")
+			return errors.Wrap(err, "dial:")
 		}
-		client, err := mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, true)
-		if err != nil {
-			client, err = mongo.Dial(rsAddrs, replset.Name, adminUser, adminPass, false)
+		defer func() {
+			err := client.Disconnect(context.TODO())
 			if err != nil {
-				return errors.Wrap(err, "dial:")
+				log.Error(err, "failed to close connection")
 			}
-		}
-		defer client.Disconnect(context.TODO())
+		}()
 
 		for _, user := range users {
 			err := user.updateMongo(client)
@@ -257,7 +258,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 }
 
 func (u *systemUser) updateMongo(c *mongod.Client) error {
-	if bytes.Compare(u.currName, u.name) == 0 {
+	if bytes.Equal(u.currName, u.name) {
 		err := mongo.UpdateUserPass(context.TODO(), c, string(u.name), string(u.pass))
 		return errors.Wrapf(err, "change password for user %s", u.name)
 	}

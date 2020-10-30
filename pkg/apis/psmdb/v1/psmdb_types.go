@@ -27,8 +27,6 @@ type PerconaServerMongoDB struct {
 
 	Spec   PerconaServerMongoDBSpec   `json:"spec,omitempty"`
 	Status PerconaServerMongoDBStatus `json:"status,omitempty"`
-
-	version *v.Version
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -50,6 +48,7 @@ const (
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
 	Pause                   bool                                 `json:"pause,omitempty"`
+	CRVersion               string                               `json:"crVersion,omitempty"`
 	Platform                *version.Platform                    `json:"platform,omitempty"`
 	Image                   string                               `json:"image,omitempty"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
@@ -65,6 +64,7 @@ type PerconaServerMongoDBSpec struct {
 	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	InitImage               string                               `json:"initImage,omitempty"`
 }
 
 const (
@@ -97,9 +97,9 @@ type AppState string
 
 const (
 	AppStatePending AppState = "pending"
-	AppStateInit             = "initializing"
-	AppStateReady            = "ready"
-	AppStateError            = "error"
+	AppStateInit    AppState = "initializing"
+	AppStateReady   AppState = "ready"
+	AppStateError   AppState = "error"
 )
 
 type UpgradeStrategy string
@@ -132,18 +132,18 @@ type ConditionStatus string
 
 const (
 	ConditionTrue    ConditionStatus = "True"
-	ConditionFalse                   = "False"
-	ConditionUnknown                 = "Unknown"
+	ConditionFalse   ConditionStatus = "False"
+	ConditionUnknown ConditionStatus = "Unknown"
 )
 
 type ClusterConditionType string
 
 const (
 	ClusterReady   ClusterConditionType = "ClusterReady"
-	ClusterInit                         = "ClusterInitializing"
-	ClusterRSInit                       = "ReplsetInitialized"
-	ClusterRSReady                      = "ReplsetReady"
-	ClusterError                        = "Error"
+	ClusterInit    ClusterConditionType = "ClusterInitializing"
+	ClusterRSInit  ClusterConditionType = "ReplsetInitialized"
+	ClusterRSReady ClusterConditionType = "ReplsetReady"
+	ClusterError   ClusterConditionType = "Error"
 )
 
 type ClusterCondition struct {
@@ -277,8 +277,8 @@ type MongodChiperMode string
 
 const (
 	MongodChiperModeUnset MongodChiperMode = ""
-	MongodChiperModeCBC                    = "AES256-CBC"
-	MongodChiperModeGCM                    = "AES256-GCM"
+	MongodChiperModeCBC   MongodChiperMode = "AES256-CBC"
+	MongodChiperModeGCM   MongodChiperMode = "AES256-GCM"
 )
 
 type MongodSpecSecurity struct {
@@ -433,17 +433,9 @@ type Expose struct {
 	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 }
 
-type Platform string
-
-const (
-	PlatformUndef      Platform = ""
-	PlatformKubernetes          = "kubernetes"
-	PlatformOpenshift           = "openshift"
-)
-
 // ServerVersion represents info about k8s / openshift server version
 type ServerVersion struct {
-	Platform Platform
+	Platform version.Platform
 	Info     k8sversion.Info
 }
 
@@ -469,7 +461,11 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 // The new (semver-matching) version is determined either by the CR's API version or an API version specified via the CR's annotations.
 // If the CR's API version is an empty string, it returns "v1"
 func (cr *PerconaServerMongoDB) setVersion() error {
-	apiVersion := cr.APIVersion
+	if len(cr.Spec.CRVersion) > 0 {
+		return nil
+	}
+
+	apiVersion := version.Version
 
 	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		var newCR PerconaServerMongoDB
@@ -477,33 +473,25 @@ func (cr *PerconaServerMongoDB) setVersion() error {
 		if err != nil {
 			return err
 		}
-		apiVersion = newCR.APIVersion
+		if len(newCR.APIVersion) > 0 {
+			apiVersion = strings.Replace(strings.TrimPrefix(newCR.APIVersion, "psmdb.percona.com/v"), "-", ".", -1)
+		}
 	}
 
-	crVersion := strings.Replace(strings.TrimPrefix(apiVersion, "psmdb.percona.com/v"), "-", ".", -1)
-	if len(crVersion) == 0 {
-		crVersion = "v1"
-	}
-
-	currentVersion, err := v.NewVersion(crVersion)
-	if err != nil {
-		return err
-	}
-
-	cr.version = currentVersion
+	cr.Spec.CRVersion = apiVersion
 
 	return nil
 }
 
 func (cr *PerconaServerMongoDB) Version() *v.Version {
-	return cr.version
+	return v.Must(v.NewVersion(cr.Spec.CRVersion))
 }
 
 func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
-	if cr.version == nil {
-		_ = cr.setVersion()
+	if len(cr.Spec.CRVersion) == 0 {
+		cr.setVersion()
 	}
 
 	//using Must because "version" must be right format
-	return cr.version.Compare(v.Must(v.NewVersion(version)))
+	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }
