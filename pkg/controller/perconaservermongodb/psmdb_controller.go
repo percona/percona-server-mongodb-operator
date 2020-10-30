@@ -399,12 +399,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.deleteMongos(cr)
+	err = r.deleteMongosIfNeeded(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "delete mongos")
 	}
 
-	err = r.deleteCfg(cr)
+	err = r.deleteCfgIfNeeded(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "delete config server")
 	}
@@ -463,7 +463,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	return created, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteCfg(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -479,7 +479,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfg(cr *api.PerconaServerMongoDB) 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Sharding.Enabled {
 		return nil
 	}
