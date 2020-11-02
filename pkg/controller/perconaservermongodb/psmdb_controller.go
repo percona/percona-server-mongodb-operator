@@ -280,8 +280,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			continue
 		}
 
-		if replset.ClusterRole != api.ClusterRoleConfigSvr && replset.Name == "cfg" {
-			return reconcile.Result{}, errors.New("cfg is reserved name for config server replset")
+		if cr.Spec.Sharding.Enabled && replset.ClusterRole != api.ClusterRoleConfigSvr && replset.Name == api.ConfigReplSetName {
+			return reconcile.Result{}, errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
 		}
 
 		matchLabels := map[string]string{
