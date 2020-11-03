@@ -31,6 +31,10 @@ INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-oper
 OPERATOR_NAME='percona-server-mongodb-operator'
 API="psmdb.percona.com/v${INIT_OPERATOR_VER//./-}"
 IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
+# we use the starting image from the same repo so we don't need to use initImage option
+if [[ "$(echo ${TARGET_IMAGE}|cut -d'/' -f1)" == "perconalab" ]]; then
+    IMAGE="${IMAGE/percona/perconalab}"
+fi
 IMAGE_MONGOD=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.mongod[].imagePath')
 IMAGE_PMM=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.pmm[].imagePath')
 IMAGE_BACKUP=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.backup[].imagePath')
@@ -107,7 +111,6 @@ function prepare_cr_yaml() {
 
     curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" > "${cr_yaml}"
     yq w -i "${cr_yaml}" "metadata.name" "${CLUSTER}"
-    yq w -i "${cr_yaml}" "spec.initImage" "${IMAGE}"
     yq w -i "${cr_yaml}" "spec.upgradeOptions.apply" "disabled"
     yq w -i "${cr_yaml}" "spec.replsets[*].size" "${CLUSTER_SIZE}"
     yq w -i "${cr_yaml}" "spec.replsets[*].arbiter.enabled" "false"
@@ -161,7 +164,6 @@ function main() {
     kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {
             "crVersion": "'"${TARGET_OPERATOR_VER}"'",
-            "initImage": "'"${TARGET_IMAGE}"'",
             "image": "'"${TARGET_IMAGE_MONGOD}"'",
             "pmm": { "image": "'"${TARGET_IMAGE_PMM}"'" },
             "backup": { "image": "'"${TARGET_IMAGE_BACKUP}"'" }
