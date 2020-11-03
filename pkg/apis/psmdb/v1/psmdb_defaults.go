@@ -5,16 +5,18 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
 const DefaultDNSSuffix = "svc.cluster.local"
+
+// ConfigReplSetName is the only possible name for config replica set
+const ConfigReplSetName = "cfg"
 
 var (
 	defaultRunUID                   int64 = 1001
@@ -35,6 +37,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	err := cr.setVersion()
 	if err != nil {
 		return errors.Wrap(err, "set version")
+	}
+
+	if cr.Spec.Replsets == nil {
+		return errors.New("at least one replica set should be specified")
 	}
 
 	if cr.Spec.Image == "" {
@@ -141,7 +147,88 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		failureThresholdDefault = int32(4)
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
-	for _, replset := range cr.Spec.Replsets {
+
+	if cr.Spec.Sharding.Enabled {
+		if cr.Spec.Sharding.ConfigsvrReplSet == nil {
+			return errors.New("config replica set should be specified")
+		}
+
+		if cr.Spec.Sharding.Mongos == nil {
+			return errors.New("mongos should be specified")
+		}
+
+		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
+
+		if cr.Spec.Sharding.Mongos.Port == 0 {
+			cr.Spec.Sharding.Mongos.Port = 27017
+		}
+
+		for i := range cr.Spec.Replsets {
+			cr.Spec.Replsets[i].ClusterRole = ClusterRoleShardSvr
+		}
+
+		cr.Spec.Sharding.ConfigsvrReplSet.ClusterRole = ClusterRoleConfigSvr
+
+		if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
+			if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
+				cr.Spec.Sharding.Mongos.LivenessProbe = new(LivenessProbeExtended)
+				cr.Spec.Sharding.Mongos.LivenessProbe.Probe = corev1.Probe{
+					Handler: corev1.Handler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+						},
+					},
+				}
+			}
+
+			if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDeafult
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
+			}
+		}
+
+		if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
+			if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
+				cr.Spec.Sharding.Mongos.ReadinessProbe = &corev1.Probe{
+					Handler: corev1.Handler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+						},
+					},
+				}
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = int32(3)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(8)
+			}
+		}
+	}
+
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled {
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	for _, replset := range repls {
 		if replset.LivenessProbe == nil {
 			replset.LivenessProbe = new(LivenessProbeExtended)
 		}

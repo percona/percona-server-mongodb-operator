@@ -24,6 +24,7 @@ spec:
     image: percona/percona-server-mongodb-operator:1.5.0-pmm
     serverHost: monitoring-service
   replsets:
+
   - name: rs0
     size: 3
     affinity:
@@ -63,6 +64,10 @@ spec:
     expose:
       enabled: false
       exposeType: LoadBalancer
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
+#      serviceAnnotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
     arbiter:
       enabled: false
       size: 1
@@ -109,6 +114,42 @@ spec:
         resources:
           requests:
             storage: 3Gi
+
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      size: 3
+      volumeSpec:
+#       emptyDir: {}
+#       hostPath:
+#         path: /data
+#         type: Directory
+        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      expose:
+        enabled: false
+        exposeType: ClusterIP
+#        loadBalancerSourceRanges:
+#          - 10.0.0.0/8
+#        serviceAnnotations:
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+        rateLimit: 100
+#    auditLog:
+#      destination: file
+#      format: BSON
+#      filter: '{}'
+ 
   mongod:
     net:
       port: 27017
@@ -143,14 +184,11 @@ spec:
       mode: slowOp
       slowOpThresholdMs: 100
       rateLimit: 100
-#    loadBalancerSourceRanges:
-#      - 10.0.0.0/8
-#    serviceAnnotations:
-#      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http   
 #    auditLog:
 #      destination: file
 #      format: BSON
 #      filter: '{}'
+
   backup:
     enabled: true
     restartOnFailure: true

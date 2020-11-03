@@ -39,6 +39,7 @@ func Dial(conf *Config) (*mongo.Client, error) {
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
 		SetReadPreference(readpref.Primary()).SetTLSConfig(conf.TLSConf)
+
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
@@ -126,6 +127,25 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	}
 
 	return status, nil
+}
+
+func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
+	shardList := ShardList{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "listShards", Value: 1}})
+	if resp.Err() != nil {
+		return shardList, errors.Wrap(resp.Err(), "listShards")
+	}
+
+	if err := resp.Decode(&shardList); err != nil {
+		return shardList, errors.Wrap(err, "failed to decode shard list")
+	}
+
+	if shardList.OK != 1 {
+		return shardList, fmt.Errorf("mongo says: %s", shardList.Errmsg)
+	}
+
+	return shardList, nil
 }
 
 func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {
