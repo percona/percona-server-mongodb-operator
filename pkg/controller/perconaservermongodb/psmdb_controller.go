@@ -174,11 +174,19 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		// Error reading the object - requeue the request.
 		return rr, err
 	}
+
+	err = r.compareWithCurrentReplSets(cr)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	usersSecretName = cr.Spec.Secrets.Users
 	if cr.CompareVersion("1.5.0") >= 0 {
 		usersSecretName = internalPrefix + cr.Name + "-users"
 	}
+
 	isClusterLive := clusterInit
+
 	defer func() {
 		err = r.updateStatus(cr, err, isClusterLive)
 		if err != nil {
@@ -427,6 +435,37 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) compareWithCurrentReplSets(cr *api.PerconaServerMongoDB) error {
+	sfsList := appsv1.StatefulSetList{}
+	if err := r.client.List(context.TODO(), &sfsList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/instance": cr.Name,
+			}),
+		},
+	); err != nil {
+		return errors.Wrap(err, "failed to get statefulset list")
+	}
+
+	appliedNames := make(map[string]struct{}, len(cr.Spec.Replsets))
+	for _, v := range cr.Spec.Replsets {
+		appliedNames[cr.Name+"-"+v.Name] = struct{}{}
+	}
+
+	for _, v := range sfsList.Items {
+		if v.Name == cr.Name+"-"+api.ConfigReplSetName {
+			continue
+		}
+
+		if _, ok := appliedNames[v.Name]; !ok {
+			return errors.Errorf("removal is not supported yet, please return %s replset back", v.Name)
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerMongoDB, secretName, keyName string, keyLen int, setOwner bool) (created bool, err error) {
@@ -751,6 +790,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	sfsSpec.Template.Annotations = sslAnn
 
 	sfs.Spec = sfsSpec
+	sfs.Labels = matchLabels
+
 	if k8serrors.IsNotFound(errGet) {
 		err = r.client.Create(context.TODO(), sfs)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
