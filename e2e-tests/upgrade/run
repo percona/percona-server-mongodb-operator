@@ -109,17 +109,17 @@ function deploy_operator_gh() {
 function prepare_cr_yaml() {
     local cr_yaml="$1"
 
-    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" > "${cr_yaml}"
-    yq w -i "${cr_yaml}" "metadata.name" "${CLUSTER}"
-    yq w -i "${cr_yaml}" "spec.upgradeOptions.apply" "disabled"
-    yq w -i "${cr_yaml}" "spec.replsets[*].size" "${CLUSTER_SIZE}"
-    yq w -i "${cr_yaml}" "spec.replsets[*].arbiter.enabled" "false"
-    yq w -i "${cr_yaml}" "spec.backup.enabled" "false"
     # spinup function expects images to have suffix like "-backup"
     # to replace them with images from environment variables
-    yq w -i "${cr_yaml}" "spec.image" ""
-    yq w -i "${cr_yaml}" "spec.backup.image" -- "-backup"
-    yq w -i "${cr_yaml}" "spec.pmm.image" -- "-pmm"
+    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" \
+        | yq w - "metadata.name" "${CLUSTER}" \
+        | yq w - "spec.upgradeOptions.apply" "disabled" \
+        | yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" \
+        | yq w - "spec.replsets[*].arbiter.enabled" "false" \
+        | yq w - "spec.backup.enabled" "false" \
+        | yq w - "spec.image" "" \
+        | yq w - "spec.backup.image" -- "-backup" \
+        | yq w - "spec.pmm.image" -- "-pmm" > "${cr_yaml}"
 }
 
 function main() {
