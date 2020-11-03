@@ -92,10 +92,8 @@ function check_applied_images() {
 
 function deploy_operator_gh() {
     desc 'start operator'
-    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml" > "${tmp_dir}/crd_${GIT_TAG}.yaml"
-    kubectl_bin apply -f "${tmp_dir}/crd_${GIT_TAG}.yaml"
-    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/rbac.yaml" > "${tmp_dir}/rbac_${GIT_TAG}.yaml"
-    kubectl_bin apply -f "${tmp_dir}/rbac_${GIT_TAG}.yaml"
+    kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
+    kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/rbac.yaml"
     curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/operator.yaml" > "${tmp_dir}/operator_${GIT_TAG}.yaml"
     $sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/operator_${GIT_TAG}.yaml"
     kubectl_bin apply -f "${tmp_dir}/operator_${GIT_TAG}.yaml"
@@ -179,10 +177,6 @@ function main() {
     compare_generation "2" "psmdb" "${CLUSTER}"
 
     desc 'cleanup'
-    kubectl_bin delete -f "${cr_yaml}" || true
-    kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || true
-    kubectl_bin delete pvc --all
-    kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
     destroy "${namespace}"
 }
 
