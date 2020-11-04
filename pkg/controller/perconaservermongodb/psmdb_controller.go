@@ -794,7 +794,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	sfsSpec.Template.Annotations = sslAnn
 
 	sfs.Spec = sfsSpec
-	sfs.Labels = matchLabels
+	if cr.CompareVersion("1.6.0") >= 0 {
+		sfs.Labels = matchLabels
+	}
 
 	if k8serrors.IsNotFound(errGet) {
 		err = r.client.Create(context.TODO(), sfs)
