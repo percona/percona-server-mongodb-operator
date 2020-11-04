@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: mongod
+    app.kubernetes.io/component: arbiter
     app.kubernetes.io/instance: arbiter
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
