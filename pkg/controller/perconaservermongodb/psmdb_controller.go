@@ -460,6 +460,10 @@ func (r *ReconcilePerconaServerMongoDB) compareWithCurrentReplSets(cr *api.Perco
 			continue
 		}
 
+		if v.Labels["app.kubernetes.io/component"] == "arbiter" {
+			continue
+		}
+
 		if _, ok := appliedNames[v.Name]; !ok {
 			return errors.Errorf("removal is not supported yet, please return %s replset back", v.Name)
 		}
