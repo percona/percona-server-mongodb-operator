@@ -103,10 +103,9 @@ type ReplsetStatus struct {
 type AppState string
 
 const (
-	AppStatePending AppState = "pending"
-	AppStateInit    AppState = "initializing"
-	AppStateReady   AppState = "ready"
-	AppStateError   AppState = "error"
+	AppStateInit  AppState = "initializing"
+	AppStateReady AppState = "ready"
+	AppStateError AppState = "error"
 )
 
 type UpgradeStrategy string
