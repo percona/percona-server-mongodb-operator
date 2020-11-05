@@ -484,9 +484,6 @@ destroy() {
     kubectl_bin delete psmdb --all
     kubectl_bin delete psmdb-backup --all || :
     kubectl_bin delete psmdb-recovery --all || :
-    kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
-    kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
-    kubectl_bin delete pvc --all
 
     kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml 2>/dev/null || :
     if [ "$OPENSHIFT" == 1 ]; then
