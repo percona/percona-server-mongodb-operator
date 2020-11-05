@@ -294,8 +294,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ReadinessProbe.FailureThreshold = int32(8)
 		}
 
-		gte150 := cr.CompareVersion("1.5.0") >= 0
-		if gte150 && len(replset.ServiceAccountName) == 0 {
+		if cr.CompareVersion("1.6.0") >= 0 && len(replset.ServiceAccountName) == 0 {
 			replset.ServiceAccountName = WorkloadSA
 		}
 
