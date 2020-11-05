@@ -552,8 +552,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return nil
 	}
 
+	uptodate, err := r.isAllSfsUpToDate(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+	}
+
+	if !uptodate {
+		return nil
+	}
+
 	msDepl := psmdb.MongosDeployment(cr)
-	err := setControllerReference(cr, msDepl, r.scheme)
+	err = setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
 		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
 	}

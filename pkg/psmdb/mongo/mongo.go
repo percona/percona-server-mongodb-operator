@@ -120,16 +120,29 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	return status, nil
 }
 
+func StartBalancer(ctx context.Context, client *mongo.Client) error {
+	return SwitchBalancer(ctx, client, true)
+}
+
 func StopBalancer(ctx context.Context, client *mongo.Client) error {
+	return SwitchBalancer(ctx, client, false)
+}
+
+func SwitchBalancer(ctx context.Context, client *mongo.Client, state bool) error {
 	res := OKResponse{}
 
-	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "balancerStop", Value: 1}})
+	command := "balancerStop"
+	if state {
+		command = "balancerStart"
+	}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: command, Value: 1}})
 	if resp.Err() != nil {
-		return errors.Wrap(resp.Err(), "balancerStop")
+		return errors.Wrap(resp.Err(), command)
 	}
 
 	if err := resp.Decode(&res); err != nil {
-		return errors.Wrap(err, "failed to decode balancer stop responce")
+		return errors.Wrapf(err, "failed to decode %s responce", command)
 	}
 
 	if res.OK != 1 {
@@ -137,6 +150,25 @@ func StopBalancer(ctx context.Context, client *mongo.Client) error {
 	}
 
 	return nil
+}
+
+func IsBalancerRunning(ctx context.Context, client *mongo.Client) (bool, error) {
+	res := BalancerStatus{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "balancerStatus", Value: 1}})
+	if resp.Err() != nil {
+		return false, errors.Wrap(resp.Err(), "balancer status")
+	}
+
+	if err := resp.Decode(&res); err != nil {
+		return false, errors.Wrap(err, "failed to decode balancer status responce")
+	}
+
+	if res.OK != 1 {
+		return false, fmt.Errorf("mongo says: %s", res.Errmsg)
+	}
+
+	return res.Mode == "full", nil
 }
 
 func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
