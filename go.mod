@@ -20,7 +20,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.6.1
 	go.mongodb.org/mongo-driver v1.3.4
-	golang.org/x/tools/gopls v0.5.2 // indirect
+	golang.org/x/tools v0.0.0-20201028153306-37f0764111ff // indirect
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
 	k8s.io/api v0.18.0
 	k8s.io/apimachinery v0.18.0
