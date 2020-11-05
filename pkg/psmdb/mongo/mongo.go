@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/pkg/errors"
@@ -65,14 +64,6 @@ func Dial(conf *Config) (*mongo.Client, error) {
 	return client, nil
 }
 
-type tlsDialer struct {
-	cfg *tls.Config
-}
-
-func (d tlsDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	return tls.Dial("tcp", address, d.cfg)
-}
-
 func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 	resp := ReplSetGetConfig{}
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetGetConfig", Value: 1}})
@@ -127,6 +118,25 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	}
 
 	return status, nil
+}
+
+func StopBalancer(ctx context.Context, client *mongo.Client) error {
+	res := OKResponse{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "balancerStop", Value: 1}})
+	if resp.Err() != nil {
+		return errors.Wrap(resp.Err(), "balancerStop")
+	}
+
+	if err := resp.Decode(&res); err != nil {
+		return errors.Wrap(err, "failed to decode balancer stop responce")
+	}
+
+	if res.OK != 1 {
+		return fmt.Errorf("mongo says: %s", res.Errmsg)
+	}
+
+	return nil
 }
 
 func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
