@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +76,11 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []corev1.Container {
 	image := cr.Spec.InitImage
 	if len(image) == 0 {
-		image = strings.Split(operatorPod.Spec.Containers[0].Image, ":")[0] + ":" + cr.Spec.CRVersion
+		if cr.CompareVersion(version.Version) != 0 {
+			image = strings.Split(operatorPod.Spec.Containers[0].Image, ":")[0] + ":" + cr.Spec.CRVersion
+		} else {
+			image = operatorPod.Spec.Containers[0].Image
+		}
 	}
 	return []corev1.Container{EntrypointInitContainer(image)}
 }
