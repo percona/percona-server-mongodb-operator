@@ -735,7 +735,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 	for k, v := range sfsTemplateAnnotations {
 		sfsSpec.Template.Annotations[k] = v
-		sfs.Annotations[k] = v
 	}
 
 	// add TLS/SSL Volume

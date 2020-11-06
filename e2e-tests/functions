@@ -19,7 +19,7 @@ namespace="${test_name}-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 
-if oc get projects 2>&1 | egrep -q 'You have access to the following projects|You are not a member of any projects|You have one project on this server'; then
+if oc get projects ; then
     OPENSHIFT=1
 fi
 

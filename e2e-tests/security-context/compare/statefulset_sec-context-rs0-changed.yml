@@ -1,8 +1,6 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  annotations:
-    openshift.io/scc: privileged
   generation: 2
   labels:
     app.kubernetes.io/component: mongod
