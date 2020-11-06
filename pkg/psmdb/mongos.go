@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +40,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := initContainers(cr, operatorPod)
+	initContainers := InitContainers(cr, operatorPod)
 	for i := range initContainers {
 		initContainers[i].Resources.Limits = c.Resources.Limits
 		initContainers[i].Resources.Requests = c.Resources.Requests
@@ -72,10 +73,16 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 	}, nil
 }
 
-func initContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []corev1.Container {
-	inits := []corev1.Container{EntrypointInitContainer(operatorPod.Spec.Containers[0].Image)}
-
-	return inits
+func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []corev1.Container {
+	image := cr.Spec.InitImage
+	if len(image) == 0 {
+		if cr.CompareVersion(version.Version) != 0 {
+			image = strings.Split(operatorPod.Spec.Containers[0].Image, ":")[0] + ":" + cr.Spec.CRVersion
+		} else {
+			image = operatorPod.Spec.Containers[0].Image
+		}
+	}
+	return []corev1.Container{EntrypointInitContainer(image)}
 }
 
 func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {

@@ -667,11 +667,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		if err != nil {
 			return nil, fmt.Errorf("failed to get operator pod: %v", err)
 		}
-		if len(cr.Spec.InitImage) > 0 {
-			inits = append(inits, psmdb.EntrypointInitContainer(cr.Spec.InitImage))
-		} else {
-			inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
-		}
+		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits)
