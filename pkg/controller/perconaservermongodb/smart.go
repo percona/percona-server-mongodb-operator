@@ -167,7 +167,7 @@ func stopBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password strin
 		}
 	}()
 
-	err = mongo.SwitchBalancer(context.TODO(), mongosSession, false)
+	err = mongo.StopBalancer(context.TODO(), mongosSession)
 	if err != nil {
 		return errors.Wrap(err, "failed to stop balancer")
 	}
@@ -263,7 +263,7 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 	}
 
 	if !run {
-		err := mongo.SwitchBalancer(context.TODO(), mongosSession, true)
+		err := mongo.StartBalancer(context.TODO(), mongosSession)
 		if err != nil {
 			return errors.Wrap(err, "failed to start balancer")
 		}
