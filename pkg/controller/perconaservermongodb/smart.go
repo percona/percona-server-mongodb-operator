@@ -145,7 +145,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return errors.Wrap(err, "failed to start balancer")
 	}
 
-	log.Info("smart update finished")
+	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
 
 	return nil
 }
@@ -213,6 +213,38 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 		return nil
 	}
 
+	mongosPods := corev1.PodList{}
+	err = r.client.List(context.TODO(),
+		&mongosPods,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/name":       "percona-server-mongodb",
+				"app.kubernetes.io/instance":   cr.Name,
+				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+				"app.kubernetes.io/part-of":    "percona-server-mongodb",
+				"app.kubernetes.io/component":  "mongos",
+			}),
+		},
+	)
+	if err != nil && !k8sErrors.IsNotFound(err) {
+		return errors.Wrap(err, "get pods list for mongos")
+	}
+
+	if len(mongosPods.Items) == 0 {
+		return nil
+	}
+	for _, p := range mongosPods.Items {
+		if p.Status.Phase != corev1.PodRunning {
+			return nil
+		}
+		for _, cs := range p.Status.ContainerStatuses {
+			if !cs.Ready {
+				return nil
+			}
+		}
+	}
+
 	mongosSession, err := mongosConn(cr, username, password)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
@@ -235,9 +267,9 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 		if err != nil {
 			return errors.Wrap(err, "failed to start balancer")
 		}
-	}
 
-	log.Info("balancer started")
+		log.Info("balancer started")
+	}
 
 	return nil
 }

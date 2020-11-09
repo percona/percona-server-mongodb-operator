@@ -828,6 +828,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		return nil, fmt.Errorf("failed to run smartUpdate %v", err)
 	}
 
+	username := string(secret.Data[envMongoDBClusterAdminUser])
+	password := string(secret.Data[envMongoDBClusterAdminPassword])
+	if err := r.startBalancerIfNeeded(cr, username, password); err != nil {
+		return nil, fmt.Errorf("failed to start balancer: %v", err)
+	}
+
 	return sfs, nil
 }
 
