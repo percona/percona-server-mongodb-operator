@@ -41,7 +41,7 @@ func Dial(conf *Config) (*mongo.Client, error) {
 
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to mongo rs: %v", err)
+		return nil, errors.Errorf("failed to connect to mongo rs: %v", err)
 	}
 
 	defer func() {
@@ -58,7 +58,7 @@ func Dial(conf *Config) (*mongo.Client, error) {
 
 	err = client.Ping(ctx, readpref.Primary())
 	if err != nil {
-		return nil, fmt.Errorf("failed to ping mongo: %v", err)
+		return nil, errors.Errorf("failed to ping mongo: %v", err)
 	}
 
 	return client, nil
@@ -75,7 +75,7 @@ func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 	}
 
 	if resp.Config == nil {
-		return RSConfig{}, fmt.Errorf("mongo says: %s", resp.Errmsg)
+		return RSConfig{}, errors.Errorf("mongo says: %s", resp.Errmsg)
 	}
 
 	return *resp.Config, nil
@@ -95,7 +95,7 @@ func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error 
 	}
 
 	if resp.OK != 1 {
-		return fmt.Errorf("mongo says: %s", resp.Errmsg)
+		return errors.Errorf("mongo says: %s", resp.Errmsg)
 	}
 
 	return nil
@@ -114,7 +114,7 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 	}
 
 	if status.OK != 1 {
-		return status, fmt.Errorf("mongo says: %s", status.Errmsg)
+		return status, errors.Errorf("mongo says: %s", status.Errmsg)
 	}
 
 	return status, nil
@@ -146,7 +146,7 @@ func SwitchBalancer(ctx context.Context, client *mongo.Client, state bool) error
 	}
 
 	if res.OK != 1 {
-		return fmt.Errorf("mongo says: %s", res.Errmsg)
+		return errors.Errorf("mongo says: %s", res.Errmsg)
 	}
 
 	return nil
@@ -165,7 +165,7 @@ func IsBalancerRunning(ctx context.Context, client *mongo.Client) (bool, error) 
 	}
 
 	if res.OK != 1 {
-		return false, fmt.Errorf("mongo says: %s", res.Errmsg)
+		return false, errors.Errorf("mongo says: %s", res.Errmsg)
 	}
 
 	return res.Mode == "full", nil
@@ -184,7 +184,7 @@ func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
 	}
 
 	if shardList.OK != 1 {
-		return shardList, fmt.Errorf("mongo says: %s", shardList.Errmsg)
+		return shardList, errors.Errorf("mongo says: %s", shardList.Errmsg)
 	}
 
 	return shardList, nil
@@ -228,7 +228,7 @@ func StepDown(ctx context.Context, client *mongo.Client) error {
 	}
 
 	if resp.OK != 1 {
-		return fmt.Errorf("mongo says: %s", resp.Errmsg)
+		return errors.Errorf("mongo says: %s", resp.Errmsg)
 	}
 
 	return nil
