@@ -168,19 +168,6 @@ function main() {
             "pmm": { "image": "'"${TARGET_IMAGE_PMM}"'" },
             "backup": { "image": "'"${TARGET_IMAGE_BACKUP}"'" }
         }}'
-
-    wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
-    compare_generation 2 statefulset "${CLUSTER}-rs0"
-    compare_generation 2 psmdb "${CLUSTER}"
-
-    if [[ "${IMAGE_TO_UPDATE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
-          && "${IMAGE_MONGOD_TO_UPDATE}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
-        : MongoDB image has been updated correctly
-    else
-        echo 'MongoDB image has not been updated'
-        exit 1
-    fi
-
     sleep 10
 
     desc 'check cluster after full upgrade'
