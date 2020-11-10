@@ -4,7 +4,7 @@ metadata:
   name: version-service-unreachable
 spec:
   image: perconalab/percona-server-mongodb-operator:master-mongod4.0
-  initImage: perconalab/percona-server-mongodb-operator:master
+  initImage: #initImage
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
