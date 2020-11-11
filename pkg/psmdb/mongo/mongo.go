@@ -121,20 +121,15 @@ func RSStatus(ctx context.Context, client *mongo.Client) (Status, error) {
 }
 
 func StartBalancer(ctx context.Context, client *mongo.Client) error {
-	return SwitchBalancer(ctx, client, true)
+	return switchBalancer(ctx, client, "balancerStart")
 }
 
 func StopBalancer(ctx context.Context, client *mongo.Client) error {
-	return SwitchBalancer(ctx, client, false)
+	return switchBalancer(ctx, client, "balancerStop")
 }
 
-func SwitchBalancer(ctx context.Context, client *mongo.Client, state bool) error {
+func switchBalancer(ctx context.Context, client *mongo.Client, command string) error {
 	res := OKResponse{}
-
-	command := "balancerStop"
-	if state {
-		command = "balancerStart"
-	}
 
 	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: command, Value: 1}})
 	if resp.Err() != nil {
