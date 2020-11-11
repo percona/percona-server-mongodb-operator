@@ -4,6 +4,7 @@ metadata:
   name: version-service-latest
 spec:
   image: perconalab/percona-server-mongodb-operator:master-mongod4.0
+  initImage: #initImage
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
