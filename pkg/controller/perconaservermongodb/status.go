@@ -53,7 +53,13 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 
 	replsetsReady := 0
 	inProgress := false
-	for _, rs := range cr.Spec.Replsets {
+
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	for _, rs := range repls {
 		status, err := r.rsStatus(rs, cr.Name, cr.Namespace)
 		if err != nil {
 			return errors.Wrapf(err, "get replset %v status", rs.Name)

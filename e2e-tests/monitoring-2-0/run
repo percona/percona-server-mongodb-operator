@@ -17,7 +17,8 @@ if [ "$OPENSHIFT" == 1 ]; then
     platform=openshift
 fi
 helm del --purge monitoring || :
-helm repo add stable https://kubernetes-charts.storage.googleapis.com/
+helm repo remove stable || :
+helm repo add stable https://charts.helm.sh/stable
 retry 10 60 helm install monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-2.3.0.tgz
 
 desc 'create PSMDB cluster'
