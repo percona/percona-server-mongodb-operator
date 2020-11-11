@@ -787,7 +787,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get ssl annotations")
 	}
-	sfsSpec.Template.Annotations = sslAnn
+	for k, v := range sslAnn {
+		sfsSpec.Template.Annotations[k] = v
+	}
 
 	sfs.Spec = sfsSpec
 	if cr.CompareVersion("1.6.0") >= 0 {
