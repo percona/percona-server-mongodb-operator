@@ -217,7 +217,8 @@ deploy_operator() {
 deploy_minio() {
     desc 'install Minio'
     helm del minio-service || :
-    helm repo add stable https://kubernetes-charts.storage.googleapis.com/
+    helm repo remove stable || :
+    helm repo add stable https://charts.helm.sh/stable
     # kubectl_bin delete pvc minio-service --force
     retry 10 60 helm install minio-service \
         --set accessKey=some-access-key \
@@ -400,6 +401,19 @@ compare_mongo_cmd() {
     local suffix="$4"
 
     run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
+        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+        | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
+        > $tmp_dir/${command}
+    diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+}
+
+compare_mongos_cmd() {
+    local command="$1"
+    local uri="$2"
+    local postfix="$3"
+    local suffix="$4"
+
+    run_mongos "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
         | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
         | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
         > $tmp_dir/${command}

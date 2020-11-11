@@ -36,13 +36,11 @@ run_mongos \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster-mongos.$namespace"
 sleep 10 # for minikube
-compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
-wait_backup_agent $cluster-0
-wait_backup_agent $cluster-1
-wait_backup_agent $cluster-2
+wait_backup_agent $cluster-rs0-0
+wait_backup_agent $cluster-rs0-1
+wait_backup_agent $cluster-rs0-2
 
 backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
@@ -54,7 +52,7 @@ run_backup minio
 run_backup gcp-cs
 
 wait_backup "$backup_name_aws"
-wait_backup "$backup_name_minio"
+# wait_backup "$backup_name_minio"
 wait_backup "$backup_name_gcp"
 
 sleep 5
@@ -65,14 +63,14 @@ curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.g
 run_restore $backup_name_aws 3
 wait_restore $backup_name_aws 3
 
-desc 'check backup and restore -- minio'
-backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} |
-	grep ${backup_dest_minio}_rs0.dump.gz
-run_restore $backup_name_minio 3
-wait_restore $backup_name_minio 3
+# desc 'check backup and restore -- minio'
+# backup_dest_minio=$(get_backup_dest "$backup_name_minio")
+# kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+# 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+# 	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} |
+# 	grep ${backup_dest_minio}_rs0.dump.gz
+# run_restore $backup_name_minio 3
+# wait_restore $backup_name_minio 3
 
 desc 'check backup and restore -- gcp-cs'
 backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")

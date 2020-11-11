@@ -107,8 +107,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	cr.Status.State = api.AppStateInit
-	if replsetsReady == len(cr.Spec.Replsets) && clusterState == clusterReady {
-
+	if replsetsReady == len(repls) && clusterState == clusterReady {
 		clusterCondition = api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.ClusterReady,
