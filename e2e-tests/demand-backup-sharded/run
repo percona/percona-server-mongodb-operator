@@ -60,7 +60,7 @@ sleep 5
 desc 'check backup and restore -- aws-s3'
 backup_dest_aws=$(get_backup_dest "$backup_name_aws")
 curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip >/dev/null
-run_restore $backup_name_aws 3
+run_restore $backup_name_aws 3 1 mongos
 wait_restore $backup_name_aws 3
 
 desc 'check backup and restore -- minio'
