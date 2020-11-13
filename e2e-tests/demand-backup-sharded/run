@@ -14,10 +14,10 @@ deploy_minio
 desc 'create first PSMDB cluster'
 cluster="some-name"
 kubectl_bin apply \
-	-f "$conf_dir/cloud-secret.yml" \
-	-f "$conf_dir/minio-secret.yml" \
-	-f "$conf_dir/secrets.yml" \
-	-f "$conf_dir/client.yml"
+    -f "$conf_dir/cloud-secret.yml" \
+    -f "$conf_dir/minio-secret.yml" \
+    -f "$conf_dir/secrets.yml" \
+    -f "$conf_dir/client.yml"
 
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 desc 'check if all 3 Pods started'
@@ -29,12 +29,12 @@ compare_kubectl statefulset/$cluster-cfg
 
 desc 'write data, read from all'
 run_mongos \
-	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-	"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+    "userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 sleep 2
 run_mongos \
-	'use myApp\n db.test.insert({ x: 100500 })' \
-	"myApp:myPass@$cluster-mongos.$namespace"
+    'use myApp\n db.test.insert({ x: 100500 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
 sleep 10 # for minikube
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
@@ -66,9 +66,9 @@ wait_restore $backup_name_aws 3
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} |
-	grep ${backup_dest_minio}_rs0.dump.gz
+    /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://operator-testing/${backup_dest_minio}" |
+    grep "${backup_dest_minio}_rs0.dump.gz"
 run_restore $backup_name_minio 3
 wait_restore $backup_name_minio 3
 
@@ -78,4 +78,4 @@ curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.
 run_restore $backup_name_gcp 3
 wait_restore $backup_name_gcp 3
 
-destroy $namespace
+destroy "$namespace"
