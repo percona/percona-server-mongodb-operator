@@ -145,15 +145,22 @@ wait_backup() {
 run_restore() {
     local backup_name=$1
     let last_pod="$2-1" || :
+    local isSharded=${3:-0}
+    local cluster_pfx=$4
+    if [ $isSharded -eq 1 ]; then
+        run_mongos \
+            'use myApp\n db.test.insert({ x: 100501 })' \
+            "myApp:myPass@$cluster$cluster_pfx.$namespace"
+        compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace" "-2nd"
+    else
+        run_mongo \
+            'use myApp\n db.test.insert({ x: 100501 })' \
+            "myApp:myPass@$cluster.$namespace"
 
-    run_mongo \
-        'use myApp\n db.test.insert({ x: 100501 })' \
-        "myApp:myPass@$cluster.$namespace"
-
-    for i in $(seq 0 $last_pod); do
-        compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
-    done
-
+        for i in $(seq 0 $last_pod); do
+            compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
+        done
+    fi
     cat $test_dir/conf/restore.yml \
         | $sed -e "s/name:/name: restore-$backup_name/" \
         | $sed -e "s/backupName:/backupName: $backup_name/" \
@@ -161,19 +168,29 @@ run_restore() {
 }
 
 wait_restore() {
+    local isSharded=${3:-0}
+    local cluster_pfx=$4
+
     wait_restore_object "${1}"
     echo
     set -o xtrace
 
-    simple_data_check "${cluster}" "${2}"
+    simple_data_check "${cluster}" "${2}" "$isSharded" "$cluster_pfx"
 }
 
 simple_data_check() {
     cluster_name=${1}
     let last_pod="$2-1" || :
-    for i in $(seq 0 $last_pod); do
-        compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
-    done
+    local isSharded=${3:-0}
+    local cluster_pfx=$4
+
+    if [ $isSharded -eq 1 ]; then
+        compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
+    else
+        for i in $(seq 0 $last_pod); do
+            compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
+        done
+    fi
 }
 
 wait_restore_object() {
