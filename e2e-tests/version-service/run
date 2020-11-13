@@ -31,7 +31,10 @@ for i in "${!cases[@]}"; do
 	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
 
 	desc 'create PSMDB cluster'
-	spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
+	tmp_file=$(mktemp)
+	sed "s%#initImage%$IMAGE%g" "$test_dir/conf/${cluster}-rs0.yml" >"$tmp_file"
+
+	spinup_psmdb ${cluster}-rs0 "$tmp_file"
 	compare_kubectl "statefulset/${cluster}-rs0"
 
 	pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
