@@ -9,6 +9,7 @@ import (
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -210,6 +211,22 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 	}
 
 	if !uptodate {
+		return nil
+	}
+
+	msDepl := psmdb.MongosDeployment(cr)
+	err = setControllerReference(cr, msDepl, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
+	}
+
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+	if err != nil && !k8sErrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get Deployment %s", msDepl.Name)
+	}
+
+	if msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
+		log.Info("waiting for mongos update")
 		return nil
 	}
 
