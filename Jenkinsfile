@@ -292,6 +292,7 @@ pipeline {
                         runTest('upgrade-consistency', 'backups')
                         runTest('demand-backup', 'backups')
                         runTest('scheduled-backup', 'backups')
+                        runTest('demand-backup-sharded', 'backups')
                         ShutdownCluster('backups')
                     }
                 }
