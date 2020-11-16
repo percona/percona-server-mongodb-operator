@@ -28,7 +28,6 @@ spec:
 
   - name: rs0
     size: 3
-    serviceAccountName: percona-server-mongodb-operator-workload
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
 #      advanced:
@@ -214,10 +213,6 @@ spec:
       mode: slowOp
       slowOpThresholdMs: 100
       rateLimit: 100
-#    loadBalancerSourceRanges:
-#      - 10.0.0.0/8
-#    serviceAnnotations:
-#      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #    auditLog:
 #      destination: file
 #      format: BSON
