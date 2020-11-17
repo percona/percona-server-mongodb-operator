@@ -599,10 +599,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	mongosSvcSpec := psmdb.MongosServiceSpec(cr)
 	mongosSvc.Spec = mongosSvcSpec
-
-	err = r.createOrUpdate(&mongosSvc, mongosSvc.Name, mongosSvc.Namespace)
-	if err != nil {
-		return errors.Wrapf(err, "update or create Service %s", mongosSvc.Name)
+	if k8serrors.IsNotFound(err) {
+		err = r.client.Create(context.TODO(), &mongosSvc)
+		if err != nil && !k8serrors.IsAlreadyExists(err) {
+			return errors.Wrapf(err, "create Service %s", mongosSvc.Name)
+		}
 	}
 
 	return nil

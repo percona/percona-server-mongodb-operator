@@ -135,7 +135,6 @@ spec:
     mongos:
       size: 3
       affinity:
-        antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
 #          nodeAffinity:
 #            requiredDuringSchedulingIgnoredDuringExecution:
@@ -166,7 +165,6 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        enabled: false
         exposeType: ClusterIP
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
