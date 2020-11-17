@@ -54,6 +54,9 @@ flycheck_*.el
 .projectile
 projectile-bookmarks.eld
 
+# editorconfig
+.editorconfig
+
 # directory configuration
 .dir-locals.el
 
