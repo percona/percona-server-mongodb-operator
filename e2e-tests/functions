@@ -610,7 +610,8 @@ cat_config() {
         | $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
         | $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
         | $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-        | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#"
+        | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
+        | $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#"
 }
 
 apply_cluster() {

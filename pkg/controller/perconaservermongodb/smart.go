@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -19,7 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet, replset *api.ReplsetSpec, secret *corev1.Secret) error {
+func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
+	replset *api.ReplsetSpec, secret *corev1.Secret) error {
+
 	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
 		return nil
 	}
@@ -32,7 +36,20 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	log.Info("statefullSet was changed, run smart update")
+	if cr.Spec.Sharding.Enabled && sfs.Name != cr.Name+"-"+api.ConfigReplSetName {
+		cfgSfs := appsv1.StatefulSet{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &cfgSfs)
+		if err != nil {
+			return errors.Wrapf(err, "get config statefulset %s/%s", cr.Namespace, cr.Name+"-"+api.ConfigReplSetName)
+		}
+
+		if cfgSfs.Status.UpdatedReplicas < cfgSfs.Status.Replicas {
+			log.Info("waiting for config RS update")
+			return nil
+		}
+	}
+
+	log.Info("statefullSet was changed, start smart update", "name", sfs.Name)
 
 	if sfs.Status.ReadyReplicas < sfs.Status.Replicas {
 		log.Info("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
@@ -46,6 +63,16 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	if ok {
 		log.Info("can't start 'SmartUpdate': waiting for running backups finished")
 		return nil
+	}
+
+	username := string(secret.Data[envMongoDBClusterAdminUser])
+	password := string(secret.Data[envMongoDBClusterAdminPassword])
+
+	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
+		err := stopBalancerIfNeeded(cr, username, password)
+		if err != nil {
+			return errors.Wrap(err, "failed to stop balancer")
+		}
 	}
 
 	list := corev1.PodList{}
@@ -65,8 +92,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	username := string(secret.Data[envMongoDBClusterAdminUser])
-	password := string(secret.Data[envMongoDBClusterAdminPassword])
 	client, err := r.mongoClient(cr, replset, list, username, password)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
@@ -116,9 +141,165 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("failed to apply changes: %v", err)
 	}
 
-	log.Info("smart update finished")
+	err = r.startBalancerIfNeeded(cr, username, password)
+	if err != nil {
+		return errors.Wrap(err, "failed to start balancer")
+	}
+
+	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
 
 	return nil
+}
+
+func stopBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	mongosSession, err := mongosConn(cr, username, password)
+	if err != nil {
+		return errors.Wrap(err, "failed to get mongos connection")
+	}
+
+	defer func() {
+		err := mongosSession.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongos connection")
+		}
+	}()
+
+	err = mongo.StopBalancer(context.TODO(), mongosSession)
+	if err != nil {
+		return errors.Wrap(err, "failed to stop balancer")
+	}
+
+	log.Info("balancer stopped")
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMongoDB) (bool, error) {
+	sfsList := appsv1.StatefulSetList{}
+	if err := r.client.List(context.TODO(), &sfsList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/instance": cr.Name,
+			}),
+		},
+	); err != nil {
+		return false, errors.Wrap(err, "failed to get statefulset list")
+	}
+
+	for _, s := range sfsList.Items {
+		if s.Status.UpdatedReplicas < s.Status.Replicas {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	uptodate, err := r.isAllSfsUpToDate(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+	}
+
+	if !uptodate {
+		return nil
+	}
+
+	msDepl := psmdb.MongosDeployment(cr)
+	err = setControllerReference(cr, msDepl, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
+	}
+
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+	if err != nil && !k8sErrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get Deployment %s", msDepl.Name)
+	}
+
+	if msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
+		log.Info("waiting for mongos update")
+		return nil
+	}
+
+	mongosPods := corev1.PodList{}
+	err = r.client.List(context.TODO(),
+		&mongosPods,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/name":       "percona-server-mongodb",
+				"app.kubernetes.io/instance":   cr.Name,
+				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+				"app.kubernetes.io/part-of":    "percona-server-mongodb",
+				"app.kubernetes.io/component":  "mongos",
+			}),
+		},
+	)
+	if err != nil && !k8sErrors.IsNotFound(err) {
+		return errors.Wrap(err, "get pods list for mongos")
+	}
+
+	if len(mongosPods.Items) == 0 {
+		return nil
+	}
+	for _, p := range mongosPods.Items {
+		if p.Status.Phase != corev1.PodRunning {
+			return nil
+		}
+		for _, cs := range p.Status.ContainerStatuses {
+			if !cs.Ready {
+				return nil
+			}
+		}
+	}
+
+	mongosSession, err := mongosConn(cr, username, password)
+	if err != nil {
+		return errors.Wrap(err, "failed to get mongos connection")
+	}
+
+	defer func() {
+		err := mongosSession.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongos connection")
+		}
+	}()
+
+	run, err := mongo.IsBalancerRunning(context.TODO(), mongosSession)
+	if err != nil {
+		return errors.Wrap(err, "failed to check if balancer running")
+	}
+
+	if !run {
+		err := mongo.StartBalancer(context.TODO(), mongosSession)
+		if err != nil {
+			return errors.Wrap(err, "failed to start balancer")
+		}
+
+		log.Info("balancer started")
+	}
+
+	return nil
+}
+
+func mongosConn(cr *api.PerconaServerMongoDB, username, password string) (*mgo.Client, error) {
+	conf := mongo.Config{
+		Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
+			":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
+		Username: username,
+		Password: password,
+	}
+
+	return mongo.Dial(&conf)
 }
 
 func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMongoDB) (bool, error) {
