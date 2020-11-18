@@ -650,6 +650,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	matchLabels["app.kubernetes.io/component"] = "mongod"
 	multiAZ := replset.MultiAZ
 	pdbspec := replset.PodDisruptionBudget
+
 	if arbiter {
 		sfsName += "-arbiter"
 		containerName += "-arbiter"
@@ -657,6 +658,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		matchLabels["app.kubernetes.io/component"] = "arbiter"
 		multiAZ = replset.Arbiter.MultiAZ
 		pdbspec = replset.Arbiter.PodDisruptionBudget
+	}
+
+	if replset.ClusterRole == api.ClusterRoleConfigSvr {
+		matchLabels["app.kubernetes.io/component"] = api.ConfigReplSetName
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)

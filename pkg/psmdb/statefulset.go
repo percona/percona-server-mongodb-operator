@@ -140,18 +140,12 @@ func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity
 			return nil
 		}
 
-		lablesCopy := make(map[string]string)
-		for k, v := range labels {
-			if k != "app.kubernetes.io/component" {
-				lablesCopy[k] = v
-			}
-		}
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 					{
 						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: lablesCopy,
+							MatchLabels: labels,
 						},
 						TopologyKey: *af.TopologyKey,
 					},

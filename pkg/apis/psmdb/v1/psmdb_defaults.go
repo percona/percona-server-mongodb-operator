@@ -221,6 +221,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(8)
 			}
 		}
+
+		cr.Spec.Sharding.Mongos.reconcileOpts()
 	}
 
 	repls := cr.Spec.Replsets
