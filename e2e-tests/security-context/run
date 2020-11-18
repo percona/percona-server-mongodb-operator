@@ -25,3 +25,5 @@ sleep 20
 wait_for_running "${cluster}-rs0" "3"
 compare_kubectl "statefulset/${cluster}-rs0" $postfix
 compare_kubectl "cronjob.batch/${cluster}-backup-each-hour"
+
+destroy "$namespace"

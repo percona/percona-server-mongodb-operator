@@ -54,7 +54,7 @@ flycheck_*.el
 .projectile
 projectile-bookmarks.eld
 
-#editrconfig file
+#editorconfig file
 .editorconfig
 
 # directory configuration

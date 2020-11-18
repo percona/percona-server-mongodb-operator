@@ -134,8 +134,8 @@ spec:
 
     mongos:
       size: 3
-      affinity:
-        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#      affinity:
+#        antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
 #          nodeAffinity:
 #            requiredDuringSchedulingIgnoredDuringExecution:

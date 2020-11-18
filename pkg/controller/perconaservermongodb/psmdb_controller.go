@@ -552,8 +552,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return nil
 	}
 
+	uptodate, err := r.isAllSfsUpToDate(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+	}
+
+	if !uptodate {
+		return nil
+	}
+
 	msDepl := psmdb.MongosDeployment(cr)
-	err := setControllerReference(cr, msDepl, r.scheme)
+	err = setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
 		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
 	}
@@ -815,6 +824,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 	if err := r.smartUpdate(cr, sfs, replset, secret); err != nil {
 		return nil, fmt.Errorf("failed to run smartUpdate %v", err)
+	}
+
+	username := string(secret.Data[envMongoDBClusterAdminUser])
+	password := string(secret.Data[envMongoDBClusterAdminPassword])
+	if err := r.startBalancerIfNeeded(cr, username, password); err != nil {
+		return nil, fmt.Errorf("failed to start balancer: %v", err)
 	}
 
 	return sfs, nil
