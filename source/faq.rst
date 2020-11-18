@@ -19,19 +19,10 @@ already-deployed components interchangeable. You can find more about substantial
 benefits brought by Kubernetes to databases in `this blog post <https://www.percona.com/blog/2020/10/08/the-criticality-of-a-kubernetes-operator-for-databases/>`_.
 
 The architecture of state-centric applications (like databases) should be
-composed in a right way to allow avoiding crashes, data loss, or data
-inconsistencies during hardware fail. It is the main goal of the database
-Kubernetes Operator to solve or simplify these aspects.
-
-It worth to mention, that in a non-Kubernetes environment issues with
-distributed databases are the same. Unfortunately, we, Engineers, tend to think
-that crash, data loss, or data inconsistency issues are not important or even do
-not exist in the non-Kubernetes world, but of course that's not true.
-
-Percona Kubernetes Operator for Percona Server for MongoDB has automatic
-backup functionality and simplifies scaling. The Operator provides this among
-other things which are typically not solved at all in an ordinary non-Kubernetes
-setup.
+composed in a right way to avoid crashes, data loss, or data inconsistencies
+during hardware failure. Percona Kubernetes Operator for Percona Server for
+MongoDB provides out-of-the-box functionality to automate provisioning and
+management of highly available MongoDB database clusters on Kubernetes.
 
 How can I contact the developers?
 ================================================================================
