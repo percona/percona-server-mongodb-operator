@@ -215,9 +215,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
-	var sfsTemplateAnnotations map[string]string
+
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	var sfsTemplateAnnotations, mongosTemplateAnnotations map[string]string
 	if cr.CompareVersion("1.5.0") >= 0 {
-		sfsTemplateAnnotations, err = r.reconcileUsers(cr)
+		sfsTemplateAnnotations, mongosTemplateAnnotations, err = r.reconcileUsers(cr, repls)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
 		}
@@ -271,9 +277,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	repls := cr.Spec.Replsets
-	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
 	}
 
 	shards := 0
@@ -422,11 +428,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "delete config server")
 	}
 
-	err = r.reconcileMongos(cr)
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
-	}
-
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
 		OpVersion: version.String(),
 	})
@@ -547,7 +548,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB, annotations map[string]string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -586,8 +587,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	if err != nil {
 		return errors.Wrap(err, "failed to get ssl annotations")
 	}
-
-	deplSpec.Template.Annotations = sslAnn
+	if deplSpec.Template.Annotations == nil {
+		deplSpec.Template.Annotations = make(map[string]string)
+	}
+	for k, v := range annotations {
+		deplSpec.Template.Annotations[k] = v
+	}
+	for k, v := range sslAnn {
+		deplSpec.Template.Annotations[k] = v
+	}
 
 	msDepl.Spec = deplSpec
 	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)

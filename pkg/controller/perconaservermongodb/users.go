@@ -22,9 +22,9 @@ import (
 
 const internalPrefix = "internal-"
 
-func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB) (map[string]string, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) (sfsTemplateAnn, mongosTemplateAnn map[string]string, err error) {
 	sysUsersSecretObj := corev1.Secret{}
-	err := r.client.Get(context.TODO(),
+	err = r.client.Get(context.TODO(),
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.Secrets.Users,
@@ -32,9 +32,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&sysUsersSecretObj,
 	)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return nil, nil
+		return nil, nil, nil
 	} else if err != nil {
-		return nil, errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
+		return nil, nil, errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
 	}
 
 	secretName := internalPrefix + cr.Name + "-users"
@@ -48,7 +48,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&internalSysSecretObj,
 	)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return nil, errors.Wrap(err, "get internal sys users secret")
+		return nil, nil, errors.Wrap(err, "get internal sys users secret")
 	}
 
 	if k8serrors.IsNotFound(err) {
@@ -59,48 +59,51 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		}
 		err = r.client.Create(context.TODO(), internalSysUsersSecret)
 		if err != nil {
-			return nil, errors.Wrap(err, "create internal sys users secret")
+			return nil, nil, errors.Wrap(err, "create internal sys users secret")
 		}
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// we do this check after work with secret objects because in case of upgrade cluster we need to be sure that internal secret exist
 	if cr.Status.State != api.AppStateReady {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	newSysData, err := json.Marshal(sysUsersSecretObj.Data)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal sys secret data")
+		return nil, nil, errors.Wrap(err, "marshal sys secret data")
 	}
 	newSecretDataHash := sha256Hash(newSysData)
 	dataChanged, err := sysUsersSecretDataChanged(newSecretDataHash, &internalSysSecretObj)
 	if err != nil {
-		return nil, errors.Wrap(err, "check sys users data changes")
+		return nil, nil, errors.Wrap(err, "check sys users data changes")
 	}
 
 	if !dataChanged {
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	restartSfs, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj)
+	restartSfs, restartMongos, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
-		return nil, errors.Wrap(err, "manage sys users")
+		return nil, nil, errors.Wrap(err, "manage sys users")
 	}
 
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
 	err = r.client.Update(context.TODO(), &internalSysSecretObj)
 	if err != nil {
-		return nil, errors.Wrap(err, "update internal sys users secret")
+		return nil, nil, errors.Wrap(err, "update internal sys users secret")
 	}
-
+	ann := map[string]string{
+		"last-applied-secret": newSecretDataHash,
+	}
 	if restartSfs {
-		return map[string]string{
-			"last-applied-secret": newSecretDataHash,
-		}, nil
+		sfsTemplateAnn = ann
+	}
+	if restartMongos {
+		mongosTemplateAnn = ann
 	}
 
-	return nil, nil
+	return
 }
 
 type systemUser struct {
@@ -145,44 +148,46 @@ func (su *systemUsers) len() int {
 	return len(su.users)
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret) (restartSfs bool, err error) {
+func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret, repls []*api.ReplsetSpec) (restartSfs, restartMongos bool, err error) {
 	su := systemUsers{
 		currData: currUsersSec.Data,
 		newData:  newUsersSec.Data,
 	}
 
 	type user struct {
-		nameKey, passKey string
-		needRestart      bool
+		nameKey, passKey  string
+		needRestartSfs    bool
+		needRestartMongos bool
 	}
 	users := []user{
 		{
-			nameKey: envMongoDBClusterAdminUser,
-			passKey: envMongoDBClusterAdminPassword,
+			nameKey:           envMongoDBClusterAdminUser,
+			passKey:           envMongoDBClusterAdminPassword,
+			needRestartMongos: true,
 		},
 		{
 			nameKey: envMongoDBClusterMonitorUser,
 			passKey: envMongoDBClusterMonitorPassword,
 		},
 		{
-			nameKey:     envMongoDBBackupUser,
-			passKey:     envMongoDBBackupPassword,
-			needRestart: true,
+			nameKey:        envMongoDBBackupUser,
+			passKey:        envMongoDBBackupPassword,
+			needRestartSfs: true,
 		},
 		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
 		{
-			nameKey:     envMongoDBUserAdminUser,
-			passKey:     envMongoDBUserAdminPassword,
-			needRestart: true,
+			nameKey:        envMongoDBUserAdminUser,
+			passKey:        envMongoDBUserAdminPassword,
+			needRestartSfs: true,
 		},
 	}
 	if cr.Spec.PMM.Enabled {
 		// insert in front
 		users = append([]user{
 			{
-				nameKey:     envPMMServerUser,
-				passKey:     envPMMServerPassword,
-				needRestart: true,
+				nameKey:        envPMMServerUser,
+				passKey:        envPMMServerPassword,
+				needRestartSfs: true,
 			},
 		}, users...)
 	}
@@ -190,29 +195,27 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 	for _, u := range users {
 		changed, err := su.add(u.nameKey, u.passKey)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
-		if u.needRestart && changed {
+		if u.needRestartSfs && changed {
 			restartSfs = true
+		}
+		if u.needRestartMongos && changed {
+			restartMongos = true
 		}
 	}
 
 	if su.len() == 0 {
-		return false, nil
+		return false, false, nil
 	}
 
-	err = r.updateUsers(cr, su.users, currUsersSec)
+	err = r.updateUsers(cr, su.users, currUsersSec, repls)
 
-	return restartSfs, errors.Wrap(err, "mongo: update system users")
+	return restartSfs, restartMongos, errors.Wrap(err, "mongo: update system users")
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, usersSecret *corev1.Secret) error {
-	for i, replset := range cr.Spec.Replsets {
-		if i > 0 {
-			log.Info("update users: multiple replica sets is not yet supported")
-			return nil
-		}
-
+func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, usersSecret *corev1.Secret, repls []*api.ReplsetSpec) error {
+	for _, replset := range repls {
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
 			"app.kubernetes.io/instance":   cr.Name,
