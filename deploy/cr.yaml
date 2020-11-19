@@ -172,10 +172,6 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-      operationProfiling:
-        mode: slowOp
-        slowOpThresholdMs: 100
-        rateLimit: 100
 #      auditLog:
 #        destination: file
 #        format: BSON
