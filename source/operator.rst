@@ -434,8 +434,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``7200``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Adds a delay before the run check ensures the application is healthy and capable of		|
-|                 | processing requests										|
+| **Description** | Time after which the liveness probe is failed if the MongoDB instance didn't finish its 	|
+|                 | full startup yet										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
