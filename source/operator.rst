@@ -80,7 +80,7 @@ file. This file contains the following spec sections:
    * - updateStrategy
      - string
      - ``SmartUpdate``
-     - A strategy the Operator uses for :ref:`upgrades<operator-update>`
+     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are `SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
 
 .. _operator.upgradeoptions-section:
 
@@ -99,7 +99,7 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value**       | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Example**     | ``https://check.percona.com/versions``                                                    |
+| **Example**     | ``https://check.percona.com``                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The Version Service URL used to check versions compatibility for upgrade                  |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -334,9 +334,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-nodeSelector:									|
+|                 | .. _replsets-nodeselector:									|
 |                 |												|
-| **Key**         | `replsets.nodeSelector <operator.html#replsets-nodeSelector>`_				|
+| **Key**         | `replsets.nodeSelector <operator.html#replsets-nodeselector>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -345,6 +345,97 @@ The replsets section controls the MongoDB Replica Set.
 | **Description** | The `Kubernetes nodeSelector								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_		|
 |                 | affinity constraint  for the Replica Set nodes						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-failurethreshold:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.failureThreshold							|
+|                 | <operator.html#replsets-livenessprobe-failurethreshold>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``4``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of consecutive unsuccessful tries of the `liveness probe 				|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> to be undertaken		|
+|                 | before giving up.										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-initialdelayseconds:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.initialDelaySeconds							|
+|                 | <operator.html#replsets-livenessprobe-initialdelayseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``60``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds to wait after the container start before initiating the `liveness probe	|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>.				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-periodseconds:							|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.periodSeconds							|
+|                 | <operator.html#replsets-livenessprobe-periodseconds>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``30``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | How often to perform a `liveness probe 							|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> (in seconds).		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-successthreshold:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.successThreshold							|
+|                 | <operator.html#replsets-livenessprobe-successthreshold>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Minimum consecutive successes for the `liveness probe 					|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> to be considered successful	|
+|                 | after having failed.									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-timeoutseconds:							|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.timeoutSeconds							|
+|                 | <operator.html#replsets-livenessprobe-timeoutseconds>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``5``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds after which the `liveness probe 						|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> times out.			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-startupdelayseconds:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.startupDelaySeconds							|
+|                 | <operator.html#replsets-livenessprobe-startupdelayseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``7200``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Adds a delay before the run check ensures the application is healthy and capable of		|
+|                 | processing requests										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -562,9 +653,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-arbiter-nodeSelector:								|
+|                 | .. _replsets-arbiter-nodeselector:								|
 |                 |												|
-| **Key**         | `replsets.arbiter.nodeSelector <operator.html#replsets-arbiter-nodeSelector>`_		|
+| **Key**         | `replsets.arbiter.nodeSelector <operator.html#replsets-arbiter-nodeselector>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -573,6 +664,19 @@ The replsets section controls the MongoDB Replica Set.
 | **Description** | The `Kubernetes nodeSelector								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
 |                 | #nodeselector>`_ affinity constraint for the Arbiter nodes					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-schedulername:									|
+|                 |												|
+| **Key**         | `replsets.schedulerName <operator.html#replsets-schedulername>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``default``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Scheduler									|
+|                 | <https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1148,7 +1252,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``true``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables or disables debug mode for bakups							|
+| **Description** | Enables or disables debug mode for backups							|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1259,7 +1363,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-s3-credentialssecret:							|
 |                 |												|
-| **Key**         | `backup.storages.<storage-name>.s3.credentialsSecret					| 	
+| **Key**         | `backup.storages.<storage-name>.s3.credentialsSecret					|
 |                 | <operator.html#backup-storages-s3-credentialssecret>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
@@ -1308,6 +1412,18 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The endpoint URL of the S3-compatible storage to be used (not needed for the original	|
 |                 | Amazon S3 cloud)										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _backup-tasks-name:									|
+|                 |												|
+| **Key**         | `backup.tasks.name <operator.html#backup-tasks-name>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | 												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The name of the backup									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
