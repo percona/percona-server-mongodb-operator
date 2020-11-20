@@ -415,7 +415,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
+		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
 
 	username := string(secrets.Data[envMongoDBClusterAdminUser])
