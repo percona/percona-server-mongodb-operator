@@ -58,7 +58,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 			},
 			Spec: corev1.PodSpec{
 				SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
-				Affinity:          PodAffinity(cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
+				Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 				NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
 				Tolerations:       cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
 				PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
