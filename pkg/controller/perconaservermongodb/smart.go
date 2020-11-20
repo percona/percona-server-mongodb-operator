@@ -141,11 +141,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("failed to apply changes: %v", err)
 	}
 
-	err = r.startBalancerIfNeeded(cr, username, password)
-	if err != nil {
-		return errors.Wrap(err, "failed to start balancer")
-	}
-
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
 
 	return nil
