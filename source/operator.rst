@@ -21,20 +21,25 @@ file. This file contains the following spec sections:
      - kubernetes
      - Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set openshift on OpenShift 3.11+
 
+   * - crVersion
+     - string
+     - ``{{{release}}}``
+     - Version of the Operator the Custom Resource belongs to
+
    * - image
      - string
      - ``percona/percona-server-mongodb:4.2.8-8``
      - The Docker image of `Percona Server for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html>`_ to deploy (actual image names can be found :ref:`in the list of certified images<custom-registry-images>`) 
 
-   * - imagePullSecrets.name
-     - string
-     - ``private-registry-credentials``
-     - The `Kubernetes ImagePullSecret <https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets>`_ to access the :ref:`custom registry<custom-registry>`
-
    * - imagePullPolicy
      - string
      - ``Always``
      - The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/#updating-images>`_
+
+   * - imagePullSecrets.name
+     - string
+     - ``private-registry-credentials``
+     - The `Kubernetes ImagePullSecret <https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets>`_ to access the :ref:`custom registry<custom-registry>`
 
    * - ClusterServiceDNSSuffix
      - string
@@ -46,6 +51,16 @@ file. This file contains the following spec sections:
      - int
      - 1001
      - The (non-standard) user ID
+
+   * - allowUnsafeConfigurations
+     - boolean
+     - ``false``
+     - Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 nodes or starting the cluster without TLS/SSL certificates
+
+   * - updateStrategy
+     - string
+     - ``SmartUpdate``
+     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are `SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
 
    * - secrets
      - subdoc
@@ -71,16 +86,6 @@ file. This file contains the following spec sections:
      - subdoc
      - 
      - Percona Server for MongoDB backups section
-
-   * - allowUnsafeConfigurations
-     - boolean
-     - ``false``
-     - Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 nodes or starting the cluster without TLS/SSL certificates
-
-   * - updateStrategy
-     - string
-     - ``SmartUpdate``
-     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are `SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
 
 .. _operator.upgradeoptions-section:
 
