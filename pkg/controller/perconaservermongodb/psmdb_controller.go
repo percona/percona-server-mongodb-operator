@@ -277,11 +277,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
-	}
-
 	shards := 0
 	for _, replset := range repls {
 		if (cr.Spec.Sharding.Enabled && replset.ClusterRole == api.ClusterRoleShardSvr) ||
@@ -416,6 +411,17 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		if err := r.fetchVersionFromMongo(cr, replset, *pods, secrets); err != nil {
 			return rr, errors.Wrap(err, "update CR version")
 		}
+	}
+
+	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
+	}
+
+	username := string(secrets.Data[envMongoDBClusterAdminUser])
+	password := string(secrets.Data[envMongoDBClusterAdminPassword])
+	if err := r.startBalancerIfNeeded(cr, username, password); err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to start balancer: %v", err)
 	}
 
 	err = r.deleteMongosIfNeeded(cr)
@@ -832,12 +838,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 	if err := r.smartUpdate(cr, sfs, replset, secret); err != nil {
 		return nil, fmt.Errorf("failed to run smartUpdate %v", err)
-	}
-
-	username := string(secret.Data[envMongoDBClusterAdminUser])
-	password := string(secret.Data[envMongoDBClusterAdminPassword])
-	if err := r.startBalancerIfNeeded(cr, username, password); err != nil {
-		return nil, fmt.Errorf("failed to start balancer: %v", err)
 	}
 
 	return sfs, nil
