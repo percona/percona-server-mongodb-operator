@@ -621,7 +621,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
 
-	if k8serrors.IsNotFound(err) {
+	if k8serrors.IsNotFound(err) || mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
 		err = r.client.Create(context.TODO(), &mongosSvc)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrapf(err, "create service %s", mongosSvc.Name)
