@@ -424,7 +424,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	err = r.reconcileMongos(cr)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile Deployment for")
+		return reconcile.Result{}, errors.Wrap(err, "reconcile deployment for")
+	}
+
+	username := string(secrets.Data[envMongoDBClusterAdminUser])
+	password := string(secrets.Data[envMongoDBClusterAdminPassword])
+	if err := r.startBalancerIfNeeded(cr, username, password); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
 
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
@@ -564,12 +570,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	msDepl := psmdb.MongosDeployment(cr)
 	err = setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
 	}
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
 	}
 
 	opPod, err := r.operatorPod()
@@ -579,7 +585,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod)
 	if err != nil {
-		return errors.Wrapf(err, "create Deployment.Spec %s", msDepl.Name)
+		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
 
 	sslAnn, err := r.sslAnnotation(cr)
@@ -592,26 +598,33 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	msDepl.Spec = deplSpec
 	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
 	if err != nil {
-		return errors.Wrapf(err, "update or create Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
 	}
 
 	mongosSvc := psmdb.MongosService(cr)
 	err = setControllerReference(cr, &mongosSvc, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for Service %s", mongosSvc.Name)
+		return errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
 	}
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, &mongosSvc)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get monogs Service %s", mongosSvc.Name)
+		return errors.Wrapf(err, "get monogs service %s", mongosSvc.Name)
 	}
 
-	mongosSvcSpec := psmdb.MongosServiceSpec(cr)
-	mongosSvc.Spec = mongosSvcSpec
+	if !k8serrors.IsNotFound(err) && mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
+		err = r.client.Delete(context.TODO(), &mongosSvc)
+		if err != nil {
+			return errors.Wrapf(err, "delete service %s", mongosSvc.Name)
+		}
+	}
+
+	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
+
 	if k8serrors.IsNotFound(err) {
 		err = r.client.Create(context.TODO(), &mongosSvc)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
-			return errors.Wrapf(err, "create Service %s", mongosSvc.Name)
+			return errors.Wrapf(err, "create service %s", mongosSvc.Name)
 		}
 	}
 
@@ -825,12 +838,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 	if err := r.smartUpdate(cr, sfs, replset, secret); err != nil {
 		return nil, fmt.Errorf("failed to run smartUpdate %v", err)
-	}
-
-	username := string(secret.Data[envMongoDBClusterAdminUser])
-	password := string(secret.Data[envMongoDBClusterAdminPassword])
-	if err := r.startBalancerIfNeeded(cr, username, password); err != nil {
-		return nil, fmt.Errorf("failed to start balancer: %v", err)
 	}
 
 	return sfs, nil
