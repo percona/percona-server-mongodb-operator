@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: mongod
+    app.kubernetes.io/component: cfg
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
@@ -20,7 +20,7 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: mongod
+      app.kubernetes.io/component: cfg
       app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
@@ -31,7 +31,7 @@ spec:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: mongod
+        app.kubernetes.io/component: cfg
         app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
@@ -43,6 +43,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
+                  app.kubernetes.io/component: cfg
                   app.kubernetes.io/instance: some-name
                   app.kubernetes.io/managed-by: percona-server-mongodb-operator
                   app.kubernetes.io/name: percona-server-mongodb
