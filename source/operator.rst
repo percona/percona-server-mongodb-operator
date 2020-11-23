@@ -21,20 +21,25 @@ file. This file contains the following spec sections:
      - kubernetes
      - Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set openshift on OpenShift 3.11+
 
+   * - crVersion
+     - string
+     - ``{{{release}}}``
+     - Version of the Operator the Custom Resource belongs to
+
    * - image
      - string
      - ``percona/percona-server-mongodb:4.2.8-8``
      - The Docker image of `Percona Server for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html>`_ to deploy (actual image names can be found :ref:`in the list of certified images<custom-registry-images>`) 
 
-   * - imagePullSecrets.name
-     - string
-     - ``private-registry-credentials``
-     - The `Kubernetes ImagePullSecret <https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets>`_ to access the :ref:`custom registry<custom-registry>`
-
    * - imagePullPolicy
      - string
      - ``Always``
      - The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/#updating-images>`_
+
+   * - imagePullSecrets.name
+     - string
+     - ``private-registry-credentials``
+     - The `Kubernetes ImagePullSecret <https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets>`_ to access the :ref:`custom registry<custom-registry>`
 
    * - ClusterServiceDNSSuffix
      - string
@@ -46,6 +51,16 @@ file. This file contains the following spec sections:
      - int
      - 1001
      - The (non-standard) user ID
+
+   * - allowUnsafeConfigurations
+     - boolean
+     - ``false``
+     - Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 nodes or starting the cluster without TLS/SSL certificates
+
+   * - updateStrategy
+     - string
+     - ``SmartUpdate``
+     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are `SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
 
    * - secrets
      - subdoc
@@ -72,16 +87,6 @@ file. This file contains the following spec sections:
      - 
      - Percona Server for MongoDB backups section
 
-   * - allowUnsafeConfigurations
-     - boolean
-     - ``false``
-     - Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 nodes or starting the cluster without TLS/SSL certificates
-
-   * - updateStrategy
-     - string
-     - ``SmartUpdate``
-     - A strategy the Operator uses for :ref:`upgrades<operator-update>`
-
 .. _operator.upgradeoptions-section:
 
 `Upgrade Options Section <operator.html#operator-upgradeoptions-section>`_
@@ -99,7 +104,7 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value**       | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Example**     | ``https://check.percona.com/versions``                                                    |
+| **Example**     | ``https://check.percona.com``                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The Version Service URL used to check versions compatibility for upgrade                  |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -292,9 +297,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-priorityClassName:								|
+|                 | .. _replsets-priorityclassname:								|
 |                 |												|
-| **Key**         | `replsets.priorityClassName <operator.html#replsets-priorityClassName>`_			|
+| **Key**         | `replsets.priorityClassName <operator.html#replsets-priorityclassname>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -334,9 +339,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-nodeSelector:									|
+|                 | .. _replsets-nodeselector:									|
 |                 |												|
-| **Key**         | `replsets.nodeSelector <operator.html#replsets-nodeSelector>`_				|
+| **Key**         | `replsets.nodeSelector <operator.html#replsets-nodeselector>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -345,6 +350,97 @@ The replsets section controls the MongoDB Replica Set.
 | **Description** | The `Kubernetes nodeSelector								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_		|
 |                 | affinity constraint  for the Replica Set nodes						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-failurethreshold:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.failureThreshold							|
+|                 | <operator.html#replsets-livenessprobe-failurethreshold>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``4``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of consecutive unsuccessful tries of the `liveness probe 				|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> to be undertaken		|
+|                 | before giving up.										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-initialdelayseconds:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.initialDelaySeconds							|
+|                 | <operator.html#replsets-livenessprobe-initialdelayseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``60``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds to wait after the container start before initiating the `liveness probe	|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>.				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-periodseconds:							|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.periodSeconds							|
+|                 | <operator.html#replsets-livenessprobe-periodseconds>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``30``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | How often to perform a `liveness probe 							|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> (in seconds).		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-successthreshold:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.successThreshold							|
+|                 | <operator.html#replsets-livenessprobe-successthreshold>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Minimum consecutive successes for the `liveness probe 					|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> to be considered successful	|
+|                 | after having failed.									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-timeoutseconds:							|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.timeoutSeconds							|
+|                 | <operator.html#replsets-livenessprobe-timeoutseconds>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``5``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds after which the `liveness probe 						|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes> times out.			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-livenessprobe-startupdelayseconds:						|
+|                 |												|
+| **Key**         | `replsets.livenessProbe.startupDelaySeconds							|
+|                 | <operator.html#replsets-livenessprobe-startupdelayseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``7200``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Time after which the liveness probe is failed if the MongoDB instance didn't finish its 	|
+|                 | full startup yet										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -363,10 +459,10 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-podDisruptionBudget-minAvailable:						|
+|                 | .. _replsets-poddisruptionbudget-minavailable:						|
 |                 |												|
 | **Key**         | `replsets.podDisruptionBudget.minAvailable							|
-|                 | <operator.html#replsets-podDisruptionBudget-minAvailable>`_					|
+|                 | <operator.html#replsets-poddisruptionbudget-minavailable>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -391,9 +487,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-expose-exposeType:								|
+|                 | .. _replsets-expose-exposetype:								|
 |                 |												|
-| **Key**         | `replsets.expose.exposeType <operator.html#replsets-expose-exposeType>`_			|
+| **Key**         | `replsets.expose.exposeType <operator.html#replsets-expose-exposetype>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -504,10 +600,10 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-arbiter-tolerations-tolerationSeconds:						|
+|                 | .. _replsets-arbiter-tolerations-tolerationseconds:						|
 |                 |												|
 | **Key**         | `replsets.arbiter.tolerations.tolerationSeconds						|
-|                 | <operator.html#replsets-arbiter-tolerations-tolerationSeconds>`_				|
+|                 | <operator.html#replsets-arbiter-tolerations-tolerationseconds>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -519,9 +615,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-arbiter-priorityClassName:							|
+|                 | .. _replsets-arbiter-priorityclassname:							|
 |                 |												|
-| **Key**         | `replsets.arbiter.priorityClassName <operator.html#replsets-arbiter-priorityClassName>`_	|
+| **Key**         | `replsets.arbiter.priorityClassName <operator.html#replsets-arbiter-priorityclassname>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -562,9 +658,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-arbiter-nodeSelector:								|
+|                 | .. _replsets-arbiter-nodeselector:								|
 |                 |												|
-| **Key**         | `replsets.arbiter.nodeSelector <operator.html#replsets-arbiter-nodeSelector>`_		|
+| **Key**         | `replsets.arbiter.nodeSelector <operator.html#replsets-arbiter-nodeselector>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | label											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -573,6 +669,19 @@ The replsets section controls the MongoDB Replica Set.
 | **Description** | The `Kubernetes nodeSelector								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
 |                 | #nodeselector>`_ affinity constraint for the Arbiter nodes					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-schedulername:									|
+|                 |												|
+| **Key**         | `replsets.schedulerName <operator.html#replsets-schedulername>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``default``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Scheduler									|
+|                 | <https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -632,9 +741,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-volumeSpec-emptyDir:								|
+|                 | .. _replsets-volumespec-emptydir:								|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.emptyDir <operator.html#replsets-volumeSpec-emptyDir>`_		|
+| **Key**         | `replsets.volumeSpec.emptyDir <operator.html#replsets-volumespec-emptydir>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -646,9 +755,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-volumeSpec-hostPath-path:							|
+|                 | .. _replsets-volumespec-hostpath-path:							|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.hostPath.path <operator.html#replsets-volumeSpec-hostPath-path>`_	|
+| **Key**         | `replsets.volumeSpec.hostPath.path <operator.html#replsets-volumespec-hostpath-path>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -660,9 +769,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-volumeSpec-hostPath-type:							|
+|                 | .. _replsets-volumespec-hostpath-type:							|
 |                 |												|
-| **Key**         | `replsets.volumeSpec.hostPath.type <operator.html#replsets-volumeSpec-hostPath-type>`_	|
+| **Key**         | `replsets.volumeSpec.hostPath.type <operator.html#replsets-volumespec-hostpath-type>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -673,10 +782,10 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-volumeSpec-persistentVolumeClaim-storageClassName:				|
+|                 | .. _replsets-volumespec-persistentvolumeclaim-storageclassname:				|
 |                 |												|
 | **Key**         | `replsets.volumeSpec.persistentVolumeClaim.storageClassName					|
-|                 | <operator.html#replsets-volumeSpec-persistentVolumeClaim-storageClassName>`_		|
+|                 | <operator.html#replsets-volumespec-persistentvolumeclaim-storageclassname>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -692,10 +801,10 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-volumeSpec-persistentVolumeClaim-accessModes:					|
+|                 | .. _replsets-volumespec-persistentvolumeclaim-accessmodes:					|
 |                 |												|
 | **Key**         | `replsets.volumeSpec.persistentVolumeClaim.accessModes					|
-|                 | <operator.html#replsets-volumeSpec-persistentVolumeClaim-accessModes>`_			|
+|                 | <operator.html#replsets-volumespec-persistentvolumeclaim-accessmodes>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | array											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -707,10 +816,10 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-volumeSpec-persistentVolumeClaim-resources-requests-storage:			|
+|                 | .. _replsets-volumespec-persistentvolumeclaim-resources-requests-storage:			|
 |                 |												|
 | **Key**         | `replsets.volumeSpec.persistentVolumeClaim.resources.requests.storage			|
-|                 | <operator.html#replsets-volumeSpec-persistentVolumeClaim-resources-requests-storage>`_	|
+|                 | <operator.html#replsets-volumespec-persistentvolumeclaim-resources-requests-storage>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -759,9 +868,9 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _pmm-serverHost:										|
+|                 | .. _pmm-serverhost:										|
 |                 |												|
-| **Key**         | `pmm.serverHost <operator.html#pmm-serverHost>`_						|
+| **Key**         | `pmm.serverHost <operator.html#pmm-serverhost>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -796,7 +905,7 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _mongod-net-hostPort:									|
 |                 |												|
-| **Key**         | `mongod.net.hostPort <operator.html#mongod-net-hostPort>`_					|
+| **Key**         | `mongod.net.hostport <operator.html#mongod-net-hostport>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -808,9 +917,9 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-security-redactClientLogData:							|
+|                 | .. _mongod-security-redactclientlogdata:							|
 |                 |												|
-| **Key**         | `mongod.security.redactClientLogData <operator.html#mongod-security-redactClientLogData>`_	|
+| **Key**         | `mongod.security.redactClientLogData <operator.html#mongod-security-redactclientlogdata>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -821,9 +930,9 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-security-enableEncryption:							|
+|                 | .. _mongod-security-enableencryption:							|
 |                 |												|
-| **Key**         | `mongod.security.enableEncryption <operator.html#mongod-security-enableEncryption>`_	|
+| **Key**         | `mongod.security.enableEncryption <operator.html#mongod-security-enableencryption>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -835,9 +944,9 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-security-encryptionKeySecret:							|
+|                 | .. _mongod-security-encryptionkeysecret:							|
 |                 |												|
-| **Key**         | `mongod.security.encryptionKeySecret <operator.html#mongod-security-encryptionKeySecret>`_	|
+| **Key**         | `mongod.security.encryptionKeySecret <operator.html#mongod-security-encryptionkeysecret>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -848,9 +957,9 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-security-encryptionCipherMode:							|
+|                 | .. _mongod-security-encryptionciphermode:							|
 |                 |												|
-| **Key**         | `mongod.security.encryptionCipherMode <operator.html#mongod-security-encryptionCipherMode>`_|
+| **Key**         | `mongod.security.encryptionCipherMode <operator.html#mongod-security-encryptionciphermode>`_|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -862,10 +971,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-setParameter-ttlMonitorSleepSecs:						|
+|                 | .. _mongod-setparameter-ttlmonitorsleepsecs:						|
 |                 |												|
 | **Key**         | `mongod.setParameter.ttlMonitorSleepSecs							|
-|                 | <operator.html#mongod-setParameter-ttlMonitorSleepSecs>`_					|
+|                 | <operator.html#mongod-setparameter-ttlmonitorsleepsecs>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -875,10 +984,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-setParameter-wiredTigerConcurrentReadTransactions:				|
+|                 | .. _mongod-setparameter-wiredtigerconcurrentreadtransactions:				|
 |                 |												|
 | **Key**         | `mongod.setParameter.wiredTigerConcurrentReadTransactions					|
-|                 | <operator.html#mongod-setParameter-wiredTigerConcurrentReadTransactions>`_			|
+|                 | <operator.html#mongod-setparameter-wiredtigerconcurrentreadtransactions>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -890,10 +999,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-setParameter-wiredTigerConcurrentWriteTransactions:				|
+|                 | .. _mongod-setparameter-wiredtigerconcurrentwritetransactions:				|
 |                 |												|
 | **Key**         | `mongod.setParameter.wiredTigerConcurrentWriteTransactions					|
-|                 | <operator.html#mongod-setParameter-wiredTigerConcurrentWriteTransactions>`_			|
+|                 | <operator.html#mongod-setparameter-wiredtigerconcurrentwritetransactions>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -918,10 +1027,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-storage-inMemory-engineConfig-inMemorySizeRatio:					|
+|                 | .. _mongod-storage-inmemory-engineconfig-inmemorysizeratio:					|
 |                 |												|
 | **Key**         | `mongod.storage.inMemory.engineConfig.inMemorySizeRatio					|
-|                 | <operator.html#mongod-storage-inMemory-engineConfig-inMemorySizeRatio>`_			|
+|                 | <operator.html#mongod-storage-inmemory-engineconfig-inmemorysizeratio>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | float											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -933,9 +1042,9 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-storage-mmapv1-nsSize:								|
+|                 | .. _mongod-storage-mmapv1-nssize:								|
 |                 |												|
-| **Key**         | `mongod.storage.mmapv1.nsSize <operator.html#mongod-storage-mmapv1-nsSize>`_		|
+| **Key**         | `mongod.storage.mmapv1.nsSize <operator.html#mongod-storage-mmapv1-nssize>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -960,10 +1069,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-storage-wiredTiger-engineConfig-cacheSizeRatio:					|
+|                 | .. _mongod-storage-wiredtiger-engineconfig-cachesizeratio:					|
 |                 |												|
 | **Key**         | `mongod.storage.wiredTiger.engineConfig.cacheSizeRatio					|
-|                 | <operator.html#mongod-storage-wiredTiger-engineConfig-cacheSizeRatio>`_			|
+|                 | <operator.html#mongod-storage-wiredtiger-engineconfig-cachesizeratio>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | float											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -975,10 +1084,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-storage-wiredTiger-engineConfig-directoryForIndexes:				|
+|                 | .. _mongod-storage-wiredtiger-engineconfig-directoryforindexes:				|
 |                 |												|
 | **Key**         | `mongod.storage.wiredTiger.engineConfig.directoryForIndexes					|
-|                 | <operator.html#mongod-storage-wiredTiger-engineConfig-directoryForIndexes>`_		|
+|                 | <operator.html#mongod-storage-wiredtiger-engineconfig-directoryforindexes>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -990,10 +1099,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-storage-wiredTiger-engineConfig-journalCompressor:				|
+|                 | .. _mongod-storage-wiredtiger-engineconfig-journalcompressor:				|
 |                 |												|
 | **Key**         | `mongod.storage.wiredTiger.engineConfig.journalCompressor					|
-|                 | <operator.html#mongod-storage-wiredTiger-engineConfig-journalCompressor>`_			|
+|                 | <operator.html#mongod-storage-wiredtiger-engineconfig-journalcompressor>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1005,10 +1114,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-storage-wiredTiger-collectionConfig-blockCompressor:				|
+|                 | .. _mongod-storage-wiredtiger-collectionconfig-blockcompressor:				|
 |                 |												|
 | **Key**         | `mongod.storage.wiredTiger.collectionConfig.blockCompressor					|
-|                 | <operator.html#mongod-storage-wiredTiger-collectionConfig-blockCompressor>`_		|
+|                 | <operator.html#mongod-storage-wiredtiger-collectionconfig-blockcompressor>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1020,10 +1129,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-storage-wiredTiger-indexConfig-prefixCompression:				|
+|                 | .. _mongod-storage-wiredtiger-indexconfig-prefixcompression:				|
 |                 |												|
 | **Key**         | `mongod.storage.wiredTiger.indexConfig.prefixCompression					|
-|                 | <operator.html#mongod-storage-wiredTiger-indexConfig-prefixCompression>`_			|
+|                 | <operator.html#mongod-storage-wiredtiger-indexconfig-prefixcompression>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | bool											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1035,9 +1144,9 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-operationProfiling-mode:								|
+|                 | .. _mongod-operationprofiling-mode:								|
 |                 |												|
-| **Key**         | `mongod.operationProfiling.mode <operator.html#mongod-operationProfiling-mode>`_		|
+| **Key**         | `mongod.operationProfiling.mode <operator.html#mongod-operationprofiling-mode>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1049,10 +1158,10 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-operationProfiling-slowOpThresholdMs:						|
+|                 | .. _mongod-operationprofiling-slowopthresholdms:						|
 |                 |												|
 | **Key**         | `mongod.operationProfiling.slowOpThresholdMs						|
-|                 | <operator.html#mongod-operationProfiling-slowOpThresholdMs>`_				|
+|                 | <operator.html#mongod-operationprofiling-slowopthresholdms>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1064,9 +1173,9 @@ configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _mongod-operationProfiling-rateLimit:							|
+|                 | .. _mongod-operationprofiling-ratelimit:							|
 |                 |												|
-| **Key**         | `mongod.operationProfiling.rateLimit <operator.html#mongod-operationProfiling-rateLimit>`_	|
+| **Key**         | `mongod.operationProfiling.rateLimit <operator.html#mongod-operationprofiling-ratelimit>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1148,13 +1257,13 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``true``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables or disables debug mode for bakups							|
+| **Description** | Enables or disables debug mode for backups							|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-restartOnFailure:								|
+|                 | .. _backup-restartonfailure:								|
 |                 |												|
-| **Key**         | `backup.restartOnFailure <operator.html#backup-restartOnFailure>`_				|
+| **Key**         | `backup.restartOnFailure <operator.html#backup-restartonfailure>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | boolean											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1176,9 +1285,9 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-serviceAccountName:								|
+|                 | .. _backup-serviceaccountname:								|
 |                 |												|
-| **Key**         | `backup.serviceAccountName <operator.html#backup-serviceAccountName?>`_			|
+| **Key**         | `backup.serviceAccountName <operator.html#backup-serviceaccountname?>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1259,7 +1368,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-s3-credentialssecret:							|
 |                 |												|
-| **Key**         | `backup.storages.<storage-name>.s3.credentialsSecret					| 	
+| **Key**         | `backup.storages.<storage-name>.s3.credentialsSecret					|
 |                 | <operator.html#backup-storages-s3-credentialssecret>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
@@ -1297,10 +1406,10 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-storages-s3-endpointUrl:								|
+|                 | .. _backup-storages-s3-endpointurl:								|
 |                 |												|
 | **Key**         | `backup.storages.s3.<storage-name>.endpointUrl						|
-|                 | <operator.html#backup-storages-s3-endpointUrl>`_						|
+|                 | <operator.html#backup-storages-s3-endpointurl>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1308,6 +1417,18 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The endpoint URL of the S3-compatible storage to be used (not needed for the original	|
 |                 | Amazon S3 cloud)										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _backup-tasks-name:									|
+|                 |												|
+| **Key**         | `backup.tasks.name <operator.html#backup-tasks-name>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | 												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The name of the backup									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1336,9 +1457,9 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-tasks-storageName:								|
+|                 | .. _backup-tasks-storagename:								|
 |                 |												|
-| **Key**         | `backup.tasks.storageName <operator.html#backup-tasks-storageName>`_			|
+| **Key**         | `backup.tasks.storageName <operator.html#backup-tasks-storagename>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1348,9 +1469,9 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-tasks-compressionType:								|
+|                 | .. _backup-tasks-compressiontype:								|
 |                 |												|
-| **Key**         | `backup.tasks.compressionType <operator.html#backup-tasks-compressionType>`_		|
+| **Key**         | `backup.tasks.compressionType <operator.html#backup-tasks-compressiontype>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
