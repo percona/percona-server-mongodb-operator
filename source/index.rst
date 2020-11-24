@@ -47,6 +47,7 @@ Configuration
    constraints
    expose
    arbiter
+   sharding
    TLS
    encryption
 
