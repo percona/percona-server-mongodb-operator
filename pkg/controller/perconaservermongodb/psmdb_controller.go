@@ -535,6 +535,11 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to get config service")
 	}
+
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+
 	err = r.client.Delete(context.TODO(), &svc)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete config service")
