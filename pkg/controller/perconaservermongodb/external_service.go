@@ -42,7 +42,9 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 	return services, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podList *corev1.PodList) error {
+func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
+	podList *corev1.PodList) error {
+
 	if len(podList.Items) == 0 {
 		return nil
 	}
