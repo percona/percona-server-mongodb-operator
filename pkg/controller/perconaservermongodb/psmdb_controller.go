@@ -522,12 +522,22 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 		return nil
 	}
 
-	sfsName := cr.Name + "-" + "cfg"
+	sfsName := cr.Name + "-" + api.ConfigReplSetName
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
 
 	err := r.client.Delete(context.TODO(), sfs)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
+	}
+
+	svc := corev1.Service{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &svc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to get config service")
+	}
+	err = r.client.Delete(context.TODO(), &svc)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete config service")
 	}
 
 	return nil
