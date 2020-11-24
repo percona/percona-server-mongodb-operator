@@ -166,7 +166,6 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        enabled: false
         exposeType: ClusterIP
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8

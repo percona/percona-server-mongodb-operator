@@ -306,7 +306,6 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
 		},
 		Selector:                 ls,
 		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges,
-		ClusterIP:                "None",
 	}
 
 	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
