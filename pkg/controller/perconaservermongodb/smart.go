@@ -141,11 +141,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("failed to apply changes: %v", err)
 	}
 
-	err = r.startBalancerIfNeeded(cr, username, password)
-	if err != nil {
-		return errors.Wrap(err, "failed to start balancer")
-	}
-
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
 
 	return nil
@@ -217,12 +212,12 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 	msDepl := psmdb.MongosDeployment(cr)
 	err = setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
 	}
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
 	if err != nil && !k8sErrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
 	}
 
 	if msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
