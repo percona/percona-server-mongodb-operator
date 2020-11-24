@@ -532,7 +532,7 @@ The replsets section controls the MongoDB Replica Set.
 | **Example**     | ``1``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The number of `Replica Set Arbiter								|
-|                 | <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`_  nodes			|
+|                 | <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`_ instances			|
 |                 | within the cluster										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -916,11 +916,12 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.size <operator.html#sharding-configsvrreplset-size>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | string											|
+| **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``{}``											|
+| **Example**     | ``3``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | 												|
+| **Description** | The number of `Config Server instances							|
+|                 | <https://docs.mongodb.com/manual/core/sharded-cluster-config-servers/>`_ within the cluster |
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -935,7 +936,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes emptyDir volume <https://kubernetes.io/docs/concepts/storage/volumes/	|
 |                 | #emptydir>`_, i.e. the directory which will be created on a node, and will be accessible to	|
-|                 | the MongoDB Pod containers									|
+|                 | the Config Server Pod containers								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -949,8 +950,8 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 | **Example**     | ``/data``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | `Kubernetes hostPath volume <https://kubernetes.io/docs/concepts/storage/volumes/		|
-|                 | #hostpath>`_, i.e. the file or directory of a node that will be accessible to the MongoDB	|
-|                 | Pod containers										|
+|                 | #hostpath>`_, i.e. the file or directory of a node that will be accessible to the Config	|
+|                 | Server Pod containers										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -979,7 +980,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes Storage Class								|
 |                 | <https://kubernetes.io/docs/concepts/storage/storage-classes/>`_				|
-|                 | to use with the MongoDB container `Persistent Volume Claim 					|
+|                 | to use with the Config Server container `Persistent Volume Claim 				|
 |                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims>`_.	|
 |                 | Use Storage Class with XFS as the default filesystem if possible, `for better MongoDB 	|
 |                 | performance 										|
@@ -998,7 +999,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes Persistent Volume								|
 |                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_				|
-|                 | access modes for the MongoDB container							|
+|                 | access modes for the Config Server container						|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1014,7 +1015,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes Persistent Volume								|
 |                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_				|
-|                 | size for the MongoDB container								|
+|                 | size for the Config Server container							|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1026,15 +1027,15 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``3``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The number of `MongoDB mongos								|
-|                 | <https://docs.mongodb.com/manual/core/sharded-cluster-query-router/>`_  instances		|
+| **Description** | The number of `mongos									|
+|                 | <https://docs.mongodb.com/manual/core/sharded-cluster-query-router/>`_ instances		|
 |                 | within the cluster										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _sharding-mongos-affinity-antiaffinitytopologykey:					|
 |                 |												|
-| **Key**         | `sharding.mongos.arbiter.afinity.antiAffinityTopologyKey					|
+| **Key**         | `sharding.mongos.afinity.antiAffinityTopologyKey						|
 |                 | <operator.html#sharding-mongos-affinity-antiaffinitytopologykey>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
@@ -1056,7 +1057,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     |												|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | In cases where the pods require complex tuning the `advanced` option turns off		|
+| **Description** | In cases where the Pods require complex tuning the `advanced` option turns off		|
 |                 | the ``topologykey`` effect. This setting allows the standard Kubernetes affinity		|
 |                 | constraints of any complexity to be used							|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1201,7 +1202,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | `Kubernetes Memory limit 									|
 |                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|
-|                 | #resource-requests-and-limits-of-pod-and-container>`__ for mongos container			|
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for mongos container			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1242,7 +1243,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``false``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enable or disable exposing `MongoDB mongos daemon						|
+| **Description** | Enable or disable exposing `MongoDB mongos daemons						|
 |                 | <https://docs.mongodb.com/manual/core/sharded-cluster-query-router/>`_ with dedicated IP	|
 |                 | addresses											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1299,6 +1300,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `auditLog.destination option							|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
+|                 | for the MongoDB mongos daemon								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1312,6 +1314,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `auditLog.format option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
+|                 | for the MongoDB mongos daemon								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1325,6 +1328,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `auditLog.filter option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
+|                 | for the MongoDB mongos daemon								|
 +-----------------+---------------------------------------------------------------------------------------------+
 
 .. _operator.mongod-section:
