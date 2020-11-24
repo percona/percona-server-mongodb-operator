@@ -96,7 +96,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 			},
 			Spec: corev1.PodSpec{
 				SecurityContext:   replset.PodSecurityContext,
-				Affinity:          PodAffinity(multiAZ.Affinity, ls),
+				Affinity:          PodAffinity(m, multiAZ.Affinity, ls),
 				NodeSelector:      multiAZ.NodeSelector,
 				Tolerations:       multiAZ.Tolerations,
 				PriorityClassName: multiAZ.PriorityClassName,
@@ -127,9 +127,18 @@ func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolume
 }
 
 // PodAffinity returns podAffinity options for the pod
-func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
+func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
 	if af == nil {
 		return nil
+	}
+
+	labelsCopy := make(map[string]string)
+	for k, v := range labels {
+		labelsCopy[k] = v
+	}
+
+	if cr.CompareVersion("1.6.0") < 0 {
+		delete(labelsCopy, "app.kubernetes.io/component")
 	}
 
 	switch {
@@ -140,18 +149,12 @@ func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity
 			return nil
 		}
 
-		lablesCopy := make(map[string]string)
-		for k, v := range labels {
-			if k != "app.kubernetes.io/component" {
-				lablesCopy[k] = v
-			}
-		}
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 					{
 						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: lablesCopy,
+							MatchLabels: labelsCopy,
 						},
 						TopologyKey: *af.TopologyKey,
 					},

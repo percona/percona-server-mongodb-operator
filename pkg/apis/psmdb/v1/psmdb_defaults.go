@@ -221,10 +221,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(8)
 			}
 		}
+
+		cr.Spec.Sharding.Mongos.reconcileOpts()
 	}
 
 	repls := cr.Spec.Replsets
-	if cr.Spec.Sharding.Enabled {
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		cr.Spec.Sharding.ConfigsvrReplSet.Arbiter.Enabled = false
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 

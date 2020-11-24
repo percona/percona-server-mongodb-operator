@@ -571,12 +571,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	msDepl := psmdb.MongosDeployment(cr)
 	err = setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
 	}
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
 	}
 
 	opPod, err := r.operatorPod()
@@ -586,7 +586,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod)
 	if err != nil {
-		return errors.Wrapf(err, "create Deployment.Spec %s", msDepl.Name)
+		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
 
 	sslAnn, err := r.sslAnnotation(cr)
@@ -606,26 +606,34 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	msDepl.Spec = deplSpec
 	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
 	if err != nil {
-		return errors.Wrapf(err, "update or create Deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
 	}
 
 	mongosSvc := psmdb.MongosService(cr)
 	err = setControllerReference(cr, &mongosSvc, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for Service %s", mongosSvc.Name)
+		return errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
 	}
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, &mongosSvc)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get monogs Service %s", mongosSvc.Name)
+		return errors.Wrapf(err, "get monogs service %s", mongosSvc.Name)
 	}
 
-	mongosSvcSpec := psmdb.MongosServiceSpec(cr)
-	mongosSvc.Spec = mongosSvcSpec
+	if !k8serrors.IsNotFound(err) && mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
+		err = r.client.Delete(context.TODO(), &mongosSvc)
+		if err != nil {
+			return errors.Wrapf(err, "delete service %s", mongosSvc.Name)
+		}
+	}
 
-	err = r.createOrUpdate(&mongosSvc, mongosSvc.Name, mongosSvc.Namespace)
-	if err != nil {
-		return errors.Wrapf(err, "update or create Service %s", mongosSvc.Name)
+	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
+
+	if k8serrors.IsNotFound(err) || mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
+		err = r.client.Create(context.TODO(), &mongosSvc)
+		if err != nil && !k8serrors.IsAlreadyExists(err) {
+			return errors.Wrapf(err, "create service %s", mongosSvc.Name)
+		}
 	}
 
 	return nil
@@ -664,6 +672,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	matchLabels["app.kubernetes.io/component"] = "mongod"
 	multiAZ := replset.MultiAZ
 	pdbspec := replset.PodDisruptionBudget
+
 	if arbiter {
 		sfsName += "-arbiter"
 		containerName += "-arbiter"
@@ -671,6 +680,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		matchLabels["app.kubernetes.io/component"] = "arbiter"
 		multiAZ = replset.Arbiter.MultiAZ
 		pdbspec = replset.Arbiter.PodDisruptionBudget
+	}
+
+	if replset.ClusterRole == api.ClusterRoleConfigSvr {
+		matchLabels["app.kubernetes.io/component"] = api.ConfigReplSetName
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
