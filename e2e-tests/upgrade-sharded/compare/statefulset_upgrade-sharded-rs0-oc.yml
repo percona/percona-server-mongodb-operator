@@ -1,0 +1,204 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  labels:
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: upgrade-sharded
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
+  name: upgrade-sharded-rs0
+  ownerReferences:
+    - controller: true
+      kind: PerconaServerMongoDB
+      name: upgrade-sharded
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: upgrade-sharded
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
+  serviceName: upgrade-sharded-rs0
+  template:
+    metadata:
+      annotations: {}
+      labels:
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: upgrade-sharded
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: mongod
+                  app.kubernetes.io/instance: upgrade-sharded
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+                  app.kubernetes.io/replset: rs0
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - args:
+            - --bind_ip_all
+            - --auth
+            - --dbpath=/data/db
+            - --port=27017
+            - --replSet=rs0
+            - --storageEngine=wiredTiger
+            - --relaxPermChecks
+            - --sslAllowInvalidCertificates
+            - --sslMode=preferSSL
+            - --clusterAuthMode=x509
+            - --shardsvr
+            - --slowms=100
+            - --profile=1
+            - --rateLimit=100
+            - --enableEncryption
+            - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+            - --encryptionCipherMode=AES256-CBC
+            - --wiredTigerCacheSizeGB=0.25
+            - --wiredTigerCollectionBlockCompressor=snappy
+            - --wiredTigerJournalCompressor=snappy
+            - --wiredTigerIndexPrefixCompression=true
+            - --setParameter
+            - ttlMonitorSleepSecs=60
+            - --setParameter
+            - wiredTigerConcurrentReadTransactions=128
+            - --setParameter
+            - wiredTigerConcurrentWriteTransactions=128
+          command:
+            - /data/db/ps-entry.sh
+          env:
+            - name: SERVICE_NAME
+              value: upgrade-sharded
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: MONGODB_REPLSET
+              value: rs0
+          envFrom:
+            - secretRef:
+                name: internal-upgrade-sharded-users
+                optional: false
+          imagePullPolicy: Always
+          livenessProbe:
+            exec:
+              command:
+                - mongodb-healthcheck
+                - k8s
+                - liveness
+                - --startupDelaySeconds
+                - "7200"
+            failureThreshold: 4
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: mongod
+          ports:
+            - containerPort: 27017
+              name: mongodb
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 8
+            initialDelaySeconds: 10
+            periodSeconds: 3
+            successThreshold: 1
+            tcpSocket:
+              port: 27017
+            timeoutSeconds: 2
+          resources:
+            limits:
+              cpu: 300m
+              memory: 500M
+            requests:
+              cpu: 300m
+              memory: 500M
+          securityContext:
+            runAsNonRoot: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /etc/mongodb-secrets
+              name: upgrade-sharded-mongodb-keyfile
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl-internal
+              name: ssl-internal
+              readOnly: true
+            - mountPath: /etc/mongodb-encryption
+              name: my-cluster-name-mongodb-encryption-key
+              readOnly: true
+          workingDir: /data/db
+      dnsPolicy: ClusterFirst
+      initContainers:
+        - command:
+            - /init-entrypoint.sh
+          imagePullPolicy: Always
+          name: mongo-init
+          resources:
+            limits:
+              cpu: 300m
+              memory: 500M
+            requests:
+              cpu: 300m
+              memory: 500M
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: upgrade-sharded-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: upgrade-sharded-mongodb-keyfile
+        - name: my-cluster-name-mongodb-encryption-key
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: my-cluster-name-mongodb-encryption-key
+        - name: ssl
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: upgrade-sharded-ssl
+        - name: ssl-internal
+          secret:
+            defaultMode: 288
+            optional: true
+            secretName: upgrade-sharded-ssl-internal
+  updateStrategy:
+    type: OnDelete
+  volumeClaimTemplates:
+    - metadata:
+        name: mongod-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 3Gi
+      status:
+        phase: Pending
