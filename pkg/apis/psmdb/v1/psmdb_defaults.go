@@ -157,6 +157,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.New("mongos should be specified")
 		}
 
+		if cr.Spec.Mongod.Storage.Engine == StorageEngineMMAPv1 {
+			return errors.Errorf("%s storage engine is not supported for sharded cluster cinfiguration", StorageEngineMMAPv1)
+		}
+
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
 
 		if cr.Spec.Sharding.Mongos.Port == 0 {
