@@ -3,7 +3,7 @@
 Percona Server for MongoDB Sharding
 ===================================
 
-`Sharding <_https://docs.mongodb.com/manual/reference/glossary/#term-sharding>`_
+`Sharding <https://docs.mongodb.com/manual/reference/glossary/#term-sharding>`_
 provides horizontal database scaling, distributing data across multiple MongoDB
 Pods. It is useful for large data sets when a single machine's overall
 processing speed or storage capacity turns out to be not enough.
