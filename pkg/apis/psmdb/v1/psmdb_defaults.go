@@ -158,7 +158,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if cr.Spec.Mongod.Storage.Engine == StorageEngineMMAPv1 {
-			return errors.Errorf("%s storage engine is not supported for sharded cluster cinfiguration", StorageEngineMMAPv1)
+			return errors.Errorf("%s storage engine is not supported for sharded cluster configuration", StorageEngineMMAPv1)
 		}
 
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
