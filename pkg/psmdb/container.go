@@ -114,19 +114,13 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements) []string {
 	mSpec := m.Spec.Mongod
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
-
-	engine := mSpec.Storage.Engine
-	if replset.ClusterRole == api.ClusterRoleConfigSvr {
-		engine = api.StorageEngineWiredTiger
-	}
-
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
 		"--dbpath=" + MongodContainerDataDir,
 		"--port=" + strconv.Itoa(int(mSpec.Net.Port)),
 		"--replSet=" + replset.Name,
-		"--storageEngine=" + string(engine),
+		"--storageEngine=" + string(mSpec.Storage.Engine),
 		"--relaxPermChecks",
 		"--sslAllowInvalidCertificates",
 	}
@@ -169,7 +163,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 
 	// storage
 	if mSpec.Storage != nil {
-		switch engine {
+		switch mSpec.Storage.Engine {
 		case api.StorageEngineWiredTiger:
 			if *m.Spec.Mongod.Security.EnableEncryption {
 				args = append(args,
