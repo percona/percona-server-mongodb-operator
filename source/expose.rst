@@ -11,7 +11,7 @@ accessing the database.
    cluster runs special ``mongos`` Pods - query routers, which acts as an entry
    point for client applications,
    
-   .. image:: assets/images/mongod_expose.png
+   .. image:: ./assets/images/mongod_expose.png
       :alt: PSMDB Operator, sharding on
 #. If :ref`sharding` mode is turned **off**, the application needs access to all
    MongoDB Pods of the replica set:
