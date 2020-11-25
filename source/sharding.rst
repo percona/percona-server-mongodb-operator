@@ -28,10 +28,4 @@ When the sharding is turned on, the Operator runs replica sets with config
 servers and mongos instances. Their numbers are controlled by 
 ``configsvrReplSet.size`` and ``mongos.size`` keys respectively.
 
-.. note:: Config servers for now can properly work only with WiredTiger engine. 
-
-As shards, so config servers are treated by the Operator as a regular replica
-set and cannot have arbiters. This means that even if a user puts the
-:ref:`configuration for arbiters<arbiter>` into the correspondent subsection of
-the ``deploy/cr.yaml`` file, this subsection will be ignored if sharding is
-turned on.
+.. note:: Config servers for now can properly work only with WiredTiger engine.
