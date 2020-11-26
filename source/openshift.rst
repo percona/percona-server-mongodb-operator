@@ -73,8 +73,8 @@ Install Percona server for MongoDB on OpenShift
    documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`_
    for details).
 
-   After editing the yaml file, the secrets should be created or
-   updated with the following command:
+   After editing the yaml file, the secrets should be created
+   with the following command:
 
    .. code:: bash
 

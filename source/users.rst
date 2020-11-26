@@ -108,7 +108,7 @@ YAML Object Format
 The default name of the Secrets object for these users is
 ``my-cluster-name-secrets`` and can be set in the CR for your cluster in
 ``spec.secrets.users`` to something different. When you create the object
-yourself, it should match the following simple format:
+yourself, the corresponding YAML file should match the following simple format:
 
 .. code:: yaml
 
@@ -135,11 +135,13 @@ contains default passwords. You should NOT use these in production, but they are
 present to assist in automated testing or simple use in a development
 environment.
 
-As you can see, because we use the ``stringData`` type in the Secrets object, all
-values for each key/value pair are stated in plain text format for the user convenience.
-If you want to update any field, you'll need to encode the value into base64 format.
-To do this you can simply run ``echo -n "password" | base64`` in your local shell to get valid
-values.
+As you can see, because we use the ``stringData`` type when creating the Secrets
+object, all values for each key/value pair are stated in plain text format
+convenient from the user's point of view. But the resulting Secrets
+object contains passwords stored as ``data`` - i.e., base64-encoded strings.
+If you want to update any field, you'll need to encode the value into base64
+format. To do this, you can run ``echo -n "password" | base64`` in your local
+shell to get valid values.
 
 .. note:: The operator creates and updates an additional Secrets object named
    based on the cluster name, like ``internal-my-cluster-name-users``. It is
