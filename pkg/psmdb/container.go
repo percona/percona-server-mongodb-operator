@@ -120,7 +120,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		"--dbpath=" + MongodContainerDataDir,
 		"--port=" + strconv.Itoa(int(mSpec.Net.Port)),
 		"--replSet=" + replset.Name,
-		"--storageEngine=" + string(mSpec.Storage.Engine),
+		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
 		"--sslAllowInvalidCertificates",
 	}
@@ -162,8 +162,8 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	}
 
 	// storage
-	if mSpec.Storage != nil {
-		switch mSpec.Storage.Engine {
+	if replset.Storage != nil {
+		switch replset.Storage.Engine {
 		case api.StorageEngineWiredTiger:
 			if *m.Spec.Mongod.Security.EnableEncryption {
 				args = append(args,
@@ -179,47 +179,47 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 			if limit, ok := resources.Limits[corev1.ResourceCPU]; ok && !limit.IsZero() {
 				args = append(args, fmt.Sprintf(
 					"--wiredTigerCacheSizeGB=%.2f",
-					getWiredTigerCacheSizeGB(resources.Limits, mSpec.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
+					getWiredTigerCacheSizeGB(resources.Limits, replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),
 				))
 			}
-			if mSpec.Storage.WiredTiger.CollectionConfig != nil {
-				if mSpec.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
+			if replset.Storage.WiredTiger.CollectionConfig != nil {
+				if replset.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
 					args = append(args,
-						"--wiredTigerCollectionBlockCompressor="+string(*mSpec.Storage.WiredTiger.CollectionConfig.BlockCompressor),
+						"--wiredTigerCollectionBlockCompressor="+string(*replset.Storage.WiredTiger.CollectionConfig.BlockCompressor),
 					)
 				}
 			}
-			if mSpec.Storage.WiredTiger.EngineConfig != nil {
-				if mSpec.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
+			if replset.Storage.WiredTiger.EngineConfig != nil {
+				if replset.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
 					args = append(args,
-						"--wiredTigerJournalCompressor="+string(*mSpec.Storage.WiredTiger.EngineConfig.JournalCompressor),
+						"--wiredTigerJournalCompressor="+string(*replset.Storage.WiredTiger.EngineConfig.JournalCompressor),
 					)
 				}
-				if mSpec.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
+				if replset.Storage.WiredTiger.EngineConfig.DirectoryForIndexes {
 					args = append(args, "--wiredTigerDirectoryForIndexes")
 				}
 			}
-			if mSpec.Storage.WiredTiger.IndexConfig != nil && mSpec.Storage.WiredTiger.IndexConfig.PrefixCompression {
+			if replset.Storage.WiredTiger.IndexConfig != nil && replset.Storage.WiredTiger.IndexConfig.PrefixCompression {
 				args = append(args, "--wiredTigerIndexPrefixCompression=true")
 			}
 		case api.StorageEngineInMemory:
 			args = append(args, fmt.Sprintf(
 				"--inMemorySizeGB=%.2f",
-				getWiredTigerCacheSizeGB(resources.Limits, mSpec.Storage.InMemory.EngineConfig.InMemorySizeRatio, false),
+				getWiredTigerCacheSizeGB(resources.Limits, replset.Storage.InMemory.EngineConfig.InMemorySizeRatio, false),
 			))
 		case api.StorageEngineMMAPv1:
-			if mSpec.Storage.MMAPv1.NsSize > 0 {
-				args = append(args, "--nssize="+strconv.Itoa(mSpec.Storage.MMAPv1.NsSize))
+			if replset.Storage.MMAPv1.NsSize > 0 {
+				args = append(args, "--nssize="+strconv.Itoa(replset.Storage.MMAPv1.NsSize))
 			}
-			if mSpec.Storage.MMAPv1.Smallfiles {
+			if replset.Storage.MMAPv1.Smallfiles {
 				args = append(args, "--smallfiles")
 			}
 		}
-		if mSpec.Storage.DirectoryPerDB {
+		if replset.Storage.DirectoryPerDB {
 			args = append(args, "--directoryperdb")
 		}
-		if mSpec.Storage.SyncPeriodSecs > 0 {
-			args = append(args, "--syncdelay="+strconv.Itoa(mSpec.Storage.SyncPeriodSecs))
+		if replset.Storage.SyncPeriodSecs > 0 {
+			args = append(args, "--syncdelay="+strconv.Itoa(replset.Storage.SyncPeriodSecs))
 		}
 	}
 
