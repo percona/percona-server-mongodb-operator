@@ -240,6 +240,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if cr.Spec.Sharding.Enabled && replset.Storage.Engine == StorageEngineMMAPv1 {
 			return errors.Errorf("%s storage engine is not supported for sharded cluster configuration", StorageEngineMMAPv1)
 		}
+		if cr.Spec.Sharding.Enabled && replset.ClusterRole == ClusterRoleConfigSvr && replset.Storage.Engine != StorageEngineWiredTiger {
+			return errors.Errorf("%s storage engine is not supported for config server replica set", replset.Storage.Engine)
+		}
 
 		if replset.LivenessProbe == nil {
 			replset.LivenessProbe = new(LivenessProbeExtended)
