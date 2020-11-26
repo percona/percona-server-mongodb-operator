@@ -73,19 +73,19 @@ required secrets can be set in ``deploy/cr.yaml`` under the
    * - User Purpose
      - Username Secret Key
      - Password Secret Key
-     
+
    * - Backup/Restore
      - MONGODB_BACKUP_USER
      - MONGODB_BACKUP_PASSWORD
-     
+
    * - Cluster Admin
      - MONGODB_CLUSTER_ADMIN_USER
      - MONGODB_CLUSTER_ADMIN_PASSWORD
-     
+
    * - Cluster Monitor
      - MONGODB_CLUSTER_MONITOR_USER
      - MONGODB_CLUSTER_MONITOR_PASSWORD
-     
+
    * - User Admin
      - MONGODB_USER_ADMIN_USER
      - MONGODB_USER_ADMIN_PASSWORD
@@ -94,9 +94,9 @@ required secrets can be set in ``deploy/cr.yaml`` under the
      - PMM_SERVER_USER
      - PMM_SERVER_PASSWORD
 
-`Backup/Restore` - MongoDB Role: `backup <https://docs.mongodb.com/manual/reference/built-in-roles/#backup>`__, `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__, `restore <https://docs.mongodb.com/manual/reference/built-in-roles/#restore>`__   
+`Backup/Restore` - MongoDB Role: `backup <https://docs.mongodb.com/manual/reference/built-in-roles/#backup>`__, `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__, `restore <https://docs.mongodb.com/manual/reference/built-in-roles/#restore>`__
 
-`Cluster Admin` - MongoDB Role: `clusterAdmin <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin>`__  
+`Cluster Admin` - MongoDB Role: `clusterAdmin <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin>`__
 
 `Cluster Monitor` - MongoDB Role: `clusterMonitor <https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor>`__
 
@@ -117,17 +117,17 @@ yourself, it should match the following simple format:
    metadata:
      name: my-cluster-name-secrets
    type: Opaque
-   data:
-     MONGODB_BACKUP_USER: YmFja3Vw
-     MONGODB_BACKUP_PASSWORD: YmFja3VwMTIzNDU2
-     MONGODB_CLUSTER_ADMIN_USER: Y2x1c3RlckFkbWlu
-     MONGODB_CLUSTER_ADMIN_PASSWORD: Y2x1c3RlckFkbWluMTIzNDU2
-     MONGODB_CLUSTER_MONITOR_USER: Y2x1c3Rlck1vbml0b3I=
-     MONGODB_CLUSTER_MONITOR_PASSWORD: Y2x1c3Rlck1vbml0b3IxMjM0NTY=
-     MONGODB_USER_ADMIN_USER: dXNlckFkbWlu
-     MONGODB_USER_ADMIN_PASSWORD: dXNlckFkbWluMTIzNDU2
-     PMM_SERVER_USER: cG1t
-     PMM_SERVER_PASSWORD: c3VwYXxefHBheno=
+   stringData:
+     MONGODB_BACKUP_USER: backup
+     MONGODB_BACKUP_PASSWORD: backup123456
+     MONGODB_CLUSTER_ADMIN_USER: clusterAdmin
+     MONGODB_CLUSTER_ADMIN_PASSWORD: clusterAdmin123456
+     MONGODB_CLUSTER_MONITOR_USER: clusterMonitor
+     MONGODB_CLUSTER_MONITOR_PASSWORD: clusterMonitor123456
+     MONGODB_USER_ADMIN_USER: userAdmin
+     MONGODB_USER_ADMIN_PASSWORD: userAdmin123456
+     PMM_SERVER_USER: pmm
+     PMM_SERVER_PASSWORD: supa|^|pazz
 
 The example above matches
 :ref:`what is shipped in deploy/secrets.yaml<users.development-mode>` which
@@ -135,9 +135,10 @@ contains default passwords. You should NOT use these in production, but they are
 present to assist in automated testing or simple use in a development
 environment.
 
-As you can see, because we use the ``data`` type in the Secrets object, all
-values for each key/value pair must be encoded in base64. To do this you can
-simply run ``echo -n "password" | base64`` in your local shell to get valid
+As you can see, because we use the ``stringData`` type in the Secrets object, all
+values for each key/value pair are stated in plain text format for the user convenience.
+If you want to update any field, you'll need to encode the value into base64 format.
+To do this you can simply run ``echo -n "password" | base64`` in your local shell to get valid
 values.
 
 .. note:: The operator creates and updates an additional Secrets object named
