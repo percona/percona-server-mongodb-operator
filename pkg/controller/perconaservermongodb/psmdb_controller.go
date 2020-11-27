@@ -665,6 +665,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	if err != nil {
 		return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
 	}
+	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, msDepl.Spec.Template.Labels, cr.Namespace, msDepl)
+	if err != nil {
+		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos deployment")
+	}
 
 	mongosSvc := psmdb.MongosService(cr)
 	err = setControllerReference(cr, &mongosSvc, r.scheme)
