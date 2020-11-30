@@ -10,7 +10,11 @@ Backup for
 MongoDB <https://github.com/percona/percona-backup-mongodb>`_ tool.
 
 Backup files are usually stored on `Amazon S3 or S3-compatible
-storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_.
+storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_:
+
+.. image:: backup-s3.png
+   :align: center
+   :alt: Backup on S3-compatible storage
 
 .. contents:: :local:
 
