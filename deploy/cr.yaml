@@ -33,9 +33,6 @@ spec:
 #      inMemory:
 #        engineConfig:
 #          inMemorySizeRatio: 0.9
-#      mmapv1:
-#        nsSize: 16
-#        smallfiles: false
 #      wiredTiger:
 #        engineConfig:
 #          cacheSizeRatio: 0.5
@@ -223,9 +220,6 @@ spec:
       inMemory:
         engineConfig:
           inMemorySizeRatio: 0.9
-      mmapv1:
-        nsSize: 16
-        smallfiles: false
       wiredTiger:
         engineConfig:
           cacheSizeRatio: 0.5

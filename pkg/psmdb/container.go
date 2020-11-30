@@ -207,13 +207,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 				"--inMemorySizeGB=%.2f",
 				getWiredTigerCacheSizeGB(resources.Limits, replset.Storage.InMemory.EngineConfig.InMemorySizeRatio, false),
 			))
-		case api.StorageEngineMMAPv1:
-			if replset.Storage.MMAPv1.NsSize > 0 {
-				args = append(args, "--nssize="+strconv.Itoa(replset.Storage.MMAPv1.NsSize))
-			}
-			if replset.Storage.MMAPv1.Smallfiles {
-				args = append(args, "--smallfiles")
-			}
 		}
 		if replset.Storage.DirectoryPerDB {
 			args = append(args, "--directoryperdb")
