@@ -39,7 +39,7 @@ var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mo
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
 	pods corev1.PodList, usersSecret *corev1.Secret, mongosPods []corev1.Pod) (mongoClusterState, error) {
 
-	if cr.Spec.Pause {
+	if replset.Size == 0 {
 		return clusterReady, nil
 	}
 
