@@ -3,9 +3,11 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -251,7 +253,28 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServer
 
 	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled &&
 		rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-		return loadBalancerServiceEndpoint(r.client, cr.Name+"-"+cr.Spec.Replsets[0].Name, cr.Namespace)
+		list := corev1.PodList{}
+		err := r.client.List(context.TODO(),
+			&list,
+			&client.ListOptions{
+				Namespace: cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(map[string]string{
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/instance":   cr.Name,
+					"app.kubernetes.io/replset":    rs.Name,
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+				}),
+			},
+		)
+		if err != nil {
+			return "", errors.Wrap(err, "list psmdb pods")
+		}
+		addrs, err := psmdb.GetReplsetAddrs(r.client, cr, rs, list.Items)
+		if err != nil {
+			return "", err
+		}
+		return strings.Join(addrs, ","), nil
 	}
 
 	return cr.Name + "-" + cr.Spec.Replsets[0].Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
