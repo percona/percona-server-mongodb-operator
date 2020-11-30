@@ -146,19 +146,21 @@ func newLockStore() lockStore {
 	}
 }
 
-func (l lockStore) Load(key string) (lock, bool) {
+func (l lockStore) LoadOrCreate(key string) lock {
 	l.mx.RLock()
 	defer l.mx.RUnlock()
 
 	val, ok := l.store[key]
-	return val, ok
-}
+	if !ok {
+		val = lock{
+			statusMutex: new(sync.Mutex),
+			updateSync:  new(int32),
+		}
 
-func (l lockStore) Store(key string, value lock) {
-	l.mx.Lock()
-	defer l.mx.Unlock()
+		l.store[key] = val
+	}
 
-	l.store[key] = value
+	return val
 }
 
 type lock struct {
@@ -185,14 +187,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	// As operator can handle a few clusters
 	// lock should be created per cluster to not lock cron jobs of other clusters
-	l, ok := r.lockers.Load(request.NamespacedName.String())
-	if !ok {
-		l = lock{
-			statusMutex: new(sync.Mutex),
-			updateSync:  new(int32),
-		}
-		r.lockers.Store(request.NamespacedName.String(), l)
-	}
+	l := r.lockers.LoadOrCreate(request.NamespacedName.String())
 
 	// PerconaServerMongoDB object is also accessed and changed by a version service's cron job (that runs concurrently)
 	l.statusMutex.Lock()

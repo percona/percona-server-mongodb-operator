@@ -38,22 +38,18 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 	}
 
 	if ok {
-		log.Info(fmt.Sprintf("remove job %s because of new %s", schedule.CronShedule, cr.Spec.UpgradeOptions.Schedule))
+		log.Info("remove job because of new", "old", schedule.CronShedule, "new", cr.Spec.UpgradeOptions.Schedule)
 		r.deleteEnsureVersion(cr, schedule.ID)
 	}
 
+	nn := types.NamespacedName{
+		Name:      cr.Name,
+		Namespace: cr.Namespace,
+	}
+
+	l := r.lockers.LoadOrCreate(nn.String())
+
 	id, err := r.crons.crons.AddFunc(cr.Spec.UpgradeOptions.Schedule, func() {
-		nn := types.NamespacedName{
-			Name:      cr.Name,
-			Namespace: cr.Namespace,
-		}
-
-		l, ok := r.lockers.Load(nn.String())
-		if !ok {
-			log.Error(nil, "failed to get lock for cluster", "cluster", nn.String())
-			return
-		}
-
 		l.statusMutex.Lock()
 		defer l.statusMutex.Unlock()
 
@@ -88,8 +84,9 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 		return err
 	}
 
-	log.Info(fmt.Sprintf("add new job (%s): %s", jobName(cr), cr.Spec.UpgradeOptions.Schedule))
-	r.crons.jobs[jobName(cr)] = Shedule{
+	jn := jobName(cr)
+	log.Info("add new job", "name", jn, "schedule", cr.Spec.UpgradeOptions.Schedule)
+	r.crons.jobs[jn] = Shedule{
 		ID:          int(id),
 		CronShedule: cr.Spec.UpgradeOptions.Schedule,
 	}
