@@ -24,7 +24,7 @@ import (
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
 	replset *api.ReplsetSpec, secret *corev1.Secret) error {
 
-	if cr.Spec.Pause {
+	if replset.Size == 0 {
 		return nil
 	}
 
