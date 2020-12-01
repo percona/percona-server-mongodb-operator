@@ -3,9 +3,11 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -153,6 +155,12 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
+	host, err := r.connectionEndpoint(cr)
+	if err != nil {
+		log.Error(err, "get psmdb connection endpoint")
+	}
+	cr.Status.Host = host
+
 	return r.writeStatus(cr)
 }
 
@@ -232,4 +240,61 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(rsSpec *api.ReplsetSpec, cluste
 	}
 
 	return status, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServerMongoDB) (string, error) {
+	if cr.Spec.Sharding.Enabled {
+		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.Enabled &&
+			mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+			return loadBalancerServiceEndpoint(r.client, cr.Name+"-mongos", cr.Namespace)
+		}
+		return cr.Name + "-mongos." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+	}
+
+	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled &&
+		rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+		list := corev1.PodList{}
+		err := r.client.List(context.TODO(),
+			&list,
+			&client.ListOptions{
+				Namespace: cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(map[string]string{
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/instance":   cr.Name,
+					"app.kubernetes.io/replset":    rs.Name,
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+				}),
+			},
+		)
+		if err != nil {
+			return "", errors.Wrap(err, "list psmdb pods")
+		}
+		addrs, err := psmdb.GetReplsetAddrs(r.client, cr, rs, list.Items)
+		if err != nil {
+			return "", err
+		}
+		return strings.Join(addrs, ","), nil
+	}
+
+	return cr.Name + "-" + cr.Spec.Replsets[0].Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+}
+
+func loadBalancerServiceEndpoint(client client.Client, serviceName, namespace string) (string, error) {
+	host := ""
+	srv := corev1.Service{}
+	err := client.Get(context.TODO(), types.NamespacedName{
+		Namespace: namespace,
+		Name:      serviceName,
+	}, &srv)
+	if err != nil {
+		return "", errors.Wrap(err, "get service")
+	}
+	for _, i := range srv.Status.LoadBalancer.Ingress {
+		host = i.IP
+		if len(i.Hostname) > 0 {
+			host = i.Hostname
+		}
+	}
+	return host, nil
 }
