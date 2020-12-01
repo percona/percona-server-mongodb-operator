@@ -46,7 +46,6 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 		initContainers[i].Resources.Requests = c.Resources.Requests
 	}
 
-	zero := intstr.FromInt(0)
 	return appsv1.DeploymentSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
@@ -72,10 +71,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 			},
 		},
 		Strategy: appsv1.DeploymentStrategy{
-			Type: appsv1.RollingUpdateDeploymentStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateDeployment{
-				MaxSurge: &zero,
-			},
+			Type: appsv1.RecreateDeploymentStrategyType,
 		},
 	}, nil
 }
