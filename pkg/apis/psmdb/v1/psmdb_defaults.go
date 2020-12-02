@@ -144,15 +144,17 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Sharding.ConfigsvrReplSet.ClusterRole = ClusterRoleConfigSvr
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
-			if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
-				cr.Spec.Sharding.Mongos.LivenessProbe = new(LivenessProbeExtended)
-				cr.Spec.Sharding.Mongos.LivenessProbe.Probe = corev1.Probe{
-					Handler: corev1.Handler{
-						TCPSocket: &corev1.TCPSocketAction{
-							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+			cr.Spec.Sharding.Mongos.LivenessProbe = new(LivenessProbeExtended)
+			cr.Spec.Sharding.Mongos.LivenessProbe.Probe = corev1.Probe{
+				Handler: corev1.Handler{
+					Exec: &corev1.ExecAction{
+						Command: []string{
+							"mongodb-healthcheck",
+							"k8s", "liveness",
+							"--component", "mongos",
 						},
 					},
-				}
+				},
 			}
 
 			if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
@@ -173,14 +175,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
-			if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
-				cr.Spec.Sharding.Mongos.ReadinessProbe = &corev1.Probe{
-					Handler: corev1.Handler{
-						TCPSocket: &corev1.TCPSocketAction{
-							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+			cr.Spec.Sharding.Mongos.ReadinessProbe = &corev1.Probe{
+				Handler: corev1.Handler{
+					Exec: &corev1.ExecAction{
+						Command: []string{
+							"mongodb-healthcheck",
+							"k8s", "readiness",
+							"--component", "mongos",
 						},
 					},
-				}
+				},
 			}
 			if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
