@@ -141,6 +141,16 @@ spec:
               value: "30100"
             - name: DB_PORT_MAX
               value: "30105"
+            - name: PMM_USER
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_USER
+                  name: internal-monitoring-users
+            - name: PMM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_PASSWORD
+                  name: internal-monitoring-users
           imagePullPolicy: Always
           name: pmm-client
           ports:
@@ -176,6 +186,8 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
+      serviceAccount: default
+      serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
         - name: monitoring-mongodb-keyfile
