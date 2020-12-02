@@ -135,27 +135,22 @@ type ReconcilePerconaServerMongoDB struct {
 }
 
 type lockStore struct {
-	store map[string]lock
+	store *sync.Map
 }
 
 func newLockStore() lockStore {
 	return lockStore{
-		store: make(map[string]lock),
+		store: new(sync.Map),
 	}
 }
 
 func (l lockStore) LoadOrCreate(key string) lock {
-	val, ok := l.store[key]
-	if !ok {
-		val = lock{
-			statusMutex: new(sync.Mutex),
-			updateSync:  new(int32),
-		}
+	val, _ := l.store.LoadOrStore(key, lock{
+		statusMutex: new(sync.Mutex),
+		updateSync:  new(int32),
+	})
 
-		l.store[key] = val
-	}
-
-	return val
+	return val.(lock)
 }
 
 type lock struct {
