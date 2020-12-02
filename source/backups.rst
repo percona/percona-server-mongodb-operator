@@ -58,7 +58,7 @@ file. This section contains three subsections:
 
 * ``storages`` contains data needed to access the S3-compatible cloud to store
   backups.
-* ``schedule`` subsection allows to actually schedule backups (the schedule is
+* ``tasks`` subsection allows to actually schedule backups (the schedule is
   specified in crontab format).
 
 Here is an example which uses Amazon S3 storage for backups:
@@ -78,10 +78,9 @@ Here is an example which uses Amazon S3 storage for backups:
            region: us-west-2
            credentialsSecret: my-cluster-name-backup-s3
      ...
-     schedule:
+     tasks:
       - name: "sat-night-backup"
         schedule: "0 0 * * 6"
-        keep: 3
         storageName: s3-us-west
      ...
 
@@ -94,7 +93,7 @@ is specific to the cloud provider. For example, using `Google Cloud <https://clo
    endpointUrl: https://storage.googleapis.com
 
 The options within these three subsections are further explained in the
-:ref:`operator.custom-resource-options`.
+:ref:`Operator Custom Resource options<operator.backup-section>`.
 
 One option which should be mentioned separately is
 ``credentialsSecret`` which is a `Kubernetes
@@ -104,7 +103,7 @@ create the secret object (``my-cluster-name-backup-s3`` in the last
 example).
 
 The schedule is specified in crontab format as explained in
-:ref:`operator.custom-resource-options`.
+:ref:`Operator Custom Resource options<operator.backup-section>`.
 
 Making on-demand backup
 -----------------------
