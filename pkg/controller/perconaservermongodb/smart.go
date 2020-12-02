@@ -24,6 +24,10 @@ import (
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
 	replset *api.ReplsetSpec, secret *corev1.Secret) error {
 
+	if replset.Size == 0 {
+		return nil
+	}
+
 	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
 		return nil
 	}
@@ -199,8 +203,8 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMo
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
-	if !cr.Spec.Sharding.Enabled {
+func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 {
 		return nil
 	}
 
