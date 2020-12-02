@@ -67,7 +67,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 
 	username := string(secret.Data[envMongoDBClusterAdminUser])
 	password := string(secret.Data[envMongoDBClusterAdminPassword])
-	err = stopBalancerIfNeeded(cr, username, password)
+	err = disableBalancerIfNeeded(cr, username, password)
 	if err != nil {
 		return errors.Wrap(err, "failed to stop balancer")
 	}
@@ -143,7 +143,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	return nil
 }
 
-func stopBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func disableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -171,7 +171,7 @@ func stopBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password strin
 			return errors.Wrap(err, "failed to stop balancer")
 		}
 
-		log.Info("balancer stopped")
+		log.Info("balancer disabled")
 	}
 
 	return nil
@@ -199,7 +199,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMo
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -288,7 +288,7 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 			return errors.Wrap(err, "failed to start balancer")
 		}
 
-		log.Info("balancer started")
+		log.Info("balancer enabled")
 	}
 
 	return nil
