@@ -40,6 +40,9 @@ spec:
           prefixCompression: true
   replsets:
   - name: rs0
+    serviceAccountName: percona-server-mongodb-operator-workload
+    annotations:
+      openshift.io/scc: privileged
     affinity:
       antiAffinityTopologyKey: none
     resources:

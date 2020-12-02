@@ -155,6 +155,8 @@ spec:
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
+      serviceAccount: default
+      serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
         - name: some-name-mongodb-keyfile
