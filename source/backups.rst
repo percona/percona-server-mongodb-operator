@@ -15,8 +15,6 @@ storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`
 .. figure:: assets/images/backup-s3.png
    :align: center
    :alt: Backup on S3-compatible storage
-   
-   Backup on S3-compatible storage
 
 .. contents:: :local:
 
