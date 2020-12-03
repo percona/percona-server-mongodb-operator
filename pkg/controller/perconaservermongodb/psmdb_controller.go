@@ -550,6 +550,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 				pmmC.Resources = res
 			}
 			if cr.CompareVersion("1.6.0") >= 0 {
+				pmmC.Lifecycle = &corev1.Lifecycle{
+					PreStop: &corev1.Handler{
+						Exec: &corev1.ExecAction{
+							Command: []string{"bash", "-c", "pmm-admin inventory remove node --force $(pmm-admin status --json | python -c \"import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])\")"},
+						},
+					},
+				}
 				clusterPmmEnvs := []corev1.EnvVar{
 					{
 						Name:  "CLUSTER_NAME",

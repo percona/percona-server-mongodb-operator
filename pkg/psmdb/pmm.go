@@ -13,7 +13,7 @@ const (
 )
 
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v170OrGreater bool) corev1.Container {
+func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v160OrGreater bool) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 
 	for i := 30100; i <= 30105; i++ {
@@ -143,7 +143,7 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 		}...)
 	}
 
-	if v170OrGreater {
+	if v160OrGreater {
 		pmm.LivenessProbe = &corev1.Probe{
 			InitialDelaySeconds: 60,
 			TimeoutSeconds:      5,
@@ -261,13 +261,13 @@ func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets string) []core
 
 func PMMAgentScript() []corev1.EnvVar {
 	pmmServerArgs := " --skip-connection-check --metrics-mode=push "
-	pmmServerArgs = pmmServerArgs + " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
-	pmmServerArgs = pmmServerArgs + "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
+	pmmServerArgs += " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
+	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
 	return []corev1.EnvVar{
 		{
 			Name:  "PMM_AGENT_PRERUN_SCRIPT",
-			Value: "pmm-admin status --wait=10s; pmm-admin add $(DB_TYPE)" + pmmServerArgs + "; pmm-admin annotate restart",
+			Value: "pmm-admin status --wait=10s; pmm-admin add $(DB_TYPE)" + pmmServerArgs + "; pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) restart",
 		},
 	}
 }
