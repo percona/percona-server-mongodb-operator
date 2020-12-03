@@ -69,6 +69,7 @@ Reference
    :maxdepth: 1
 
    operator
+   images
    api
    faq
    Release Notes <RN/index.rst>
