@@ -132,6 +132,7 @@ type PerconaServerMongoDBStatus struct {
 	BackupVersion      string                    `json:"backupVersion,omitempty"`
 	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
 	PMMVersion         string                    `json:"pmmVersion,omitempty"`
+	Host               string                    `json:"host,omitempty"`
 }
 
 type ConditionStatus string
@@ -172,6 +173,7 @@ type MultiAZ struct {
 	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
 	Tolerations         []corev1.Toleration      `json:"tolerations,omitempty"`
 	PriorityClassName   string                   `json:"priorityClassName,omitempty"`
+	ServiceAccountName  string                   `json:"serviceAccountName,omitempty"`
 	Annotations         map[string]string        `json:"annotations,omitempty"`
 	Labels              map[string]string        `json:"labels,omitempty"`
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
@@ -199,6 +201,7 @@ type ReplsetSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
 	MultiAZ
 }
 
