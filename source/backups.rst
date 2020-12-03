@@ -1,16 +1,18 @@
 Providing Backups
 =================
 
-Percona Server for MongoDB Operator allows doing cluster backup in two
+The Operator usually stores Server for MongoDB backups on `Amazon S3 or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_ outside the Kubernetes cluster:
+
+.. figure:: assets/images/backup-s3.png
+   :align: center
+   :alt: Backup on S3-compatible storage
+
+The Operator allows doing cluster backup in two
 ways. *Scheduled backups* are configured in the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_
 file to be executed automatically in proper time. *On-demand backups*
 can be done manually at any moment. Both ways use the `Percona
-Backup for
-MongoDB <https://github.com/percona/percona-backup-mongodb>`_ tool.
-
-Backup files are usually stored on `Amazon S3 or S3-compatible
-storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_.
+Backup for MongoDB <https://github.com/percona/percona-backup-mongodb>`_ tool.
 
 .. contents:: :local:
 
@@ -54,7 +56,7 @@ file. This section contains three subsections:
 
 * ``storages`` contains data needed to access the S3-compatible cloud to store
   backups.
-* ``schedule`` subsection allows to actually schedule backups (the schedule is
+* ``tasks`` subsection allows to actually schedule backups (the schedule is
   specified in crontab format).
 
 Here is an example which uses Amazon S3 storage for backups:
@@ -74,10 +76,9 @@ Here is an example which uses Amazon S3 storage for backups:
            region: us-west-2
            credentialsSecret: my-cluster-name-backup-s3
      ...
-     schedule:
+     tasks:
       - name: "sat-night-backup"
         schedule: "0 0 * * 6"
-        keep: 3
         storageName: s3-us-west
      ...
 
@@ -90,7 +91,7 @@ is specific to the cloud provider. For example, using `Google Cloud <https://clo
    endpointUrl: https://storage.googleapis.com
 
 The options within these three subsections are further explained in the
-:ref:`operator.custom-resource-options`.
+:ref:`Operator Custom Resource options<operator.backup-section>`.
 
 One option which should be mentioned separately is
 ``credentialsSecret`` which is a `Kubernetes
@@ -100,7 +101,7 @@ create the secret object (``my-cluster-name-backup-s3`` in the last
 example).
 
 The schedule is specified in crontab format as explained in
-:ref:`operator.custom-resource-options`.
+:ref:`Operator Custom Resource options<operator.backup-section>`.
 
 Making on-demand backup
 -----------------------
