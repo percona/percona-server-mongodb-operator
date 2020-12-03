@@ -73,7 +73,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		serverVersion: sv,
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
-		statusMutex:   new(sync.Mutex),
+		lockers:       newLockStore(),
 
 		clientcmd: cli,
 	}, nil
@@ -131,8 +131,31 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
 
+	lockers lockStore
+}
+
+type lockStore struct {
+	store *sync.Map
+}
+
+func newLockStore() lockStore {
+	return lockStore{
+		store: new(sync.Map),
+	}
+}
+
+func (l lockStore) LoadOrCreate(key string) lock {
+	val, _ := l.store.LoadOrStore(key, lock{
+		statusMutex: new(sync.Mutex),
+		updateSync:  new(int32),
+	})
+
+	return val.(lock)
+}
+
+type lock struct {
 	statusMutex *sync.Mutex
-	updateSync  int32
+	updateSync  *int32
 }
 
 const (
@@ -152,14 +175,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		RequeueAfter: r.reconcileIn,
 	}
 
+	// As operator can handle a few clusters
+	// lock should be created per cluster to not lock cron jobs of other clusters
+	l := r.lockers.LoadOrCreate(request.NamespacedName.String())
+
 	// PerconaServerMongoDB object is also accessed and changed by a version service's cron job (that runs concurrently)
-	r.statusMutex.Lock()
-	defer r.statusMutex.Unlock()
+	l.statusMutex.Lock()
+	defer l.statusMutex.Unlock()
 	// we have to be sure the reconcile loop will be run at least once
 	// in-between any version service jobs (hence any two vs jobs shouldn't be run sequentially).
 	// the version service job sets the state to  `updateWait` and the next job can be run only
 	// after the state was dropped to`updateDone` again
-	defer atomic.StoreInt32(&r.updateSync, updateDone)
+	defer atomic.StoreInt32(l.updateSync, updateDone)
 
 	// Fetch the PerconaServerMongoDB instance
 	cr := &api.PerconaServerMongoDB{}

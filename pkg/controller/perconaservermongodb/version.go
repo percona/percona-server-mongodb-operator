@@ -15,21 +15,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-const jobName = "ensure-version"
-
-func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(id int) {
+func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
 	r.crons.crons.Remove(cron.EntryID(id))
-	delete(r.crons.jobs, jobName)
+	delete(r.crons.jobs, jobName(cr))
 }
 
 func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
-	schedule, ok := r.crons.jobs[jobName]
+	schedule, ok := r.crons.jobs[jobName(cr)]
 	if cr.Spec.UpdateStrategy != v1.SmartUpdateStatefulSetStrategyType ||
 		cr.Spec.UpgradeOptions.Schedule == "" ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyNever ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyDiasbled {
 		if ok {
-			r.deleteEnsureVersion(schedule.ID)
+			r.deleteEnsureVersion(cr, schedule.ID)
 		}
 
 		return nil
@@ -40,16 +38,22 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 	}
 
 	if ok {
-		log.Info(fmt.Sprintf("remove job %s because of new %s", schedule.CronShedule, cr.Spec.UpgradeOptions.Schedule))
-		r.deleteEnsureVersion(schedule.ID)
+		log.Info("remove job because of new", "old", schedule.CronShedule, "new", cr.Spec.UpgradeOptions.Schedule)
+		r.deleteEnsureVersion(cr, schedule.ID)
 	}
 
-	log.Info(fmt.Sprintf("add new job: %s", cr.Spec.UpgradeOptions.Schedule))
-	id, err := r.crons.crons.AddFunc(cr.Spec.UpgradeOptions.Schedule, func() {
-		r.statusMutex.Lock()
-		defer r.statusMutex.Unlock()
+	nn := types.NamespacedName{
+		Name:      cr.Name,
+		Namespace: cr.Namespace,
+	}
 
-		if !atomic.CompareAndSwapInt32(&r.updateSync, updateDone, updateWait) {
+	l := r.lockers.LoadOrCreate(nn.String())
+
+	id, err := r.crons.crons.AddFunc(cr.Spec.UpgradeOptions.Schedule, func() {
+		l.statusMutex.Lock()
+		defer l.statusMutex.Unlock()
+
+		if !atomic.CompareAndSwapInt32(l.updateSync, updateDone, updateWait) {
 			return
 		}
 
@@ -80,12 +84,23 @@ func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(cr *api.PerconaServ
 		return err
 	}
 
-	r.crons.jobs[jobName] = Shedule{
+	jn := jobName(cr)
+	log.Info("add new job", "name", jn, "schedule", cr.Spec.UpgradeOptions.Schedule)
+	r.crons.jobs[jn] = Shedule{
 		ID:          int(id),
 		CronShedule: cr.Spec.UpgradeOptions.Schedule,
 	}
 
 	return nil
+}
+
+func jobName(cr *api.PerconaServerMongoDB) string {
+	jobName := "ensure-version"
+	nn := types.NamespacedName{
+		Name:      cr.Name,
+		Namespace: cr.Namespace,
+	}
+	return fmt.Sprintf("%s/%s", jobName, nn.String())
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
