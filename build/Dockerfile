@@ -15,7 +15,12 @@ RUN mkdir -p build/_output/bin \
        go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
            -o build/_output/bin/percona-server-mongodb-operator \
                cmd/manager/main.go \
-    && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator
+    && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator \
+    && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+       go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
+           -o build/_output/bin/mongodb-healthcheck \
+               cmd/mongodb-healthcheck/main.go \
+    && cp -r build/_output/bin/mongodb-healthcheck /usr/local/bin/mongodb-healthcheck
 
 FROM registry.access.redhat.com/ubi7/ubi-minimal AS ubi7
 RUN microdnf update && microdnf clean all
@@ -28,6 +33,7 @@ LABEL name="Percona Server for MongoDB Operator" \
 
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator
+COPY --from=go_builder /usr/local/bin/mongodb-healthcheck /usr/local/bin/mongodb-healthcheck
 COPY build/init-entrypoint.sh /init-entrypoint.sh
 COPY build/ps-entry.sh /ps-entry.sh
 

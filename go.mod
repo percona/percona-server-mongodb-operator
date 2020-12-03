@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/Percona-Lab/percona-version-service/api v0.0.0-20200714141734-e9fed619b55c
-	github.com/Robpol86/logrus-custom-formatter v1.0.2-0.20170624003940-ba99911cd0e4
+	github.com/Robpol86/logrus-custom-formatter v1.0.2-0.20170624003940-ba99911cd0e4 // indirect
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/aws/aws-sdk-go v1.31.13 // indirect
 	github.com/go-logr/logr v0.1.0
