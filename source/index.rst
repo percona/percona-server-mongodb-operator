@@ -70,4 +70,5 @@ Reference
 
    operator
    api
+   faq
    Release Notes <RN/index.rst>
