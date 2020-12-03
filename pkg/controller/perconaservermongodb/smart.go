@@ -203,7 +203,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMo
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 {
 		return nil
 	}
