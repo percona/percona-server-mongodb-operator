@@ -71,12 +71,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 
 	username := string(secret.Data[envMongoDBClusterAdminUser])
 	password := string(secret.Data[envMongoDBClusterAdminPassword])
-
-	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
-		err := stopBalancerIfNeeded(cr, username, password)
-		if err != nil {
-			return errors.Wrap(err, "failed to stop balancer")
-		}
+	err = disableBalancerIfNeeded(cr, username, password)
+	if err != nil {
+		return errors.Wrap(err, "failed to stop balancer")
 	}
 
 	list := corev1.PodList{}
@@ -150,7 +147,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	return nil
 }
 
-func stopBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func disableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -167,12 +164,19 @@ func stopBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password strin
 		}
 	}()
 
-	err = mongo.StopBalancer(context.TODO(), mongosSession)
+	run, err := mongo.IsBalancerRunning(context.TODO(), mongosSession)
 	if err != nil {
-		return errors.Wrap(err, "failed to stop balancer")
+		return errors.Wrap(err, "failed to check if balancer running")
 	}
 
-	log.Info("balancer stopped")
+	if run {
+		err := mongo.StopBalancer(context.TODO(), mongosSession)
+		if err != nil {
+			return errors.Wrap(err, "failed to stop balancer")
+		}
+
+		log.Info("balancer disabled")
+	}
 
 	return nil
 }
@@ -199,7 +203,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMo
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 {
 		return nil
 	}
@@ -214,14 +218,18 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 	}
 
 	msDepl := psmdb.MongosDeployment(cr)
-	err = setControllerReference(cr, msDepl, r.scheme)
-	if err != nil {
-		return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
-	}
 
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
-	if err != nil && !k8sErrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+	for {
+		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+		if err != nil && !k8sErrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+		}
+
+		if msDepl.ObjectMeta.Generation == msDepl.Status.ObservedGeneration {
+			break
+		}
+
+		time.Sleep(1 * time.Second)
 	}
 
 	if msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
@@ -284,7 +292,7 @@ func (r *ReconcilePerconaServerMongoDB) startBalancerIfNeeded(cr *api.PerconaSer
 			return errors.Wrap(err, "failed to start balancer")
 		}
 
-		log.Info("balancer started")
+		log.Info("balancer enabled")
 	}
 
 	return nil

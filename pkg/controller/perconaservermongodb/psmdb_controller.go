@@ -447,7 +447,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	username := string(secrets.Data[envMongoDBClusterAdminUser])
 	password := string(secrets.Data[envMongoDBClusterAdminPassword])
-	if err := r.startBalancerIfNeeded(cr, username, password); err != nil {
+	if err := r.enableBalancerIfNeeded(cr, username, password); err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to start balancer: %v", err)
 	}
 
