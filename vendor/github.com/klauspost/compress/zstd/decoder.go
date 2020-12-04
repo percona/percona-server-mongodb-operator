@@ -32,8 +32,9 @@ type Decoder struct {
 	// Current read position used for Reader functionality.
 	current decoderState
 
-	// Custom dictionaries
-	dicts map[uint32]struct{}
+	// Custom dictionaries.
+	// Always uses copies.
+	dicts map[uint32]dict
 
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
@@ -169,7 +170,12 @@ func (d *Decoder) Reset(r io.Reader) error {
 			println("*bytes.Buffer detected, doing sync decode, len:", bb.Len())
 		}
 		b := bb.Bytes()
-		dst, err := d.DecodeAll(b, nil)
+		var dst []byte
+		if cap(d.current.b) > 0 {
+			dst = d.current.b
+		}
+
+		dst, err := d.DecodeAll(b, dst[:0])
 		if err == nil {
 			err = io.EOF
 		}
@@ -290,9 +296,17 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	frame.bBuf = input
 
 	for {
+		frame.history.reset()
 		err := frame.reset(&frame.bBuf)
 		if err == io.EOF {
 			return dst, nil
+		}
+		if frame.DictionaryID != nil {
+			dict, ok := d.dicts[*frame.DictionaryID]
+			if !ok {
+				return nil, ErrUnknownDictionary
+			}
+			frame.history.setDict(&dict)
 		}
 		if err != nil {
 			return dst, err
@@ -388,6 +402,19 @@ func (d *Decoder) Close() {
 	d.current.err = ErrDecoderClosed
 }
 
+// RegisterDict will load a dictionary
+func (d *Decoder) RegisterDict(b []byte) error {
+	dc, err := loadDict(b)
+	if err != nil {
+		return err
+	}
+	if d.dicts == nil {
+		d.dicts = make(map[uint32]dict, 1)
+	}
+	d.dicts[dc.id] = *dc
+	return nil
+}
+
 // IOReadCloser returns the decoder as an io.ReadCloser for convenience.
 // Any changes to the decoder will be reflected, so the returned ReadCloser
 // can be reused along with the decoder.
@@ -456,9 +483,18 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 		br := readerWrapper{r: stream.r}
 	decodeStream:
 		for {
+			frame.history.reset()
 			err := frame.reset(&br)
 			if debug && err != nil {
 				println("Frame decoder returned", err)
+			}
+			if err == nil && frame.DictionaryID != nil {
+				dict, ok := d.dicts[*frame.DictionaryID]
+				if !ok {
+					err = ErrUnknownDictionary
+				} else {
+					frame.history.setDict(&dict)
+				}
 			}
 			if err != nil {
 				stream.output <- decodeOutput{
