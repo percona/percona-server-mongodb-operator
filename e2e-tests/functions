@@ -234,19 +234,20 @@ deploy_operator() {
 deploy_minio() {
     desc 'install Minio'
     helm del minio-service || :
-    helm repo remove stable || :
-    helm repo add stable https://charts.helm.sh/stable
+    helm repo remove minio || :
+    helm repo add minio https://helm.min.io/
     # kubectl_bin delete pvc minio-service --force
     retry 10 60 helm install minio-service \
+        --version 8.0.5 \
         --set accessKey=some-access-key \
         --set secretKey=some-secret-key \
         --set service.type=ClusterIP \
-        --set configPath=/tmp/.minio/ \
+        --set configPathmc=/tmp/.minio/ \
         --set persistence.size=2G \
         --set environment.MINIO_REGION=us-east-1 \
         --set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
         --set securityContext.enabled=false \
-        stable/minio
+        minio/minio
     MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
     wait_pod $MINIO_POD
 
