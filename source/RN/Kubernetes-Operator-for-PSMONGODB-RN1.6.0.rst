@@ -10,7 +10,7 @@
 New Features
 ================================================================================
 
-* :jirabug:`K8SPSMDB-273`: Support :ref:`sharding` by the Operator
+* :jirabug:`K8SPSMDB-273`: :ref:`sharding` support by the Operator
 
 Improvements
 ================================================================================
@@ -25,7 +25,7 @@ Bugs Fixed
 
 * :jirabug:`K8SPSMDB-271`: Cluster initialization was failing with CFSSL certificates
 * :jirabug:`K8SPSMDB-211`: Operator's documentation on TLS was outdated regarding the option to keep the name of the certificate generated for internal communications (Thanks to user abutch3r for reporting this issue)
-* :jirabug:`K8SPSMDB-268`: Certmanager not working
+* :jirabug:`K8SPSMDB-268`: TLS was not working with installed certmanager
 * :jirabug:`K8SPSMDB-261`: ``pause`` option in ``deploy/cr.yaml`` configuration file didn't work
 * :jirabug:`K8SPSMDB-292`: The automatic update didn't upgrade all clusters managed by the Operator
 * :jirabug:`K8SPSMDB-325`: The Operator was repeatedly flooding ping mongo errors in logs if the cluster was set on pause
