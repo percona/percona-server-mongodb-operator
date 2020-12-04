@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
+	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,9 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-
-	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -53,7 +52,7 @@ type PerconaServerMongoDBSpec struct {
 	Image                   string                               `json:"image,omitempty"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	RunUID                  int64                                `json:"runUid,omitempty"`
-	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations"`
+	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
 	Replsets                []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                 *SecretsSpec                         `json:"secrets,omitempty"`
@@ -64,11 +63,19 @@ type PerconaServerMongoDBSpec struct {
 	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	Sharding                Sharding                             `json:"sharding,omitempty"`
+	InitImage               string                               `json:"initImage,omitempty"`
 }
 
 const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 )
+
+type Sharding struct {
+	Enabled          bool         `json:"enabled"`
+	ConfigsvrReplSet *ReplsetSpec `json:"configsvrReplSet,omitempty"`
+	Mongos           *MongosSpec  `json:"mongos,omitempty"`
+}
 
 type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
@@ -85,20 +92,20 @@ type ReplsetStatus struct {
 	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
 	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
 
-	Initialized bool     `json:"initialized,omitempty"`
-	Size        int32    `json:"size"`
-	Ready       int32    `json:"ready"`
-	Status      AppState `json:"status,omitempty"`
-	Message     string   `json:"message,omitempty"`
+	Initialized  bool     `json:"initialized,omitempty"`
+	AddedAsShard bool     `json:"added_as_shard,omitempty"`
+	Size         int32    `json:"size"`
+	Ready        int32    `json:"ready"`
+	Status       AppState `json:"status,omitempty"`
+	Message      string   `json:"message,omitempty"`
 }
 
 type AppState string
 
 const (
-	AppStatePending AppState = "pending"
-	AppStateInit    AppState = "initializing"
-	AppStateReady   AppState = "ready"
-	AppStateError   AppState = "error"
+	AppStateInit  AppState = "initializing"
+	AppStateReady AppState = "ready"
+	AppStateError AppState = "error"
 )
 
 type UpgradeStrategy string
@@ -125,6 +132,7 @@ type PerconaServerMongoDBStatus struct {
 	BackupVersion      string                    `json:"backupVersion,omitempty"`
 	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
 	PMMVersion         string                    `json:"pmmVersion,omitempty"`
+	Host               string                    `json:"host,omitempty"`
 }
 
 type ConditionStatus string
@@ -165,6 +173,7 @@ type MultiAZ struct {
 	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
 	Tolerations         []corev1.Toleration      `json:"tolerations,omitempty"`
 	PriorityClassName   string                   `json:"priorityClassName,omitempty"`
+	ServiceAccountName  string                   `json:"serviceAccountName,omitempty"`
 	Annotations         map[string]string        `json:"annotations,omitempty"`
 	Labels              map[string]string        `json:"labels,omitempty"`
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
@@ -192,6 +201,7 @@ type ReplsetSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
 	MultiAZ
 }
 
@@ -245,21 +255,28 @@ type SecretsSpec struct {
 }
 
 type MongosSpec struct {
-	*ResourcesSpec `json:"resources,omitempty"`
-	Port           int32 `json:"port,omitempty"`
-	HostPort       int32 `json:"hostPort,omitempty"`
+	MultiAZ
+	Port                     int32                      `json:"port,omitempty"`
+	HostPort                 int32                      `json:"hostPort,omitempty"`
+	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
+	AuditLog                 *MongoSpecAuditLog         `json:"auditLog,omitempty"`
+	Expose                   Expose                     `json:"expose,omitempty"`
+	Size                     int32                      `json:"size,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	*ResourcesSpec           `json:"resources,omitempty"`
 }
 
 type MongodSpec struct {
-	Net                      *MongodSpecNet                `json:"net,omitempty"`
-	AuditLog                 *MongodSpecAuditLog           `json:"auditLog,omitempty"`
-	OperationProfiling       *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
-	Replication              *MongodSpecReplication        `json:"replication,omitempty"`
-	Security                 *MongodSpecSecurity           `json:"security,omitempty"`
-	SetParameter             *MongodSpecSetParameter       `json:"setParameter,omitempty"`
-	Storage                  *MongodSpecStorage            `json:"storage,omitempty"`
-	LoadBalancerSourceRanges []string                      `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations       map[string]string             `json:"serviceAnnotations,omitempty"`
+	Net                *MongodSpecNet                `json:"net,omitempty"`
+	AuditLog           *MongoSpecAuditLog            `json:"auditLog,omitempty"`
+	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
+	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
+	Security           *MongodSpecSecurity           `json:"security,omitempty"`
+	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
+	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
 }
 
 type MongodSpecNet struct {
@@ -292,6 +309,10 @@ type MongodSpecSetParameter struct {
 	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
 	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
 	CursorTimeoutMillis                   int `json:"cursorTimeoutMillis,omitempty"`
+}
+
+type MongosSpecSetParameter struct {
+	CursorTimeoutMillis int `json:"cursorTimeoutMillis,omitempty"`
 }
 
 type StorageEngine string
@@ -363,7 +384,7 @@ var (
 	AuditLogFormatJSON AuditLogFormat = "JSON"
 )
 
-type MongodSpecAuditLog struct {
+type MongoSpecAuditLog struct {
 	Destination AuditLogDestination `json:"destination,omitempty"`
 	Format      AuditLogFormat      `json:"format,omitempty"`
 	Filter      string              `json:"filter,omitempty"`
@@ -428,8 +449,10 @@ type Arbiter struct {
 }
 
 type Expose struct {
-	Enabled    bool               `json:"enabled"`
-	ExposeType corev1.ServiceType `json:"exposeType,omitempty"`
+	Enabled                  bool               `json:"enabled"`
+	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
+	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
+	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 }
 
 // ServerVersion represents info about k8s / openshift server version

@@ -2,6 +2,13 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 2
+  labels:
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: sec-context
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
   name: sec-context-rs0
   ownerReferences:
     - controller: true
@@ -22,7 +29,8 @@ spec:
   serviceName: sec-context-rs0
   template:
     metadata:
-      annotations: {}
+      annotations:
+        openshift.io/scc: privileged
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: sec-context
@@ -176,6 +184,8 @@ spec:
         supplementalGroups:
           - 1001
           - 1003
+      serviceAccount: percona-server-mongodb-operator-workload
+      serviceAccountName: percona-server-mongodb-operator-workload
       terminationGracePeriodSeconds: 30
       volumes:
         - name: sec-context-mongodb-keyfile

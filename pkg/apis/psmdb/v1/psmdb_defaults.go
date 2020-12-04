@@ -5,16 +5,19 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
 const DefaultDNSSuffix = "svc.cluster.local"
+
+// ConfigReplSetName is the only possible name for config replica set
+const ConfigReplSetName = "cfg"
+const WorkloadSA = "default"
 
 var (
 	defaultRunUID                   int64 = 1001
@@ -35,6 +38,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	err := cr.setVersion()
 	if err != nil {
 		return errors.Wrap(err, "set version")
+	}
+
+	if cr.Spec.Replsets == nil {
+		return errors.New("at least one replica set should be specified")
 	}
 
 	if cr.Spec.Image == "" {
@@ -85,36 +92,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
-	switch cr.Spec.Mongod.Storage.Engine {
-	case StorageEngineInMemory:
-		if cr.Spec.Mongod.Storage.InMemory == nil {
-			cr.Spec.Mongod.Storage.InMemory = &MongodSpecInMemory{}
-		}
-		if cr.Spec.Mongod.Storage.InMemory.EngineConfig == nil {
-			cr.Spec.Mongod.Storage.InMemory.EngineConfig = &MongodSpecInMemoryEngineConfig{}
-		}
-		if cr.Spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio == 0 {
-			cr.Spec.Mongod.Storage.InMemory.EngineConfig.InMemorySizeRatio = defaultInMemorySizeRatio
-		}
-	case StorageEngineWiredTiger:
-		if cr.Spec.Mongod.Storage.WiredTiger == nil {
-			cr.Spec.Mongod.Storage.WiredTiger = &MongodSpecWiredTiger{}
-		}
-		if cr.Spec.Mongod.Storage.WiredTiger.CollectionConfig == nil {
-			cr.Spec.Mongod.Storage.WiredTiger.CollectionConfig = &MongodSpecWiredTigerCollectionConfig{}
-		}
-		if cr.Spec.Mongod.Storage.WiredTiger.EngineConfig == nil {
-			cr.Spec.Mongod.Storage.WiredTiger.EngineConfig = &MongodSpecWiredTigerEngineConfig{}
-		}
-		if cr.Spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio == 0 {
-			cr.Spec.Mongod.Storage.WiredTiger.EngineConfig.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
-		}
-		if cr.Spec.Mongod.Storage.WiredTiger.IndexConfig == nil {
-			cr.Spec.Mongod.Storage.WiredTiger.IndexConfig = &MongodSpecWiredTigerIndexConfig{
-				PrefixCompression: true,
-			}
-		}
-	}
 	if cr.Spec.Mongod.OperationProfiling == nil {
 		cr.Spec.Mongod.OperationProfiling = &MongodSpecOperationProfiling{
 			Mode: defaultOperationProfilingMode,
@@ -141,7 +118,137 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		failureThresholdDefault = int32(4)
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
-	for _, replset := range cr.Spec.Replsets {
+
+	if cr.Spec.Sharding.Enabled {
+		if cr.Spec.Sharding.ConfigsvrReplSet == nil {
+			return errors.New("config replica set should be specified")
+		}
+
+		if cr.Spec.Sharding.Mongos == nil {
+			return errors.New("mongos should be specified")
+		}
+
+		if cr.Spec.Pause {
+			cr.Spec.Sharding.Mongos.Size = 0
+		}
+
+		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
+
+		if cr.Spec.Sharding.Mongos.Port == 0 {
+			cr.Spec.Sharding.Mongos.Port = 27017
+		}
+
+		for i := range cr.Spec.Replsets {
+			cr.Spec.Replsets[i].ClusterRole = ClusterRoleShardSvr
+		}
+
+		cr.Spec.Sharding.ConfigsvrReplSet.ClusterRole = ClusterRoleConfigSvr
+
+		if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
+			if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
+				cr.Spec.Sharding.Mongos.LivenessProbe = new(LivenessProbeExtended)
+				cr.Spec.Sharding.Mongos.LivenessProbe.Probe = corev1.Probe{
+					Handler: corev1.Handler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+						},
+					},
+				}
+			}
+
+			if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDeafult
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
+			}
+			if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
+			}
+		}
+
+		if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
+			if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
+				cr.Spec.Sharding.Mongos.ReadinessProbe = &corev1.Probe{
+					Handler: corev1.Handler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+						},
+					},
+				}
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = int32(3)
+			}
+			if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold == 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(8)
+			}
+		}
+
+		cr.Spec.Sharding.Mongos.reconcileOpts()
+	}
+
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		cr.Spec.Sharding.ConfigsvrReplSet.Arbiter.Enabled = false
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	for _, replset := range repls {
+		if replset.Storage == nil {
+			replset.Storage = cr.Spec.Mongod.Storage
+		}
+
+		switch replset.Storage.Engine {
+		case StorageEngineInMemory:
+			if replset.Storage.InMemory == nil {
+				replset.Storage.InMemory = &MongodSpecInMemory{}
+			}
+			if replset.Storage.InMemory.EngineConfig == nil {
+				replset.Storage.InMemory.EngineConfig = &MongodSpecInMemoryEngineConfig{}
+			}
+			if replset.Storage.InMemory.EngineConfig.InMemorySizeRatio == 0 {
+				replset.Storage.InMemory.EngineConfig.InMemorySizeRatio = defaultInMemorySizeRatio
+			}
+		case StorageEngineWiredTiger:
+			if replset.Storage.WiredTiger == nil {
+				replset.Storage.WiredTiger = &MongodSpecWiredTiger{}
+			}
+			if replset.Storage.WiredTiger.CollectionConfig == nil {
+				replset.Storage.WiredTiger.CollectionConfig = &MongodSpecWiredTigerCollectionConfig{}
+			}
+			if replset.Storage.WiredTiger.EngineConfig == nil {
+				replset.Storage.WiredTiger.EngineConfig = &MongodSpecWiredTigerEngineConfig{}
+			}
+			if replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio == 0 {
+				replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
+			}
+			if replset.Storage.WiredTiger.IndexConfig == nil {
+				replset.Storage.WiredTiger.IndexConfig = &MongodSpecWiredTigerIndexConfig{
+					PrefixCompression: true,
+				}
+			}
+		}
+
+		if replset.Storage.Engine == StorageEngineMMAPv1 {
+			return errors.Errorf("%s storage engine is not supported", StorageEngineMMAPv1)
+		}
+		if cr.Spec.Sharding.Enabled && replset.ClusterRole == ClusterRoleConfigSvr && replset.Storage.Engine != StorageEngineWiredTiger {
+			return errors.Errorf("%s storage engine is not supported for config server replica set", replset.Storage.Engine)
+		}
+
 		if replset.LivenessProbe == nil {
 			replset.LivenessProbe = new(LivenessProbeExtended)
 		}
@@ -197,6 +304,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 		if replset.ReadinessProbe.FailureThreshold == 0 {
 			replset.ReadinessProbe.FailureThreshold = int32(8)
+		}
+
+		if cr.CompareVersion("1.6.0") >= 0 && len(replset.ServiceAccountName) == 0 {
+			replset.ServiceAccountName = WorkloadSA
 		}
 
 		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)

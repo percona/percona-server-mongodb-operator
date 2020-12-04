@@ -77,6 +77,20 @@ type WriteConcern struct {
 	Journal      bool        `bson:"j,omitempty" json:"j,omitempty"`
 }
 
+type BalancerStatus struct {
+	Mode       string `json:"mode"`
+	OKResponse `bson:",inline"`
+}
+
+type ShardList struct {
+	Shards []struct {
+		ID    string `json:"_id"`
+		Host  string `json:"host"`
+		State int    `json:"state"`
+	} `json:"shards"`
+	OKResponse `bson:",inline"`
+}
+
 type Status struct {
 	Set                     string         `bson:"set" json:"set"`
 	Date                    time.Time      `bson:"date" json:"date"`

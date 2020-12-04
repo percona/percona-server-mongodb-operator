@@ -2,6 +2,13 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
+  labels:
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: monitoring
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
   name: monitoring-rs0
   ownerReferences:
     - controller: true
@@ -244,6 +251,8 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
+      serviceAccount: default
+      serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
         - name: monitoring-mongodb-keyfile

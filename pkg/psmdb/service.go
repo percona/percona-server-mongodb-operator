@@ -7,15 +7,14 @@ import (
 	"strings"
 	"time"
 
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/pkg/errors"
 )
 
 // Service returns a core/v1 API Service
@@ -36,7 +35,7 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        m.Name + "-" + replset.Name,
 			Namespace:   m.Namespace,
-			Annotations: m.Spec.Mongod.ServiceAnnotations,
+			Annotations: replset.Expose.ServiceAnnotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -48,7 +47,7 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			},
 			ClusterIP:                "None",
 			Selector:                 ls,
-			LoadBalancerSourceRanges: m.Spec.Mongod.LoadBalancerSourceRanges,
+			LoadBalancerSourceRanges: replset.Expose.LoadBalancerSourceRanges,
 		},
 	}
 }
@@ -207,7 +206,7 @@ func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, replset *api.Repls
 		return getExtAddr(cl, m.Namespace, pod)
 	}
 
-	return getAddr(m, pod.Name, replset.Name), nil
+	return GetAddr(m, pod.Name, replset.Name), nil
 }
 
 func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
@@ -224,7 +223,8 @@ func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, err
 	return hostname.String(), nil
 }
 
-func getAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
+// GetAddr returns replicaSet pod address in cluster
+func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }

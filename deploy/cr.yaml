@@ -5,6 +5,7 @@ metadata:
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
+#  pause: true
   crVersion: 1.6.0
   image: percona/percona-server-mongodb:4.2.8-8
   imagePullPolicy: Always
@@ -24,8 +25,23 @@ spec:
     image: percona/pmm-client:2.12.0
     serverHost: monitoring-service
   replsets:
+
   - name: rs0
     size: 3
+#    storage:
+#      engine: wiredTiger
+#      inMemory:
+#        engineConfig:
+#          inMemorySizeRatio: 0.9
+#      wiredTiger:
+#        engineConfig:
+#          cacheSizeRatio: 0.5
+#          directoryForIndexes: false
+#          journalCompressor: snappy
+#        collectionConfig:
+#          blockCompressor: snappy
+#        indexConfig:
+#          prefixCompression: true
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
 #      advanced:
@@ -38,7 +54,7 @@ spec:
 #                values:
 #                - e2e-az1
 #                - e2e-az2
-#    tolerations: 
+#    tolerations:
 #    - key: "node.alpha.kubernetes.io/unreachable"
 #      operator: "Exists"
 #      effect: "NoExecute"
@@ -63,6 +79,10 @@ spec:
     expose:
       enabled: false
       exposeType: LoadBalancer
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
+#      serviceAnnotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
     arbiter:
       enabled: false
       size: 1
@@ -78,7 +98,7 @@ spec:
 #                 values:
 #                 - e2e-az1
 #                 - e2e-az2
-#     tolerations: 
+#     tolerations:
 #     - key: "node.alpha.kubernetes.io/unreachable"
 #       operator: "Exists"
 #       effect: "NoExecute"
@@ -109,6 +129,82 @@ spec:
         resources:
           requests:
             storage: 3Gi
+
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      size: 3
+#      storage:
+#       engine: wiredTiger
+#       wiredTiger:
+#         engineConfig:
+#           cacheSizeRatio: 0.5
+#           directoryForIndexes: false
+#           journalCompressor: snappy
+#         collectionConfig:
+#           blockCompressor: snappy
+#         indexConfig:
+#           prefixCompression: true
+      volumeSpec:
+#       emptyDir: {}
+#       hostPath:
+#         path: /data
+#         type: Directory
+        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      expose:
+        # enabled: true
+        exposeType: ClusterIP
+#        loadBalancerSourceRanges:
+#          - 10.0.0.0/8
+#        serviceAnnotations:
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      auditLog:
+#        destination: file
+#        format: BSON
+#        filter: '{}'
+
   mongod:
     net:
       port: 27017
@@ -127,9 +223,6 @@ spec:
       inMemory:
         engineConfig:
           inMemorySizeRatio: 0.9
-      mmapv1:
-        nsSize: 16
-        smallfiles: false
       wiredTiger:
         engineConfig:
           cacheSizeRatio: 0.5
@@ -143,14 +236,11 @@ spec:
       mode: slowOp
       slowOpThresholdMs: 100
       rateLimit: 100
-#    loadBalancerSourceRanges:
-#      - 10.0.0.0/8
-#    serviceAnnotations:
-#      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http   
 #    auditLog:
 #      destination: file
 #      format: BSON
 #      filter: '{}'
+
   backup:
     enabled: true
     restartOnFailure: true

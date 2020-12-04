@@ -1,17 +1,24 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
-  name: upgrade
+  name: some-name
 spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
   backup:
-    enabled: false
+    enabled: true
     debug: true
     restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
+      aws-s3:
+        type: s3
+        s3:
+          credentialsSecret: aws-s3-secret
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb
       minio:
         type: s3
         s3:
@@ -19,6 +26,42 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
+      gcp-cs:
+        type: s3
+        s3:
+          credentialsSecret: gcp-cs-secret
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb
+          endpointUrl: https://storage.googleapis.com
+    tasks:
+    - name: weekly
+      enabled: true
+      schedule: "0 0 * * 0"
+      compressionType: gzip
+      storageName: aws-s3
+      
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      size: 3
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      expose:
+        enabled: false
+        exposeType: ClusterIP
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+        rateLimit: 100
+ 
   mongod:
     net:
       hostPort: 0
@@ -28,7 +71,7 @@ spec:
       rateLimit: 1
       slowOpThresholdMs: 100
     security:
-      enableEncryption: false
+      enableEncryption: true
       redactClientLogData: false
     setParameter:
       ttlMonitorSleepSecs: 60
@@ -51,6 +94,7 @@ spec:
           journalCompressor: snappy
         indexConfig:
           prefixCompression: true
+
   replsets:
   - name: rs0
     affinity:
@@ -71,4 +115,3 @@ spec:
   secrets:
     key: some-key
     users: some-users
-    ssl: some-name-ssl

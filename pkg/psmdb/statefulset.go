@@ -28,7 +28,10 @@ var secretFileMode int32 = 288
 
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string, ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string, initContainers []corev1.Container) (appsv1.StatefulSetSpec, error) {
+func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
+	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
+	initContainers []corev1.Container) (appsv1.StatefulSetSpec, error) {
+
 	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
@@ -92,17 +95,18 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Annotations: multiAZ.Annotations,
 			},
 			Spec: corev1.PodSpec{
-				SecurityContext:   replset.PodSecurityContext,
-				Affinity:          PodAffinity(multiAZ.Affinity, ls),
-				NodeSelector:      multiAZ.NodeSelector,
-				Tolerations:       multiAZ.Tolerations,
-				PriorityClassName: multiAZ.PriorityClassName,
-				RestartPolicy:     corev1.RestartPolicyAlways,
-				ImagePullSecrets:  m.Spec.ImagePullSecrets,
-				Containers:        []corev1.Container{c},
-				InitContainers:    initContainers,
-				Volumes:           volumes,
-				SchedulerName:     m.Spec.SchedulerName,
+				SecurityContext:    replset.PodSecurityContext,
+				Affinity:           PodAffinity(m, multiAZ.Affinity, ls),
+				NodeSelector:       multiAZ.NodeSelector,
+				Tolerations:        multiAZ.Tolerations,
+				PriorityClassName:  multiAZ.PriorityClassName,
+				ServiceAccountName: multiAZ.ServiceAccountName,
+				RestartPolicy:      corev1.RestartPolicyAlways,
+				ImagePullSecrets:   m.Spec.ImagePullSecrets,
+				Containers:         []corev1.Container{c},
+				InitContainers:     initContainers,
+				Volumes:            volumes,
+				SchedulerName:      m.Spec.SchedulerName,
 			},
 		},
 	}, nil
@@ -124,9 +128,18 @@ func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolume
 }
 
 // PodAffinity returns podAffinity options for the pod
-func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
+func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
 	if af == nil {
 		return nil
+	}
+
+	labelsCopy := make(map[string]string)
+	for k, v := range labels {
+		labelsCopy[k] = v
+	}
+
+	if cr.CompareVersion("1.6.0") < 0 {
+		delete(labelsCopy, "app.kubernetes.io/component")
 	}
 
 	switch {
@@ -137,18 +150,12 @@ func PodAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity
 			return nil
 		}
 
-		lablesCopy := make(map[string]string)
-		for k, v := range labels {
-			if k != "app.kubernetes.io/component" {
-				lablesCopy[k] = v
-			}
-		}
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 					{
 						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: lablesCopy,
+							MatchLabels: labelsCopy,
 						},
 						TopologyKey: *af.TopologyKey,
 					},

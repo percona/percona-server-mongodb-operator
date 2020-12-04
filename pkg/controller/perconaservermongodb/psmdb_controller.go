@@ -73,7 +73,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		serverVersion: sv,
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
-		statusMutex:   new(sync.Mutex),
+		lockers:       newLockStore(),
 
 		clientcmd: cli,
 	}, nil
@@ -131,8 +131,31 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
 
+	lockers lockStore
+}
+
+type lockStore struct {
+	store *sync.Map
+}
+
+func newLockStore() lockStore {
+	return lockStore{
+		store: new(sync.Map),
+	}
+}
+
+func (l lockStore) LoadOrCreate(key string) lock {
+	val, _ := l.store.LoadOrStore(key, lock{
+		statusMutex: new(sync.Mutex),
+		updateSync:  new(int32),
+	})
+
+	return val.(lock)
+}
+
+type lock struct {
 	statusMutex *sync.Mutex
-	updateSync  int32
+	updateSync  *int32
 }
 
 const (
@@ -152,14 +175,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		RequeueAfter: r.reconcileIn,
 	}
 
+	// As operator can handle a few clusters
+	// lock should be created per cluster to not lock cron jobs of other clusters
+	l := r.lockers.LoadOrCreate(request.NamespacedName.String())
+
 	// PerconaServerMongoDB object is also accessed and changed by a version service's cron job (that runs concurrently)
-	r.statusMutex.Lock()
-	defer r.statusMutex.Unlock()
+	l.statusMutex.Lock()
+	defer l.statusMutex.Unlock()
 	// we have to be sure the reconcile loop will be run at least once
 	// in-between any version service jobs (hence any two vs jobs shouldn't be run sequentially).
 	// the version service job sets the state to  `updateWait` and the next job can be run only
 	// after the state was dropped to`updateDone` again
-	defer atomic.StoreInt32(&r.updateSync, updateDone)
+	defer atomic.StoreInt32(l.updateSync, updateDone)
 
 	// Fetch the PerconaServerMongoDB instance
 	cr := &api.PerconaServerMongoDB{}
@@ -174,11 +201,19 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		// Error reading the object - requeue the request.
 		return rr, err
 	}
+
+	err = r.compareWithCurrentReplSets(cr)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	usersSecretName = cr.Spec.Secrets.Users
 	if cr.CompareVersion("1.5.0") >= 0 {
 		usersSecretName = internalPrefix + cr.Name + "-users"
 	}
+
 	isClusterLive := clusterInit
+
 	defer func() {
 		err = r.updateStatus(cr, err, isClusterLive)
 		if err != nil {
@@ -207,9 +242,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
-	var sfsTemplateAnnotations map[string]string
+
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	var sfsTemplateAnnotations, mongosTemplateAnnotations map[string]string
 	if cr.CompareVersion("1.5.0") >= 0 {
-		sfsTemplateAnnotations, err = r.reconcileUsers(cr)
+		sfsTemplateAnnotations, mongosTemplateAnnotations, err = r.reconcileUsers(cr, repls)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
 		}
@@ -222,12 +263,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	internalKey := cr.Name + "-mongodb-keyfile"
+	internalKey := psmdb.InternalKey(cr)
 	ikCreated, err := r.ensureSecurityKey(cr, internalKey, "mongodb-key", 768, true)
 	if err != nil {
 		err = errors.Wrapf(err, "ensure mongo Key %s", internalKey)
 		return reconcile.Result{}, err
 	}
+
 	if ikCreated {
 		reqLogger.Info("Created a new mongo key", "KeyName", internalKey)
 	}
@@ -262,12 +304,20 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	for i, replset := range cr.Spec.Replsets {
-		// multiple replica sets is not supported until sharding is
-		// added to the operator
-		if i > 0 {
-			reqLogger.Error(nil, "multiple replica sets is not yet supported, skipping replset %s", replset.Name)
+	shards := 0
+	for _, replset := range repls {
+		if (cr.Spec.Sharding.Enabled && replset.ClusterRole == api.ClusterRoleShardSvr) ||
+			!cr.Spec.Sharding.Enabled {
+			shards++
+		}
+
+		if shards > 1 {
+			reqLogger.Error(nil, "multiple replica sets is not supported, skipping replset %s", replset.Name)
 			continue
+		}
+
+		if cr.Spec.Sharding.Enabled && replset.ClusterRole != api.ClusterRoleConfigSvr && replset.Name == api.ConfigReplSetName {
+			return reconcile.Result{}, errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
 		}
 
 		matchLabels := map[string]string{
@@ -289,6 +339,24 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
+		}
+
+		mongosPods := corev1.PodList{}
+		err = r.client.List(context.TODO(),
+			&mongosPods,
+			&client.ListOptions{
+				Namespace: cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(map[string]string{
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/instance":   cr.Name,
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/component":  "mongos",
+				}),
+			},
+		)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return reconcile.Result{}, errors.Wrap(err, "get pods list for mongos")
 		}
 
 		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, secrets, sfsTemplateAnnotations)
@@ -362,7 +430,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
 		}
 
-		isClusterLive, err = r.reconcileCluster(cr, replset, *pods, secrets)
+		isClusterLive, err = r.reconcileCluster(cr, replset, *pods, secrets, mongosPods.Items)
 		if err != nil {
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
@@ -370,6 +438,27 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		if err := r.fetchVersionFromMongo(cr, replset, *pods, secrets); err != nil {
 			return rr, errors.Wrap(err, "update CR version")
 		}
+	}
+
+	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
+	}
+
+	username := string(secrets.Data[envMongoDBClusterAdminUser])
+	password := string(secrets.Data[envMongoDBClusterAdminPassword])
+	if err := r.enableBalancerIfNeeded(cr, username, password); err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to start balancer: %v", err)
+	}
+
+	err = r.deleteMongosIfNeeded(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "delete mongos")
+	}
+
+	err = r.deleteCfgIfNeeded(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "delete config server")
 	}
 
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
@@ -380,6 +469,41 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) compareWithCurrentReplSets(cr *api.PerconaServerMongoDB) error {
+	sfsList := appsv1.StatefulSetList{}
+	if err := r.client.List(context.TODO(), &sfsList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/instance": cr.Name,
+			}),
+		},
+	); err != nil {
+		return errors.Wrap(err, "failed to get statefulset list")
+	}
+
+	appliedNames := make(map[string]struct{}, len(cr.Spec.Replsets))
+	for _, v := range cr.Spec.Replsets {
+		appliedNames[cr.Name+"-"+v.Name] = struct{}{}
+	}
+
+	for _, v := range sfsList.Items {
+		if v.Name == cr.Name+"-"+api.ConfigReplSetName {
+			continue
+		}
+
+		if v.Labels["app.kubernetes.io/component"] == "arbiter" {
+			continue
+		}
+
+		if _, ok := appliedNames[v.Name]; !ok {
+			return errors.Errorf("removal is not supported yet, please return %s replset back", v.Name)
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerMongoDB, secretName, keyName string, keyLen int, setOwner bool) (created bool, err error) {
@@ -421,14 +545,180 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	return created, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	sfsName := cr.Name + "-" + api.ConfigReplSetName
+	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
+
+	err := r.client.Delete(context.TODO(), sfs)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
+	}
+
+	svc := corev1.Service{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &svc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to get config service")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+
+	err = r.client.Delete(context.TODO(), &svc)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete config service")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	msDepl := psmdb.MongosDeployment(cr)
+	err := r.client.Delete(context.TODO(), msDepl)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete mongos deployment")
+	}
+
+	mongosSvc := psmdb.MongosService(cr)
+	err = r.client.Delete(context.TODO(), &mongosSvc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete mongos service")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB, annotations map[string]string) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	uptodate, err := r.isAllSfsUpToDate(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+	}
+
+	if !uptodate {
+		return nil
+	}
+
+	msDepl := psmdb.MongosDeployment(cr)
+	err = setControllerReference(cr, msDepl, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
+	}
+
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+	}
+
+	opPod, err := r.operatorPod()
+	if err != nil {
+		return errors.Wrap(err, "failed to get operator pod")
+	}
+
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod)
+	if err != nil {
+		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
+	}
+
+	sslAnn, err := r.sslAnnotation(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get ssl annotations")
+	}
+	if deplSpec.Template.Annotations == nil {
+		deplSpec.Template.Annotations = make(map[string]string)
+	}
+	for k, v := range annotations {
+		deplSpec.Template.Annotations[k] = v
+	}
+	for k, v := range sslAnn {
+		deplSpec.Template.Annotations[k] = v
+	}
+
+	msDepl.Spec = deplSpec
+	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
+	if err != nil {
+		return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+	}
+	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, msDepl.Spec.Template.Labels, cr.Namespace, msDepl)
+	if err != nil {
+		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos deployment")
+	}
+
+	mongosSvc := psmdb.MongosService(cr)
+	err = setControllerReference(cr, &mongosSvc, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
+	}
+
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, &mongosSvc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get monogs service %s", mongosSvc.Name)
+	}
+
+	if !k8serrors.IsNotFound(err) && mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
+		err = r.client.Delete(context.TODO(), &mongosSvc)
+		if err != nil {
+			return errors.Wrapf(err, "delete service %s", mongosSvc.Name)
+		}
+	}
+
+	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
+
+	if k8serrors.IsNotFound(err) || mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
+		err = r.client.Create(context.TODO(), &mongosSvc)
+		if err != nil && !k8serrors.IsAlreadyExists(err) {
+			return errors.Wrapf(err, "create service %s", mongosSvc.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongoDB) (map[string]string, error) {
+	annotation := make(map[string]string)
+
+	is110 := cr.CompareVersion("1.1.0") >= 0
+	if is110 {
+		sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
+		if err != nil {
+			return nil, fmt.Errorf("get secret hash error: %v", err)
+		}
+		annotation["percona.com/ssl-hash"] = sslHash
+
+		sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("get secret hash error: %v", err)
+		} else if err == nil {
+			annotation["percona.com/ssl-internal-hash"] = sslInternalHash
+		}
+	}
+
+	return annotation, nil
+}
+
 // TODO: reduce cyclomatic complexity
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret, sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, secret *corev1.Secret,
+	sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
+
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
 	matchLabels["app.kubernetes.io/component"] = "mongod"
 	multiAZ := replset.MultiAZ
 	pdbspec := replset.PodDisruptionBudget
+
 	if arbiter {
 		sfsName += "-arbiter"
 		containerName += "-arbiter"
@@ -436,6 +726,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		matchLabels["app.kubernetes.io/component"] = "arbiter"
 		multiAZ = replset.Arbiter.MultiAZ
 		pdbspec = replset.Arbiter.PodDisruptionBudget
+	}
+
+	if replset.ClusterRole == api.ClusterRoleConfigSvr {
+		matchLabels["app.kubernetes.io/component"] = api.ConfigReplSetName
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -455,16 +749,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		if err != nil {
 			return nil, fmt.Errorf("failed to get operator pod: %v", err)
 		}
-		inits = append(inits, psmdb.EntrypointInitContainer(operatorPod.Spec.Containers[0].Image))
+		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits)
 	if err != nil {
 		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
 	}
-	sfsSpec.Template.Annotations = sfs.Spec.Template.Annotations
 	if sfsSpec.Template.Annotations == nil {
 		sfsSpec.Template.Annotations = make(map[string]string)
+	}
+	for k, v := range sfs.Spec.Template.Annotations {
+		sfsSpec.Template.Annotations[k] = v
 	}
 
 	for k, v := range sfsTemplateAnnotations {
@@ -589,25 +885,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		}
 	}
 
-	sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
+	sslAnn, err := r.sslAnnotation(cr)
 	if err != nil {
-		return nil, fmt.Errorf("get secret hash error: %v", err)
+		return nil, errors.Wrap(err, "failed to get ssl annotations")
 	}
-
-	is110 := cr.CompareVersion("1.1.0") >= 0
-	if is110 {
-		sfsSpec.Template.Annotations["percona.com/ssl-hash"] = sslHash
-	}
-	sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return nil, fmt.Errorf("get secret hash error: %v", err)
-	} else if err == nil {
-		if is110 {
-			sfsSpec.Template.Annotations["percona.com/ssl-internal-hash"] = sslInternalHash
-		}
+	for k, v := range sslAnn {
+		sfsSpec.Template.Annotations[k] = v
 	}
 
 	sfs.Spec = sfsSpec
+	if cr.CompareVersion("1.6.0") >= 0 {
+		sfs.Labels = matchLabels
+	}
+
 	if k8serrors.IsNotFound(errGet) {
 		err = r.client.Create(context.TODO(), sfs)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {

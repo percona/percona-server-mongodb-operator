@@ -6,18 +6,19 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
-
-	mgo "go.mongodb.org/mongo-driver/mongo"
-
-	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
+	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -35,7 +36,13 @@ const (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) (mongoClusterState, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
+	pods corev1.PodList, usersSecret *corev1.Secret, mongosPods []corev1.Pod) (mongoClusterState, error) {
+
+	if replset.Size == 0 {
+		return clusterReady, nil
+	}
+
 	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
 	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
 	session, err := r.mongoClient(cr, replset, pods, username, password)
@@ -65,6 +72,49 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			log.Error(err, "failed to close connection")
 		}
 	}()
+
+	if cr.Status.Replsets[replset.Name].Initialized &&
+		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
+		replset.ClusterRole == api.ClusterRoleShardSvr &&
+		len(mongosPods) > 0 {
+
+		conf := mongo.Config{
+			Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
+				":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
+			Username: username,
+			Password: password,
+		}
+
+		mongosSession, err := mongo.Dial(&conf)
+		if err != nil {
+			return clusterError, errors.Wrap(err, "failed to connect to mongos")
+		}
+
+		defer func() {
+			err := mongosSession.Disconnect(context.TODO())
+			if err != nil {
+				log.Error(err, "failed to close mongos connection")
+			}
+		}()
+
+		in, err := inShard(mongosSession, psmdb.GetAddr(cr, pods.Items[0].Name, replset.Name))
+		if err != nil {
+			return clusterError, errors.Wrap(err, "add shard")
+		}
+
+		if !in {
+			log.Info("adding rs to shard", "rs", replset.Name)
+
+			err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods[0])
+			if err != nil {
+				return clusterError, errors.Wrap(err, "add shard")
+			}
+
+			log.Info("added to shard", "rs", replset.Name)
+
+			cr.Status.Replsets[replset.Name].AddedAsShard = true
+		}
+	}
 
 	cnf, err := mongo.ReadConfig(context.TODO(), session)
 	if err != nil {
@@ -144,7 +194,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return clusterInit, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList, username, password string) (*mgo.Client, error) {
+func inShard(client *mgo.Client, podName string) (bool, error) {
+	shardList, err := mongo.ListShard(context.TODO(), client)
+	if err != nil {
+		return false, errors.Wrap(err, "unable to get shard list")
+	}
+
+	for _, shard := range shardList.Shards {
+		if strings.Contains(shard.Host, podName) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList,
+	username, password string) (*mgo.Client, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replSet, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
@@ -237,6 +303,42 @@ const (
 	)
 	`
 )
+
+func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
+	mongosPod corev1.Pod) error {
+
+	var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
+	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
+		return errors.New("rsPod is not redy")
+	}
+	if !isContainerAndPodRunning(mongosPod, "mongos") || !isPodReady(mongosPod) {
+		return errors.New("mongos pod is not ready")
+	}
+
+	host := psmdb.GetAddr(m, rspod.Name, replset.Name)
+
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf(
+			`
+				cat <<-EOF | mongo "mongodb://${MONGODB_CLUSTER_ADMIN_USER}:${MONGODB_CLUSTER_ADMIN_PASSWORD}@localhost"
+				sh.addShard("%s/%s")
+				EOF
+			`, replset.Name, host),
+	}
+
+	var errb, outb bytes.Buffer
+	err := r.clientcmd.Exec(&mongosPod, "mongos", cmd, nil, &outb, &errb, false)
+	if err != nil {
+		return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
+	}
+
+	if !re.Match(outb.Bytes()) {
+		return errors.New("failed to add shard")
+	}
+
+	return nil
+}
 
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
 // This must be ran from within the running container to utilise the MongoDB Localhost Exeception.

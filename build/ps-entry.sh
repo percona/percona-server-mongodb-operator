@@ -367,7 +367,9 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		echo 'MongoDB init process complete; ready for start up.'
 		echo
 	fi
+fi
 
+if [[ "$originalArgOne" == mongo* ]]; then
 	mongodHackedArgs=("$@")
 	MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
 	CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
