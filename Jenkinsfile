@@ -10,6 +10,7 @@ void CreateCluster(String CLUSTER_PREFIX) {
         """
    }
 }
+
 void ShutdownCluster(String CLUSTER_PREFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
@@ -21,6 +22,7 @@ void ShutdownCluster(String CLUSTER_PREFIX) {
         """
    }
 }
+
 void pushArtifactFile(String FILE_NAME) {
     echo "Push $FILE_NAME file to S3!"
 
