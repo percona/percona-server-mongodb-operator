@@ -13,7 +13,11 @@ deploy_operator
 kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
 
 IMAGE_MONGOD_TO_UPDATE=${IMAGE_MONGOD}
-MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+if [[ "${IMAGE_MONGOD}" == *"percona-server-mongodb-operator"* ]]; then
+    MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+else
+    MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+fi
 IMAGE_MONGOD="percona:psmdb-$MONGO_VER"
 
 desc 'create first PSMDB cluster'
