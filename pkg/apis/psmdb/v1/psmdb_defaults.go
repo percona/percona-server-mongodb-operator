@@ -150,7 +150,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				Handler: corev1.Handler{
 					Exec: &corev1.ExecAction{
 						Command: []string{
-							"mongodb-healthcheck",
+							"/data/db/mongodb-healthcheck",
 							"k8s", "liveness",
 							"--component", "mongos",
 						},
@@ -180,7 +180,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				Handler: corev1.Handler{
 					Exec: &corev1.ExecAction{
 						Command: []string{
-							"mongodb-healthcheck",
+							"/data/db/mongodb-healthcheck",
 							"k8s", "readiness",
 							"--component", "mongos",
 						},
@@ -279,6 +279,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					"k8s",
 					"liveness",
 				},
+			}
+			if cr.CompareVersion("1.6.0") >= 0 {
+				replset.LivenessProbe.Probe.Handler.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 			}
 		}
 
