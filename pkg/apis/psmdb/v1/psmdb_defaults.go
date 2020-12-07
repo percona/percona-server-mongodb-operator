@@ -194,10 +194,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)
 			}
 			if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds == 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = int32(3)
+				cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = int32(1)
 			}
 			if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold == 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(8)
+				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(3)
 			}
 		}
 
