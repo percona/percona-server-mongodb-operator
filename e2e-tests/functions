@@ -330,6 +330,7 @@ compare_kubectl() {
     local postfix="$2"
     local expected_result=${test_dir}/compare/${resource//\//_}${postfix}.yml
     local new_result="${tmp_dir}/${resource//\//_}.yml"
+    local expected_custom="$3"
 
     if [ "$OPENSHIFT" = 1 -a -f ${expected_result//.yml/-oc.yml} ]; then
         expected_result=${expected_result//.yml/-oc.yml}
@@ -365,7 +366,12 @@ compare_kubectl() {
         | yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
         | yq d - 'spec.volumeClaimTemplates.*.kind' \
         > ${new_result}
-    diff -u ${expected_result} ${new_result}
+
+    if [[ "$expected_custom" ]]; then
+        diff -u "$expected_custom" "$new_result"
+    else
+        diff -u "$expected_result" "$new_result"
+    fi
 }
 
 run_mongo() {

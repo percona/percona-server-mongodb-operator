@@ -27,6 +27,9 @@ desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl statefulset/$cluster-cfg
 
+sed -e "s#NAMESPACE#$namespace#" "${test_dir}/compare/deployment_some-name-mongos.yml" >"${tmp_dir}/deployment_some-name-mongos_new.yml"
+compare_kubectl deployment/$cluster-mongos "" "${tmp_dir}/deployment_some-name-mongos.yml"
+
 desc 'write data, read from all'
 run_mongos \
     'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
