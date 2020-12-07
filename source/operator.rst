@@ -21,6 +21,12 @@ file. This file contains the following spec sections:
      - kubernetes
      - Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set openshift on OpenShift 3.11+
 
+   * - pause
+     - boolean
+     - ``false``
+     - Pause/resume: setting it to ``true`` gracefully stops the cluster, and
+       setting it to ``false`` after shut down starts the cluster back.
+
    * - crVersion
      - string
      - ``{{{release}}}``
