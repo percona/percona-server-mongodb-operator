@@ -55,7 +55,7 @@ file. This file contains the following spec sections:
    * - allowUnsafeConfigurations
      - boolean
      - ``false``
-     - Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 replica set nodes, with odd number of replica set nodes and no arbiter, or without TLS/SSL certificates
+     - Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 replica set nodes, with odd number of replica set nodes and no arbiter, or without TLS/SSL certificates (if ``true``, unsafe parameters will be automatically changed to safe defaults)
 
    * - updateStrategy
      - string
