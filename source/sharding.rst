@@ -19,10 +19,10 @@ A MongoDB Sharding involves the following components:
   settings for the sharded database cluster.
 
 Sharding is controlled by the ``sharding`` section of the ``deploy/cr.yaml``
-configuration file.
+configuration file and is turned on by default.
 
-Sharding is enabled when the ``sharding.enabled`` key is set to ``true``, and
-it is turned on by default.
+To enable sharding, set the ``sharding.enabled`` key ``true`` (this will turn
+existing MongoDB replica set nodes into sharded ones).
 
 When the sharding is turned on, the Operator runs replica sets with config
 servers and mongos instances. Their numbers are controlled by 
