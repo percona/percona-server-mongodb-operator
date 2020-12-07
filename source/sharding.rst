@@ -28,4 +28,5 @@ When the sharding is turned on, the Operator runs replica sets with config
 servers and mongos instances. Their numbers are controlled by 
 ``configsvrReplSet.size`` and ``mongos.size`` keys respectively.
 
-.. note:: Config servers for now can properly work only with WiredTiger engine.
+.. note:: Config servers for now can properly work only with WiredTiger engine,
+   and sharded MongoDB nodes can use either WiredTiger or InMemory one.
