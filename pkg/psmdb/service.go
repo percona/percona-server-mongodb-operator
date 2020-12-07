@@ -229,6 +229,12 @@ func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }
 
+// GetAddr returns replicaSet pod address in cluster
+func GetAddrWithEnvNamespace(m *api.PerconaServerMongoDB, pod, replset string) string {
+	return strings.Join([]string{pod, m.Name + "-" + replset, "$(NAMESPACE)", m.Spec.ClusterServiceDNSSuffix}, ".") +
+		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
+}
+
 func getExtServices(cl client.Client, namespace, podName string) (*corev1.Service, error) {
 	svcMeta := &corev1.Service{}
 

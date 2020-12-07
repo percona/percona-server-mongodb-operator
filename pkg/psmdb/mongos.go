@@ -139,6 +139,14 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 				Name:  "MONGODB_PORT",
 				Value: strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port)),
 			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.namespace",
+					},
+				},
+			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
 			{
@@ -178,7 +186,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 	cfgInstanses := make([]string, 0, cfgRs.Size)
 	for i := 0; i < int(cfgRs.Size); i++ {
 		podName := cr.Name + "-" + cfgRs.Name + "-" + strconv.Itoa(i)
-		cfgInstanses = append(cfgInstanses, GetAddr(cr, podName, cfgRs.Name))
+		cfgInstanses = append(cfgInstanses, GetAddrWithEnvNamespace(cr, podName, cfgRs.Name))
 	}
 
 	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstanses, ","))
