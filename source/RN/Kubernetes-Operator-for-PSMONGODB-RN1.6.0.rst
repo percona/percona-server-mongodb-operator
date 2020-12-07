@@ -7,6 +7,9 @@
 :Date: December 2, 2020
 :Installation: `Installing Percona Kubernetes Operator for Percona Server for MongoDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
+Starting from this version, the already deprecated `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
+for Percona Server for MongoDB 3.6 and 4.0 is not supported by the Operator.
+
 New Features
 ================================================================================
 
@@ -20,7 +23,6 @@ Improvements
 * :jirabug:`K8SPSMDB-319`: Show Endpoint to connect to a MongoDB cluster in the ``kubectl get psmdb`` command output
 * :jirabug:`K8SPSMDB-257`: Store the Operator versiuon as a ``crVersion`` field in the ``deploy/cr.yaml`` configuration file
 * :jirabug:`K8SPSMDB-266`: Use plain-text passwords instead of base64-encoded ones when creating :ref:`users.system-users` secrets for simplicity reasons
-
 
 Bugs Fixed
 ================================================================================
