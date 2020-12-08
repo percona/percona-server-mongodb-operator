@@ -40,7 +40,7 @@ LABEL name="Percona Server for MongoDB Operator" \
 COPY --from=go_builder /usr/local/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator
 COPY --from=go_builder /licenses/* /licenses
 COPY LICENSE /licenses/
-COPY --from=go_builder /usr/local/bin/mongodb-healthcheck /usr/local/bin/mongodb-healthcheck
+COPY --from=go_builder /usr/local/bin/mongodb-healthcheck /mongodb-healthcheck
 COPY build/init-entrypoint.sh /init-entrypoint.sh
 COPY build/ps-entry.sh /ps-entry.sh
 # Mozilla licensed source code should be included

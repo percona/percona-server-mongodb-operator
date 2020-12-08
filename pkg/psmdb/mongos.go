@@ -134,6 +134,12 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 				ContainerPort: cr.Spec.Sharding.Mongos.Port,
 			},
 		},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "MONGODB_PORT",
+				Value: strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port)),
+			},
+		},
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{

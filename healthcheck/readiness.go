@@ -15,16 +15,34 @@
 package healthcheck
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/percona/pmgo"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 // ReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
-func ReadinessCheck(session pmgo.SessionManager) (State, error) {
+func ReadinessCheck(session *mgo.Session) (State, error) {
 	err := session.Ping()
+
 	if err != nil {
 		return StateFailed, fmt.Errorf("failed to get successful ping: %s", err)
 	}
+
 	return StateOk, nil
+}
+
+func MongosReadinessCheck(session *mgo.Session) error {
+	ss := ServerStatus{}
+
+	if err := session.Run(bson.D{{Name: "listDatabases", Value: 1}}, &ss); err != nil {
+		return fmt.Errorf("listDatabases returned error %v", err)
+	}
+
+	if ss.Ok == 0 {
+		return errors.New(ss.Errmsg)
+	}
+
+	return nil
 }
