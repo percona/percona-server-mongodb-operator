@@ -5,7 +5,7 @@ set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
-cluster="monitoring-rs0"
+cluster="monitoring"
 
 deploy_cert_manager
 create_namespace $namespace
@@ -27,29 +27,38 @@ kubectl_bin apply \
     -f $conf_dir/client.yml \
     -f $test_dir/conf/secrets.yml
 
-apply_cluster $test_dir/conf/$cluster.yml
+apply_cluster $test_dir/conf/$cluster-rs0.yml
 desc 'check if all 3 Pods started'
-wait_for_running $cluster 3
+wait_for_running $cluster-rs0 3
 
 # wait for prometheus
 sleep 90
 desc 'check if pmm-client container enabled'
-compare_kubectl statefulset/$cluster
-compare_kubectl service/$cluster
+compare_kubectl statefulset/$cluster-rs0
+compare_kubectl service/$cluster-rs0
+compare_kubectl statefulset/$cluster-cfg
+compare_kubectl deployment/$cluster-mongos
 
 desc 'check mongod metrics'
-get_metric_values node_boot_time_seconds $namespace-$cluster-1 admin:admin
-get_metric_values mongodb_connections $namespace-$cluster-1 admin:admin
+get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 admin:admin
+get_metric_values mongodb_connections $namespace-$cluster-rs0-1 admin:admin
+
+#desc 'check mongo config  metrics'
+get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 admin:admin
+get_metric_values mongodb_connections $namespace-$cluster-cfg-1 admin:admin
 
 #desc 'check mongos metrics'
-#get_metric_values node_boot_time ${cluster%%-rs0}-mongos-0
+MONGOS_POD_NAME=$(kubectl get pod -l app.kubernetes.io/component=mongos -o jsonpath="{.items[0].metadata.name}")
+get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME admin:admin
 #get_metric_values mongodb_mongos_connections ${cluster%%-rs0}-mongos-0
 
 # wait for QAN
 sleep 90
 
 desc 'check QAN data'
-get_qan20_values $cluster-0 admin:admin
+get_qan20_values $cluster-rs0-0 admin:admin
+get_qan20_values $cluster-cfg-0 admin:admin
+get_qan20_values $MONGOS_POD_NAME admin:admin
 
 helm delete monitoring
 destroy $namespace

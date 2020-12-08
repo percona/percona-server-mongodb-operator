@@ -26,6 +26,7 @@ wait_for_running $cluster-rs0 3
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl statefulset/$cluster-cfg
+compare_kubectl deployment/$cluster-mongos ""
 
 desc 'write data, read from all'
 run_mongos \

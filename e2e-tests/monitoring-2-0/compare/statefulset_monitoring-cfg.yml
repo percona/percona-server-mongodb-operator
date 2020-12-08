@@ -4,16 +4,16 @@ metadata:
   generation: 1
   labels:
     app.kubernetes.io/component: cfg
-    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/instance: monitoring
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: cfg
-  name: some-name-cfg
+  name: monitoring-cfg
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: some-name
+      name: monitoring
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -21,18 +21,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: cfg
-      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/instance: monitoring
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: cfg
-  serviceName: some-name-cfg
+  serviceName: monitoring-cfg
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: cfg
-        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/instance: monitoring
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
@@ -44,7 +44,7 @@ spec:
             - labelSelector:
                 matchLabels:
                   app.kubernetes.io/component: cfg
-                  app.kubernetes.io/instance: some-name
+                  app.kubernetes.io/instance: monitoring
                   app.kubernetes.io/managed-by: percona-server-mongodb-operator
                   app.kubernetes.io/name: percona-server-mongodb
                   app.kubernetes.io/part-of: percona-server-mongodb
@@ -63,32 +63,23 @@ spec:
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --configsvr
-            - --slowms=100
-            - --profile=1
+            - --profile=2
             - --rateLimit=1
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-            - --wiredTigerCollectionBlockCompressor=snappy
-            - --wiredTigerJournalCompressor=snappy
             - --wiredTigerIndexPrefixCompression=true
-            - --setParameter
-            - ttlMonitorSleepSecs=60
-            - --setParameter
-            - wiredTigerConcurrentReadTransactions=128
-            - --setParameter
-            - wiredTigerConcurrentWriteTransactions=128
           command:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: some-name
+              value: monitoring
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
               value: cfg
           envFrom:
             - secretRef:
-                name: internal-some-name-users
+                name: internal-monitoring-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -127,7 +118,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: some-name-mongodb-keyfile
+              name: monitoring-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -136,34 +127,127 @@ spec:
               name: ssl-internal
               readOnly: true
             - mountPath: /etc/mongodb-encryption
-              name: some-name-mongodb-encryption-key
+              name: monitoring-mongodb-encryption-key
               readOnly: true
           workingDir: /data/db
         - env:
-            - name: PBM_AGENT_MONGODB_USERNAME
+            - name: PMM_SERVER
+              value: monitoring-service
+            - name: DB_TYPE
+              value: mongodb
+            - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  key: MONGODB_BACKUP_USER
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_AGENT_MONGODB_PASSWORD
+                  key: MONGODB_CLUSTER_MONITOR_USER
+                  name: internal-monitoring-users
+            - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  key: MONGODB_BACKUP_PASSWORD
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_MONGODB_REPLSET
-              value: cfg
-            - name: PBM_MONGODB_PORT
+                  key: MONGODB_CLUSTER_MONITOR_PASSWORD
+                  name: internal-monitoring-users
+            - name: DB_HOST
+              value: localhost
+            - name: DB_CLUSTER
+              value: monitoring
+            - name: DB_PORT
               value: "27017"
-            - name: SHARDED
-              value: "TRUE"
+            - name: DB_PORT_MIN
+              value: "30100"
+            - name: DB_PORT_MAX
+              value: "30105"
+            - name: PMM_USER
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_USER
+                  name: internal-monitoring-users
+            - name: PMM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_PASSWORD
+                  name: internal-monitoring-users
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPASE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: PMM_AGENT_SERVER_ADDRESS
+              value: monitoring-service
+            - name: PMM_AGENT_LISTEN_PORT
+              value: "7777"
+            - name: PMM_AGENT_PORTS_MIN
+              value: "30100"
+            - name: PMM_AGENT_PORTS_MAX
+              value: "30105"
+            - name: PMM_AGENT_CONFIG_FILE
+              value: /usr/local/percona/pmm2/config/pmm-agent.yaml
+            - name: PMM_AGENT_SERVER_INSECURE_TLS
+              value: "1"
+            - name: PMM_AGENT_LISTEN_ADDRESS
+              value: 0.0.0.0
+            - name: PMM_AGENT_SETUP_NODE_NAME
+              value: $(POD_NAMESPASE)-$(POD_NAME)
+            - name: PMM_AGENT_SETUP
+              value: "1"
+            - name: PMM_AGENT_SETUP_FORCE
+              value: "1"
+            - name: PMM_AGENT_SETUP_NODE_TYPE
+              value: container
+            - name: PMM_AGENT_SETUP_METRICS_MODE
+              value: push
+            - name: PMM_AGENT_SERVER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_USER
+                  name: internal-monitoring-users
+            - name: PMM_AGENT_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_PASSWORD
+                  name: internal-monitoring-users
+            - name: CLUSTER_NAME
+              value: monitoring
+            - name: PMM_AGENT_PRERUN_SCRIPT
+              value: pmm-admin status --wait=10s; pmm-admin add $(DB_TYPE) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT); pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) restart
           imagePullPolicy: Always
-          name: backup-agent
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - pmm-admin inventory remove node --force $(pmm-admin status --json | python -c "import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])")
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /local/Status
+              port: 7777
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: pmm-client
+          ports:
+            - containerPort: 7777
+              protocol: TCP
+            - containerPort: 30100
+              protocol: TCP
+            - containerPort: 30101
+              protocol: TCP
+            - containerPort: 30102
+              protocol: TCP
+            - containerPort: 30103
+              protocol: TCP
+            - containerPort: 30104
+              protocol: TCP
+            - containerPort: 30105
+              protocol: TCP
           resources: {}
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
       dnsPolicy: ClusterFirst
@@ -186,26 +270,26 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: some-name-mongodb-keyfile
+        - name: monitoring-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-keyfile
-        - name: some-name-mongodb-encryption-key
+            secretName: monitoring-mongodb-keyfile
+        - name: monitoring-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-encryption-key
+            secretName: monitoring-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-ssl
+            secretName: monitoring-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: some-name-ssl-internal
+            secretName: monitoring-ssl-internal
   updateStrategy:
     rollingUpdate:
       partition: 0
