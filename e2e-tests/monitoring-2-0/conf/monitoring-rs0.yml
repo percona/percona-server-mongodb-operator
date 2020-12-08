@@ -52,5 +52,7 @@ spec:
     enabled: true
     image: -pmm
     serverHost: monitoring-service
+    mongosParams: "--environment=dev-mongos"
+    mongodParams: "--environment=dev-mongod"
   secrets:
     users: some-users
