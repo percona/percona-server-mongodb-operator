@@ -58,6 +58,9 @@ spec:
             - --clusterAuthMode=x509
           command:
             - /data/db/ps-entry.sh
+          env:
+            - name: MONGODB_PORT
+              value: "27017"
           envFrom:
             - secretRef:
                 name: some-users
@@ -67,12 +70,17 @@ spec:
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
+            exec:
+              command:
+                - /data/db/mongodb-healthcheck
+                - k8s
+                - liveness
+                - --component
+                - mongos
             failureThreshold: 4
             initialDelaySeconds: 60
             periodSeconds: 30
             successThreshold: 1
-            tcpSocket:
-              port: 27017
             timeoutSeconds: 5
           name: mongos
           ports:
@@ -80,12 +88,17 @@ spec:
               name: mongos
               protocol: TCP
           readinessProbe:
-            failureThreshold: 8
+            exec:
+              command:
+                - /data/db/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongos
+            failureThreshold: 3
             initialDelaySeconds: 10
-            periodSeconds: 3
+            periodSeconds: 1
             successThreshold: 1
-            tcpSocket:
-              port: 27017
             timeoutSeconds: 2
           resources:
             limits:

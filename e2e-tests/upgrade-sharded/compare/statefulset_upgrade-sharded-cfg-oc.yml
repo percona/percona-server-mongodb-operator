@@ -1,0 +1,221 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  creationTimestamp: "2020-11-25T18:32:08Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/component: cfg
+    app.kubernetes.io/instance: upgrade-sharded
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: cfg
+  name: upgrade-sharded-cfg
+  namespace: upgrade-sharded-1145
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1-6-0
+    controller: true
+    kind: PerconaServerMongoDB
+    name: upgrade-sharded
+    uid: 36486ee4-505d-4ae4-9b75-df358cd1f70c
+  resourceVersion: "934932"
+  selfLink: /apis/apps/v1/namespaces/upgrade-sharded-1145/statefulsets/upgrade-sharded-cfg
+  uid: 26e23f8e-6502-4033-ad44-93b34dd35025
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: cfg
+      app.kubernetes.io/instance: upgrade-sharded
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: cfg
+  serviceName: upgrade-sharded-cfg
+  template:
+    metadata:
+      annotations:
+        percona.com/ssl-hash: 61932d9e3b76e49581875e5e7bf83588
+        percona.com/ssl-internal-hash: ff1d16c56c9bae76a79b400d1bf720de
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/component: cfg
+        app.kubernetes.io/instance: upgrade-sharded
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: cfg
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: cfg
+                app.kubernetes.io/instance: upgrade-sharded
+                app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                app.kubernetes.io/name: percona-server-mongodb
+                app.kubernetes.io/part-of: percona-server-mongodb
+                app.kubernetes.io/replset: cfg
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - --bind_ip_all
+        - --auth
+        - --dbpath=/data/db
+        - --port=27017
+        - --replSet=cfg
+        - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslAllowInvalidCertificates
+        - --sslMode=preferSSL
+        - --clusterAuthMode=x509
+        - --configsvr
+        - --slowms=100
+        - --profile=1
+        - --rateLimit=100
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+        - --encryptionCipherMode=AES256-CBC
+        - --wiredTigerCollectionBlockCompressor=snappy
+        - --wiredTigerJournalCompressor=snappy
+        - --wiredTigerIndexPrefixCompression=true
+        - --setParameter
+        - ttlMonitorSleepSecs=60
+        - --setParameter
+        - wiredTigerConcurrentReadTransactions=128
+        - --setParameter
+        - wiredTigerConcurrentWriteTransactions=128
+        command:
+        - /data/db/ps-entry.sh
+        env:
+        - name: SERVICE_NAME
+          value: upgrade-sharded
+        - name: NAMESPACE
+          value: upgrade-sharded-1145
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_REPLSET
+          value: cfg
+        envFrom:
+        - secretRef:
+            name: internal-upgrade-sharded-users
+            optional: false
+        image: percona/percona-server-mongodb:4.2.8-8
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - mongodb-healthcheck
+            - k8s
+            - liveness
+            - --startupDelaySeconds
+            - "7200"
+          failureThreshold: 4
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: mongod
+        ports:
+        - containerPort: 27017
+          name: mongodb
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 8
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          tcpSocket:
+            port: 27017
+          timeoutSeconds: 2
+        resources: {}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: upgrade-sharded-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
+          readOnly: true
+        - mountPath: /etc/mongodb-encryption
+          name: my-cluster-name-mongodb-encryption-key
+          readOnly: true
+        workingDir: /data/db
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /init-entrypoint.sh
+        image: perconalab/percona-server-mongodb-operator:master
+        imagePullPolicy: Always
+        name: mongo-init
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: upgrade-sharded-mongodb-keyfile
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: upgrade-sharded-mongodb-keyfile
+      - name: my-cluster-name-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: my-cluster-name-mongodb-encryption-key
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: upgrade-sharded-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: upgrade-sharded-ssl-internal
+  updateStrategy:
+    type: OnDelete
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      creationTimestamp: null
+      name: mongod-data
+      namespace: upgrade-sharded-1145
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 3Gi
+      volumeMode: Filesystem
+    status:
+      phase: Pending
+status:
+  collisionCount: 0
+  currentReplicas: 3
+  currentRevision: upgrade-sharded-cfg-7d9488b6c4
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updateRevision: upgrade-sharded-cfg-7d9488b6c4
+  updatedReplicas: 3

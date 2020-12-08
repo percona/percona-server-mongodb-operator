@@ -289,11 +289,12 @@ pipeline {
                     steps {
                         CreateCluster('backups')
                         sleep 60
-                        runTest('upgrade', 'backups')
                         runTest('upgrade-consistency', 'backups')
                         runTest('demand-backup', 'backups')
                         runTest('scheduled-backup', 'backups')
                         runTest('demand-backup-sharded', 'backups')
+                        runTest('upgrade', 'backups')
+                        runTest('upgrade-sharded', 'backups')
                         ShutdownCluster('backups')
                     }
                 }
