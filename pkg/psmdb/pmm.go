@@ -5,6 +5,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -270,4 +271,40 @@ func PMMAgentScript() []corev1.EnvVar {
 			Value: "pmm-admin status --wait=10s; pmm-admin add $(DB_TYPE)" + pmmServerArgs + "; pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) restart",
 		},
 	}
+}
+
+// AddPMMContainer creates the container object for a pmm-client
+func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmsec corev1.Secret) (corev1.Container, error) {
+	_, okl := pmmsec.Data[PMMUserKey]
+	_, okp := pmmsec.Data[PMMPasswordKey]
+	is120 := cr.CompareVersion("1.2.0") >= 0
+
+	pmmC := PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0)
+	if is120 {
+		res, err := CreateResources(cr.Spec.PMM.Resources)
+		if err != nil {
+			return corev1.Container{}, errors.Wrap(err, "create resources")
+		}
+		pmmC.Resources = res
+	}
+	if cr.CompareVersion("1.6.0") >= 0 {
+		pmmC.Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"bash", "-c", "pmm-admin inventory remove node --force $(pmm-admin status --json | python -c \"import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])\")"},
+				},
+			},
+		}
+		clusterPmmEnvs := []corev1.EnvVar{
+			{
+				Name:  "CLUSTER_NAME",
+				Value: cr.Name,
+			},
+		}
+		pmmC.Env = append(pmmC.Env, clusterPmmEnvs...)
+		pmmAgentScriptEnv := PMMAgentScript()
+		pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
+	}
+
+	return pmmC, nil
 }
