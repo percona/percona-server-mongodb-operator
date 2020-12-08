@@ -51,6 +51,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 	for _, replset := range cr.Spec.Replsets {
 		certificateDNSNames = append(certificateDNSNames, getCertificateSans(cr, replset)...)
 	}
+	certificateDNSNames = append(certificateDNSNames, getShardingSans(cr)...)
 	owner, err := OwnerRef(cr, r.scheme)
 	if err != nil {
 		return err
@@ -158,6 +159,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 	for _, replset := range cr.Spec.Replsets {
 		certificateDNSNames = append(certificateDNSNames, getCertificateSans(cr, replset)...)
 	}
+	certificateDNSNames = append(certificateDNSNames, getShardingSans(cr)...)
 	caCert, tlsCert, key, err := tls.Issue(certificateDNSNames)
 	if err != nil {
 		return fmt.Errorf("create proxy certificate: %v", err)
@@ -207,6 +209,23 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 		return fmt.Errorf("create TLS internal secret: %v", err)
 	}
 	return nil
+}
+
+func getShardingSans(cr *api.PerconaServerMongoDB) []string {
+	return []string{
+		cr.Name + "-mongos",
+		cr.Name + "-mongos" + "." + cr.Namespace,
+		cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+		"*." + cr.Name + "-mongos",
+		"*." + cr.Name + "-mongos" + "." + cr.Namespace,
+		"*." + cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+		cr.Name + "-" + api.ConfigReplSetName,
+		cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace,
+		cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+		"*." + cr.Name + "-" + api.ConfigReplSetName,
+		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace,
+		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+	}
 }
 
 func getCertificateSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) []string {
