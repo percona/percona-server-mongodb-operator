@@ -12,6 +12,7 @@ fail() {
 }
 
 "$dir/upgrade/run" || fail "upgrade"
+"$dir/upgrade-sharded/run" || fail "upgrade-sharded"
 "$dir/upgrade-consistency/run" || fail "upgrade-consistency"
 "$dir/init-deploy/run" || fail "init-deploy"
 "$dir/limits/run" || fail "limits"
