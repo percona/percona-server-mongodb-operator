@@ -53,7 +53,7 @@ spec:
             - --port=27017
             - --sslAllowInvalidCertificates
             - --configdb
-            - cfg/some-name-cfg-0.some-name-cfg.$(NAMESPACE).svc.cluster.local:27017,some-name-cfg-1.some-name-cfg.$(NAMESPACE).svc.cluster.local:27017,some-name-cfg-2.some-name-cfg.$(NAMESPACE).svc.cluster.local:27017
+            - cfg/some-name-cfg-0.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-1.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-2.some-name-cfg.NAME_SPACE.svc.cluster.local:27017
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
           command:
