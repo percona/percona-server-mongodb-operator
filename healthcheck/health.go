@@ -70,7 +70,25 @@ func HealthCheck(session *mgo.Session, okMemberStates []status.MemberState) (Sta
 	return StateFailed, state, fmt.Errorf("member has unhealthy replication state: %s", state)
 }
 
-func HealthCheckLiveness(session *mgo.Session, startupDelaySeconds int64) (*status.MemberState, error) {
+func HealthCheckMongosLiveness(session *mgo.Session) error {
+	isMasterResp := IsMasterResp{}
+
+	if err := session.Run(bson.D{{Name: "isMaster", Value: 1}}, &isMasterResp); err != nil {
+		return fmt.Errorf("isMaster returned error %v", err)
+	}
+
+	if isMasterResp.Ok == 0 {
+		return errors.New(isMasterResp.Errmsg)
+	}
+
+	if isMasterResp.Msg != "isdbgrid" {
+		return errors.New("wrong msg")
+	}
+
+	return nil
+}
+
+func HealthCheckMongodLiveness(session *mgo.Session, startupDelaySeconds int64) (*status.MemberState, error) {
 	isMasterResp := IsMasterResp{}
 	if err := session.Run(bson.D{{Name: "isMaster", Value: 1}}, &isMasterResp); err != nil {
 		return nil, fmt.Errorf("isMaster returned error %v", err)
@@ -119,7 +137,8 @@ type ServerStatus struct {
 }
 
 type IsMasterResp struct {
-	IsMaster bool `bson:"ismaster" json:"ismaster"`
+	IsMaster bool   `bson:"ismaster" json:"ismaster"`
+	Msg      string `bson:"msg" json:"msg"`
 
 	Ok     int    `bson:"ok" json:"ok"`
 	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`

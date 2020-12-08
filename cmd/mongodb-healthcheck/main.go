@@ -23,7 +23,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/dcos"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/tool"
-	"github.com/percona/pmgo"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,7 +45,9 @@ func main() {
 
 	k8sCmd := app.Command("k8s", "Performs liveness check for MongoDB on Kubernetes")
 	livenessCmd := k8sCmd.Command("liveness", "Run a liveness check of MongoDB").Default()
+	_ = k8sCmd.Command("readiness", "Run a readiness check of MongoDB")
 	startupDelaySeconds := livenessCmd.Flag("startupDelaySeconds", "").Default("7200").Uint64()
+	component := k8sCmd.Flag("component", "").Default("mongod").String()
 
 	cnf := db.NewConfig(
 		app,
@@ -81,7 +82,6 @@ func main() {
 			log.Fatalf("Error connecting to mongodb: %s", err)
 			return
 		}
-
 	}
 
 	defer session.Close()
@@ -98,7 +98,7 @@ func main() {
 		log.Debugf("Member passed DC/OS health check with replication state: %s", memberState)
 	case "dcos readiness":
 		log.Debug("Running DC/OS readiness check")
-		state, err := healthcheck.ReadinessCheck(pmgo.NewSessionManager(session))
+		state, err := healthcheck.ReadinessCheck(session)
 		if err != nil {
 			log.Debug(err.Error())
 			session.Close()
@@ -106,13 +106,38 @@ func main() {
 		}
 		log.Debug("Member passed DC/OS readiness check")
 	case "k8s liveness":
-		log.Info("Running Kubernetes liveness check")
-		memberState, err := healthcheck.HealthCheckLiveness(session, int64(*startupDelaySeconds))
-		if err != nil {
-			log.Error(err.Error())
+		log.Infof("Running Kubernetes liveness check for %s", *component)
+		switch *component {
+		case "mongod":
+			memberState, err := healthcheck.HealthCheckMongodLiveness(session, int64(*startupDelaySeconds))
+			if err != nil {
+				log.Error(err.Error())
+				session.Close()
+				os.Exit(1)
+			}
+			log.Infof("Member passed Kubernetes liveness check with replication state: %s", memberState)
+		case "mongos":
+			err := healthcheck.HealthCheckMongosLiveness(session)
+			if err != nil {
+				log.Error(err.Error())
+				session.Close()
+				os.Exit(1)
+			}
+		}
+	case "k8s readiness":
+		log.Infof("Running Kubernetes readiness check for %s", *component)
+		switch *component {
+		case "mongod":
+			log.Error("readiness check for mongod is not implemented")
 			session.Close()
 			os.Exit(1)
+		case "mongos":
+			err := healthcheck.MongosReadinessCheck(session)
+			if err != nil {
+				log.Error(err.Error())
+				session.Close()
+				os.Exit(1)
+			}
 		}
-		log.Infof("Member passed Kubernetes liveness check with replication state: %s", memberState)
 	}
 }

@@ -43,8 +43,13 @@ desc 'check mongod metrics'
 get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 admin:admin
 get_metric_values mongodb_connections $namespace-$cluster-rs0-1 admin:admin
 
+#desc 'check mongo config  metrics'
+get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 admin:admin
+get_metric_values mongodb_connections $namespace-$cluster-cfg-1 admin:admin
+
 #desc 'check mongos metrics'
-#get_metric_values node_boot_time ${cluster%%-rs0}-mongos-0
+MONGOS_POD_NAME=$(kubectl get pod -l app.kubernetes.io/component=mongos -o jsonpath="{.items[0].metadata.name}")
+get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME admin:admin
 #get_metric_values mongodb_mongos_connections ${cluster%%-rs0}-mongos-0
 
 # wait for QAN
@@ -52,6 +57,8 @@ sleep 90
 
 desc 'check QAN data'
 get_qan20_values $cluster-rs0-0 admin:admin
+get_qan20_values $cluster-cfg-0 admin:admin
+get_qan20_values $MONGOS_POD_NAME admin:admin
 
 helm delete monitoring
 destroy $namespace
