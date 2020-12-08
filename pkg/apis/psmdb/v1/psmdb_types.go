@@ -88,6 +88,13 @@ type ReplsetMemberStatus struct {
 	Version string `json:"version,omitempty"`
 }
 
+type MongosStatus struct {
+	Size    int      `json:"size"`
+	Ready   int      `json:"ready"`
+	Status  AppState `json:"status,omitempty"`
+	Message string   `json:"message,omitempty"`
+}
+
 type ReplsetStatus struct {
 	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
 	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
@@ -127,6 +134,7 @@ type PerconaServerMongoDBStatus struct {
 	Message            string                    `json:"message,omitempty"`
 	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
 	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`
+	Mongos             *MongosStatus             `json:"mongos,omitempty"`
 	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
 	BackupStatus       AppState                  `json:"backup,omitempty"`
 	BackupVersion      string                    `json:"backupVersion,omitempty"`
@@ -146,11 +154,12 @@ const (
 type ClusterConditionType string
 
 const (
-	ClusterReady   ClusterConditionType = "ClusterReady"
-	ClusterInit    ClusterConditionType = "ClusterInitializing"
-	ClusterRSInit  ClusterConditionType = "ReplsetInitialized"
-	ClusterRSReady ClusterConditionType = "ReplsetReady"
-	ClusterError   ClusterConditionType = "Error"
+	ClusterReady       ClusterConditionType = "ClusterReady"
+	ClusterInit        ClusterConditionType = "ClusterInitializing"
+	ClusterRSInit      ClusterConditionType = "ReplsetInitialized"
+	ClusterRSReady     ClusterConditionType = "ReplsetReady"
+	ClusterMongosReady ClusterConditionType = "MongosReady"
+	ClusterError       ClusterConditionType = "Error"
 )
 
 type ClusterCondition struct {
