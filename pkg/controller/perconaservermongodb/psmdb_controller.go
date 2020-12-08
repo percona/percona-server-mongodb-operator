@@ -645,6 +645,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		deplSpec.Template.Annotations[k] = v
 	}
 
+	if cr.Spec.PMM.Enabled {
+		pmmsec := corev1.Secret{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: usersSecretName, Namespace: cr.Namespace}, &pmmsec)
+		if err != nil {
+			return errors.Wrapf(err, "check pmm secrets: %s", usersSecretName)
+		}
+
+		pmmC, err := psmdb.AddPMMContainer(cr, usersSecretName, pmmsec)
+		if err != nil {
+			return errors.Wrap(err, "failed to create a pmm-client container")
+		}
+		deplSpec.Template.Spec.Containers = append(
+			deplSpec.Template.Spec.Containers,
+			pmmC,
+		)
+	}
+
 	msDepl.Spec = deplSpec
 	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
 	if err != nil {
@@ -833,40 +850,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 				return nil, fmt.Errorf("check pmm secrets: %v", err)
 			}
 
-			_, okl := pmmsec.Data[psmdb.PMMUserKey]
-			_, okp := pmmsec.Data[psmdb.PMMPasswordKey]
-			is120 := cr.CompareVersion("1.2.0") >= 0
-
-			pmmC := psmdb.PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0)
-			if is120 {
-				res, err := psmdb.CreateResources(cr.Spec.PMM.Resources)
-				if err != nil {
-					return nil, fmt.Errorf("pmm container error: create resources error: %v", err)
-				}
-				pmmC.Resources = res
+			pmmC, err := psmdb.AddPMMContainer(cr, usersSecretName, pmmsec)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create a pmm-client container: %v", err)
 			}
-			if cr.CompareVersion("1.6.0") >= 0 {
-				pmmC.Lifecycle = &corev1.Lifecycle{
-					PreStop: &corev1.Handler{
-						Exec: &corev1.ExecAction{
-							Command: []string{"bash", "-c", "pmm-admin inventory remove node --force $(pmm-admin status --json | python -c \"import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])\")"},
-						},
-					},
-				}
-				clusterPmmEnvs := []corev1.EnvVar{
-					{
-						Name:  "CLUSTER_NAME",
-						Value: cr.Name,
-					},
-				}
-				pmmC.Env = append(pmmC.Env, clusterPmmEnvs...)
-				pmmAgentScriptEnv := psmdb.PMMAgentScript()
-				pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
-			}
-			sfsSpec.Template.Spec.Containers = append(
-				sfsSpec.Template.Spec.Containers,
-				pmmC,
-			)
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, pmmC)
 		}
 	}
 

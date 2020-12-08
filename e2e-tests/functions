@@ -364,6 +364,7 @@ compare_kubectl() {
         | yq d - '**.(name==PBM_AGENT_SERVER_ADDRESS)' \
         | yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
         | yq d - 'spec.volumeClaimTemplates.*.kind' \
+        | $sed "s/${namespace}/NAME_SPACE/g" \
         > ${new_result}
     diff -u ${expected_result} ${new_result}
 }
