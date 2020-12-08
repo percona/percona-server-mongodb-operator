@@ -1,12 +1,11 @@
 package psmdb
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -284,7 +283,7 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmse
 	if is120 {
 		res, err := CreateResources(cr.Spec.PMM.Resources)
 		if err != nil {
-			return corev1.Container{}, fmt.Errorf("pmm container error: create resources error: %v", err)
+			return corev1.Container{}, errors.Wrap(err, "create resources")
 		}
 		pmmC.Resources = res
 	}
