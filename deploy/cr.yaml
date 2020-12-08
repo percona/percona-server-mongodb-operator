@@ -22,7 +22,7 @@ spec:
     users: my-cluster-name-secrets
   pmm:
     enabled: false
-    image: percona/percona-server-mongodb-operator:1.5.0-pmm
+    image: percona/pmm-client:2.12.0
     serverHost: monitoring-service
   replsets:
 
@@ -135,17 +135,50 @@ spec:
 
     configsvrReplSet:
       size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
 #      storage:
-#       engine: wiredTiger
-#       wiredTiger:
-#         engineConfig:
-#           cacheSizeRatio: 0.5
-#           directoryForIndexes: false
-#           journalCompressor: snappy
-#         collectionConfig:
-#           blockCompressor: snappy
-#         indexConfig:
-#           prefixCompression: true
+#        engine: wiredTiger
+#        wiredTiger:
+#          engineConfig:
+#            cacheSizeRatio: 0.5
+#            directoryForIndexes: false
+#            journalCompressor: snappy
+#          collectionConfig:
+#            blockCompressor: snappy
+#          indexConfig:
+#            prefixCompression: true
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
       volumeSpec:
 #       emptyDir: {}
 #       hostPath:
@@ -194,7 +227,6 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        # enabled: true
         exposeType: ClusterIP
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
