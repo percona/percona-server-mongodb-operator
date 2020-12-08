@@ -108,6 +108,42 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
+	if cr.Spec.Sharding.Enabled {
+		mongosStatus, err := r.mongosStatus(cr.Name, cr.Namespace)
+		if err != nil {
+			return errors.Wrap(err, "get mongos status")
+		}
+
+		if cr.Status.Mongos == nil {
+			cr.Status.Mongos = &api.MongosStatus{}
+		}
+
+		if mongosStatus.Status != cr.Status.Mongos.Status {
+			if mongosStatus.Status == api.AppStateReady {
+				clusterCondition = api.ClusterCondition{
+					Status:             api.ConditionTrue,
+					Type:               api.ClusterMongosReady,
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				}
+			}
+
+			if mongosStatus.Status == api.AppStateError {
+				clusterCondition = api.ClusterCondition{
+					Status:             api.ConditionTrue,
+					Message:            mongosStatus.Message,
+					Reason:             "ErrorMongos",
+					Type:               api.ClusterError,
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				}
+			}
+			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+		}
+
+		cr.Status.Mongos = &mongosStatus
+	} else {
+		cr.Status.Mongos = nil
+	}
+
 	cr.Status.State = api.AppStateInit
 	if replsetsReady == len(repls) && clusterState == clusterReady {
 		clusterCondition = api.ClusterCondition{
@@ -209,6 +245,60 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(rsSpec *api.ReplsetSpec, cluste
 
 	status := api.ReplsetStatus{
 		Size:   rsSpec.Size,
+		Status: api.AppStateInit,
+	}
+
+	for _, pod := range list.Items {
+		for _, cond := range pod.Status.Conditions {
+			switch cond.Type {
+			case corev1.ContainersReady:
+				if cond.Status == corev1.ConditionTrue {
+					status.Ready++
+				} else if cond.Status == corev1.ConditionFalse {
+					for _, cntr := range pod.Status.ContainerStatuses {
+						if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
+							status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
+						}
+					}
+				}
+			case corev1.PodScheduled:
+				if cond.Reason == corev1.PodReasonUnschedulable &&
+					cond.LastTransitionTime.Time.Before(time.Now().Add(-1*time.Minute)) {
+					status.Status = api.AppStateError
+					status.Message = cond.Message
+				}
+			}
+		}
+	}
+
+	if status.Size == status.Ready {
+		status.Status = api.AppStateReady
+	}
+
+	return status, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) mongosStatus(clusterName, namespace string) (api.MongosStatus, error) {
+	list := corev1.PodList{}
+	err := r.client.List(context.TODO(),
+		&list,
+		&client.ListOptions{
+			Namespace: namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/name":       "percona-server-mongodb",
+				"app.kubernetes.io/instance":   clusterName,
+				"app.kubernetes.io/component":  "mongos",
+				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+				"app.kubernetes.io/part-of":    "percona-server-mongodb",
+			}),
+		},
+	)
+	if err != nil {
+		return api.MongosStatus{}, fmt.Errorf("get list: %v", err)
+	}
+
+	status := api.MongosStatus{
+		Size:   len(list.Items),
 		Status: api.AppStateInit,
 	}
 
