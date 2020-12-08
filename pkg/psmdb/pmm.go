@@ -14,7 +14,7 @@ const (
 )
 
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v160OrGreater bool) corev1.Container {
+func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v160OrGreater bool, customAdminParams string) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 
 	for i := 30100; i <= 30105; i++ {
@@ -156,13 +156,13 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 				},
 			},
 		}
-		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec.ServerHost, customLogin, secrets)...)
+		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec.ServerHost, customLogin, secrets, customAdminParams)...)
 	}
 
 	return pmm
 }
 
-func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets string) []corev1.EnvVar {
+func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets string, customAdminParams string) []corev1.EnvVar {
 	pmmAgentEnvs := []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -228,6 +228,10 @@ func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets string) []core
 			Name:  "PMM_AGENT_SETUP_METRICS_MODE",
 			Value: "push",
 		},
+		{
+			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
+			Value: customAdminParams,
+		},
 	}
 
 	if customLogin {
@@ -261,7 +265,7 @@ func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets string) []core
 }
 
 func PMMAgentScript() []corev1.EnvVar {
-	pmmServerArgs := " --skip-connection-check --metrics-mode=push "
+	pmmServerArgs := " $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push "
 	pmmServerArgs += " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
@@ -274,12 +278,12 @@ func PMMAgentScript() []corev1.EnvVar {
 }
 
 // AddPMMContainer creates the container object for a pmm-client
-func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmsec corev1.Secret) (corev1.Container, error) {
+func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmsec corev1.Secret, customAdminParams string) (corev1.Container, error) {
 	_, okl := pmmsec.Data[PMMUserKey]
 	_, okp := pmmsec.Data[PMMPasswordKey]
 	is120 := cr.CompareVersion("1.2.0") >= 0
 
-	pmmC := PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0)
+	pmmC := PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0, customAdminParams)
 	if is120 {
 		res, err := CreateResources(cr.Spec.PMM.Resources)
 		if err != nil {

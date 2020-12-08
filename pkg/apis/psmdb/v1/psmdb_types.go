@@ -162,10 +162,12 @@ type ClusterCondition struct {
 }
 
 type PMMSpec struct {
-	Enabled    bool           `json:"enabled,omitempty"`
-	ServerHost string         `json:"serverHost,omitempty"`
-	Image      string         `json:"image,omitempty"`
-	Resources  *ResourcesSpec `json:"resources,omitempty"`
+	Enabled      bool           `json:"enabled,omitempty"`
+	ServerHost   string         `json:"serverHost,omitempty"`
+	Image        string         `json:"image,omitempty"`
+	MongodParams string         `json:"mongodParams,omitempty"`
+	MongosParams string         `json:"mongosParams,omitempty"`
+	Resources    *ResourcesSpec `json:"resources,omitempty"`
 }
 
 type MultiAZ struct {
