@@ -652,7 +652,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 			return errors.Wrapf(err, "check pmm secrets: %s", usersSecretName)
 		}
 
-		pmmC, err := psmdb.AddPMMContainer(cr, usersSecretName, pmmsec)
+		customAdminParams := ""
+		if cr.Spec.PMM.MongosParams != "" {
+			customAdminParams = cr.Spec.PMM.MongosParams
+		}
+		pmmC, err := psmdb.AddPMMContainer(cr, usersSecretName, pmmsec, customAdminParams)
 		if err != nil {
 			return errors.Wrap(err, "failed to create a pmm-client container")
 		}
@@ -849,8 +853,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			if err != nil {
 				return nil, fmt.Errorf("check pmm secrets: %v", err)
 			}
-
-			pmmC, err := psmdb.AddPMMContainer(cr, usersSecretName, pmmsec)
+			customAdminParams := ""
+			if cr.Spec.PMM.MongodParams != "" {
+				customAdminParams = cr.Spec.PMM.MongodParams
+			}
+			pmmC, err := psmdb.AddPMMContainer(cr, usersSecretName, pmmsec, customAdminParams)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create a pmm-client container: %v", err)
 			}

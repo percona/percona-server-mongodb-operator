@@ -178,6 +178,8 @@ spec:
               value: container
             - name: PMM_AGENT_SETUP_METRICS_MODE
               value: push
+            - name: PMM_ADMIN_CUSTOM_PARAMS
+              value: --environment=dev-mongos
             - name: PMM_AGENT_SERVER_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -191,7 +193,7 @@ spec:
             - name: CLUSTER_NAME
               value: monitoring
             - name: PMM_AGENT_PRERUN_SCRIPT
-              value: pmm-admin status --wait=10s; pmm-admin add $(DB_TYPE) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT); pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) restart
+              value: pmm-admin status --wait=10s; pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT); pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) restart
           imagePullPolicy: Always
           lifecycle:
             preStop:
