@@ -169,6 +169,11 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.State = api.AppStateError
 	}
 
+	if cr.Status.State != api.AppStateError &&
+		cr.Status.Mongos != nil && cr.Status.Mongos.Status != api.AppStateReady {
+		cr.Status.State = cr.Status.Mongos.Status
+	}
+
 	if len(cr.Status.Conditions) == 0 {
 		cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
 	} else {
