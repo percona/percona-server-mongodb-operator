@@ -259,6 +259,7 @@ pipeline {
                         runTest('limits', 'scaling')
                         runTest('scaling', 'scaling')
                         runTest('security-context', 'scaling')
+                        runTest('rs-shard-migration', 'scaling')
                         ShutdownCluster('scaling')
                    }
                 }
