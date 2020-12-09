@@ -13,7 +13,9 @@ for Percona Server for MongoDB 3.6 and 4.0 is not supported by the Operator.
 New Features
 ================================================================================
 
-* :jirabug:`K8SPSMDB-273`: :ref:`sharding` support for now is limited by 1 replica set, but mongos entry point.
+* :jirabug:`K8SPSMDB-273`: Initial :ref:`sharding` support: for now it is limited
+   by one Replica Set, but it already provides ``mongos`` instance as a single
+   entry point
 * :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management<pmm>`
 
 Improvements
