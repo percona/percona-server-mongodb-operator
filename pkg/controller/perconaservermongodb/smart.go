@@ -71,7 +71,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 
 	username := string(secret.Data[envMongoDBClusterAdminUser])
 	password := string(secret.Data[envMongoDBClusterAdminPassword])
-	err = disableBalancerIfNeeded(cr, username, password)
+	err = r.disableBalancerIfNeeded(cr, username, password)
 	if err != nil {
 		return errors.Wrap(err, "failed to stop balancer")
 	}
@@ -147,9 +147,19 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	return nil
 }
 
-func disableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
+	}
+
+	msDepl := psmdb.MongosDeployment(cr)
+
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+	if k8sErrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrapf(err, "get mongos deployment %s", msDepl.Name)
 	}
 
 	mongosSession, err := mongosConn(cr, username, password)

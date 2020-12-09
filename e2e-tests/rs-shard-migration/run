@@ -1,0 +1,41 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+
+function main() {
+    create_namespace $namespace
+    deploy_operator
+
+    kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+    cluster="some-name"
+    CLUSTER_SIZE=3
+
+    desc 'create first PSMDB cluster'
+    spinup_psmdb ${cluster}-rs0 $conf_dir/${cluster}-rs0.yml
+    compare_kubectl "statefulset/${cluster}-rs0"
+    simple_data_check "${cluster}-rs0" ${CLUSTER_SIZE}
+
+    desc 'initiate migration from replicaset to sharded cluster'
+    kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"add","path":"/spec/sharding","value":{"configsvrReplSet":{"size":'${CLUSTER_SIZE}',"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},"enabled":true,"mongos":{"size":1,"expose":{"exposeType":"ClusterIP"}}}}]'
+    sleep 10
+    wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
+    wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
+    wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+    # Migration to shards wipes out rs users. Let's recreate them
+    run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+                "userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+
+    simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
+
+    desc 'cleanup'
+    kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
+    kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
+    kubectl_bin delete pvc --all
+    destroy "${namespace}"
+}
+
+main
