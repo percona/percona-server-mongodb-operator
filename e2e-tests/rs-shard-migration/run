@@ -31,6 +31,13 @@ function main() {
 
     simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
+    desc 'Get back from sharded cluster to replicaset'
+    kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
+    sleep 10
+    wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "true"
+
+    simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
+
     desc 'cleanup'
     kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
     kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
