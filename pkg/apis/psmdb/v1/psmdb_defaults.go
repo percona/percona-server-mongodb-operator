@@ -202,6 +202,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		cr.Spec.Sharding.Mongos.reconcileOpts()
+
+		if cr.Spec.Sharding.Mongos.Expose.ExposeType == "" {
+			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
+		}
 	}
 
 	repls := cr.Spec.Replsets
