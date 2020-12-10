@@ -7,8 +7,9 @@ spec:
   image:
   mongod:
     operationProfiling:
-      mode: all
-      rateLimit: 1
+      mode: slowOp
+      slowOpThresholdMs: 100
+      rateLimit: 100
     security:
       enableEncryption: true
   replsets:
