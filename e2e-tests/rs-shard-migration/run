@@ -6,6 +6,20 @@ set -o xtrace
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 
+function get_lastCommitedOpTime() {
+    local cluster_name=$1
+    local namespace=$2
+    local isSharded=$3
+
+    if [[ ${isSharded} == true ]]; then
+        echo $(run_mongos 'db.isMaster().lastCommittedOpTime' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
+        return
+    else
+        echo $(run_mongo 'db.isMaster().lastCommittedOpTime' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
+        return
+    fi
+}
+
 function main() {
     create_namespace $namespace
     deploy_operator
@@ -20,7 +34,7 @@ function main() {
     simple_data_check "${cluster}-rs0" ${CLUSTER_SIZE}
 
     desc 'initiate migration from replicaset to sharded cluster'
-    kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"add","path":"/spec/sharding","value":{"configsvrReplSet":{"size":'${CLUSTER_SIZE}',"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},"enabled":true,"mongos":{"size":1,"expose":{"exposeType":"ClusterIP"}}}}]'
+    kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"add","path":"/spec/sharding","value":{"configsvrReplSet":{"size":'${CLUSTER_SIZE}',"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},"enabled":true,"mongos":{"size":1}}}]'
     sleep 10
     wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
     wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
@@ -31,12 +45,24 @@ function main() {
 
     simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
+    lastCommitedOpTime=$(get_lastCommitedOpTime ${cluster} ${namespace} "true")
+    if [[ -z "${lastCommitedOpTime}" ]]; then
+        echo "Sharded cluster does not work properly"
+        exit 1
+    fi
+
     desc 'Get back from sharded cluster to replicaset'
     kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
     sleep 10
     wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "true"
 
     simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
+
+    lastCommitedOpTime=$(get_lastCommitedOpTime ${cluster} ${namespace})
+    if [[ ! -z "${lastCommitedOpTime}" ]]; then
+        echo "Replicaset cluster does not work properly"
+        exit 1
+    fi
 
     desc 'cleanup'
     kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
