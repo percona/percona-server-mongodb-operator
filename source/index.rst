@@ -60,6 +60,7 @@ Management
    private
    update
    scaling
+   monitoring
    debug
 
 Reference
