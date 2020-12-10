@@ -7,7 +7,7 @@ spec:
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
   crVersion: 1.6.0
-  image: percona/percona-server-mongodb:4.2.8-8
+  image: percona/percona-server-mongodb:4.4.2-4
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -278,7 +278,7 @@ spec:
   backup:
     enabled: true
     restartOnFailure: true
-    image: percona/percona-server-mongodb-operator:1.5.0-backup
+    image: percona/percona-server-mongodb-operator:1.6.0-backup
     serviceAccountName: percona-server-mongodb-operator
 #    resources:
 #      limits:
