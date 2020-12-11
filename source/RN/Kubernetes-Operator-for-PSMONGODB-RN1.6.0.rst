@@ -27,7 +27,7 @@ Bugs Fixed
 ================================================================================
 
 * :jirabug:`K8SPSMDB-271`: Fix cluster initialization with CloudFlare SSL certificates
-* :jirabug:`K8SPSMDB-268`: Fix suppot of TLS certificates issued by `certmanager <https://github.com/jetstack/cert-manager>`_
+* :jirabug:`K8SPSMDB-268`: Fix support of TLS certificates issued by `cert-manager <https://github.com/jetstack/cert-manager>`_
 * :jirabug:`K8SPSMDB-261`: Fix a bug in cluster pause/resume functionality
 * :jirabug:`K8SPSMDB-292`: Fix a bug due to which not all clusters managed by the Operator were upgraded by the automatic update
 
