@@ -4,7 +4,7 @@
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.6.0
 ================================================================================
 
-:Date: December 2, 2020
+:Date: December 17, 2020
 :Installation: `Installing Percona Kubernetes Operator for Percona Server for MongoDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
 Starting from this version, the already deprecated `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
@@ -16,7 +16,7 @@ New Features
 * :jirabug:`K8SPSMDB-273`: Initial :ref:`sharding` support: for now it is limited
    by one Replica Set, but it already provides ``mongos`` instance as a single
    entry point
-* :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management<pmm>`
+* :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management<operator.monitoring>`
 
 Improvements
 ================================================================================
