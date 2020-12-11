@@ -39,13 +39,28 @@ Kubernetes-based environment:
       ``monitoring-service`` by default) is the same as value specified
       for the ``name`` parameter on the previous step, but with an added
       additional ``-service`` suffix.
-   -  check that ``PMM_USER`` key in the
+   -  check that ``PMM_SERVER_USER`` key in the
       `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
       secrets file contains your PMM Server user name (``admin`` by default).
-   -  make sure the ``PMM_PASSWORD`` key in the
+   -  make sure the ``PMM_SERVER_PASSWORD`` key in the
       `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
       secrets file contains password specified for the PMM Server during its
       installation
+      
+      .. note:: You use ``deploy/secrets.yaml`` file to *create* Secrets Object.
+         The file contains all values for each key/value pair in convenient
+         plain text format. But the resulting Secrets contain passwords stored
+         as base64-encoded strings. If you want to *update* password field,
+         you'll need to encode the value into base64 format. To do this, you can
+         run ``echo -n "password" | base64`` in your local shell to get valid
+         values. For example, setting the PMM Server user's password to 
+         `new_password`` in the ``my-cluster-name-secrets`` object can be done
+         with the following command:
+
+         .. code:: bash
+
+         kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_USER": '$(echo -n new_password | base64)'}}'
+      
    -  you can also use ``pmm.mongodParams`` and ``pmm.mongosParams`` keys to
       specify additional parameters for the `pmm-admin add mongodb <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>_ command for ``mongod`` and
       ``mongos`` Pods respectively, if needed.
@@ -76,3 +91,17 @@ Kubernetes-based environment:
    Percona Server for MongoDB
    metrics <https://www.percona.com/doc/percona-monitoring-and-management/index.metrics-monitor.dashboard.html#pmm-dashboard-mongodb-list>`__.
 
+
+
+
+As you can see, because we use the ``stringData`` type when creating the Secrets
+object, all values for each key/value pair are stated in plain text format
+convenient from the user's point of view. But the resulting Secrets
+object contains passwords stored as ``data`` - i.e., base64-encoded strings.
+If you want to update any field, you'll need to encode the value into base64
+format. To do this, you can run ``echo -n "password" | base64`` in your local
+shell to get valid values. For example, setting the PMM Server user's password
+to ``new_password`` in the ``my-cluster-name-secrets`` object can be done
+with the following command:
+.. code:: bash
+   kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_USER": '$(echo -n new_password | base64)'}}'
