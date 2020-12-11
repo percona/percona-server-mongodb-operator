@@ -8,8 +8,8 @@ and 4.2. Other options may or may not work.
    for Percona Server for MongoDB 3.6 and 4.0 is not supported by the Operator
    starting from version 1.6.
 
-Also, the current Percona Server for MongoDB on Kubernetes implementation
-supports Percona Server for MongoDB sharding with only one .
+Also, Operator 1.6 supports Percona Server for MongoDB sharding with only one
+Replica Set.
 
 Officially supported platforms
 --------------------------------
