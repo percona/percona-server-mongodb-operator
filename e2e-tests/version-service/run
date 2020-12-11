@@ -34,7 +34,24 @@ for i in "${!cases[@]}"; do
     tmp_file=$(mktemp)
     sed "s%#initImage%$IMAGE%g" "$test_dir/conf/${cluster}-rs0.yml" >"$tmp_file"
 
-    spinup_psmdb ${cluster}-rs0 "$tmp_file"
+    desc 'create first PSMDB cluster'
+    cat "$tmp_file" \
+        | $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
+        | $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
+        | $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
+        | $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
+        | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
+        | $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
+        | kubectl_bin apply -f -
+    desc 'check if Pod is started'
+    wait_for_running "${cluster}-rs0" "$size"
+    sleep 20
+    compare_kubectl "statefulset/${cluster}-rs0"
+    desc 'write data'
+    run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+              "userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+
+    run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
     compare_kubectl "statefulset/${cluster}-rs0"
 
     pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
