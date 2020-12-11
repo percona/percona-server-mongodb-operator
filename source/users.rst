@@ -147,7 +147,7 @@ with the following command:
 
 .. code:: bash
 
-   kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_USER": '$(echo -n new_password | base64)'}}'
+   kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_PASSWORD": '$(echo -n new_password | base64)'}}'
 
 .. note:: The operator creates and updates an additional Secrets object named
    based on the cluster name, like ``internal-my-cluster-name-users``. It is
