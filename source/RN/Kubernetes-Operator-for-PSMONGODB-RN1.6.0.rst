@@ -12,14 +12,14 @@ New Features
 
 * :jirabug:`K8SPSMDB-273`: Add support for ``mongos`` service to expose a single
   :ref:`shard<shard>` of a MongoDB cluster through one entry point. In the
-  following release we will add support for multiple shards.
+  following release, we will add support for multiple shards.
 * :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management (PMM) v.2<operator.monitoring>`
 
 Improvements
 ================================================================================
 
 * :jirabug:`K8SPSMDB-258`: Add support for Percona Server for MongoDB version 4.4
-* :jirabug:`K8SPSMDB-319`: Show Endpoint in the ``kubectl get psmdb`` command output to easily connect to a MongoDB cluster 
+* :jirabug:`K8SPSMDB-319`: Show Endpoint in the ``kubectl get psmdb`` command output to connect to a MongoDB cluster easily
 * :jirabug:`K8SPSMDB-257`: Store the Operator version as a ``crVersion`` field in the ``deploy/cr.yaml`` configuration file
 * :jirabug:`K8SPSMDB-266`: Use plain-text passwords instead of base64-encoded ones when creating :ref:`users.system-users` secrets for simplicity
 
