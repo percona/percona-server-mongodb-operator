@@ -59,7 +59,7 @@ Kubernetes-based environment:
 
          .. code:: bash
 
-         kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_USER": '$(echo -n new_password | base64)'}}'
+            kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_PASSWORD": '$(echo -n new_password | base64)'}}'
       
    -  you can also use ``pmm.mongodParams`` and ``pmm.mongosParams`` keys to
       specify additional parameters for the `pmm-admin add mongodb <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>_ command for ``mongod`` and
