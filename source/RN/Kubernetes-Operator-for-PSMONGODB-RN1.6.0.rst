@@ -11,7 +11,8 @@ New Features
 ================================================================================
 
 * :jirabug:`K8SPSMDB-273`: Add support for ``mongos`` service to expose a single
-  :ref:`shard<shard>` of a MongoDB cluster through one entry point. In the
+  :ref:`shard<shard>` of a MongoDB cluster through one entry point, instead of
+  provisioning a load-balancer per replica set node. In the
   following release, we will add support for multiple shards.
 * :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management (PMM) v.2<operator.monitoring>`
 
@@ -26,12 +27,13 @@ Improvements
 Bugs Fixed
 ================================================================================
 
-* :jirabug:`K8SPSMDB-271`: Fix cluster initialization with CloudFlare SSL certificates
-* :jirabug:`K8SPSMDB-268`: Fix support of TLS certificates issued by `cert-manager <https://github.com/jetstack/cert-manager>`_
-* :jirabug:`K8SPSMDB-261`: Fix a bug in cluster pause/resume functionality
+* :jirabug:`K8SPSMDB-268`: Fix a bug affecting the support of TLS certificates issued by `cert-manager <https://github.com/jetstack/cert-manager>`_,
+  due to which proper rights were not set for the role-based access control, and
+  Kubernetes versions newer than 1.15 required other certificate issuing sources
+* :jirabug:`K8SPSMDB-261`: Fix a bug due to which cluster pause/resume functionality didn't work in previous releases
 * :jirabug:`K8SPSMDB-292`: Fix a bug due to which not all clusters managed by the Operator were upgraded by the automatic update
 
-Deprecation
+Removal
 ================================================================================
 
-* The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_ is no longer supported for all MongoDB versions starting from this version of the Operator. MMAPv1 was already deprecated by MongoDB for a long time. WiredTiger is the default storage engine since MongoDB 3.2, and MMAPv1 was completely removed in 4.2.
+* The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_ is no longer supported for all MongoDB versions starting from this version of the Operator. MMAPv1 was already deprecated by MongoDB for a long time. WiredTiger is the default storage engine since MongoDB 3.2, and MMAPv1 was completely removed in MongoDB 4.2.
