@@ -20,13 +20,17 @@ conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 
 if oc get projects ; then
-    OPENSHIFT=1
+    # Guessing Openshift version from master node API version
+    case "$(oc get nodes --no-headers=true | grep master | head -n1 | grep -Eo 'v[0-9]+\.[0-9]+')" in
+        "v1.11") OPENSHIFT=3.11 ;;
+              *) OPENSHIFT=4    ;;
+    esac
 fi
 
 
 create_namespace() {
     local namespace="$1"
-    if [ "$OPENSHIFT" == 1 ]; then
+    if [ ! -z "${OPENSHIFT}" ]; then
         oc delete project "$namespace" && sleep 40 || :
         oc new-project "$namespace"
         oc project "$namespace"
@@ -331,8 +335,11 @@ compare_kubectl() {
     local expected_result=${test_dir}/compare/${resource//\//_}${postfix}.yml
     local new_result="${tmp_dir}/${resource//\//_}.yml"
 
-    if [ "$OPENSHIFT" = 1 -a -f ${expected_result//.yml/-oc.yml} ]; then
+    if [ ! -z "$OPENSHIFT" -a -f ${expected_result//.yml/-oc.yml} ]; then
         expected_result=${expected_result//.yml/-oc.yml}
+        if [ "$OPENSHIFT" = 4 -a -f ${expected_result//-oc.yml/-4-oc.yml} ]; then
+            expected_result=${expected_result//-oc.yml/-4-oc.yml}
+        fi
     fi
 
     kubectl_bin get -o yaml ${resource} \
@@ -532,7 +539,7 @@ destroy() {
     kubectl_bin delete psmdb-recovery --all || :
 
     kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml 2>/dev/null || :
-    if [ "$OPENSHIFT" == 1 ]; then
+    if [ ! -z "$OPENSHIFT" ]; then
         oc delete --grace-period=0 --force=true project "$namespace"
     else
         kubectl_bin delete --grace-period=0 --force=true namespace "$namespace"
