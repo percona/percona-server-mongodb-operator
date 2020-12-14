@@ -13,7 +13,7 @@ deploy_operator
 
 desc 'install PMM Server'
 platform=kubernetes
-if [ ! -z "$OPENSHIFT" ]; then
+if [ -n "$OPENSHIFT" ]; then
     platform=openshift
 fi
 helm del --purge monitoring || :
