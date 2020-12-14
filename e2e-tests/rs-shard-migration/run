@@ -9,15 +9,8 @@ test_dir=$(realpath "$(dirname "$0")")
 function get_lastCommitedOpTime() {
     local cluster_name=$1
     local namespace=$2
-    local isSharded=$3
-
-    if [[ ${isSharded} == true ]]; then
-        echo $(run_mongos 'db.isMaster().lastCommittedOpTime' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
-        return
-    else
-        echo $(run_mongo 'db.isMaster().lastCommittedOpTime' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
-        return
-    fi
+    run_mongo 'db.isMaster().lastCommittedOpTime' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" \
+        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match'
 }
 
 function main() {
@@ -45,8 +38,7 @@ function main() {
 
     simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
-    lastCommitedOpTime=$(get_lastCommitedOpTime ${cluster} ${namespace} "true")
-    if [[ -z "${lastCommitedOpTime}" ]]; then
+    if [[ -z "$(get_lastCommitedOpTime ${cluster} ${namespace})" ]]; then
         echo "Sharded cluster does not work properly"
         exit 1
     fi
@@ -58,8 +50,7 @@ function main() {
 
     simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
-    lastCommitedOpTime=$(get_lastCommitedOpTime ${cluster} ${namespace})
-    if [[ ! -z "${lastCommitedOpTime}" ]]; then
+    if [[ ! -z "$(get_lastCommitedOpTime ${cluster} ${namespace})" ]]; then
         echo "Replicaset cluster does not work properly"
         exit 1
     fi
