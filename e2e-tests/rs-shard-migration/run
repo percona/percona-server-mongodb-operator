@@ -32,6 +32,11 @@ function main() {
     wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
     wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
     wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+
+    if [[ $(kubectl_bin get deployment/${cluster}-mongos -o jsonpath='{.status.readyReplicas}') -lt 1 ]]; then
+        echo "Mongos hasn't been properly started. Exiting..."
+        exit 1
+    fi
     # Migration to shards wipes out rs users. Let's recreate them
     run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
                 "userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
@@ -50,7 +55,8 @@ function main() {
 
     simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
-    if [[ ! -z "$(get_lastCommitedOpTime ${cluster} ${namespace})" ]]; then
+    if [[ ! -z "$(get_lastCommitedOpTime ${cluster} ${namespace})" \
+          || -n "$(kubectl_bin get deployments -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]]; then
         echo "Replicaset cluster does not work properly"
         exit 1
     fi
