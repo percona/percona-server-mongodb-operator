@@ -536,7 +536,7 @@ destroy() {
 
     kubectl_bin delete psmdb --all
     kubectl_bin delete psmdb-backup --all || :
-    kubectl_bin delete psmdb-recovery --all || :
+    kubectl_bin delete psmdb-restore --all || :
 
     kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml 2>/dev/null || :
     if [ ! -z "$OPENSHIFT" ]; then
@@ -663,7 +663,8 @@ cat_config() {
         | $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
         | $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
         | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
-        | $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#"
+        | $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
+        | $sed -e "s#apply:.*#apply: Never#"
 }
 
 apply_cluster() {
