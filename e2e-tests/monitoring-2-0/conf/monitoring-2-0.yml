@@ -1,0 +1,200 @@
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: monitoring
+  generation: 7
+  labels:
+    app: monitoring
+    app.kubernetes.io/managed-by: Helm
+    chart: pmm-server-2.12.0
+    heritage: Helm
+    release: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitoring
+      component: pmm
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: monitoring
+        component: pmm
+      annotations:
+        openshift.io/scc: privileged
+    spec:
+      containers:
+        - resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          terminationMessagePath: /dev/termination-log
+          name: monitoring
+          command:
+            - bash
+          env:
+            - name: DISABLE_UPDATES
+              value: 'true'
+            - name: METRICS_RESOLUTION
+              value: 1s
+            - name: METRICS_RETENTION
+              value: 720h
+            - name: QUERIES_RETENTION
+              value: '8'
+            - name: METRICS_MEMORY
+              value: '600000'
+            - name: ADMIN_PASSWORD
+              value: admin
+          ports:
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: pmmdata
+              mountPath: /pmmdata
+          terminationMessagePolicy: File
+          image: 'percona/pmm-server:2.12.0'
+          args:
+            - '-c'
+            - >
+              set -ex
+
+
+
+              if [[ $EUID != 1000 ]]; then
+                  # logrotate requires UID in /etc/passwd
+                  sed -e "s^x:1000:^x:$EUID:^" /etc/passwd > /tmp/passwd
+                  cat /tmp/passwd > /etc/passwd
+                  rm -rf /tmp/passwd
+              fi
+
+              if [ ! -f /pmmdata/app-init ]; then
+                  # the PV hasn't been initialized, so copy over default
+                  # pmm-server directories before symlinking
+                  mkdir -p /pmmdata
+
+                  rsync -a --owner=$EUID /srv/prometheus/data/  /pmmdata/prometheus-data/
+                  rsync -a --owner=$EUID /srv/prometheus/rules/ /pmmdata/prometheus-rules/
+                  rsync -a --owner=$EUID /srv/postgres/         /pmmdata/postgres/
+                  rsync -a --owner=$EUID /srv/grafana/          /pmmdata/grafana/
+                  rsync -a --owner=$EUID /srv/clickhouse/       /pmmdata/clickhouse/
+
+                  # initialize the PV and then mark it complete
+                  touch /pmmdata/app-init
+              fi
+
+
+              # remove the default directories so we can symlink the
+
+              # existing PV directories
+
+              rm -Rf /srv/prometheus/data
+
+              rm -Rf /srv/prometheus/rules
+
+              rm -Rf /srv/postgres
+
+              rm -Rf /srv/grafana
+
+              rm -Rf /srv/clickhouse
+
+
+              # symlink pmm-server paths to point to our PV
+
+              ln -s /pmmdata/prometheus-data  /srv/prometheus/data
+
+              ln -s /pmmdata/prometheus-rules /srv/prometheus/rules
+
+              ln -s /pmmdata/postgres         /srv/
+
+              ln -s /pmmdata/grafana          /srv/
+
+              ln -s /pmmdata/clickhouse       /srv/
+
+
+              sed -ri "s/(^log_directory = ).*/\1\'\/srv\/logs\'/g"
+              /pmmdata/postgres/postgresql.conf
+
+              chmod 700 /pmmdata/postgres
+
+
+
+              # http2 is not supported in openshift now
+
+              sed -e "s^ http2^^" /etc/nginx/conf.d/pmm.conf > /tmp/nginx
+
+              cat /tmp/nginx > /etc/nginx/conf.d/pmm.conf
+
+              rm -rf /tmp/nginx
+
+
+
+
+              ln -s /srv/grafana /usr/share/grafana/data
+
+              grafana-cli --homepath=/usr/share/grafana
+              --config=/etc/grafana/grafana.ini admin reset-admin-password
+              "$ADMIN_PASSWORD"
+
+
+
+              bash -x /opt/entrypoint.sh
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      serviceAccountName: percona-server-mongodb-operator
+      serviceAccount: percona-server-mongodb-operator
+      securityContext:
+        supplementalGroups:
+          - 1000
+        fsGroup: 1000
+      schedulerName: default-scheduler
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: pmmdata
+        creationTimestamp: null
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 8Gi
+        volumeMode: Filesystem
+      status:
+        phase: Pending
+  serviceName: monitoring
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 10
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: monitoring-service
+  finalizers:
+    - service.kubernetes.io/load-balancer-cleanup
+  labels:
+    app: monitoring
+    app.kubernetes.io/managed-by: Helm
+    chart: pmm-server-2.12.0
+    component: pmm
+    heritage: Helm
+    release: monitoring
+spec:
+  ports:
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+      nodePort: 31833
+  selector:
+    app: monitoring
+    component: pmm
+  type: LoadBalancer
+  sessionAffinity: None
+  externalTrafficPolicy: Cluster
