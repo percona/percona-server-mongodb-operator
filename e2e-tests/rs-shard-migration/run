@@ -37,6 +37,11 @@ function main() {
         echo "Mongos hasn't been properly started. Exiting..."
         exit 1
     fi
+    if [[ "$(kubectl_bin get sts/${cluster}-cfg -o jsonpath='{.status.replicas}')" \
+          != "$(kubectl_bin get sts/${cluster}-cfg -o jsonpath='{.status.readyReplicas}')" ]]; then
+        echo "Cfg pods haven't been properly started. Exiting..."
+        exit 1
+    fi
     # Migration to shards wipes out rs users. Let's recreate them
     run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
                 "userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
@@ -55,9 +60,12 @@ function main() {
 
     simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
-    if [[ ! -z "$(get_lastCommitedOpTime ${cluster} ${namespace})" \
-          || -n "$(kubectl_bin get deployments -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]]; then
-        echo "Replicaset cluster does not work properly"
+    if [[ ! -z "$(get_lastCommitedOpTime ${cluster} ${namespace})" ]] \
+       || [[ -n "$(kubectl_bin get deployments -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]] \
+       || [[ -n "$(kubectl_bin get service -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]] \
+       || [[ -n "$(kubectl_bin get service -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-cfg"'")].metadata.name}')" ]] \
+       || [[ -n "$(kubectl_bin get statefulset -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-cfg"'")].metadata.name}')" ]]; then
+        echo "Transition to replicaset cluster has not been done well. Cluster does not work properly or some leftovers still exist"
         exit 1
     fi
 
