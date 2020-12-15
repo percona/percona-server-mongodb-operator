@@ -3,9 +3,9 @@
 Monitoring
 ==========
 
-The Percona Monitoring and Management (PMM) `provides an excellent
+Percona Monitoring and Management (PMM) `provides an excellent
 solution <https://www.percona.com/doc/percona-monitoring-and-management/2.x/index.html>`_
-to monitor Percona Server for MongoDB.
+of monitoring Percona Server for MongoDB.
 
 .. note:: Only PMM 2.x versions are supported by the Operator.
 
@@ -14,16 +14,16 @@ database you wish to monitor: it collects needed metrics and sends gathered data
 to *PMM Server*. As a user, you connect to PMM Server to see database metrics on
 a number of dashboards.
 
-That's why PMM Server and PMM Client are to be installed separately.
+That's why PMM Server and PMM Client need to be installed separately.
 
-Installing the PMM Server
+Installing PMM Server
 -------------------------
 
 PMM Server runs as a *Docker image*, a *virtual appliance*, or on an *AWS instance*.
 Please refer to the `official PMM documentation <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/server/index.html>`_
 for the installation instructions.
 
-Installing the PMM Client
+Installing PMM Client
 -------------------------
 
 The following steps are needed for the PMM client installation in your
@@ -36,19 +36,19 @@ Kubernetes-based environment:
 
    -  set ``pmm.enabled=true``
    -  ensure the ``serverHost`` (the PMM service name is
-      ``monitoring-service`` by default) is the same as value specified
+      ``monitoring-service`` by default) is the same as the value specified
       for the ``name`` parameter on the previous step, but with an added
       additional ``-service`` suffix.
-   -  check that ``PMM_SERVER_USER`` key in the
+   -  check that  the``PMM_SERVER_USER`` key in the
       `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
       secrets file contains your PMM Server user name (``admin`` by default).
    -  make sure the ``PMM_SERVER_PASSWORD`` key in the
       `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
-      secrets file contains password specified for the PMM Server during its
-      installation
+      secrets file contains the password specified for the PMM Server during its
+      installation.
       
       .. note:: You use ``deploy/secrets.yaml`` file to *create* Secrets Object.
-         The file contains all values for each key/value pair in convenient
+         The file contains all values for each key/value pair in a convenient
          plain text format. But the resulting Secrets contain passwords stored
          as base64-encoded strings. If you want to *update* password field,
          you'll need to encode the value into base64 format. To do this, you can
@@ -73,7 +73,7 @@ Kubernetes-based environment:
 
       $ kubectl apply -f deploy/cr.yaml
 
-#. Check that correspondent Pods are
+#. Check that corresponding Pods are
    not in a cycle of stopping and restarting. This cycle occurs if there are errors on the previous steps:
 
    .. code:: bash
@@ -96,7 +96,7 @@ Kubernetes-based environment:
 
 As you can see, because we use the ``stringData`` type when creating the Secrets
 object, all values for each key/value pair are stated in plain text format
-convenient from the user's point of view. But the resulting Secrets
+which is convenient from the user's point of view. But the resulting Secrets
 object contains passwords stored as ``data`` - i.e., base64-encoded strings.
 If you want to update any field, you'll need to encode the value into base64
 format. To do this, you can run ``echo -n "password" | base64`` in your local
