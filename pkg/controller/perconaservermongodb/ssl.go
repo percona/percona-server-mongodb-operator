@@ -95,7 +95,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 		return fmt.Errorf("create certificate: %v", err)
 	}
 	if cr.Spec.Secrets.SSL == cr.Spec.Secrets.SSLInternal {
-		return nil
+		return r.waitForCerts(cr.Namespace, cr.Spec.Secrets.SSL)
 	}
 
 	err = r.client.Create(context.TODO(), &cm.Certificate{
@@ -124,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 }
 
 func (r *ReconcilePerconaServerMongoDB) waitForCerts(namespace string, secretsList ...string) error {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	timeoutTimer := time.NewTimer(30 * time.Second)
 	defer timeoutTimer.Stop()
 	defer ticker.Stop()
