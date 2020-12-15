@@ -1,0 +1,289 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  generation: 1
+  name: monitoring-mongos
+  ownerReferences:
+    - controller: true
+      kind: PerconaServerMongoDB
+      name: monitoring
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongos
+      app.kubernetes.io/instance: monitoring
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations: {}
+      labels:
+        app.kubernetes.io/component: mongos
+        app.kubernetes.io/instance: monitoring
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: mongos
+                  app.kubernetes.io/instance: monitoring
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - args:
+            - mongos
+            - --bind_ip_all
+            - --port=27017
+            - --sslAllowInvalidCertificates
+            - --configdb
+            - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017
+            - --sslMode=preferSSL
+            - --clusterAuthMode=x509
+          command:
+            - /data/db/ps-entry.sh
+          env:
+            - name: MONGODB_PORT
+              value: "27017"
+          envFrom:
+            - secretRef:
+                name: some-users
+                optional: false
+            - secretRef:
+                name: internal-monitoring-users
+                optional: false
+          imagePullPolicy: Always
+          livenessProbe:
+            exec:
+              command:
+                - /data/db/mongodb-healthcheck
+                - k8s
+                - liveness
+                - --component
+                - mongos
+            failureThreshold: 4
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: mongos
+          ports:
+            - containerPort: 27017
+              name: mongos
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - /data/db/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongos
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 1
+            successThreshold: 1
+            timeoutSeconds: 2
+          resources:
+            limits:
+              cpu: 300m
+              memory: 500M
+            requests:
+              cpu: 300m
+              memory: 500M
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /etc/mongodb-secrets
+              name: monitoring-mongodb-keyfile
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl-internal
+              name: ssl-internal
+              readOnly: true
+          workingDir: /data/db
+        - env:
+            - name: PMM_SERVER
+              value: monitoring-service
+            - name: DB_TYPE
+              value: mongodb
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_CLUSTER_MONITOR_USER
+                  name: internal-monitoring-users
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_CLUSTER_MONITOR_PASSWORD
+                  name: internal-monitoring-users
+            - name: DB_HOST
+              value: localhost
+            - name: DB_CLUSTER
+              value: monitoring
+            - name: DB_PORT
+              value: "27017"
+            - name: DB_PORT_MIN
+              value: "30100"
+            - name: DB_PORT_MAX
+              value: "30105"
+            - name: PMM_USER
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_USER
+                  name: internal-monitoring-users
+            - name: PMM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_PASSWORD
+                  name: internal-monitoring-users
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPASE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: PMM_AGENT_SERVER_ADDRESS
+              value: monitoring-service
+            - name: PMM_AGENT_LISTEN_PORT
+              value: "7777"
+            - name: PMM_AGENT_PORTS_MIN
+              value: "30100"
+            - name: PMM_AGENT_PORTS_MAX
+              value: "30105"
+            - name: PMM_AGENT_CONFIG_FILE
+              value: /usr/local/percona/pmm2/config/pmm-agent.yaml
+            - name: PMM_AGENT_SERVER_INSECURE_TLS
+              value: "1"
+            - name: PMM_AGENT_LISTEN_ADDRESS
+              value: 0.0.0.0
+            - name: PMM_AGENT_SETUP_NODE_NAME
+              value: $(POD_NAMESPASE)-$(POD_NAME)
+            - name: PMM_AGENT_SETUP
+              value: "1"
+            - name: PMM_AGENT_SETUP_FORCE
+              value: "1"
+            - name: PMM_AGENT_SETUP_NODE_TYPE
+              value: container
+            - name: PMM_AGENT_SETUP_METRICS_MODE
+              value: push
+            - name: PMM_ADMIN_CUSTOM_PARAMS
+              value: --environment=dev-mongos
+            - name: PMM_AGENT_SERVER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_USER
+                  name: internal-monitoring-users
+            - name: PMM_AGENT_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_PASSWORD
+                  name: internal-monitoring-users
+            - name: CLUSTER_NAME
+              value: monitoring
+            - name: PMM_AGENT_PRERUN_SCRIPT
+              value: |-
+                pmm-admin status --wait=10s;
+                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT);
+                pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'
+          imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - pmm-admin inventory remove node --force $(pmm-admin status --json | python -c "import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])")
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /local/Status
+              port: 7777
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: pmm-client
+          ports:
+            - containerPort: 7777
+              protocol: TCP
+            - containerPort: 30100
+              protocol: TCP
+            - containerPort: 30101
+              protocol: TCP
+            - containerPort: 30102
+              protocol: TCP
+            - containerPort: 30103
+              protocol: TCP
+            - containerPort: 30104
+              protocol: TCP
+            - containerPort: 30105
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      initContainers:
+        - command:
+            - /init-entrypoint.sh
+          imagePullPolicy: Always
+          name: mongo-init
+          resources:
+            limits:
+              cpu: 300m
+              memory: 500M
+            requests:
+              cpu: 300m
+              memory: 500M
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: monitoring-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: monitoring-mongodb-keyfile
+        - name: ssl
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: monitoring-ssl
+        - name: ssl-internal
+          secret:
+            defaultMode: 288
+            optional: true
+            secretName: monitoring-ssl-internal
+        - emptyDir: {}
+          name: mongod-data
