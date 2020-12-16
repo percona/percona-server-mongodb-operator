@@ -154,14 +154,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 							"k8s", "liveness",
 							"--component", "mongos",
 							"--ssl",
-							"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-							"--sslPEMKeyFile", "/tmp/tls.pem",
 							"--sslInsecure",
 						},
 					},
 				},
 			}
-
+			if cr.CompareVersion("1.7.0") >= 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.Probe.Handler.Exec.Command = append(cr.Spec.Sharding.Mongos.LivenessProbe.Probe.Handler.Exec.Command,
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
+			}
 			if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
 				cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
 			}
@@ -194,6 +196,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 						},
 					},
 				},
+			}
+			if cr.CompareVersion("1.7.0") >= 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.Handler.Exec.Command = append(cr.Spec.Sharding.Mongos.ReadinessProbe.Handler.Exec.Command,
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
 			if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
