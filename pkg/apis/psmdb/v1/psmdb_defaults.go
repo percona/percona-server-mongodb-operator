@@ -190,8 +190,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 							"k8s", "readiness",
 							"--component", "mongos",
 							"--ssl",
-							"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
-							"--sslPEMKeyFile", "/tmp/tls.pem",
 							"--sslInsecure",
 						},
 					},
