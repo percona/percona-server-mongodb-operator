@@ -38,4 +38,12 @@ Bugs Fixed
 Removal
 ================================================================================
 
-* The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_ is no longer supported for all MongoDB versions starting from this version of the Operator. MMAPv1 was already deprecated by MongoDB for a long time. WiredTiger is the default storage engine since MongoDB 3.2, and MMAPv1 was completely removed in MongoDB 4.2.
+* The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
+  is no longer supported for all MongoDB versions starting from this version of
+  the Operator. MMAPv1 was already deprecated by MongoDB for a long time.
+  WiredTiger is the default storage engine since MongoDB 3.2, and MMAPv1 was
+  completely removed in MongoDB 4.2.
+
+  .. note:: Upgrade of the Operator from 1.5.0 to 1.6.0 will fail if MMAPv1 is
+     used, but MongoDB cluster will continue to run. It is recommended to
+     migrate your clusters to WiredTiger engine before the upgrade.
