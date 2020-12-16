@@ -66,9 +66,6 @@ func main() {
 			"password",
 		)
 	}
-	sslConf := db.SSLConfig{}
-	cnf.SSL = &sslConf
-	cnf.SSL.Insecure = true
 
 	session, err := db.GetSession(cnf)
 	if err != nil {
