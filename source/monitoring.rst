@@ -35,10 +35,7 @@ Kubernetes-based environment:
    file.
 
    -  set ``pmm.enabled=true``
-   -  ensure the ``serverHost`` (the PMM service name is
-      ``monitoring-service`` by default) is the same as the value specified
-      for the ``name`` parameter on the previous step, but with an added
-      additional ``-service`` suffix.
+   -  set the ``pmm.serverHost`` key to your PMM Server hostname.
    -  check that  the``PMM_SERVER_USER`` key in the
       `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
       secrets file contains your PMM Server user name (``admin`` by default).
