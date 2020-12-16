@@ -64,6 +64,12 @@ Kubernetes-based environment:
    -  you can also use ``pmm.mongodParams`` and ``pmm.mongosParams`` keys to
       specify additional parameters for the `pmm-admin add mongodb <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>_ command for ``mongod`` and
       ``mongos`` Pods respectively, if needed.
+      
+      .. note:: Please take into account that Operator automatically manages
+         common MongoDB Service Monitoring parameters mentioned in the officiall ``pmm-admin add mongodb`` `documentation<https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>`_,
+         such like username, password, service-name, host, etc. Assigning values
+         to these parameters is not recommended and can negatively affect the
+         functionality of the PMM setup carried out by the Operator.
 
    Apply changes with the ``kubectl apply -f deploy/secrets.yaml`` command.
 

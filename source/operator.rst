@@ -886,7 +886,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``--environment=DEV``									|
+| **Example**     | ``--environment=DEV-ENV --custom-labels=DEV-ENV``									|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Additional parameters which will be passed to the `pmm-admin add mongodb			|
 |                 | <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/	|
@@ -900,16 +900,12 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``--environment=DEV``									|
+| **Example**     | ``--environment=DEV-ENV --custom-labels=DEV-ENV``									|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Additional parameters which will be passed to the `pmm-admin add mongodb			|
 |                 | <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/	|
 |                 | mongodb.html#adding-mongodb-service-monitoring>`_ command for ``mongos`` Pods		|
 +-----------------+---------------------------------------------------------------------------------------------+
-
-
-mongodParams: --environment=ENVIRONMENT
-#    : --environment=ENVIRONMENT
 
 .. _operator.mongod-section:
 
