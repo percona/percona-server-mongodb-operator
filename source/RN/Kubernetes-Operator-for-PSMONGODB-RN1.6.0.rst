@@ -16,6 +16,8 @@ New Features
   following release, we will add support for multiple shards.
 * :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management (PMM) v.2<operator.monitoring>`
 
+  .. note:: Systems with PMM v.1 monitoring done via the `unafficial instruction<https://www.percona.com/blog/2020/07/23/using-percona-kubernetes-operators-with-percona-monitoring-and-management/>`_ should switch to PMM v.2 to upgrade the Operator.
+
 Improvements
 ================================================================================
 
