@@ -362,9 +362,9 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``4``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Number of consecutive unsuccessful tries of the `liveness probe 				|
-|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
-|                 | configure-liveness-readiness-startup-probes/#configure-probes> to be undertaken		|
+| **Description** | Number of consecutive unsuccessful tries of the 						|
+|                 | `liveness probe <https://kubernetes.io/docs/tasks/configure-pod-container/			|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be undertaken		|
 |                 | before giving up.										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -380,7 +380,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Number of seconds to wait after the container start before initiating the `liveness probe	|
 |                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
-|                 | configure-liveness-readiness-startup-probes/#configure-probes>.				|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_.				|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -395,7 +395,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | How often to perform a `liveness probe 							|
 |                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
-|                 | configure-liveness-readiness-startup-probes/#configure-probes> (in seconds).		|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ (in seconds).		|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -410,8 +410,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Minimum consecutive successes for the `liveness probe 					|
 |                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
-|                 | configure-liveness-readiness-startup-probes/#configure-probes> to be considered successful	|
-|                 | after having failed.									|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be considered 		|
+|                 | successful after having failed.								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -426,7 +426,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Number of seconds after which the `liveness probe 						|
 |                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
-|                 | configure-liveness-readiness-startup-probes/#configure-probes> times out.			|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ times out.			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -862,7 +862,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``percona/pmm-client:2.12.0``								|
+| **Example**     | ``percona/pmm-client:{{{pmm2recommended}}}``								|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | PMM Client docker image to use								|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -886,7 +886,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``--environment=DEV-ENV --custom-labels=DEV-ENV``									|
+| **Example**     | ``--environment=DEV-ENV --custom-labels=DEV-ENV``						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Additional parameters which will be passed to the `pmm-admin add mongodb			|
 |                 | <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/	|
@@ -900,7 +900,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``--environment=DEV-ENV --custom-labels=DEV-ENV``									|
+| **Example**     | ``--environment=DEV-ENV --custom-labels=DEV-ENV``						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Additional parameters which will be passed to the `pmm-admin add mongodb			|
 |                 | <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/	|

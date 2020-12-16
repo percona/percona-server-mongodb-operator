@@ -51,7 +51,7 @@ Semi-automatic upgrade
         "spec": {
             "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
-            "pmm": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-pmm" }
+            "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
 
 #. The deployment rollout will be automatically triggered by the applied patch.
@@ -95,7 +95,7 @@ Manual upgrade
         "spec": {"replsets":{ "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
             "mongod": { "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
             "backup":   { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
-            "pmm": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-pmm" }
+            "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
 
 #. Pod with the newer Percona Server for MongoDB image will start after you
