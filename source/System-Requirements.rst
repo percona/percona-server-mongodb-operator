@@ -25,12 +25,15 @@ Other Kubernetes platforms may also work but have not been tested.
 Resource Limits
 -----------------------
 
-A cluster running an officially supported platform contains at least three 
+A cluster running an officially supported platform contains at least 3 
 Nodes, with the following resources:
 
 * 2GB of RAM,
 * 2 CPU threads per Node for Pods provisioning,
 * at least 60GB of available storage for Private Volumes provisioning.
+
+Also, the number of Replica Set Nodes should not be odd
+if :ref:`Arbiter<arbiter>` is not enabled.
 
 .. note:: Use Storage Class with XFS as the default filesystem if possible
 `to achieve better MongoDB performance <https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb>`_.

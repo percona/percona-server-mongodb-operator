@@ -1,3 +1,5 @@
+.. _arbiter:
+
 Enabling Replica Set Arbiter nodes
 ==================================
 
