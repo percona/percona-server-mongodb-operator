@@ -58,6 +58,7 @@ Management
    :maxdepth: 1
 
    backups
+   pause
    private
    update
    scaling
