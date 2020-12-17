@@ -75,7 +75,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - mongodb-healthcheck
                 - k8s
                 - liveness
                 - --startupDelaySeconds
