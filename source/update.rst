@@ -195,7 +195,7 @@ Percona's Version Service:
      updateStrategy: SmartUpdate
      upgradeOptions:
        apply: Recommended
-       versionServiceEndpoint: https://check.percona.com/versions
+       versionServiceEndpoint: versionServiceEndpoint: https://check.percona.com
        schedule: "0 0 * * *"
    ...
 
