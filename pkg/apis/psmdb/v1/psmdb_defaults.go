@@ -119,6 +119,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 
+	if !cr.Spec.Sharding.Enabled {
+		for i := range cr.Spec.Replsets {
+			cr.Spec.Replsets[i].ClusterRole = ""
+		}
+	}
+
 	if cr.Spec.Sharding.Enabled {
 		if cr.Spec.Sharding.ConfigsvrReplSet == nil {
 			return errors.New("config replica set should be specified")
