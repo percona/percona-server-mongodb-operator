@@ -4,8 +4,12 @@ System Requirements
 The Operator was developed and tested with Percona Server for MongoDB 3.6, 4.0,
 and 4.2. Other options may or may not work.
 
-Also, the current PSMDB on Kubernetes implementation does not support Percona
-Server for MongoDB sharding.
+.. note:: The already deprecated `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
+   for Percona Server for MongoDB 3.6 and 4.0 is not supported by the Operator
+   starting from version 1.6.
+
+Also, Operator 1.6 supports Percona Server for MongoDB sharding with only one
+Replica Set.
 
 Officially supported platforms
 --------------------------------

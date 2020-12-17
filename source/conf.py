@@ -52,9 +52,9 @@ copyright = u'Percona LLC and/or its affiliates 2009-2020'
 # built documents.
 #
 # The short X.Y version.
-version = '1.5.0'
+version = '1.6.0'
 # The full version, including alpha/beta/rc tags.
-release = '1.5.0'
+release = '1.6.0'
 
 # the MongoDB recommended versions to be used in docs
 mongodb42recommended = '4.2.8-8'
