@@ -47,11 +47,11 @@ Semi-automatic upgrade
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"psmdb.percona.com/v{{{apiversion}}}\"}" }},
         "spec": {
-            "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}",
+            "crVersion":"{{{release}}}",
+            "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
-            "pmm": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-pmm" }
+            "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
 
 #. The deployment rollout will be automatically triggered by the applied patch.
@@ -91,11 +91,11 @@ Manual upgrade
         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
 
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "metadata": {"annotations":{ "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"psmdb.percona.com/v{{{apiversion}}}\"}" }},
-        "spec": {"replsets":{ "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
-            "mongod": { "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
-            "backup":   { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
-            "pmm": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-pmm" }
+        "spec": {
+            "crVersion":"{{{release}}}",
+            "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
+            "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
+            "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
 
 #. Pod with the newer Percona Server for MongoDB image will start after you
