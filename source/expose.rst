@@ -1,24 +1,48 @@
 Exposing cluster nodes with dedicated IP addresses
 ==================================================
 
+Using single entry point vs. accessing MongoDB Instances
+--------------------------------------------------------
+
+Percona Operator for Percona Server for MongoDB provides two scenarios for
+accessing the database.
+
+#. If :ref`sharding` mode is turned **on** (default bahaviour), then database
+   cluster runs special ``mongos`` Pods - query routers, which acts as an entry
+   point for client applications,
+   
+   .. image:: ./assets/images/mongos_espose.png
+      :alt: PSMDB Operator, sharding on
+#. If :ref`sharding` mode is turned **off**, the application needs access to all
+   MongoDB Pods of the replica set:
+
+   .. image:: assets/images/mongod_espose.png
+      :alt: PSMDB Operator, sharding off
+
+You can find more on sharding in the `official MongoDB documentation <https://docs.mongodb.com/manual/reference/glossary/#term-sharding>`_.
+
+Accessing the Pod
+-----------------
+
 When Kubernetes creates Pods, each Pod has an IP address in the
 internal virtual network of the cluster. Creating and destroying
 Pods is a dynamic process, therefore binding communication between Pods to
-specific IP addresses would cause problems as things changes over
-time as a result of the cluster scaling, maintenance, etc.. Due to
+specific IP addresses would cause problems as things change over
+time as a result of the cluster scaling, maintenance, etc. Due to
 this changing environment, you should connect to Percona Server for MongoDB via Kubernetes
 internal DNS names in URI
-(e.g. ``mongodb+srv://userAdmin:userAdmin123456@<cluster-name>-rs0.<namespace>.svc.cluster.local/admin?replicaSet=rs0&ssl=false``).
-It is strictly recommended.
+(e.g. using ``mongodb+srv://userAdmin:userAdmin123456@<cluster-name>-rs0.<namespace>.svc.cluster.local/admin?replicaSet=rs0&ssl=false`` to access one of the Replica Set Pods).
+URI-based access is strictly recommended.
 
-Sometimes you cannot communicate to the Pods using the Kubernetes internal DNS
+Sometimes you cannot communicate with the Pods using the Kubernetes internal DNS
 names. To make Pods of the Replica Set accessible, Percona Server for
 MongoDB Operator can assign a `Kubernetes
-Service <https://kubernetes.io/docs/concepts/services-networking/service/>`__
+Service <https://kubernetes.io/docs/concepts/services-networking/service/>`_
 to each Pod.
 
-This feature can be configured in the Replica Set section of the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
+This feature can be configured in the ``replsets`` (for MondgoDB instances Pod) 
+and ``sharding`` (for mongos Pod) sections of the
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_
 file:
 
 -  set ‘expose.enabled’ option to ‘true’ to allow exposing Pods via
