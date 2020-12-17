@@ -153,14 +153,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 							"/data/db/mongodb-healthcheck",
 							"k8s", "liveness",
 							"--component", "mongos",
-							"--ssl",
-							"--sslInsecure",
 						},
 					},
 				},
 			}
-			if cr.CompareVersion("1.7.0") >= 0 {
+			if cr.CompareVersion("1.6.0") >= 0 {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Probe.Handler.Exec.Command = append(cr.Spec.Sharding.Mongos.LivenessProbe.Probe.Handler.Exec.Command,
+					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 					"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
@@ -189,14 +188,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 							"/data/db/mongodb-healthcheck",
 							"k8s", "readiness",
 							"--component", "mongos",
-							"--ssl",
-							"--sslInsecure",
 						},
 					},
 				},
 			}
-			if cr.CompareVersion("1.7.0") >= 0 {
+			if cr.CompareVersion("1.6.0") >= 0 {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.Handler.Exec.Command = append(cr.Spec.Sharding.Mongos.ReadinessProbe.Handler.Exec.Command,
+					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 					"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
@@ -299,6 +297,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 			if cr.CompareVersion("1.6.0") >= 0 {
 				replset.LivenessProbe.Probe.Handler.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+				replset.LivenessProbe.Probe.Handler.Exec.Command = append(replset.LivenessProbe.Probe.Handler.Exec.Command,
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem",
+				)
 			}
 		}
 

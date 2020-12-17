@@ -75,6 +75,12 @@ spec:
                 - /data/db/mongodb-healthcheck
                 - k8s
                 - liveness
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
                 - --component
                 - mongos
             failureThreshold: 4
@@ -93,6 +99,12 @@ spec:
                 - /data/db/mongodb-healthcheck
                 - k8s
                 - readiness
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
                 - --component
                 - mongos
             failureThreshold: 3
