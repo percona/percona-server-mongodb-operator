@@ -13,7 +13,7 @@ Percona Operator for Percona Server for MongoDB:
          * - Image
            - Digest
          * - percona/percona-server-mongodb-operator:1.6.0
-           - 70f7f6ef3abb705fa5284afbc40fa0ecb36b98d20a545d46701cd516db90ecd2
+           - 73e172df78f3cc71bd1c4bf1c4bc33bb1dd2ae5c4355808097958a71096498e1
          * - percona/pmm-client:2.12.0
            - e29616e36dcd5a6fd7de67b444e5a80680d56f52f1398c0f49ee92427be797e6
          * - percona/percona-server-mongodb-operator:1.6.0-backup

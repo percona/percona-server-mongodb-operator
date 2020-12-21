@@ -4,16 +4,16 @@
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.6.0
 ================================================================================
 
-:Date: December 17, 2020
+:Date: December 22, 2020
 :Installation: `Installing Percona Kubernetes Operator for Percona Server for MongoDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
 New Features
 ================================================================================
 
 * :jirabug:`K8SPSMDB-273`: Add support for ``mongos`` service to expose a single
-  :ref:`shard<shard>` of a MongoDB cluster through one entry point, instead of
-  provisioning a load-balancer per replica set node. In the
-  following release, we will add support for multiple shards.
+  :ref:`shard<shard>` of a MongoDB cluster through one entry point instead of
+  provisioning a load-balancer per replica set node. In the following release,
+  we will add support for multiple shards.
 * :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management (PMM) v.2<operator.monitoring>`
 
   .. note:: Monitoring with PMM v.1 configured according to the `unofficial instruction<https://www.percona.com/blog/2020/07/23/using-percona-kubernetes-operators-with-percona-monitoring-and-management/>`_

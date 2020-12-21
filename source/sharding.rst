@@ -18,6 +18,10 @@ A MongoDB Sharding involves the following components:
 * ``config servers`` - a replica set to store metadata and configuration
   settings for the sharded database cluster.
 
+.. note:: Percona Server for MongoDB 1.6.0 supports only one shard of a MongoDB
+   cluster; still, this limited sharding support allows using ``mongos`` as an
+   entry point instead of provisioning a load-balancer per replica set node.
+
 Sharding is controlled by the ``sharding`` section of the ``deploy/cr.yaml``
 configuration file and is turned on by default.
 
