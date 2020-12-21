@@ -50,7 +50,7 @@ function main() {
     simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
     if [[ -z "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
-       && [[ -z "$(get_shard_parameter ${cluster} ${namespace} '$configServerState.opTime.ts')" ]]; then # for openshift 3.11
+       && [[ -z "$(get_shard_parameter ${cluster} ${namespace} '$configServerState.opTime.ts')" ]]; then # for mongo 3.6
         echo "Sharded cluster does not work properly"
         exit 1
     fi
