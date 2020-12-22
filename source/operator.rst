@@ -66,40 +66,40 @@ file. This file contains the following spec sections:
    * - updateStrategy
      - string
      - ``SmartUpdate``
-     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are `SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
+     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are :ref:`SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
+
+   * - upgradeOptions
+     - :ref:`subdoc<operator.upgradeoptions-section>`
+     - 
+     - Upgrade configuration section
 
    * - secrets
-     - subdoc
+     - :ref:`subdoc<operator.secrets-section>`
      -
      - Operator secrets section
 
    * - replsets
-     - array
+     - :ref:`subdoc<operator.replsets-section>`
      -
      - Operator MongoDB Replica Set section
 
    * - pmm
-     - subdoc
+     - :ref:`subdoc<operator.pmm-section>`
      - 
      - Percona Monitoring and Management section
 
    * - sharding
-     - subdoc
+     - :ref:`subdoc<operator.sharding-section>`
      - 
      - MongoDB sharding configuration section
 
    * - mongod
-     - subdoc
-     - 
-     - Operator MongoDB Mongos configuration section
-
-   * - mongod
-     - subdoc
+     - :ref:`subdoc<operator.mongod-section>`
      - 
      - Operator MongoDB Mongod configuration section
 
    * - backup
-     - subdoc
+     - :ref:`subdoc<operator.backup-section>`
      - 
      - Percona Server for MongoDB backups section
 
@@ -113,45 +113,45 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _upgradeoptions-versionserviceendpoint:                                                |
-|                 |                                                                                           |
-| **Key**         | `upgradeOptions.versionServiceEndpoint                                                    |
-|                 | <operator.html#upgradeoptions-versionserviceendpoint>`_                                   |
+|                 | .. _upgradeoptions-versionserviceendpoint:                                                  |
+|                 |                                                                                             |
+| **Key**         | `upgradeOptions.versionServiceEndpoint                                                      |
+|                 | <operator.html#upgradeoptions-versionserviceendpoint>`_                                     |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value**       | string                                                                                    |
+| **Value**       | string                                                                                      |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``https://check.percona.com``                                                             |
+| **Example**     | ``https://check.percona.com``                                                               |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The Version Service URL used to check versions compatibility for upgrade                  |
+| **Description** | The Version Service URL used to check versions compatibility for upgrade                    |
 +-----------------+---------------------------------------------------------------------------------------------+
-|                                                                                                             |
+|                                                                                                               |
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _upgradeoptions-apply:                                                                 |
-|                 |                                                                                           |
-| **Key**         | `upgradeOptions.apply <operator.html#upgradeoptions-apply>`_                              |
+|                 | .. _upgradeoptions-apply:                                                                   |
+|                 |                                                                                             |
+| **Key**         | `upgradeOptions.apply <operator.html#upgradeoptions-apply>`_                                |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value**       | string                                                                                    |
+| **Value**       | string                                                                                      |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``Recommended``                                                                           |
+| **Example**     | ``Recommended``                                                                             |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator. |
-|                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be |
-|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of PSMDB (e.g.       |
-|                 | ``4.2.8-8``) that is wished to be version-locked (so that the user can control the        |
-|                 | version running, but use automatic upgrades to move between them).                        |
+| **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator.   |
+|                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be   |
+|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of PSMDB (e.g.         |
+|                 | ``4.2.8-8``) that is wished to be version-locked (so that the user can control the          |
+|                 | version running, but use automatic upgrades to move between them).                          |
 +-----------------+---------------------------------------------------------------------------------------------+
-|                                                                                                             |
+|                                                                                                               |
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _upgradeoptions-schedule:                                                              |
-|                 |                                                                                           |
-| **Key**         | `upgradeOptions.schedule <operator.html#upgradeoptions-schedule>`_                        |
+|                 | .. _upgradeoptions-schedule:                                                                |
+|                 |                                                                                             |
+| **Key**         | `upgradeOptions.schedule <operator.html#upgradeoptions-schedule>`_                          |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value**       | string                                                                                    |
+| **Value**       | string                                                                                      |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``0 2 * * *``                                                                             |
+| **Example**     | ``0 2 * * *``                                                                               |
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Scheduled time to check for updates, specified in the                                     |
-|                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_                                    |
+| **Description** | Scheduled time to check for updates, specified in the                                       |
+|                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_                                      |
 +-----------------+---------------------------------------------------------------------------------------------+
 
 .. _operator.secrets-section:
@@ -928,7 +928,7 @@ options for Percona Monitoring and Management.
 --------------------------------------------------------------
 
 The ``sharding`` section in the deploy/cr.yaml file contains configuration
-options for Percona Server for MondoDB :ref:`sharding<sharding>`.
+options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -941,7 +941,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``true``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables or disables Percona Server for MondoDB 	 					|
+| **Description** | Enables or disables `Percona Server for MondoDB 	 					|
 |                 | sharding <https://docs.mongodb.com/manual/sharding/>`_ 					|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -985,7 +985,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | `Kubernetes hostPath volume <https://kubernetes.io/docs/concepts/storage/volumes/		|
 |                 | #hostpath>`_, i.e. the file or directory of a node that will be accessible to the Config	|
-|                 | Server Pod containers										|
+|                 | Server Pod containers									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1005,8 +1005,8 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _sharding-configsvrreplset-volumespec-persistentvolumeclaim-storageclassname:		|
 |                 |												|
-| **Key**         | `sharding.configsvrReplSet.volumeSpec.persistentVolumeClaim.storageClassName		|
-|                 |<operator.html#sharding-configsvrreplset-volumespec-persistentvolumeclaim-storageclassname>`_|
+| **Key**         | `sharding.configsvrReplSet.volumeSpec.persistentVolumeClaim.storageClassName <operator.html#|
+|                 | sharding-configsvrreplset-volumespec-persistentvolumeclaim-storageclassname>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1261,7 +1261,7 @@ options for Percona Server for MondoDB :ref:`sharding<sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``0.5G`											|
+| **Example**     | ``0.5G``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes Memory requests								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/	|

@@ -1,4 +1,4 @@
-.. _operator-update:
+.. _operator-updates:
 
 Update Percona Server for MongoDB Operator
 ===========================================
@@ -171,7 +171,7 @@ updates:
    Server URL (otherwise Smart Updates will not occur).
 
    A. You can use the URL of the official Percona's Version Service (default).
-      Set ``versionServiceEndpoint`` to ``https://check.percona.com/versions``.
+      Set ``versionServiceEndpoint`` to ``https://check.percona.com``.
 
    B. Alternatively, you can run Version Service inside your cluster. This
       can be done with the ``kubectl`` command as follows:
@@ -195,7 +195,7 @@ Percona's Version Service:
      updateStrategy: SmartUpdate
      upgradeOptions:
        apply: Recommended
-       versionServiceEndpoint: versionServiceEndpoint: https://check.percona.com
+       versionServiceEndpoint: https://check.percona.com
        schedule: "0 0 * * *"
    ...
 
