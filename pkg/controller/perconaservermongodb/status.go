@@ -59,6 +59,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	} else {
+		delete(cr.Status.Replsets, api.ConfigReplSetName)
 	}
 
 	for _, rs := range repls {

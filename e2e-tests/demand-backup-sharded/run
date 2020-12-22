@@ -22,6 +22,7 @@ kubectl_bin apply \
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
+wait_for_running $cluster-cfg 3 "false"
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0

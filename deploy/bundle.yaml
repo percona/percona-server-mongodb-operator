@@ -14,7 +14,7 @@ spec:
   scope: Namespaced
   versions:
     - name: v1
-      storage: true
+      storage: false
       served: true
     - name: v1-1-0
       storage: false
@@ -31,10 +31,16 @@ spec:
     - name: v1-5-0
       storage: false
       served: true
+    - name: v1-6-0
+      storage: true
+      served: true
     - name: v1alpha1
       storage: false
       served: true
   additionalPrinterColumns:
+    - name: ENDPOINT
+      type: string
+      JSONPath: .status.host
     - name: Status
       type: string
       JSONPath: .status.state
@@ -199,6 +205,7 @@ rules:
   - delete
 - apiGroups:
   - certmanager.k8s.io
+  - cert-manager.io
   resources:
   - issuers
   - certificates
@@ -246,7 +253,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.5.0
+          image: percona/percona-server-mongodb-operator:1.6.0
           ports:
           - containerPort: 60000
             name: metrics

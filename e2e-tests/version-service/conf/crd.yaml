@@ -14,7 +14,7 @@ spec:
   scope: Namespaced
   versions:
     - name: v1
-      storage: true
+      storage: false
       served: true
     - name: v1-1-0
       storage: false
@@ -32,7 +32,7 @@ spec:
       storage: false
       served: true
     - name: v1-6-0
-      storage: false
+      storage: true
       served: true
     - name: v9-9-9
       storage: false
