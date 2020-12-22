@@ -1,4 +1,4 @@
-.. _operator-update:
+.. _operator-updates:
 
 Update Percona Server for MongoDB Operator
 ===========================================

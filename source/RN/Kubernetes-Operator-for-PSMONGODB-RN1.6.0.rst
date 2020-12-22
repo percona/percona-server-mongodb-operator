@@ -11,7 +11,7 @@ New Features
 ================================================================================
 
 * :jirabug:`K8SPSMDB-273`: Add support for ``mongos`` service to expose a single
-  :ref:`shard<shard>` of a MongoDB cluster through one entry point instead of
+  :ref:`shard<operator.sharding>` of a MongoDB cluster through one entry point instead of
   provisioning a load-balancer per replica set node. In the following release,
   we will add support for multiple shards.
 * :jirabug:`K8SPSMDB-282`: Official support for :ref:`Percona Monitoring and Management (PMM) v.2<operator.monitoring>`

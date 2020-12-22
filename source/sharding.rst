@@ -1,4 +1,4 @@
-.. _sharding:
+.. _operator.sharding:
 
 Percona Server for MongoDB Sharding
 ===================================
