@@ -1,0 +1,165 @@
+
+
+
+    <title>Design overview &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Install Percona Server for MongoDB on Minikube" href="minikube.html" />
+    <link rel="prev" title="System Requirements" href="System-Requirements.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="minikube.html" title="Install Percona Server for MongoDB on Minikube"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="System-Requirements.html" title="System Requirements"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="design-overview">
+<h1>Design overview</h1>
+<p>The design of the operator is tighly bound to the Percona Server for
+MongoDB replica set, which is briefly described in the following
+diagram.</p>
+<a class="reference internal image-reference" href="_images/replication.png"><img alt="PSMDB Replication" class="align-center" src="_images/replication.png" style="width: 250px; height: 250px;" /></a>
+<p>A replica set consists of one primary server and several secondary ones
+(two in the picture), and the client application accesses the servers
+via a driver.</p>
+<p>To provide high availability the Operator uses <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity">node
+affinity</a>
+to run MongoDB instances on separate worker nodes if possible, and the
+database cluster is deployed as a single Replica Set with at least three
+nodes. If a node fails, the pod with the mongod process is automatically
+re-created on another node. If the failed node was hosting the primary
+server, the replica set initiates elections to select a new primary. If
+the failed node was running the Operator, Kubernetes will restart the Operator on
+another node, so normal operation will not be interrupted.</p>
+<p>Client applications should use a mongo+srv URI for the connection. This
+allows the drivers (3.6 and up) to retrieve the list of replica set
+members from DNS SRV entries without having to list hostnames for the
+dynamically assigned nodes.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The Operator uses security settings which are more secure
+than the default Percona Server for MongoDB setup. The initial
+configuration contains default passwords for all needed user accounts,
+which should be changed in the production environment, as stated in
+the  <a class="reference external" href="openshift.html">installation instructions</a>.</p>
+</div>
+<a class="reference internal image-reference" href="_images/operator.png"><img alt="PSMDB Operator" class="align-center" src="_images/operator.png" style="width: 250px; height: 250px;" /></a>
+<p>To provide data storage for stateful applications, Kubernetes uses
+Persistent Volumes. A <em>PersistentVolumeClaim</em> (PVC) is used to implement
+the automatic storage provisioning to pods. If a failure occurs, the
+Container Storage Interface (CSI) should be able to re-mount storage on
+a different node. The PVC StorageClass must support this feature
+(Kubernetes and OpenShift support this in versions 1.9 and 3.9
+respectively).</p>
+<p>The Operator functionality extends the Kubernetes API with
+<em>PerconaServerMongoDB</em> object, and it is implemented as a golang
+application. Each <em>PerconaServerMongoDB</em> object maps to one separate
+PSMDB setup. The Operator listens to all events on the created objects.
+When a new PerconaServerMongoDB object is created, or an existing one
+undergoes some changes or deletion, the operator automatically
+creates/changes/deletes all needed Kubernetes objects with the
+appropriate settings to provide a properly operating replica set.</p>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="minikube.html" title="Install Percona Server for MongoDB on Minikube"
+             >next</a></li>
+        <li class="right" >
+          <a href="System-Requirements.html" title="System Requirements"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="System-Requirements.html"
+                        title="previous chapter">System Requirements</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="minikube.html"
+                        title="next chapter">Install Percona Server for MongoDB on Minikube</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

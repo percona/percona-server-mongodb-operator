@@ -1,0 +1,160 @@
+
+
+
+    <title>Deploy Percona server for MongoDB with Service Broker &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Install Percona Server for MongoDB using Helm" href="helm.html" />
+    <link rel="prev" title="Use Docker images from a custom registry" href="custom-registry.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="helm.html" title="Install Percona Server for MongoDB using Helm"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="custom-registry.html" title="Use Docker images from a custom registry"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="deploy-percona-server-for-mongodb-with-service-broker">
+<h1>Deploy Percona server for MongoDB with Service Broker</h1>
+<p>Percona Service Broker provides the <a class="reference external" href="https://www.openservicebrokerapi.org/">Open Service Broker</a> object to facilitate the operator deployment within high-level visual tools. Following steps are needed to use it while installing the Percona Server for MongoDB on the OpenShift platform:</p>
+<ol class="arabic">
+<li><p>The Percona Service Broker is to be deployed based on the <code class="docutils literal notranslate"><span class="pre">percona-broker.yaml</span></code> file. To use it you should first enable the <a class="reference external" href="https://docs.openshift.com/container-platform/4.1/applications/service_brokers/installing-service-catalog.html">Service Catalog</a>, which can be done as follows:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc patch servicecatalogapiservers cluster --patch <span class="s1">&#39;{&quot;spec&quot;:{&quot;managementState&quot;:&quot;Managed&quot;}}&#39;</span> --type<span class="o">=</span>merge
+$ oc patch servicecatalogcontrollermanagers cluster --patch <span class="s1">&#39;{&quot;spec&quot;:{&quot;managementState&quot;:&quot;Managed&quot;}}&#39;</span> --type<span class="o">=</span>merge
+</pre></div>
+</div>
+<p>When Service Catalog is enabled, download and install the Percona Service
+Broker in a typical OpenShift way:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc apply -f https://raw.githubusercontent.com/Percona-Lab/percona-dbaas-cli/broker/deploy/percona-broker.yaml
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This step should be done only once; the step does not need to be repeated
+with any other Operator deployments. It will automatically create and setup
+the needed service and projects catalog with all necessary objects.</p>
+</div>
+</li>
+<li><p>Now login to your <a class="reference external" href="https://github.com/openshift/console">OpenShift Console Web UI</a> and switch to the percona-service-broker project. You can check its Pod running on a correspondent page:</p>
+<img alt="Broker in the OpenShift Console" class="align-center" src="_images/broker-pods.png" />
+<p>Now switch to the Developer Catalog and select Percona Kubernetes Operator
+for MongoDB:</p>
+<img alt="Developer Catalog" class="align-center" src="_images/broker-dev-catalog.png" />
+<p>Choose <code class="docutils literal notranslate"><span class="pre">Percona</span> <span class="pre">Kubernetes</span> <span class="pre">Operator</span> <span class="pre">for</span> <span class="pre">Percona</span> <span class="pre">Server</span> <span class="pre">for</span> <span class="pre">MongoDB</span></code> item.
+This will lead you to the Operator page with the <em>Create Service Instance</em>
+button.</p>
+</li>
+<li><p>Clicking the <em>Create Service Instance</em> button guides you to the next page:</p>
+<img alt="Developer Catalog" class="align-center" src="_images/broker-create-service-instance.png" />
+<p>The two necessary fields are <em>Service Instance Name</em> and <em>Cluster Name</em>,
+which should be unique for your project.</p>
+</li>
+<li><p>Clicking the <em>Create</em> button gets you to the <em>Overview</em> page, which reflects
+the process of the cluster creation process:</p>
+<img alt="Developer Catalog" class="align-center" src="_images/broker-creation.png" />
+<p>You can also track Pods to see when they are deployed and track any errors.</p>
+</li>
+</ol>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="helm.html" title="Install Percona Server for MongoDB using Helm"
+             >next</a></li>
+        <li class="right" >
+          <a href="custom-registry.html" title="Use Docker images from a custom registry"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="custom-registry.html"
+                        title="previous chapter">Use Docker images from a custom registry</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="helm.html"
+                        title="next chapter">Install Percona Server for MongoDB using Helm</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

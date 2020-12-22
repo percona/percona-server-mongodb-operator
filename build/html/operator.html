@@ -1,0 +1,2310 @@
+
+
+
+    <title>Custom Resource options &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Percona certified images" href="images.html" />
+    <link rel="prev" title="Debug" href="debug.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="images.html" title="Percona certified images"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="debug.html" title="Debug"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="custom-resource-options">
+<span id="operator-custom-resource-options"></span><h1>Custom Resource options</h1>
+<p>The operator is configured via the spec section of the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file. This file contains the following spec sections:</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 15%" />
+<col style="width: 10%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Key</p></th>
+<th class="head"><p>Value type</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>platform</p></td>
+<td><p>string</p></td>
+<td><p>kubernetes</p></td>
+<td><p>Override/set the Kubernetes platform: <em>kubernetes</em> or <em>openshift</em>. Set openshift on OpenShift 3.11+</p></td>
+</tr>
+<tr class="row-odd"><td><p>pause</p></td>
+<td><p>boolean</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+<td><p>Pause/resume: setting it to <code class="docutils literal notranslate"><span class="pre">true</span></code> gracefully stops the cluster, and
+setting it to <code class="docutils literal notranslate"><span class="pre">false</span></code> after shut down starts the cluster back.</p></td>
+</tr>
+<tr class="row-even"><td><p>crVersion</p></td>
+<td><p>string</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1.6.0</span></code></p></td>
+<td><p>Version of the Operator the Custom Resource belongs to</p></td>
+</tr>
+<tr class="row-odd"><td><p>image</p></td>
+<td><p>string</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">percona/percona-server-mongodb:4.2.8-8</span></code></p></td>
+<td><p>The Docker image of <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html">Percona Server for MongoDB</a> to deploy (actual image names can be found <a class="reference internal" href="images.html#custom-registry-images"><span class="std std-ref">in the list of certified images</span></a>)</p></td>
+</tr>
+<tr class="row-even"><td><p>imagePullPolicy</p></td>
+<td><p>string</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Always</span></code></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/containers/images/#updating-images">policy used to update images</a></p></td>
+</tr>
+<tr class="row-odd"><td><p>imagePullSecrets.name</p></td>
+<td><p>string</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">private-registry-credentials</span></code></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets">Kubernetes ImagePullSecret</a> to access the <a class="reference internal" href="custom-registry.html#custom-registry"><span class="std std-ref">custom registry</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p>ClusterServiceDNSSuffix</p></td>
+<td><p>string</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">svc.cluster.local</span></code></p></td>
+<td><p>The (non-standard) cluster domain to be used as a suffix of the Service
+name</p></td>
+</tr>
+<tr class="row-odd"><td><p>runUid</p></td>
+<td><p>int</p></td>
+<td><p>1001</p></td>
+<td><p>The (non-standard) user ID</p></td>
+</tr>
+<tr class="row-even"><td><p>allowUnsafeConfigurations</p></td>
+<td><p>boolean</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+<td><p>Prevents users from configuring a cluster with unsafe parameters such as starting the cluster with less than 3 replica set nodes, with odd number of replica set nodes and no arbiter, or without TLS/SSL certificates (if <code class="docutils literal notranslate"><span class="pre">true</span></code>, unsafe parameters will be automatically changed to safe defaults)</p></td>
+</tr>
+<tr class="row-odd"><td><p>updateStrategy</p></td>
+<td><p>string</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SmartUpdate</span></code></p></td>
+<td><p>A strategy the Operator uses for <a class="reference internal" href="update.html#operator-update"><span class="std std-ref">upgrades</span></a>. Possible values are <a class="reference internal" href="update.html#operator-update-smartupdates"><span class="std std-ref">SmartUpdate</span></a>, <a class="reference external" href="https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates">RollingUpdate</a> and <a class="reference external" href="https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete">OnDelete</a>.</p></td>
+</tr>
+<tr class="row-even"><td><p>upgradeOptions</p></td>
+<td><p><a class="reference internal" href="#operator-upgradeoptions-section"><span class="std std-ref">subdoc</span></a></p></td>
+<td></td>
+<td><p>Upgrade configuration section</p></td>
+</tr>
+<tr class="row-odd"><td><p>secrets</p></td>
+<td><p><a class="reference internal" href="#operator-secrets-section"><span class="std std-ref">subdoc</span></a></p></td>
+<td></td>
+<td><p>Operator secrets section</p></td>
+</tr>
+<tr class="row-even"><td><p>replsets</p></td>
+<td><p><a class="reference internal" href="#operator-replsets-section"><span class="std std-ref">subdoc</span></a></p></td>
+<td></td>
+<td><p>Operator MongoDB Replica Set section</p></td>
+</tr>
+<tr class="row-odd"><td><p>pmm</p></td>
+<td><p><a class="reference internal" href="#operator-pmm-section"><span class="std std-ref">subdoc</span></a></p></td>
+<td></td>
+<td><p>Percona Monitoring and Management section</p></td>
+</tr>
+<tr class="row-even"><td><p>sharding</p></td>
+<td><p><a class="reference internal" href="#operator-sharding-section"><span class="std std-ref">subdoc</span></a></p></td>
+<td></td>
+<td><p>MongoDB sharding configuration section</p></td>
+</tr>
+<tr class="row-odd"><td><p>mongod</p></td>
+<td><p><a class="reference internal" href="#operator-mongod-section"><span class="std std-ref">subdoc</span></a></p></td>
+<td></td>
+<td><p>Operator MongoDB Mongod configuration section</p></td>
+</tr>
+<tr class="row-even"><td><p>backup</p></td>
+<td><p><a class="reference internal" href="#operator-backup-section"><span class="std std-ref">subdoc</span></a></p></td>
+<td></td>
+<td><p>Percona Server for MongoDB backups section</p></td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="operator-upgradeoptions-section">
+<span id="id1"></span><h2><a class="reference external" href="operator.html#operator-upgradeoptions-section">Upgrade Options Section</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">upgradeOptions</span></code> section in the <a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a> file contains various configuration options to control Percona Server for MongoDB upgrades.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 85%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="upgradeoptions-versionserviceendpoint"><a class="reference external" href="operator.html#upgradeoptions-versionserviceendpoint">upgradeOptions.versionServiceEndpoint</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">https://check.percona.com</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The Version Service URL used to check versions compatibility for upgrade</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="upgradeoptions-apply"><a class="reference external" href="operator.html#upgradeoptions-apply">upgradeOptions.apply</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Recommended</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Specifies how <a class="reference internal" href="update.html#operator-update-smartupdates"><span class="std std-ref">updates are processed</span></a> by the Operator.
+<code class="docutils literal notranslate"><span class="pre">Never</span></code> or <code class="docutils literal notranslate"><span class="pre">Disabled</span></code> will completely disable automatic upgrades, otherwise it can be
+set to <code class="docutils literal notranslate"><span class="pre">Latest</span></code> or <code class="docutils literal notranslate"><span class="pre">Recommended</span></code> or to a specific version string of PSMDB (e.g.
+<code class="docutils literal notranslate"><span class="pre">4.2.8-8</span></code>) that is wished to be version-locked (so that the user can control the
+version running, but use automatic upgrades to move between them).</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="upgradeoptions-schedule"><a class="reference external" href="operator.html#upgradeoptions-schedule">upgradeOptions.schedule</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">*</span> <span class="pre">*</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Scheduled time to check for updates, specified in the
+<a class="reference external" href="https://en.wikipedia.org/wiki/Cron">crontab format</a></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="operator-secrets-section">
+<span id="id5"></span><h2><a class="reference external" href="operator.html#operator-secrets-section">Secrets section</a></h2>
+<p>Each spec in its turn may contain some key-value pairs. The secrets one
+has only two of them:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 85%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="secrets-key"><a class="reference external" href="operator.html#secrets-key">secrets.key</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">my-cluster-name-mongodb-key</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The secret name for the <a class="reference external" href="https://docs.mongodb.com/manual/core/security-internal-authentication/">MongoDB Internal Auth Key</a>. This secret is
+auto-created by the operator if it doesn’t exist.</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="secrets-users"><a class="reference external" href="operator.html#secrets-users">secrets.users</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">my-cluster-name-mongodb-users</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The secret name for the MongoDB users required to run the operator.
+<strong>This secret is required to run the operator.</strong></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="operator-replsets-section">
+<span id="id8"></span><h2><a class="reference external" href="operator.html#operator-replsets-section">Replsets Section</a></h2>
+<p>The replsets section controls the MongoDB Replica Set.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 85%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-name"><a class="reference external" href="operator.html#replsets-name">replsets.name</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rs</span> <span class="pre">0</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The name of the <a class="reference external" href="https://docs.mongodb.com/manual/replication/">MongoDB Replica Set</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-size"><a class="reference external" href="operator.html#replsets-size">replsets.size</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p>3</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The size of the MongoDB Replica Set, must be &gt;= 3 for <a class="reference external" href="https://docs.mongodb.com/manual/replication/#redundancy-and-data-availability">High-Availability</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-affinity-antiaffinitytopologykey"><a class="reference external" href="operator.html#replsets-affinity-antiaffinitytopologykey">replsets.affinity.antiAffinityTopologyKey</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">kubernetes.io/hostname</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature">Kubernetes topologyKey</a> node affinity constraint for the
+Replica Set nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-affinity-advanced"><a class="reference external" href="operator.html#replsets-affinity-advanced">replsets.affinity.advanced</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>subdoc</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>In cases where the pods require complex tuning the <cite>advanced</cite> option turns off the
+<code class="docutils literal notranslate"><span class="pre">topologykey</span></code> effect. This setting allows the standard Kubernetes affinity constraints of
+any complexity to be used</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-tolerations-key"><a class="reference external" href="operator.html#replsets-tolerations-key">replsets.tolerations.key</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">node.alpha.kubernetes.io/unreachable</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a> key
+for the Replica Set nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-tolerations-operator"><a class="reference external" href="operator.html#replsets-tolerations-operator">replsets.tolerations.operator</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Exists</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+operator for the Replica Set nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-tolerations-effect"><a class="reference external" href="operator.html#replsets-tolerations-effect">replsets.tolerations.effect</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NoExecute</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a> effect
+for the Replica Set nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-tolerations-tolerationseconds"><a class="reference external" href="operator.html#replsets-tolerations-tolerationSeconds">replsets.tolerations.tolerationSeconds</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">6000</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a> time
+limit  for the Replica Set nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-priorityclassname"><a class="reference external" href="operator.html#replsets-priorityclassname">replsets.priorityClassName</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">high</span> <span class="pre">priority</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass">Kuberentes Pod priority class</a>  for the Replica Set nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-annotations"><a class="reference external" href="operator.html#replsets-annotations">replsets.annotations.iam.amazonaws.com/role</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">role-arn</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html">AWS IAM role</a>  for the
+Replica Set nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-labels"><a class="reference external" href="operator.html#replsets-labels">replsets.labels</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>label</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rack:</span> <span class="pre">rack-22</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/">Kubernetes affinity labels</a>
+for the Replica Set nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-nodeselector"><a class="reference external" href="operator.html#replsets-nodeselector">replsets.nodeSelector</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>label</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">disktype:</span> <span class="pre">ssd</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector">Kubernetes nodeSelector</a>
+affinity constraint  for the Replica Set nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-livenessprobe-failurethreshold"><a class="reference external" href="operator.html#replsets-livenessprobe-failurethreshold">replsets.livenessProbe.failureThreshold</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">4</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Number of consecutive unsuccessful tries of the
+<a class="reference external" href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes">liveness probe</a> to be undertaken
+before giving up.</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-livenessprobe-initialdelayseconds"><a class="reference external" href="operator.html#replsets-livenessprobe-initialdelayseconds">replsets.livenessProbe.initialDelaySeconds</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">60</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Number of seconds to wait after the container start before initiating the <a class="reference external" href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes">liveness probe</a>.</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-livenessprobe-periodseconds"><a class="reference external" href="operator.html#replsets-livenessprobe-periodseconds">replsets.livenessProbe.periodSeconds</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">30</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>How often to perform a <a class="reference external" href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes">liveness probe</a> (in seconds).</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-livenessprobe-successthreshold"><a class="reference external" href="operator.html#replsets-livenessprobe-successthreshold">replsets.livenessProbe.successThreshold</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Minimum consecutive successes for the <a class="reference external" href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes">liveness probe</a> to be considered
+successful after having failed.</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-livenessprobe-timeoutseconds"><a class="reference external" href="operator.html#replsets-livenessprobe-timeoutseconds">replsets.livenessProbe.timeoutSeconds</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">5</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Number of seconds after which the <a class="reference external" href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes">liveness probe</a> times out.</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-livenessprobe-startupdelayseconds"><a class="reference external" href="operator.html#replsets-livenessprobe-startupdelayseconds">replsets.livenessProbe.startupDelaySeconds</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">7200</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Time after which the liveness probe is failed if the MongoDB instance didn’t finish its
+full startup yet</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-poddisruptionbudget-maxunavailable"><a class="reference external" href="operator.html#replsets-poddisruptionbudget-maxunavailable">replsets.podDisruptionBudget.maxUnavailable</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/workloads/pods/disruptions/">Kubernetes Pod distribution budget</a>
+limit specifying the maximum value for unavailable Pods</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-poddisruptionbudget-minavailable"><a class="reference external" href="operator.html#replsets-poddisruptionbudget-minavailable">replsets.podDisruptionBudget.minAvailable</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/workloads/pods/disruptions/">Kubernetes Pod distribution budget</a>
+limit specifying the minimum value for available Pods</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-expose-enabled"><a class="reference external" href="operator.html#replsets-expose-enabled">replsets.expose.enabled</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Enable or disable exposing <a class="reference external" href="https://docs.mongodb.com/manual/replication/">MongoDB Replica Set</a> nodes with dedicated IP addresses</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-expose-exposetype"><a class="reference external" href="operator.html#replsets-expose-exposetype">replsets.expose.exposeType</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ClusterIP</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types">IP address type</a> to be exposed</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-enabled"><a class="reference external" href="operator.html#replsets-arbiter-enabled">replsets.arbiter.enabled</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Enable or disable creation of <a class="reference external" href="https://docs.mongodb.com/manual/core/replica-set-arbiter/">Replica Set Arbiter</a> nodes within the cluster</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-size"><a class="reference external" href="operator.html#replsets-arbiter-size">replsets.arbiter.size</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The number of <a class="reference external" href="https://docs.mongodb.com/manual/core/replica-set-arbiter/">Replica Set Arbiter</a> instances
+within the cluster</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-affinity-antiaffinitytopologykey"><a class="reference external" href="operator.html#replsets-arbiter-affinity-antiaffinitytopologykey">replsets.arbiter.afinity.antiAffinityTopologyKey</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">kubernetes.io/hostname</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature">Kubernetes topologyKey</a>
+node affinity constraint for the Arbiter</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-affinity-advanced"><a class="reference external" href="operator.html#replsets-arbiter-affinity-advanced">replsets.arbiter.affinity.advanced</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>subdoc</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>In cases where the pods require complex tuning the <cite>advanced</cite> option turns off
+the <code class="docutils literal notranslate"><span class="pre">topologykey</span></code> effect. This setting allows the standard Kubernetes affinity
+constraints of any complexity to be used</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-tolerations-key"><a class="reference external" href="operator.html#replsets-arbiter-tolerations-key">replsets.arbiter.tolerations.key</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">node.alpha.kubernetes.io/unreachable</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+key for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-tolerations-operator"><a class="reference external" href="operator.html#replsets-arbiter-tolerations-operator">replsets.arbiter.tolerations.operator</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Exists</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+operator for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-tolerations-effect"><a class="reference external" href="operator.html#replsets-arbiter-tolerations-effect">replsets.arbiter.tolerations.effect</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NoExecute</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+effect for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-tolerations-tolerationseconds"><a class="reference external" href="operator.html#replsets-arbiter-tolerations-tolerationseconds">replsets.arbiter.tolerations.tolerationSeconds</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">6000</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+time limit for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-priorityclassname"><a class="reference external" href="operator.html#replsets-arbiter-priorityclassname">replsets.arbiter.priorityClassName</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">high</span> <span class="pre">priority</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass">Kuberentes Pod priority class</a> for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-annotations"><a class="reference external" href="operator.html#replsets-arbiter-annotations">replsets.arbiter.annotations.iam.amazonaws.com/role</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">role-arn</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html">AWS IAM role</a>
+for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-labels"><a class="reference external" href="operator.html#replsets-arbiter-labels">replsets.arbiter.labels</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>label</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rack:</span> <span class="pre">rack-22</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/">Kubernetes affinity labels</a>
+for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-arbiter-nodeselector"><a class="reference external" href="operator.html#replsets-arbiter-nodeselector">replsets.arbiter.nodeSelector</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>label</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">disktype:</span> <span class="pre">ssd</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector">Kubernetes nodeSelector</a> affinity constraint for the Arbiter nodes</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-schedulername"><a class="reference external" href="operator.html#replsets-schedulername">replsets.schedulerName</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">default</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers">Kubernetes Scheduler</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-resources-limits-cpu"><a class="reference external" href="operator.html#replsets-resources-limits-cpu">replsets.resources.limits.cpu</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">300m</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes CPU limit</a> for MongoDB container</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-resources-limits-memory"><a class="reference external" href="operator.html#replsets-resources-limits-memory">replsets.resources.limits.memory</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.5G</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes Memory limit</a> for MongoDB container</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-resources-requests-cpu"><a class="reference external" href="operator.html#replsets-resources-requests-cpu">replsets.resources.requests.cpu</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes CPU requests</a> for MongoDB container</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-resources-requests-memory"><a class="reference external" href="operator.html#replsets-resources-requests-memory">replsets.resources.requests.memory</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes Memory requests</a> for MongoDB container</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-volumespec-emptydir"><a class="reference external" href="operator.html#replsets-volumespec-emptydir">replsets.volumeSpec.emptyDir</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{}</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#emptydir">Kubernetes emptyDir volume</a>, i.e. the directory which will be created on a node, and will be accessible to
+the MongoDB Pod containers</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-volumespec-hostpath-path"><a class="reference external" href="operator.html#replsets-volumespec-hostpath-path">replsets.volumeSpec.hostPath.path</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/data</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#hostpath">Kubernetes hostPath volume</a>, i.e. the file or directory of a node that will be accessible to the MongoDB
+Pod containers</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-volumespec-hostpath-type"><a class="reference external" href="operator.html#replsets-volumespec-hostpath-type">replsets.volumeSpec.hostPath.type</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Directory</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#hostpath">Kubernetes hostPath volume type</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-volumespec-persistentvolumeclaim-storageclassname"><a class="reference external" href="operator.html#replsets-volumespec-persistentvolumeclaim-storageclassname">replsets.volumeSpec.persistentVolumeClaim.storageClassName</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">standard</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes Storage Class</a>
+to use with the MongoDB container <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims">Persistent Volume Claim</a>.
+Use Storage Class with XFS as the default filesystem if possible, <a class="reference external" href="https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb">for better MongoDB
+performance</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-volumespec-persistentvolumeclaim-accessmodes"><a class="reference external" href="operator.html#replsets-volumespec-persistentvolumeclaim-accessmodes">replsets.volumeSpec.persistentVolumeClaim.accessModes</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>array</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[</span> <span class="pre">&quot;ReadWriteOnce&quot;</span> <span class="pre">]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">Kubernetes Persistent Volume</a>
+access modes for the MongoDB container</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="replsets-volumespec-persistentvolumeclaim-resources-requests-storage"><a class="reference external" href="operator.html#replsets-volumespec-persistentvolumeclaim-resources-requests-storage">replsets.volumeSpec.persistentVolumeClaim.resources.requests.storage</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">3Gi</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">Kubernetes Persistent Volume</a>
+size for the MongoDB container</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="operator-pmm-section">
+<span id="id71"></span><h2><a class="reference external" href="operator.html#operator-pmm-section">PMM Section</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">pmm</span></code> section in the deploy/cr.yaml file contains configuration
+options for Percona Monitoring and Management.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 85%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="pmm-enabled"><a class="reference external" href="operator.html#pmm-enabled">pmm.enabled</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Enables or disables monitoring Percona Server for MongoDB with
+<a class="reference external" href="https://www.percona.com/doc/percona-monitoring-and-managementindex.metrics-monitor.dashboard.html">PMM</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="pmm-image"><a class="reference external" href="operator.html#pmm-image">pmm.image</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">percona/pmm-client:2.12.0</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>PMM Client docker image to use</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="pmm-serverhost"><a class="reference external" href="operator.html#pmm-serverhost">pmm.serverHost</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">monitoring-service</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Address of the PMM Server to collect data from the Cluster</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="pmm-mongodparams"><a class="reference external" href="operator.html#pmm-mongodparams">pmm.mongodParams</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--environment=DEV-ENV</span> <span class="pre">--custom-labels=DEV-ENV</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Additional parameters which will be passed to the <a class="reference external" href="https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring">pmm-admin add mongodb</a> command for <code class="docutils literal notranslate"><span class="pre">mongod</span></code> Pods</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="pmm-mongosparams"><a class="reference external" href="operator.html#pmm-mongosparams">pmm.mongosParams</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--environment=DEV-ENV</span> <span class="pre">--custom-labels=DEV-ENV</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Additional parameters which will be passed to the <a class="reference external" href="https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring">pmm-admin add mongodb</a> command for <code class="docutils literal notranslate"><span class="pre">mongos</span></code> Pods</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="operator-sharding-section">
+<span id="id78"></span><h2><a class="reference external" href="operator.html#operator-sharding-section">Sharding Section</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">sharding</span></code> section in the deploy/cr.yaml file contains configuration
+options for Percona Server for MondoDB <a class="reference internal" href="sharding.html#operator-sharding"><span class="std std-ref">sharding</span></a>.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 85%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-enabled"><a class="reference external" href="operator.html#sharding-enabled">sharding.enabled</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Enables or disables <a class="reference external" href="https://docs.mongodb.com/manual/sharding/">Percona Server for MondoDB
+sharding</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-configsvrreplset-size"><a class="reference external" href="operator.html#sharding-configsvrreplset-size">sharding.configsvrReplSet.size</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">3</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The number of <a class="reference external" href="https://docs.mongodb.com/manual/core/sharded-cluster-config-servers/">Config Server instances</a> within the cluster</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-configsvrreplset-volumespec-emptydir"><a class="reference external" href="operator.html#sharding-configsvrreplset-volumespec-emptydir">sharding.configsvrReplSet.volumeSpec.emptyDir</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{}</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#emptydir">Kubernetes emptyDir volume</a>, i.e. the directory which will be created on a node, and will be accessible to
+the Config Server Pod containers</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-configsvrreplset-volumespec-hostpath-path"><a class="reference external" href="operator.html#sharding-configsvrreplset-volumespec-hostpath-path">sharding.configsvrReplSet.volumeSpec.hostPath.path</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/data</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#hostpath">Kubernetes hostPath volume</a>, i.e. the file or directory of a node that will be accessible to the Config
+Server Pod containers</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-configsvrreplset-volumespec-hostpath-type"><a class="reference external" href="operator.html#sharding-configsvrreplset-volumespec-hostpath-type">sharding.configsvrReplSet.volumeSpec.hostPath.type</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Directory</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#hostpath">Kubernetes hostPath volume type</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-configsvrreplset-volumespec-persistentvolumeclaim-storageclassname"><a class="reference external" href="operator.html#sharding-configsvrreplset-volumespec-persistentvolumeclaim-storageclassname">sharding.configsvrReplSet.volumeSpec.persistentVolumeClaim.storageClassName</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">standard</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes Storage Class</a>
+to use with the Config Server container <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims">Persistent Volume Claim</a>.
+Use Storage Class with XFS as the default filesystem if possible, <a class="reference external" href="https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb">for better MongoDB
+performance</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-configsvrreplset-volumespec-persistentvolumeclaim-accessmodes"><a class="reference external" href="operator.html#sharding-configsvrreplset-volumespec-persistentvolumeclaim-accessmodes">sharding.configsvrReplSet.volumeSpec.persistentVolumeClaim.accessModes</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>array</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[</span> <span class="pre">&quot;ReadWriteOnce&quot;</span> <span class="pre">]</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">Kubernetes Persistent Volume</a>
+access modes for the Config Server container</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-configsvrreplset-volumespec-persistentvolumeclaim-resources-requests-storage"><a class="reference external" href="operator.html#sharding-configsvrreplset-volumespec-persistentvolumeclaim-resources-requests-storage">sharding.configsvrReplSet.volumeSpec.persistentVolumeClaim.resources.requests.storage</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">3Gi</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">Kubernetes Persistent Volume</a>
+size for the Config Server container</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-size"><a class="reference external" href="operator.html#sharding-mongos-size">sharding.mongos.size</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">3</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The number of <a class="reference external" href="https://docs.mongodb.com/manual/core/sharded-cluster-query-router/">mongos</a> instances
+within the cluster</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-affinity-antiaffinitytopologykey"><a class="reference external" href="operator.html#sharding-mongos-affinity-antiaffinitytopologykey">sharding.mongos.afinity.antiAffinityTopologyKey</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">kubernetes.io/hostname</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature">Kubernetes topologyKey</a>
+node affinity constraint for mongos</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-affinity-advanced"><a class="reference external" href="operator.html#sharding-mongos-affinity-advanced">sharding.mongos.affinity.advanced</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>subdoc</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>In cases where the Pods require complex tuning the <cite>advanced</cite> option turns off
+the <code class="docutils literal notranslate"><span class="pre">topologykey</span></code> effect. This setting allows the standard Kubernetes affinity
+constraints of any complexity to be used</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-tolerations-key"><a class="reference external" href="operator.html#sharding-mongos-tolerations-key">sharding.mongos.tolerations.key</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">node.alpha.kubernetes.io/unreachable</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+key for mongos instances</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-tolerations-operator"><a class="reference external" href="operator.html#sharding-mongos-tolerations-operator">sharding.mongos.tolerations.operator</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Exists</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+operator for mongos instances</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-tolerations-effect"><a class="reference external" href="operator.html#sharding-mongos-tolerations-effect">sharding.mongos.tolerations.effect</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NoExecute</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+effect for mongos instances</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-tolerations-tolerationseconds"><a class="reference external" href="operator.html#sharding-mongos-tolerations-tolerationseconds">sharding.mongos.tolerations.tolerationSeconds</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">6000</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#concepts">Kubernetes Pod tolerations</a>
+time limit for mongos instances</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-priorityclassname"><a class="reference external" href="operator.html#sharding-mongos-priorityclassname">sharding.mongos.priorityClassName</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">high</span> <span class="pre">priority</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass">Kuberentes Pod priority class</a> for mongos instances</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-annotations"><a class="reference external" href="operator.html#sharding-mongos-annotations">sharding.mongos.annotations.iam.amazonaws.com/role</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">role-arn</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html">AWS IAM role</a>
+for mongos instances</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-labels"><a class="reference external" href="operator.html#sharding-mongos-labels">sharding.mongos.labels</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>label</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rack:</span> <span class="pre">rack-22</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/">Kubernetes affinity labels</a>
+for mongos instances</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-nodeselector"><a class="reference external" href="operator.html#sharding-mongos-nodeselector">sharding.mongos.nodeSelector</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>label</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">disktype:</span> <span class="pre">ssd</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector">Kubernetes nodeSelector</a> affinity constraint for mongos instances</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-resources-limits-cpu"><a class="reference external" href="operator.html#sharding-mongos-resources-limits-cpu">sharding.mongos.limits.cpu</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">300m</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes CPU limit</a> for mongos container</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-resources-limits-memory"><a class="reference external" href="operator.html#sharding-mongos-resources-limits-memory">sharding.mongos.limits.memory</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.5G</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes Memory limit</a> for mongos container</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-resources-requests-cpu"><a class="reference external" href="operator.html#sharding-mongos-resources-requests-cpu">sharding.mongos.resources.requests.cpu</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">300m</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes CPU requests</a> for mongos container</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-resources-requests-memory"><a class="reference external" href="operator.html#sharding-mongos-resources-requests-memory">sharding.mongos.requests.memory</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.5G</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes Memory requests</a> for mongos container</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-expose-enabled"><a class="reference external" href="operator.html#sharding-mongos-expose-enabled">sharding.mongos.expose.enabled</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Enable or disable exposing <a class="reference external" href="https://docs.mongodb.com/manual/core/sharded-cluster-query-router/">MongoDB mongos daemons</a> with dedicated IP
+addresses</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-expose-exposetype"><a class="reference external" href="operator.html#sharding-mongos-expose-exposetype">sharding.mongos.expose.exposeType</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ClusterIP</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types">IP address type</a> to be exposed</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-loadbalancersourceranges"><a class="reference external" href="operator.html#sharding-mongos-loadbalancersourceranges">sharding.mongos.loadBalancerSourceRanges</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10.0.0.0/8</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The range of client IP addresses from which the load balancer should be reachable
+(if not set, there is no limitations)</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-serviceannotations"><a class="reference external" href="operator.html#sharding-mongos-serviceannotations">sharding.mongos.serviceAnnotations</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">service.beta.kubernetes.io/aws-load-balancer-backend-protocol:</span> <span class="pre">http</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/">Kubernetes annotations</a>
+metadata for the MongoDB mongos daemon</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-auditlog-destination"><a class="reference external" href="operator.html#sharding-mongos-auditLog-destination">sharding.mongos.auditLog.destination</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html">auditLog.destination option</a>
+for the MongoDB mongos daemon</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-auditlog-format"><a class="reference external" href="operator.html#sharding-mongos-auditLog-format">sharding.mongos.auditLog.format</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BSON</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html">auditLog.format option</a>
+for the MongoDB mongos daemon</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="sharding-mongos-auditlog-filter"><a class="reference external" href="operator.html#sharding-mongos-auditLog-filter">sharding.mongos.auditLog.filter</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{}</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html">auditLog.filter option</a>
+for the MongoDB mongos daemon</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="operator-mongod-section">
+<span id="id125"></span><h2><a class="reference external" href="operator.html#operator-mongod-section">Mongod Section</a></h2>
+<p>This section contains the Mongod configuration options.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 85%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-net-port"><a class="reference external" href="operator.html#mongod-net-port">mongod.net.port</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">27017</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the MongoDB <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#net.port">net.port option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-net-hostport"><a class="reference external" href="operator.html#mongod-net-hostport">mongod.net.hostport</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the Kubernetes <a class="reference external" href="https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#support-hostport">hostPort option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-security-redactclientlogdata"><a class="reference external" href="operator.html#mongod-security-redactclientlogdata">mongod.security.redactClientLogData</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>bool</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Enables/disables <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html">PSMDB Log Redaction</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-security-enableencryption"><a class="reference external" href="operator.html#mongod-security-enableencryption">mongod.security.enableEncryption</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>bool</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Enables/disables <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/data_at_rest_encryption.html">PSMDB data at rest encryption</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-security-encryptionkeysecret"><a class="reference external" href="operator.html#mongod-security-encryptionkeysecret">mongod.security.encryptionKeySecret</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">my-cluster-name-mongodb-encryption-key</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Specifies a secret object with the <a class="reference external" href="https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management">encryption key</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-security-encryptionciphermode"><a class="reference external" href="operator.html#mongod-security-encryptionciphermode">mongod.security.encryptionCipherMode</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">AES256-CBC</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets
+<a class="reference external" href="https://docs.mongodb.com/manual/reference/program/mongod/#cmdoption-mongod-encryptionciphermode">PSMDB encryption cipher mode</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-setparameter-ttlmonitorsleepsecs"><a class="reference external" href="operator.html#mongod-setparameter-ttlmonitorsleepsecs">mongod.setParameter.ttlMonitorSleepSecs</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">60</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the PSMDB <cite>ttlMonitorSleepSecs</cite> option</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-setparameter-wiredtigerconcurrentreadtransactions"><a class="reference external" href="operator.html#mongod-setparameter-wiredtigerconcurrentreadtransactions">mongod.setParameter.wiredTigerConcurrentReadTransactions</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">128</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentReadTransactions">wiredTigerConcurrentReadTransactions option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-setparameter-wiredtigerconcurrentwritetransactions"><a class="reference external" href="operator.html#mongod-setparameter-wiredtigerconcurrentwritetransactions">mongod.setParameter.wiredTigerConcurrentWriteTransactions</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">128</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/parameters/#param.wiredTigerConcurrentWriteTransactions">wiredTigerConcurrentWriteTransactions option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-engine"><a class="reference external" href="operator.html#mongod-storage-engine">mongod.storage.engine</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">wiredTiger</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine">storage.engine option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-inmemory-engineconfig-inmemorysizeratio"><a class="reference external" href="operator.html#mongod-storage-inmemory-engineconfig-inmemorysizeratio">mongod.storage.inMemory.engineConfig.inMemorySizeRatio</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>float</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.9</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The ratio used to compute the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html#--inMemorySizeGB">storage.engine.inMemory.inMemorySizeGb option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-mmapv1-nssize"><a class="reference external" href="operator.html#mongod-storage-mmapv1-nssize">mongod.storage.mmapv1.nsSize</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">16</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.nsSize">storage.mmapv1.nsSize option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-mmapv1-smallfiles"><a class="reference external" href="operator.html#mongod-storage-mmapv1-smallfiles">mongod.storage.mmapv1.smallfiles</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>bool</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.smallFiles">storage.mmapv1.smallfiles option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-wiredtiger-engineconfig-cachesizeratio"><a class="reference external" href="operator.html#mongod-storage-wiredtiger-engineconfig-cachesizeratio">mongod.storage.wiredTiger.engineConfig.cacheSizeRatio</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>float</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.5</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The ratio used to compute the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB">storage.wiredTiger.engineConfig.cacheSizeGB option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-wiredtiger-engineconfig-directoryforindexes"><a class="reference external" href="operator.html#mongod-storage-wiredtiger-engineconfig-directoryforindexes">mongod.storage.wiredTiger.engineConfig.directoryForIndexes</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>bool</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.directoryForIndexes">storage.wiredTiger.engineConfig.directoryForIndexes option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-wiredtiger-engineconfig-journalcompressor"><a class="reference external" href="operator.html#mongod-storage-wiredtiger-engineconfig-journalcompressor">mongod.storage.wiredTiger.engineConfig.journalCompressor</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">snappy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.journalCompressor">storage.wiredTiger.engineConfig.journalCompressor option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-wiredtiger-collectionconfig-blockcompressor"><a class="reference external" href="operator.html#mongod-storage-wiredtiger-collectionconfig-blockcompressor">mongod.storage.wiredTiger.collectionConfig.blockCompressor</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">snappy</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.collectionConfig.blockCompressor">storage.wiredTiger.collectionConfig.blockCompressor option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-storage-wiredtiger-indexconfig-prefixcompression"><a class="reference external" href="operator.html#mongod-storage-wiredtiger-indexconfig-prefixcompression">mongod.storage.wiredTiger.indexConfig.prefixCompression</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>bool</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.indexConfig.prefixCompression">storage.wiredTiger.indexConfig.prefixCompression option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-operationprofiling-mode"><a class="reference external" href="operator.html#mongod-operationprofiling-mode">mongod.operationProfiling.mode</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">slowOp</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.mode">operationProfiling.mode option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-operationprofiling-slowopthresholdms"><a class="reference external" href="operator.html#mongod-operationprofiling-slowopthresholdms">mongod.operationProfiling.slowOpThresholdMs</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">100</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://docs.mongodb.com/manual/reference/configuration-options/#operationProfiling.slowOpThresholdMs">operationProfiling.slowOpThresholdMs</a> option</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-operationprofiling-ratelimit"><a class="reference external" href="operator.html#mongod-operationprofiling-ratelimit">mongod.operationProfiling.rateLimit</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html">operationProfiling.rateLimit option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-auditlog-destination"><a class="reference external" href="operator.html#mongod.auditLog.destination">mongod.auditLog.destination</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html">auditLog.destination option</a></p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-auditlog-format"><a class="reference external" href="operator.html#mongod-auditLog-format">mongod.auditLog.format</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BSON</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html">auditLog.format option</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="mongod-auditlog-filter"><a class="reference external" href="operator.html#mongod-auditLog-filter">mongod.auditLog.filter</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{}</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Sets the <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html">auditLog.filter option</a></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="operator-backup-section">
+<span id="id153"></span><h2><a class="reference external" href="operator.html#operator-backup-section">Backup Section</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">backup</span></code> section in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file contains the following configuration options for the regular
+Percona Server for MongoDB backups.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 85%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-enabled"><a class="reference external" href="operator.html#backup-enabled">backup.enabled</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Enables or disables making backups</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-debug"><a class="reference external" href="operator.html#backup-debug">backup.debug</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Enables or disables debug mode for backups</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-restartonfailure"><a class="reference external" href="operator.html#backup-restartonfailure">backup.restartOnFailure</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Enables or disables restarting the previously failed backup process</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-image"><a class="reference external" href="operator.html#backup-image">backup.image</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">percona/percona-server-mongodb-operator:1.6.0-backup</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The Percona Server for MongoDB Docker image to use for the backup</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-serviceaccountname"><a class="reference external" href="operator.html#backup-serviceaccountname?">backup.serviceAccountName</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">percona-server-mongodb-operator</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>Nname of the separate privileged service account used by the Operator</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-resources-limits-cpu"><a class="reference external" href="operator.html#backup-resources-limits-cpu">backup.resources.limits.cpu</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">100m</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes CPU limit</a> for backups</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-resources-limits-memory"><a class="reference external" href="operator.html#backup-resources-limits-memory">backup.resources.limits.memory</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.2G</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p><a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes Memory limit</a> for backups</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-resources-requests-cpu"><a class="reference external" href="operator.html#backup-resources-requests-cpu">backup.resources.requests.cpu</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">100m</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes CPU requests</a> for backups</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-resources-requests-memory"><a class="reference external" href="operator.html#backup-resources-requests-memory">backup.resources.requests.memory</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.1G</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">Kubernetes Memory requests</a> for backups</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-storages-type"><a class="reference external" href="operator.html#backup-storages-type">backup.storages.&lt;storage-name&gt;.type</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">s3</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The cloud storage type used for backups. Only <code class="docutils literal notranslate"><span class="pre">s3</span></code> type is currently
+supported</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-storages-s3-credentialssecret"><a class="reference external" href="operator.html#backup-storages-s3-credentialssecret">backup.storages.&lt;storage-name&gt;.s3.credentialsSecret</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">my-cluster-name-backup-s3</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes secret</a> for
+backups. It should contain <code class="docutils literal notranslate"><span class="pre">AWS_ACCESS_KEY_ID</span></code> and <code class="docutils literal notranslate"><span class="pre">AWS_SECRET_ACCESS_KEY</span></code> keys.</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-storages-s3-bucket"><a class="reference external" href="operator.html#backup-storages-s3-bucket?">backup.storages.&lt;storage-name&gt;.s3.bucket</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html">Amazon S3 bucket</a>
+name for backups</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-storages-s3-region"><a class="reference external" href="operator.html#backup-storages-s3-region">backup.storages.s3.&lt;storage-name&gt;.region</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">us-east-1</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The <a class="reference external" href="https://docs.aws.amazon.com/general/latest/gr/rande.html">AWS region</a> to use.
+Please note <strong>this option is mandatory</strong> for Amazon and all S3-compatible storages</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-storages-s3-endpointurl"><a class="reference external" href="operator.html#backup-storages-s3-endpointurl">backup.storages.s3.&lt;storage-name&gt;.endpointUrl</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The endpoint URL of the S3-compatible storage to be used (not needed for the original
+Amazon S3 cloud)</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-tasks-name"><a class="reference external" href="operator.html#backup-tasks-name">backup.tasks.name</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The name of the backup</p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-tasks-enabled"><a class="reference external" href="operator.html#backup-tasks-enabled">backup.tasks.enabled</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>Enables or disables this exact backup</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-tasks-schedule"><a class="reference external" href="operator.html#backup-tasks-schedule">backup.tasks.schedule</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>int</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">0</span> <span class="pre">*</span> <span class="pre">*</span> <span class="pre">6</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The scheduled time to make a backup, specified in the
+<a class="reference external" href="https://en.wikipedia.org/wiki/Cron">crontab format</a></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"></td>
+</tr>
+<tr class="row-even"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-tasks-storagename"><a class="reference external" href="operator.html#backup-tasks-storagename">backup.tasks.storageName</a></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">st-us-west</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Description</strong></p></td>
+<td><p>The name of the S3-compatible storage for backups, configured in the <cite>storages</cite> subsection</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Key</strong></p></td>
+<td><p id="backup-tasks-compressiontype"><a class="reference external" href="operator.html#backup-tasks-compressiontype">backup.tasks.compressionType</a></p>
+</td>
+</tr>
+<tr class="row-even"><td><p><strong>Value Type</strong></p></td>
+<td><p>string</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Example</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gzip</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Description</strong></p></td>
+<td><p>The backup compression format</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="images.html" title="Percona certified images"
+             >next</a></li>
+        <li class="right" >
+          <a href="debug.html" title="Debug"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Custom Resource options</a><ul>
+<li><a class="reference internal" href="#operator-upgradeoptions-section">Upgrade Options Section</a></li>
+<li><a class="reference internal" href="#operator-secrets-section">Secrets section</a></li>
+<li><a class="reference internal" href="#operator-replsets-section">Replsets Section</a></li>
+<li><a class="reference internal" href="#operator-pmm-section">PMM Section</a></li>
+<li><a class="reference internal" href="#operator-sharding-section">Sharding Section</a></li>
+<li><a class="reference internal" href="#operator-mongod-section">Mongod Section</a></li>
+<li><a class="reference internal" href="#operator-backup-section">Backup Section</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="debug.html"
+                        title="previous chapter">Debug</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="images.html"
+                        title="next chapter">Percona certified images</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

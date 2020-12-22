@@ -1,0 +1,304 @@
+
+
+
+    <title>Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Exposing cluster nodes with dedicated IP addresses" href="expose.html" />
+    <link rel="prev" title="Local Storage support for the Percona Server for MongoDB Operator" href="storage.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="expose.html" title="Exposing cluster nodes with dedicated IP addresses"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="storage.html" title="Local Storage support for the Percona Server for MongoDB Operator"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="binding-percona-server-for-mongodb-components-to-specific-kubernetes-openshift-nodes">
+<h1>Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes</h1>
+<p>The operator does a good job of automatically assigning new pods to nodes to achieve balanced distribution across the cluster.
+There are situations when you must ensure that pods land
+on specific nodes: for example, for the advantage of speed on an SSD-equipped machine, or reduce costs by choosing nodes in the same
+availability zone.</p>
+<p>The appropriate (sub)sections (<code class="docutils literal notranslate"><span class="pre">replsets</span></code>, <code class="docutils literal notranslate"><span class="pre">replsets.arbiter</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">backup</span></code>) of the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file contain the keys which can be used to do assign pods to nodes.</p>
+<div class="section" id="node-selector">
+<h2>Node selector</h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">nodeSelector</span></code> contains one or more key-value pairs. If the node is
+not labeled with each key-value pair from the Pod’s <code class="docutils literal notranslate"><span class="pre">nodeSelector</span></code>,
+the Pod will not be able to land on it.</p>
+<p>The following example binds the Pod to any node having a
+self-explanatory <code class="docutils literal notranslate"><span class="pre">disktype:</span> <span class="pre">ssd</span></code> label:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">nodeSelector</span><span class="p">:</span>
+  <span class="n">disktype</span><span class="p">:</span> <span class="n">ssd</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="affinity-and-anti-affinity">
+<h2>Affinity and anti-affinity</h2>
+<p>Affinity defines eligible pods that can be scheduled on the node which already has pods with specific labels. Anti-affinity defines pods that are not eligible. This approach is reduces costs by ensuring several pods with intensive data exchange  occupy the
+same availability zone or even the same node or, on the contrary, to
+spread the pods on different nodes or even different availability zones
+for high availability and balancing purposes.</p>
+<p>Percona Server for MongoDB Operator provides two approaches for doing
+this:</p>
+<ul class="simple">
+<li><p>simple way to set anti-affinity for Pods, built-in into the Operator,</p></li>
+<li><p>more advanced approach based on using standard Kubernetes
+constraints.</p></li>
+</ul>
+<div class="section" id="simple-approach-use-antiaffinitytopologykey-of-the-percona-server-for-mongodb-operator">
+<h3>Simple approach - use antiAffinityTopologyKey of the Percona Server for MongoDB Operator</h3>
+<p>Percona Server for MongoDB Operator provides an
+<code class="docutils literal notranslate"><span class="pre">antiAffinityTopologyKey</span></code> option, which may have one of the following
+values:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">kubernetes.io/hostname</span></code> - Pods will avoid residing within the same
+host,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">failure-domain.beta.kubernetes.io/zone</span></code> - Pods will avoid residing
+within the same zone,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">failure-domain.beta.kubernetes.io/region</span></code> - Pods will avoid
+residing within the same region,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">none</span></code> - no constraints are applied.</p></li>
+</ul>
+<p>The following example forces Percona Server for MongoDB Pods to avoid
+occupying the same node:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">affinity</span><span class="p">:</span>
+  <span class="n">antiAffinityTopologyKey</span><span class="p">:</span> <span class="s2">&quot;kubernetes.io/hostname&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="advanced-approach-use-standard-kubernetes-constraints">
+<h3>Advanced approach - use standard Kubernetes constraints</h3>
+<p>The previous method can be used without special knowledge of the Kubernetes way
+of assigning Pods to specific nodes. Still, in some cases, more complex
+tuning may be needed. In this case, the <code class="docutils literal notranslate"><span class="pre">advanced</span></code> option placed in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file turns off the effect of the <code class="docutils literal notranslate"><span class="pre">antiAffinityTopologyKey</span></code> and allows
+the use of the standard Kubernetes affinity constraints of any complexity:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">affinity</span><span class="p">:</span>
+   <span class="n">advanced</span><span class="p">:</span>
+     <span class="n">podAffinity</span><span class="p">:</span>
+       <span class="n">requiredDuringSchedulingIgnoredDuringExecution</span><span class="p">:</span>
+       <span class="o">-</span> <span class="n">labelSelector</span><span class="p">:</span>
+           <span class="n">matchExpressions</span><span class="p">:</span>
+           <span class="o">-</span> <span class="n">key</span><span class="p">:</span> <span class="n">security</span>
+             <span class="n">operator</span><span class="p">:</span> <span class="n">In</span>
+             <span class="n">values</span><span class="p">:</span>
+             <span class="o">-</span> <span class="n">S1</span>
+         <span class="n">topologyKey</span><span class="p">:</span> <span class="n">failure</span><span class="o">-</span><span class="n">domain</span><span class="o">.</span><span class="n">beta</span><span class="o">.</span><span class="n">kubernetes</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">zone</span>
+     <span class="n">podAntiAffinity</span><span class="p">:</span>
+       <span class="n">preferredDuringSchedulingIgnoredDuringExecution</span><span class="p">:</span>
+       <span class="o">-</span> <span class="n">weight</span><span class="p">:</span> <span class="mi">100</span>
+         <span class="n">podAffinityTerm</span><span class="p">:</span>
+           <span class="n">labelSelector</span><span class="p">:</span>
+             <span class="n">matchExpressions</span><span class="p">:</span>
+             <span class="o">-</span> <span class="n">key</span><span class="p">:</span> <span class="n">security</span>
+               <span class="n">operator</span><span class="p">:</span> <span class="n">In</span>
+               <span class="n">values</span><span class="p">:</span>
+               <span class="o">-</span> <span class="n">S2</span>
+           <span class="n">topologyKey</span><span class="p">:</span> <span class="n">kubernetes</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">hostname</span>
+     <span class="n">nodeAffinity</span><span class="p">:</span>
+       <span class="n">requiredDuringSchedulingIgnoredDuringExecution</span><span class="p">:</span>
+         <span class="n">nodeSelectorTerms</span><span class="p">:</span>
+         <span class="o">-</span> <span class="n">matchExpressions</span><span class="p">:</span>
+           <span class="o">-</span> <span class="n">key</span><span class="p">:</span> <span class="n">kubernetes</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">e2e</span><span class="o">-</span><span class="n">az</span><span class="o">-</span><span class="n">name</span>
+             <span class="n">operator</span><span class="p">:</span> <span class="n">In</span>
+             <span class="n">values</span><span class="p">:</span>
+             <span class="o">-</span> <span class="n">e2e</span><span class="o">-</span><span class="n">az1</span>
+             <span class="o">-</span> <span class="n">e2e</span><span class="o">-</span><span class="n">az2</span>
+       <span class="n">preferredDuringSchedulingIgnoredDuringExecution</span><span class="p">:</span>
+       <span class="o">-</span> <span class="n">weight</span><span class="p">:</span> <span class="mi">1</span>
+         <span class="n">preference</span><span class="p">:</span>
+           <span class="n">matchExpressions</span><span class="p">:</span>
+           <span class="o">-</span> <span class="n">key</span><span class="p">:</span> <span class="n">another</span><span class="o">-</span><span class="n">node</span><span class="o">-</span><span class="n">label</span><span class="o">-</span><span class="n">key</span>
+             <span class="n">operator</span><span class="p">:</span> <span class="n">In</span>
+             <span class="n">values</span><span class="p">:</span>
+             <span class="o">-</span> <span class="n">another</span><span class="o">-</span><span class="n">node</span><span class="o">-</span><span class="n">label</span><span class="o">-</span><span class="n">value</span>
+</pre></div>
+</div>
+<p>See explanation of the advanced affinity options <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature">in Kubernetes
+documentation</a>.</p>
+</div>
+</div>
+<div class="section" id="tolerations">
+<h2>Tolerations</h2>
+<p><em>Tolerations</em> allow Pods having them to be able to land onto nodes with
+matching <em>taints</em>. Toleration is expressed as a <code class="docutils literal notranslate"><span class="pre">key</span></code> with and
+<code class="docutils literal notranslate"><span class="pre">operator</span></code>, which is either <code class="docutils literal notranslate"><span class="pre">exists</span></code> or <code class="docutils literal notranslate"><span class="pre">equal</span></code> (the equal
+variant requires a corresponding <code class="docutils literal notranslate"><span class="pre">value</span></code> for comparison).</p>
+<p>Toleration should have a specified <code class="docutils literal notranslate"><span class="pre">effect</span></code>, such as the following:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">NoSchedule</span></code> -  less strict</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PreferNoSchedule</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NoExecute</span></code></p></li>
+</ul>
+</div></blockquote>
+<p>When a <em>taint</em> with the <code class="docutils literal notranslate"><span class="pre">NoExecute</span></code> effect is assigned to a node, any pod configured to not tolerating this <em>taint</em> is removed from the node. This removal can be immediate or after the <code class="docutils literal notranslate"><span class="pre">tolerationSeconds</span></code> interval. The following example defines this effect and the removal interval:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">tolerations</span><span class="p">:</span>
+<span class="o">-</span> <span class="n">key</span><span class="p">:</span> <span class="s2">&quot;node.alpha.kubernetes.io/unreachable&quot;</span>
+  <span class="n">operator</span><span class="p">:</span> <span class="s2">&quot;Exists&quot;</span>
+  <span class="n">effect</span><span class="p">:</span> <span class="s2">&quot;NoExecute&quot;</span>
+  <span class="n">tolerationSeconds</span><span class="p">:</span> <span class="mi">6000</span>
+</pre></div>
+</div>
+<p>The <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/">Kubernetes Taints and
+Toleratins</a>
+contains more examples on this topic.</p>
+</div>
+<div class="section" id="priority-classes">
+<h2>Priority Classes</h2>
+<p>Pods may belong to some <em>priority classes</em>. This flexibility allows the scheduler to
+distinguish more and less important Pods when needed, such as the situation when
+a higher priority Pod cannot be scheduled without evicting a lower
+priority one. This ability can be accomplished by adding one or more PriorityClasses in
+your Kubernetes cluster, and specifying the <code class="docutils literal notranslate"><span class="pre">PriorityClassName</span></code> in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">priorityClassName</span><span class="p">:</span> <span class="n">high</span><span class="o">-</span><span class="n">priority</span>
+</pre></div>
+</div>
+<p>See the <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption">Kubernetes Pods Priority and Preemption
+documentation</a>
+to find out how to define and use priority classes in your cluster.</p>
+</div>
+<div class="section" id="pod-disruption-budgets">
+<h2>Pod Disruption Budgets</h2>
+<p>Creating the <a class="reference external" href="https://kubernetes.io/docs/concepts/workloads/pods/disruptions/">Pod Disruption
+Budget</a>
+is the Kubernetes method to limit the number of Pods of an application
+that can go down simultaneously due to  <em>voluntary disruptions</em> such as the
+cluster administrator’s actions during a deployment update. Distribution Budgets allow large applications
+to retain their high availability during maintenance and other
+administrative activities. The <code class="docutils literal notranslate"><span class="pre">maxUnavailable</span></code> and <code class="docutils literal notranslate"><span class="pre">minAvailable</span></code>
+options in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file can be used to set these limits. The recommended variant is the
+following:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">podDisruptionBudget</span><span class="p">:</span>
+   <span class="n">maxUnavailable</span><span class="p">:</span> <span class="mi">1</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="expose.html" title="Exposing cluster nodes with dedicated IP addresses"
+             >next</a></li>
+        <li class="right" >
+          <a href="storage.html" title="Local Storage support for the Percona Server for MongoDB Operator"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes</a><ul>
+<li><a class="reference internal" href="#node-selector">Node selector</a></li>
+<li><a class="reference internal" href="#affinity-and-anti-affinity">Affinity and anti-affinity</a><ul>
+<li><a class="reference internal" href="#simple-approach-use-antiaffinitytopologykey-of-the-percona-server-for-mongodb-operator">Simple approach - use antiAffinityTopologyKey of the Percona Server for MongoDB Operator</a></li>
+<li><a class="reference internal" href="#advanced-approach-use-standard-kubernetes-constraints">Advanced approach - use standard Kubernetes constraints</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#tolerations">Tolerations</a></li>
+<li><a class="reference internal" href="#priority-classes">Priority Classes</a></li>
+<li><a class="reference internal" href="#pod-disruption-budgets">Pod Disruption Budgets</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="storage.html"
+                        title="previous chapter">Local Storage support for the Percona Server for MongoDB Operator</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="expose.html"
+                        title="next chapter">Exposing cluster nodes with dedicated IP addresses</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

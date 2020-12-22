@@ -1,0 +1,125 @@
+\babel@toc {english}{}
+\contentsline {part}{I\hspace {1em}Requirements}{3}{part.1}%
+\contentsline {chapter}{\numberline {1}System Requirements}{5}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Officially supported platforms}{5}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Resource Limits}{5}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Platform\sphinxhyphen {}specific limitations}{6}{section.1.3}%
+\contentsline {chapter}{\numberline {2}Design overview}{7}{chapter.2}%
+\contentsline {part}{II\hspace {1em}Quickstart guides}{9}{part.2}%
+\contentsline {chapter}{\numberline {3}Install Percona Server for MongoDB on Minikube}{11}{chapter.3}%
+\contentsline {chapter}{\numberline {4}Install Percona server for MongoDB on Google Kubernetes Engine (GKE)}{13}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Prerequisites}{13}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Configuring default settings for the cluster}{13}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Installing the Operator}{14}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Verifying the cluster operator}{15}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Troubleshooting}{16}{section.4.5}%
+\contentsline {section}{\numberline {4.6}Removing the GKE cluster}{17}{section.4.6}%
+\contentsline {chapter}{\numberline {5}Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)}{19}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Prerequisites}{19}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Create the EKS cluster}{19}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Install the Operator}{20}{section.5.3}%
+\contentsline {part}{III\hspace {1em}Advanced Installation Guides}{23}{part.3}%
+\contentsline {chapter}{\numberline {6}Install Percona server for MongoDB on Kubernetes}{25}{chapter.6}%
+\contentsline {chapter}{\numberline {7}Install Percona server for MongoDB on OpenShift}{27}{chapter.7}%
+\contentsline {chapter}{\numberline {8}Use Docker images from a custom registry}{31}{chapter.8}%
+\contentsline {chapter}{\numberline {9}Deploy Percona server for MongoDB with Service Broker}{33}{chapter.9}%
+\contentsline {chapter}{\numberline {10}Install Percona Server for MongoDB using Helm}{37}{chapter.10}%
+\contentsline {section}{\numberline {10.1}Pre\sphinxhyphen {}requisites}{37}{section.10.1}%
+\contentsline {section}{\numberline {10.2}Installation}{37}{section.10.2}%
+\contentsline {section}{\numberline {10.3}Installing Percona Server for MongoDB with customized parameters}{38}{section.10.3}%
+\contentsline {part}{IV\hspace {1em}Configuration}{39}{part.4}%
+\contentsline {chapter}{\numberline {11}Users}{41}{chapter.11}%
+\contentsline {section}{\numberline {11.1}Unprivileged users}{41}{section.11.1}%
+\contentsline {section}{\numberline {11.2}System Users}{42}{section.11.2}%
+\contentsline {subsection}{\numberline {11.2.1}YAML Object Format}{42}{subsection.11.2.1}%
+\contentsline {subsection}{\numberline {11.2.2}Password Rotation Policies and Timing}{43}{subsection.11.2.2}%
+\contentsline {section}{\numberline {11.3}Development Mode}{43}{section.11.3}%
+\contentsline {section}{\numberline {11.4}MongoDB Internal Authentication Key (optional)}{44}{section.11.4}%
+\contentsline {chapter}{\numberline {12}Local Storage support for the Percona Server for MongoDB Operator}{45}{chapter.12}%
+\contentsline {section}{\numberline {12.1}emptyDir}{45}{section.12.1}%
+\contentsline {section}{\numberline {12.2}hostPath}{45}{section.12.2}%
+\contentsline {chapter}{\numberline {13}Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes}{47}{chapter.13}%
+\contentsline {section}{\numberline {13.1}Node selector}{47}{section.13.1}%
+\contentsline {section}{\numberline {13.2}Affinity and anti\sphinxhyphen {}affinity}{47}{section.13.2}%
+\contentsline {subsection}{\numberline {13.2.1}Simple approach \sphinxhyphen {} use antiAffinityTopologyKey of the Percona Server for MongoDB Operator}{48}{subsection.13.2.1}%
+\contentsline {subsection}{\numberline {13.2.2}Advanced approach \sphinxhyphen {} use standard Kubernetes constraints}{48}{subsection.13.2.2}%
+\contentsline {section}{\numberline {13.3}Tolerations}{49}{section.13.3}%
+\contentsline {section}{\numberline {13.4}Priority Classes}{49}{section.13.4}%
+\contentsline {section}{\numberline {13.5}Pod Disruption Budgets}{50}{section.13.5}%
+\contentsline {chapter}{\numberline {14}Exposing cluster nodes with dedicated IP addresses}{51}{chapter.14}%
+\contentsline {section}{\numberline {14.1}Using single entry point vs. accessing MongoDB Instances}{51}{section.14.1}%
+\contentsline {section}{\numberline {14.2}Accessing the Pod}{52}{section.14.2}%
+\contentsline {chapter}{\numberline {15}Enabling Replica Set Arbiter nodes}{55}{chapter.15}%
+\contentsline {chapter}{\numberline {16}Percona Server for MongoDB Sharding}{57}{chapter.16}%
+\contentsline {chapter}{\numberline {17}Transport Layer Security (TLS)}{59}{chapter.17}%
+\contentsline {section}{\numberline {17.1}Install and use the \sphinxstyleemphasis {cert\sphinxhyphen {}manager}}{59}{section.17.1}%
+\contentsline {subsection}{\numberline {17.1.1}About the \sphinxstyleemphasis {cert\sphinxhyphen {}manager}}{59}{subsection.17.1.1}%
+\contentsline {subsection}{\numberline {17.1.2}Installation of the \sphinxstyleemphasis {cert\sphinxhyphen {}manager}}{60}{subsection.17.1.2}%
+\contentsline {section}{\numberline {17.2}Generate certificates manually}{60}{section.17.2}%
+\contentsline {section}{\numberline {17.3}Run PSMDB without TLS}{62}{section.17.3}%
+\contentsline {chapter}{\numberline {18}Data at rest encryption}{63}{chapter.18}%
+\contentsline {part}{V\hspace {1em}Management}{65}{part.5}%
+\contentsline {chapter}{\numberline {19}Providing Backups}{67}{chapter.19}%
+\contentsline {section}{\numberline {19.1}Making scheduled backups}{68}{section.19.1}%
+\contentsline {section}{\numberline {19.2}Making on\sphinxhyphen {}demand backup}{69}{section.19.2}%
+\contentsline {section}{\numberline {19.3}Restore the cluster from a previously saved backup}{69}{section.19.3}%
+\contentsline {section}{\numberline {19.4}Delete the unneeded backup}{70}{section.19.4}%
+\contentsline {chapter}{\numberline {20}Pause/resume Percona Server for MongoDB}{71}{chapter.20}%
+\contentsline {chapter}{\numberline {21}Creating a private S3\sphinxhyphen {}compatible cloud for backups}{73}{chapter.21}%
+\contentsline {chapter}{\numberline {22}Update Percona Server for MongoDB Operator}{75}{chapter.22}%
+\contentsline {section}{\numberline {22.1}Upgrading the Operator}{75}{section.22.1}%
+\contentsline {subsection}{\numberline {22.1.1}Semi\sphinxhyphen {}automatic upgrade}{75}{subsection.22.1.1}%
+\contentsline {subsection}{\numberline {22.1.2}Manual upgrade}{76}{subsection.22.1.2}%
+\contentsline {section}{\numberline {22.2}Upgrading Percona Server for MongoDB}{77}{section.22.2}%
+\contentsline {chapter}{\numberline {23}Scale Percona Server for MongoDB on Kubernetes and OpenShift}{79}{chapter.23}%
+\contentsline {chapter}{\numberline {24}Monitoring}{81}{chapter.24}%
+\contentsline {section}{\numberline {24.1}Installing PMM Server}{81}{section.24.1}%
+\contentsline {section}{\numberline {24.2}Installing PMM Client}{81}{section.24.2}%
+\contentsline {chapter}{\numberline {25}Debug}{83}{chapter.25}%
+\contentsline {part}{VI\hspace {1em}Reference}{85}{part.6}%
+\contentsline {chapter}{\numberline {26}Custom Resource options}{87}{chapter.26}%
+\contentsline {section}{\numberline {26.1}Upgrade Options Section}{88}{section.26.1}%
+\contentsline {section}{\numberline {26.2}Secrets section}{88}{section.26.2}%
+\contentsline {section}{\numberline {26.3}Replsets Section}{89}{section.26.3}%
+\contentsline {section}{\numberline {26.4}PMM Section}{93}{section.26.4}%
+\contentsline {section}{\numberline {26.5}Sharding Section}{94}{section.26.5}%
+\contentsline {section}{\numberline {26.6}Mongod Section}{98}{section.26.6}%
+\contentsline {section}{\numberline {26.7}Backup Section}{100}{section.26.7}%
+\contentsline {chapter}{\numberline {27}Percona certified images}{103}{chapter.27}%
+\contentsline {chapter}{\numberline {28}PSMDB API Documentation}{105}{chapter.28}%
+\contentsline {section}{\numberline {28.1}Prerequisites}{105}{section.28.1}%
+\contentsline {section}{\numberline {28.2}Create new PSMDB cluster}{106}{section.28.2}%
+\contentsline {section}{\numberline {28.3}List PSMDB cluster}{116}{section.28.3}%
+\contentsline {section}{\numberline {28.4}Get status of PSMDB cluster}{123}{section.28.4}%
+\contentsline {section}{\numberline {28.5}Scale up/down PSMDB cluster}{132}{section.28.5}%
+\contentsline {section}{\numberline {28.6}Update PSMDB cluster image}{141}{section.28.6}%
+\contentsline {section}{\numberline {28.7}Backup PSMDB cluster}{150}{section.28.7}%
+\contentsline {section}{\numberline {28.8}Restore PSMDB cluster}{153}{section.28.8}%
+\contentsline {chapter}{\numberline {29}Frequently Asked Questions}{155}{chapter.29}%
+\contentsline {section}{\numberline {29.1}Why do we need to follow “the Kubernetes way” when Kubernetes was never intended to run databases?}{155}{section.29.1}%
+\contentsline {section}{\numberline {29.2}How can I contact the developers?}{155}{section.29.2}%
+\contentsline {section}{\numberline {29.3}What is the difference between the Operator quickstart and advanced installation ways?}{156}{section.29.3}%
+\contentsline {section}{\numberline {29.4}Which versions of MongoDB the Operator supports?}{156}{section.29.4}%
+\contentsline {chapter}{\numberline {30}Kubernetes Operator for Percona Server for MongoDB Release Notes}{157}{chapter.30}%
+\contentsline {section}{\numberline {30.1}\sphinxstyleemphasis {Percona Kubernetes Operator for Percona Server for MongoDB} 1.6.0}{157}{section.30.1}%
+\contentsline {subsection}{\numberline {30.1.1}New Features}{157}{subsection.30.1.1}%
+\contentsline {subsection}{\numberline {30.1.2}Improvements}{157}{subsection.30.1.2}%
+\contentsline {subsection}{\numberline {30.1.3}Bugs Fixed}{158}{subsection.30.1.3}%
+\contentsline {subsection}{\numberline {30.1.4}Removal}{158}{subsection.30.1.4}%
+\contentsline {section}{\numberline {30.2}\sphinxstyleemphasis {Percona Kubernetes Operator for Percona Server for MongoDB} 1.5.0}{158}{section.30.2}%
+\contentsline {subsection}{\numberline {30.2.1}New Features}{158}{subsection.30.2.1}%
+\contentsline {subsection}{\numberline {30.2.2}Improvements}{158}{subsection.30.2.2}%
+\contentsline {subsection}{\numberline {30.2.3}Bugs Fixed}{159}{subsection.30.2.3}%
+\contentsline {section}{\numberline {30.3}\sphinxstyleemphasis {Percona Kubernetes Operator for Percona Server for MongoDB} 1.4.0}{159}{section.30.3}%
+\contentsline {subsection}{\numberline {30.3.1}New Features}{159}{subsection.30.3.1}%
+\contentsline {subsection}{\numberline {30.3.2}Improvements}{159}{subsection.30.3.2}%
+\contentsline {subsection}{\numberline {30.3.3}Bugs Fixed}{160}{subsection.30.3.3}%
+\contentsline {section}{\numberline {30.4}\sphinxstyleemphasis {Percona Kubernetes Operator for Percona Server for MongoDB} 1.3.0}{160}{section.30.4}%
+\contentsline {subsection}{\numberline {30.4.1}New Features and Improvements}{160}{subsection.30.4.1}%
+\contentsline {section}{\numberline {30.5}\sphinxstyleemphasis {Percona Kubernetes Operator for Percona Server for MongoDB} 1.2.0}{160}{section.30.5}%
+\contentsline {subsection}{\numberline {30.5.1}New Features and Improvements}{161}{subsection.30.5.1}%
+\contentsline {subsection}{\numberline {30.5.2}Fixed Bugs}{161}{subsection.30.5.2}%
+\contentsline {section}{\numberline {30.6}\sphinxstyleemphasis {Percona Kubernetes Operator for Percona Server for MongoDB} 1.1.0}{161}{section.30.6}%
+\contentsline {subsection}{\numberline {30.6.1}New Features and Improvements}{162}{subsection.30.6.1}%
+\contentsline {section}{\numberline {30.7}\sphinxstyleemphasis {Percona Kubernetes Operator for Percona Server for MongoDB} 1.0.0}{162}{section.30.7}%
+\contentsline {subsection}{\numberline {30.7.1}Installation}{163}{subsection.30.7.1}%

@@ -1,0 +1,188 @@
+
+
+
+    <title>Frequently Asked Questions &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Kubernetes Operator for Percona Server for MongoDB Release Notes" href="RN/index.html" />
+    <link rel="prev" title="PSMDB API Documentation" href="api.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="RN/index.html" title="Kubernetes Operator for Percona Server for MongoDB Release Notes"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="api.html" title="PSMDB API Documentation"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="frequently-asked-questions">
+<span id="faq"></span><h1>Frequently Asked Questions</h1>
+<div class="contents local topic" id="contents">
+<ul class="simple">
+<li><p><a class="reference internal" href="#why-do-we-need-to-follow-the-kubernetes-way-when-kubernetes-was-never-intended-to-run-databases" id="id4">Why do we need to follow “the Kubernetes way” when Kubernetes was never intended to run databases?</a></p></li>
+<li><p><a class="reference internal" href="#how-can-i-contact-the-developers" id="id5">How can I contact the developers?</a></p></li>
+<li><p><a class="reference internal" href="#what-is-the-difference-between-the-operator-quickstart-and-advanced-installation-ways" id="id6">What is the difference between the Operator quickstart and advanced installation ways?</a></p></li>
+<li><p><a class="reference internal" href="#which-versions-of-mongodb-the-operator-supports" id="id7">Which versions of MongoDB the Operator supports?</a></p></li>
+</ul>
+</div>
+<div class="section" id="why-do-we-need-to-follow-the-kubernetes-way-when-kubernetes-was-never-intended-to-run-databases">
+<h2><a class="toc-backref" href="#id4">Why do we need to follow “the Kubernetes way” when Kubernetes was never intended to run databases?</a></h2>
+<p>As it is well known, the Kubernetes approach is targeted at stateless
+applications but provides ways to store state (in Persistent Volumes, etc.) if
+the application needs it. Generally, a stateless mode of operation is supposed
+to provide better safety, sustainability, and scalability, it makes the
+already-deployed components interchangeable. You can find more about substantial
+benefits brought by Kubernetes to databases in <a class="reference external" href="https://www.percona.com/blog/2020/10/08/the-criticality-of-a-kubernetes-operator-for-databases/">this blog post</a>.</p>
+<p>The architecture of state-centric applications (like databases) should be
+composed in a right way to avoid crashes, data loss, or data inconsistencies
+during hardware failure. Percona Kubernetes Operator for Percona Server for
+MongoDB provides out-of-the-box functionality to automate provisioning and
+management of highly available MongoDB database clusters on Kubernetes.</p>
+</div>
+<div class="section" id="how-can-i-contact-the-developers">
+<h2><a class="toc-backref" href="#id5">How can I contact the developers?</a></h2>
+<p>The best place to discuss Percona Kubernetes Operator for Percona Server for
+MongoDB with developers and other community members is the <a class="reference external" href="https://forums.percona.com/categories/kubernetes-operator-percona-server-mongodb">community forum</a>.</p>
+<p>If you would like to report a bug, use the <a class="reference external" href="https://jira.percona.com/projects/K8SPSMDB">Percona Kubernetes Operator for Percona Server for MongoDB project in JIRA</a>.</p>
+</div>
+<div class="section" id="what-is-the-difference-between-the-operator-quickstart-and-advanced-installation-ways">
+<h2><a class="toc-backref" href="#id6">What is the difference between the Operator quickstart and advanced installation ways?</a></h2>
+<p>As you have noticed, the installation section of docs contains both quickstart
+and advanced installation guides.</p>
+<p>The quickstart guide is simpler. It has fewer installation steps in favor of
+predefined default choices. Particularly, in advanced installation guides, you
+separately apply the Custom Resource Definition and Role-based Access Control
+configuration files with possible edits in them. At the same time, quickstart
+guides rely on the all-inclusive bundle configuration.</p>
+<p>At another point, quickstart guides are related to specific platforms you are
+going to use (Minikube, Google Kubernetes Engine, etc.) and therefore include
+some additional steps needed for these platforms.</p>
+<p>Generally, rely on the quickstart guide if you are a beginner user of the
+specific platform and/or you are new to the Percona Server for MongoDB Operator
+as a whole.</p>
+</div>
+<div class="section" id="which-versions-of-mongodb-the-operator-supports">
+<h2><a class="toc-backref" href="#id7">Which versions of MongoDB the Operator supports?</a></h2>
+<p>Percona Operator for Percona Server for MongoDB provides a ready-to-use
+installation of the MongoDB-based database cluster inside your Kubernetes
+installation. It works with Percona Server for MongoDB 3.6, 4.0, and 4.2, and
+the exact version is determined by the Docker image in use.</p>
+<p>Percona-certified Docker images used by the Operator are listed <a class="reference external" href="https://www.percona.com/doc/kubernetes-operator-for-psmongodb/images.html">here</a>.
+For example, Percona Server for MongoDB 4.2 is supported with the following
+recommended version: {{{mongodb42recommended}}}. More details on the exact Percona
+Server for MongoDB version can be found in the release notes (<a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/4.2/release_notes/index.html">4.2</a>, <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/4.0/release_notes/index.html">4.0</a>,
+and <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/3.6/release_notes/index.html">3.6</a>).</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="RN/index.html" title="Kubernetes Operator for Percona Server for MongoDB Release Notes"
+             >next</a></li>
+        <li class="right" >
+          <a href="api.html" title="PSMDB API Documentation"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Frequently Asked Questions</a><ul>
+<li><a class="reference internal" href="#why-do-we-need-to-follow-the-kubernetes-way-when-kubernetes-was-never-intended-to-run-databases">Why do we need to follow “the Kubernetes way” when Kubernetes was never intended to run databases?</a></li>
+<li><a class="reference internal" href="#how-can-i-contact-the-developers">How can I contact the developers?</a></li>
+<li><a class="reference internal" href="#what-is-the-difference-between-the-operator-quickstart-and-advanced-installation-ways">What is the difference between the Operator quickstart and advanced installation ways?</a></li>
+<li><a class="reference internal" href="#which-versions-of-mongodb-the-operator-supports">Which versions of MongoDB the Operator supports?</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="api.html"
+                        title="previous chapter">PSMDB API Documentation</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="RN/index.html"
+                        title="next chapter">Kubernetes Operator for Percona Server for MongoDB Release Notes</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

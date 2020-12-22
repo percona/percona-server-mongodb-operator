@@ -1,0 +1,153 @@
+
+
+
+    <title>Data at rest encryption &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Providing Backups" href="backups.html" />
+    <link rel="prev" title="Transport Layer Security (TLS)" href="TLS.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="backups.html" title="Providing Backups"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="TLS.html" title="Transport Layer Security (TLS)"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="data-at-rest-encryption">
+<h1>Data at rest encryption</h1>
+<p><a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/data_at_rest_encryption.html">Data at rest encryption in Percona Server for MongoDB</a> is supported by the Operator since version 1.1.0.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>“Data at rest” means inactive data stored as files, database records, etc.</p>
+</div>
+<p>Following options the <code class="docutils literal notranslate"><span class="pre">mongod</span></code> section of the <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> file should
+be edited to turn this feature on:</p>
+<ol class="arabic">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">security.enableEncryption</span></code> key should be set to <code class="docutils literal notranslate"><span class="pre">true</span></code> (the default
+value).</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">security.encryptionCipherMode</span></code> key should specify proper cipher mode
+for decryption. The value can be one of the following two variants:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">AES256-CBC</span></code> (the default one for the Operator and Percona Server for
+MongoDB)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AES256-GCM</span></code></p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">security.encryptionKeySecret</span></code> should specify a secret object with the
+encryption key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mongod</span><span class="p">:</span>
+  <span class="o">...</span>
+  <span class="n">security</span><span class="p">:</span>
+    <span class="o">...</span>
+    <span class="n">encryptionKeySecret</span><span class="p">:</span> <span class="n">my</span><span class="o">-</span><span class="n">cluster</span><span class="o">-</span><span class="n">name</span><span class="o">-</span><span class="n">mongodb</span><span class="o">-</span><span class="n">encryption</span><span class="o">-</span><span class="n">key</span>
+</pre></div>
+</div>
+<p>Encryption key secret will be created automatically if it
+doesn’t exist. If you would like to create it yourself, take into account
+that <a class="reference external" href="https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management">the key must be a 32 character string encoded in base64</a>.</p>
+</li>
+</ol>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="backups.html" title="Providing Backups"
+             >next</a></li>
+        <li class="right" >
+          <a href="TLS.html" title="Transport Layer Security (TLS)"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="TLS.html"
+                        title="previous chapter">Transport Layer Security (TLS)</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="backups.html"
+                        title="next chapter">Providing Backups</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

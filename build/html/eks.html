@@ -1,0 +1,270 @@
+
+
+
+    <title>Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS) &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Install Percona server for MongoDB on Kubernetes" href="kubernetes.html" />
+    <link rel="prev" title="Install Percona server for MongoDB on Google Kubernetes Engine (GKE)" href="gke.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="kubernetes.html" title="Install Percona server for MongoDB on Kubernetes"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="gke.html" title="Install Percona server for MongoDB on Google Kubernetes Engine (GKE)"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="install-percona-server-for-mongodb-on-amazon-elastic-kubernetes-service-eks">
+<h1>Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)</h1>
+<p>This quickstart shows you how to deploy Percona server for MongoDB operator on Amazon Elastic Kubernetes Service (EKS). The document assumes some experience with Amazon EKS. For more information on the EKS, see the <a class="reference external" href="https://aws.amazon.com/eks/">Amazon EKS official documentation</a>.</p>
+<div class="section" id="prerequisites">
+<h2>Prerequisites</h2>
+<p>The following tools are used in this guide and therefore should be preinstalled:</p>
+<ol class="arabic simple">
+<li><p><strong>AWS Command Line Interface (AWS CLI)</strong> for interacting with the different
+parts of AWS. You can install it following the <a class="reference external" href="https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html">official installation instructions for your system</a>.</p></li>
+<li><p><strong>eksctl</strong> to simplify cluster creation on EKS. It can be installed
+along its <a class="reference external" href="https://github.com/weaveworks/eksctl#installation">installation notes on GitHub</a>.</p></li>
+<li><p><strong>kubectl</strong>  to manage and deploy applications on Kubernetes. Install
+it <a class="reference external" href="https://kubernetes.io/docs/tasks/tools/install-kubectl/">following the official installation instructions</a>.</p></li>
+</ol>
+<p>Also, you need to configure AWS CLI with your credentials according to the <a class="reference external" href="https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html">official guide</a>.</p>
+</div>
+<div class="section" id="create-the-eks-cluster">
+<h2>Create the EKS cluster</h2>
+<p>To create your cluster, you will need the following data:</p>
+<ul class="simple">
+<li><p>name of your EKS cluster,</p></li>
+<li><p>AWS region in which you wish to deploy your cluster,</p></li>
+<li><p>the amount of nodes you would like tho have,</p></li>
+<li><p>the desired ratio between <a class="reference external" href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-on-demand-instances.html">on-demand</a> and <a class="reference external" href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-spot-instances.html">spot</a> instances in the total number of nodes.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference external" href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-spot-instances.html">spot</a> instances
+are not recommended for production environment, but may be useful e.g. for testing purposes.</p>
+</div>
+<p>The most easy and visually clear way is to describe the desired cluster in YAML
+and to pass this configuration to the <code class="docutils literal notranslate"><span class="pre">eksctl</span></code> command.</p>
+<p>The following example configures a EKS cluster with one <a class="reference external" href="https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html">managed node group</a>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">eksctl.io/v1alpha5</span>
+<span class="nt">kind</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ClusterConfig</span>
+
+<span class="nt">metadata</span><span class="p">:</span>
+    <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">test-cluster</span>
+    <span class="nt">region</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">eu-west-2</span>
+
+<span class="nt">nodeGroups</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">ng-1</span>
+      <span class="nt">minSize</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">3</span>
+      <span class="nt">maxSize</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">5</span>
+      <span class="nt">instancesDistribution</span><span class="p">:</span>
+        <span class="nt">maxPrice</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">0.15</span>
+        <span class="nt">instanceTypes</span><span class="p">:</span> <span class="p p-Indicator">[</span><span class="s">&quot;m5.xlarge&quot;</span><span class="p p-Indicator">,</span> <span class="s">&quot;m5.2xlarge&quot;</span><span class="p p-Indicator">]</span> <span class="c1"># At least two instance types should be specified</span>
+        <span class="nt">onDemandBaseCapacity</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">0</span>
+        <span class="nt">onDemandPercentageAboveBaseCapacity</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">50</span>
+        <span class="nt">spotInstancePools</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">2</span>
+      <span class="nt">tags</span><span class="p">:</span>
+        <span class="s">&#39;iit-billing-tag&#39;</span><span class="p p-Indicator">:</span> <span class="s">&#39;cloud&#39;</span>
+      <span class="nt">preBootstrapCommands</span><span class="p">:</span>
+          <span class="p p-Indicator">-</span> <span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;OPTIONS=\&quot;--default-ulimit</span><span class="nv"> </span><span class="s">nofile=1048576:1048576\&quot;&#39;</span><span class="nv"> </span><span class="s">&gt;&gt;</span><span class="nv"> </span><span class="s">/etc/sysconfig/docker&quot;</span>
+          <span class="p p-Indicator">-</span> <span class="s">&quot;systemctl</span><span class="nv"> </span><span class="s">restart</span><span class="nv"> </span><span class="s">docker&quot;</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">preBootstrapCommands</span></code> section is used in the
+above example to increase the limits for the amount of opened files:
+this is important and shouldn’t be omitted, taking into account the
+default EKS soft limit of 65536 files.</p>
+</div>
+<p>When the cluster configuration file is ready, you can actually create your cluster
+by the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ eksctl create cluster -f ~/cluster.yaml
+</pre></div>
+</div>
+</div>
+<div class="section" id="install-the-operator">
+<h2>Install the Operator</h2>
+<ol class="arabic">
+<li><p>Create a namespace and set the context for the namespace. The resource names must be unique within the namespace and provide a way to divide cluster resources between users spread across multiple projects.</p>
+<p>So, create the namespace and save it in the namespace context for subsequent commands as follows (replace the <code class="docutils literal notranslate"><span class="pre">&lt;namespace</span> <span class="pre">name&gt;</span></code> placeholder with some descriptive name):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl create namespace &lt;namespace name&gt;
+$ kubectl config set-context <span class="k">$(</span>kubectl config current-context<span class="k">)</span> --namespace<span class="o">=</span>&lt;namespace name&gt;
+</pre></div>
+</div>
+<p>At success, you will see the message that namespace/&lt;namespace name&gt; was created, and the context was modified.</p>
+</li>
+<li><p>Use the following <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span></code> command to download the correct branch of the percona-server-mongodb-operator repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone -b v1.6.0 https://github.com/percona/percona-server-mongodb-operator
+</pre></div>
+</div>
+<p>After the repository is downloaded, change the directory to run the rest of the commands in this document:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span> percona-server-mongodb-operator
+</pre></div>
+</div>
+</li>
+<li><p>Deploy the Operator with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl apply -f deploy/bundle.yaml
+</pre></div>
+</div>
+<p>The following confirmation is returned:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>customresourcedefinition.apiextensions.k8s.io/perconaservermongodbs.psmdb.percona.com created
+customresourcedefinition.apiextensions.k8s.io/perconaservermongodbbackups.psmdb.percona.com created
+customresourcedefinition.apiextensions.k8s.io/perconaservermongodbrestores.psmdb.percona.com created
+role.rbac.authorization.k8s.io/percona-server-mongodb-operator created
+serviceaccount/percona-server-mongodb-operator created
+rolebinding.rbac.authorization.k8s.io/service-account-percona-server-mongodb-operator created
+deployment.apps/percona-server-mongodb-operator created
+</pre></div>
+</div>
+</li>
+<li><p>The operator has been started, and you can create the Percona Server for MongoDB:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl apply -f deploy/cr.yaml
+</pre></div>
+</div>
+<p>The process could take some time.
+The return statement confirms the creation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>perconaservermongodb.psmdb.percona.com/my-cluster-name created
+</pre></div>
+</div>
+</li>
+<li><p>During previous steps, the Operator has generated several <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">secrets</a>, including the password for the <code class="docutils literal notranslate"><span class="pre">root</span></code> user, which you will need to access the cluster.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">secrets</span></code> command to see the list of Secrets objects (by default Secrets object you are interested in has <code class="docutils literal notranslate"><span class="pre">my-cluster-secrets</span></code> name). Then <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">secret</span> <span class="pre">my-cluster-secrets</span> <span class="pre">-o</span> <span class="pre">yaml</span></code> will return the YAML file with generated secrets, including the <code class="docutils literal notranslate"><span class="pre">MONGODB_USER_ADMIN</span></code>
+and <code class="docutils literal notranslate"><span class="pre">MONGODB_USER_ADMIN_PASSWORD</span></code> strings, which should look as follows:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">...</span>
+<span class="nt">data</span><span class="p">:</span>
+  <span class="l l-Scalar l-Scalar-Plain">...</span>
+  <span class="l l-Scalar l-Scalar-Plain">MONGODB_USER_ADMIN_PASSWORD</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">aDAzQ0pCY3NSWEZ2ZUIzS1I=</span>
+  <span class="nt">MONGODB_USER_ADMIN_USER</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">dXNlckFkbWlu</span>
+</pre></div>
+</div>
+<p>Here the actual password is base64-encoded, and <code class="docutils literal notranslate"><span class="pre">echo</span> <span class="pre">'aDAzQ0pCY3NSWEZ2ZUIzS1I='</span> <span class="pre">|</span> <span class="pre">base64</span> <span class="pre">--decode</span></code> will bring it back to a human-readable form.</p>
+</li>
+<li><p>Check connectivity to a newly created cluster.</p>
+<p>First of all, run percona-client and connect its console output to your
+terminal (running it may require some time to deploy the correspondent Pod):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+</pre></div>
+</div>
+<p>Now run <code class="docutils literal notranslate"><span class="pre">mongo</span></code> tool in the percona-client command shell using the login
+(which is <code class="docutils literal notranslate"><span class="pre">userAdmin</span></code>) and password obtained from the secret:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mongo <span class="s2">&quot;mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.default.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="kubernetes.html" title="Install Percona server for MongoDB on Kubernetes"
+             >next</a></li>
+        <li class="right" >
+          <a href="gke.html" title="Install Percona server for MongoDB on Google Kubernetes Engine (GKE)"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)</a><ul>
+<li><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li><a class="reference internal" href="#create-the-eks-cluster">Create the EKS cluster</a></li>
+<li><a class="reference internal" href="#install-the-operator">Install the Operator</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="gke.html"
+                        title="previous chapter">Install Percona server for MongoDB on Google Kubernetes Engine (GKE)</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="kubernetes.html"
+                        title="next chapter">Install Percona server for MongoDB on Kubernetes</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

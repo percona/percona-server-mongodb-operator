@@ -1,0 +1,243 @@
+
+
+
+    <title>Install Percona server for MongoDB on OpenShift &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Use Docker images from a custom registry" href="custom-registry.html" />
+    <link rel="prev" title="Install Percona server for MongoDB on Kubernetes" href="kubernetes.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="custom-registry.html" title="Use Docker images from a custom registry"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="kubernetes.html" title="Install Percona server for MongoDB on Kubernetes"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="install-percona-server-for-mongodb-on-openshift">
+<h1>Install Percona server for MongoDB on OpenShift</h1>
+<ol class="arabic" start="0">
+<li><p>Clone the percona-server-mongodb-operator repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone -b v1.6.0 https://github.com/percona/percona-server-mongodb-operator
+<span class="nb">cd</span> percona-server-mongodb-operator
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>It is crucial to specify the right branch with <code class="docutils literal notranslate"><span class="pre">-b</span></code>
+option while cloning the code on this step. Please be careful.</p>
+</div>
+</li>
+<li><p>The Custom Resource Definition for PSMDB should be created from the
+<code class="docutils literal notranslate"><span class="pre">deploy/crd.yaml</span></code> file. The Custom Resource Definition extends the
+standard set of resources which Kubernetes “knows” about with the new
+items, in our case these items are the core of the operator.</p>
+<p>This step should be done only once; it does not need to be repeated with other deployments.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc apply -f deploy/crd.yaml
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Setting Custom Resource Definition requires your user to
+have cluster-admin role privileges.</p>
+</div>
+<p>If you want to manage PSMDB cluster with a non-privileged user, the
+necessary permissions can be granted by applying the next clusterrole:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc create clusterrole psmdb-admin --verb<span class="o">=</span><span class="s2">&quot;*&quot;</span> --resource<span class="o">=</span>perconaservermongodbs.psmdb.percona.com,perconaservermongodbs.psmdb.percona.com/status,perconaservermongodbbackups.psmdb.percona.com,perconaservermongodbbackups.psmdb.percona.com/status,perconaservermongodbrestores.psmdb.percona.com,perconaservermongodbrestores.psmdb.percona.com/status
+$ oc adm policy add-cluster-role-to-user psmdb-admin &lt;some-user&gt;
+</pre></div>
+</div>
+<p>If you have a <a class="reference external" href="https://docs.cert-manager.io/en/release-0.8/getting-started/install/openshift.html">cert-manager</a> installed, then you have to execute two more commands to be able to manage certificates with a non-privileged user:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc create clusterrole cert-admin --verb<span class="o">=</span><span class="s2">&quot;*&quot;</span> --resource<span class="o">=</span>iissuers.certmanager.k8s.io,certificates.certmanager.k8s.io
+$ oc adm policy add-cluster-role-to-user cert-admin &lt;some-user&gt;
+</pre></div>
+</div>
+</li>
+<li><p>Create a new <code class="docutils literal notranslate"><span class="pre">psmdb</span></code> project:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc new-project psmdb
+</pre></div>
+</div>
+</li>
+<li><p>Add role-based access control (RBAC) for PSMDB is configured with
+the <code class="docutils literal notranslate"><span class="pre">deploy/rbac.yaml</span></code> file. RBAC is
+based on clearly defined roles and corresponding allowed actions. These actions are allowed on specific Kubernetes resources. The details
+about users and roles can be found in <a class="reference external" href="https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html">OpenShift
+documentation</a>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc apply -f deploy/rbac.yaml
+</pre></div>
+</div>
+</li>
+<li><p>Start the Operator within OpenShift:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc apply -f deploy/operator.yaml
+</pre></div>
+</div>
+</li>
+<li><p>Add the MongoDB Users secrets to OpenShift. These secrets
+should be placed as plain text in the stringData section of the
+<code class="docutils literal notranslate"><span class="pre">deploy/secrets.yaml</span></code> file as login name and
+passwords for the user accounts (see <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes
+documentation</a>
+for details).</p>
+<p>After editing the yaml file, the secrets should be created
+with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc create -f deploy/secrets.yaml
+</pre></div>
+</div>
+<p>More details about secrets can be found in <a class="reference internal" href="users.html#users"><span class="std std-ref">Users</span></a>.</p>
+</li>
+<li><p>Now certificates should be generated. By default, the Operator generates
+certificates automatically, and no actions are required at this step. Still,
+you can generate and apply your own certificates as secrets according
+to the <a class="reference internal" href="TLS.html#tls"><span class="std std-ref">TLS instructions</span></a>.</p></li>
+<li><p>Percona Server for MongoDB cluster can
+be created at any time with the following two steps:</p>
+<ol class="loweralpha">
+<li><p>Uncomment the <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> field <code class="docutils literal notranslate"><span class="pre">#platform:</span></code> and edit the field
+to <code class="docutils literal notranslate"><span class="pre">platform:</span> <span class="pre">openshift</span></code>. The result should be like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">psmdb.percona.com/v1alpha1</span>
+<span class="nt">kind</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">PerconaServerMongoDB</span>
+<span class="nt">metadata</span><span class="p">:</span>
+  <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">my-cluster-name</span>
+<span class="nt">spec</span><span class="p">:</span>
+  <span class="nt">platform</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">openshift</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+</li>
+</ol>
+<p>b (optional). In you’re using minishift, please adjust antiaffinity policy to <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+<blockquote>
+<div><div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span>   <span class="nt">affinity</span><span class="p">:</span>
+     <span class="nt">antiAffinityTopologyKey</span><span class="p">:</span> <span class="s">&quot;none&quot;</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+</div></blockquote>
+<ol class="loweralpha" start="3">
+<li><p>Create/apply the CR file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc apply -f deploy/cr.yaml
+</pre></div>
+</div>
+</li>
+</ol>
+<p>The creation process will take time. The process is complete when both the
+operator and the replica set pod have reached their Running status:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc get pods
+NAME                                               READY   STATUS    RESTARTS   AGE
+my-cluster-name-rs0-0                              <span class="m">1</span>/1     Running   <span class="m">0</span>          8m
+my-cluster-name-rs0-1                              <span class="m">1</span>/1     Running   <span class="m">0</span>          8m
+my-cluster-name-rs0-2                              <span class="m">1</span>/1     Running   <span class="m">0</span>          7m
+percona-server-mongodb-operator-754846f95d-sf6h6   <span class="m">1</span>/1     Running   <span class="m">0</span>          9m
+</pre></div>
+</div>
+</li>
+<li><p>Check connectivity to newly created cluster. Please note that mongo client command shall be executed inside the container manually.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+percona-client:/$ mongo <span class="s2">&quot;mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="custom-registry.html" title="Use Docker images from a custom registry"
+             >next</a></li>
+        <li class="right" >
+          <a href="kubernetes.html" title="Install Percona server for MongoDB on Kubernetes"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="kubernetes.html"
+                        title="previous chapter">Install Percona server for MongoDB on Kubernetes</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="custom-registry.html"
+                        title="next chapter">Use Docker images from a custom registry</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

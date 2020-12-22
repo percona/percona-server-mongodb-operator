@@ -1,0 +1,172 @@
+
+
+
+    <title>Percona Kubernetes Operator for Percona Server for MongoDB 1.5.0 &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="../_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="../index.html" />
+    <link rel="up" title="Kubernetes Operator for Percona Server for MongoDB Release Notes" href="index.html" />
+    <link rel="next" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.4.0" href="Kubernetes-Operator-for-PSMONGODB-RN1.4.0.html" />
+    <link rel="prev" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.6.0" href="Kubernetes-Operator-for-PSMONGODB-RN1.6.0.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.4.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.4.0"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.6.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.6.0"
+             accesskey="P">previous</a></li>
+        <li><a href="../index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li>
+          <li><a href="index.html" accesskey="U">Kubernetes Operator for Percona Server for MongoDB Release Notes</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="percona-kubernetes-operator-for-percona-server-for-mongodb-1-5-0">
+<span id="k8spsmdb-1-5-0"></span><h1><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.5.0</h1>
+<dl class="field-list simple">
+<dt class="field-odd">Date</dt>
+<dd class="field-odd"><p>September 7, 2020</p>
+</dd>
+<dt class="field-even">Installation</dt>
+<dd class="field-even"><p><a class="reference external" href="https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation">Installing Percona Kubernetes Operator for Percona Server for MongoDB</a></p>
+</dd>
+</dl>
+<div class="section" id="new-features">
+<h2>New Features</h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-233">K8SPSMDB-233</a>: Automatic management of system users for MongoDB on password rotation via Secret</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-226">K8SPSMDB-226</a>: Official Helm chart for the Operator</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-199">K8SPSMDB-199</a>: Support multiple PSMDB minor versions by the Operator</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-198">K8SPSMDB-198</a>: Fully Automate Minor Version Updates (Smart Update)</p></li>
+</ul>
+</div>
+<div class="section" id="improvements">
+<h2>Improvements</h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-192">K8SPSMDB-192</a>: The ability to set the mongod cursorTimeoutMillis parameter in YAML (Thanks to user xprt64 for the contribution)</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-234">K8SPSMDB-234</a>: OpenShift 4.5 support</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-197">K8SPSMDB-197</a>: Additional certificate SANs useful for reverse DNS lookups (Thanks to user phin1x for the contribution)</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-190">K8SPSMDB-190</a>: Direct API quering with “curl” instead of using “kubectl” tool in scheduled backup jobs (Thanks to user phin1x for the contribution)</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-133">K8SPSMDB-133</a>: A special Percona Server for MongoDB debug image which avoids restarting on fail and contains additional tools useful for debugging</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/CLOUD-556">CLOUD-556</a>: Kubernetes 1.17 / Google Kubernetes Engine 1.17 support</p></li>
+</ul>
+</div>
+<div class="section" id="bugs-fixed">
+<h2>Bugs Fixed</h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-213">K8SPSMDB-213</a>: Installation instruction not reflecting recent changes in git tags (Thanks to user geraintj for reporting this issue)</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-210">K8SPSMDB-210</a>: Backup documentation not reflecting changes in Percona Backup for MongoDB</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-180">K8SPSMDB-180</a>: Replset and cluster having “ready” status set before mongo initialization and replicasets configuration finished</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/K8SPSMDB-179">K8SPSMDB-179</a>: The “error” cluster status instead of the “initializing” one during the replset initialization</p></li>
+<li><p><a class="reference external" href="https://jira.percona.com/browse/CLOUD-531">CLOUD-531</a>: Wrong usage of <code class="docutils literal notranslate"><span class="pre">strings.TrimLeft</span></code> when processing apiVersion</p></li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.4.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.4.0"
+             >next</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.6.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.6.0"
+             >previous</a></li>
+        <li><a href="../index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li>
+          <li><a href="index.html" >Kubernetes Operator for Percona Server for MongoDB Release Notes</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#"><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.5.0</a><ul>
+<li><a class="reference internal" href="#new-features">New Features</a></li>
+<li><a class="reference internal" href="#improvements">Improvements</a></li>
+<li><a class="reference internal" href="#bugs-fixed">Bugs Fixed</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="Kubernetes-Operator-for-PSMONGODB-RN1.6.0.html"
+                        title="previous chapter"><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.6.0</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="Kubernetes-Operator-for-PSMONGODB-RN1.4.0.html"
+                        title="next chapter"><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.4.0</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

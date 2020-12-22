@@ -1,0 +1,240 @@
+
+
+
+    <title>Creating a private S3-compatible cloud for backups &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Update Percona Server for MongoDB Operator" href="update.html" />
+    <link rel="prev" title="Pause/resume Percona Server for MongoDB" href="pause.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="update.html" title="Update Percona Server for MongoDB Operator"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="pause.html" title="Pause/resume Percona Server for MongoDB"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="creating-a-private-s3-compatible-cloud-for-backups">
+<h1>Creating a private S3-compatible cloud for backups</h1>
+<p>As it is mentioned in
+<a class="reference external" href="backups.html">backups</a>
+any cloud storage which implements the S3 API can be used for backups. The one way to setup and implement the S3 API storage on Kubernetes or OpenShift is
+<a class="reference external" href="https://www.minio.io/">Minio</a> - the S3-compatible object storage
+server deployed via Docker on your own infrastructure.</p>
+<p>Setting up Minio to be used with Percona Server for MongoDB Operator
+backups involves following steps:</p>
+<ol class="arabic">
+<li><p>Install Minio in your Kubernetes or OpenShift
+environment and create the correspondent Kubernetes Service as
+follows:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>helm install <span class="se">\</span>
+  --name minio-service <span class="se">\</span>
+  --set <span class="nv">accessKey</span><span class="o">=</span>some-access-key <span class="se">\</span>
+  --set <span class="nv">secretKey</span><span class="o">=</span>some-secret-key <span class="se">\</span>
+  --set service.type<span class="o">=</span>ClusterIP <span class="se">\</span>
+  --set <span class="nv">configPath</span><span class="o">=</span>/tmp/.minio/ <span class="se">\</span>
+  --set persistence.size<span class="o">=</span>2G <span class="se">\</span>
+  --set environment.MINIO_REGION<span class="o">=</span>us-east-1 <span class="se">\</span>
+  stable/minio
+</pre></div>
+</div>
+<p>Don’t forget to substitute default <code class="docutils literal notranslate"><span class="pre">some-access-key</span></code> and
+<code class="docutils literal notranslate"><span class="pre">some-secret-key</span></code> strings in this command with actual unique
+key values. The values can be used later for access control. The <code class="docutils literal notranslate"><span class="pre">storageClass</span></code> option is needed if you are using the special
+<a class="reference external" href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes Storage
+Class</a>
+for backups. Otherwise, this setting may be omitted. You may also notice the
+<code class="docutils literal notranslate"><span class="pre">MINIO_REGION</span></code> value which is may not be used within a private
+cloud. Use the same region value here and on later steps
+(<code class="docutils literal notranslate"><span class="pre">us-east-1</span></code> is a good default choice).</p>
+</li>
+<li><p>Create an S3 bucket for backups:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -i --rm aws-cli --image<span class="o">=</span>perconalab/awscli --restart<span class="o">=</span>Never -- <span class="se">\</span>
+ bash -c <span class="s1">&#39;AWS_ACCESS_KEY_ID=some-access-key \</span>
+<span class="s1"> AWS_SECRET_ACCESS_KEY=some-secret-key \</span>
+<span class="s1"> AWS_DEFAULT_REGION=us-east-1 \</span>
+<span class="s1">  /usr/bin/aws \</span>
+<span class="s1">  --endpoint-url http://minio-service:9000 \</span>
+<span class="s1">  s3 mb s3://operator-testing&#39;</span>
+</pre></div>
+</div>
+<p>This command creates the bucket named <code class="docutils literal notranslate"><span class="pre">operator-testing</span></code> with
+the selected access and secret keys (substitute <code class="docutils literal notranslate"><span class="pre">some-access-key</span></code>
+and <code class="docutils literal notranslate"><span class="pre">some-secret-key</span></code> with the values used on the previous step).</p>
+</li>
+<li><p>Now edit the backup section of the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file to set proper values for the <code class="docutils literal notranslate"><span class="pre">bucket</span></code> (the S3 bucket for
+backups created on the previous step), <code class="docutils literal notranslate"><span class="pre">region</span></code>,
+<code class="docutils literal notranslate"><span class="pre">credentialsSecret</span></code> and the <code class="docutils literal notranslate"><span class="pre">endpointUrl</span></code> (which should point to
+the previously created Minio Service).</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">...</span>
+<span class="n">backup</span><span class="p">:</span>
+  <span class="n">enabled</span><span class="p">:</span> <span class="n">true</span>
+  <span class="n">version</span><span class="p">:</span> <span class="mf">0.3</span><span class="o">.</span><span class="mi">0</span>
+  <span class="o">...</span>
+  <span class="n">storages</span><span class="p">:</span>
+    <span class="n">minio</span><span class="p">:</span>
+      <span class="nb">type</span><span class="p">:</span> <span class="n">s3</span>
+      <span class="n">s3</span><span class="p">:</span>
+        <span class="n">bucket</span><span class="p">:</span> <span class="n">operator</span><span class="o">-</span><span class="n">testing</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">us</span><span class="o">-</span><span class="n">east</span><span class="o">-</span><span class="mi">1</span>
+        <span class="n">credentialsSecret</span><span class="p">:</span> <span class="n">my</span><span class="o">-</span><span class="n">cluster</span><span class="o">-</span><span class="n">name</span><span class="o">-</span><span class="n">backup</span><span class="o">-</span><span class="n">minio</span>
+        <span class="n">endpointUrl</span><span class="p">:</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">minio</span><span class="o">-</span><span class="n">service</span><span class="p">:</span><span class="mi">9000</span>
+  <span class="o">...</span>
+</pre></div>
+</div>
+<p>The option which should be specially mentioned is
+<code class="docutils literal notranslate"><span class="pre">credentialsSecret</span></code> which is a <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes
+secret</a>
+for backups. Sample
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml">backup-s3.yaml</a>
+can be used to create this secret object. Check that the object contains the
+proper <code class="docutils literal notranslate"><span class="pre">name</span></code> value and is equal to the one specified for
+<code class="docutils literal notranslate"><span class="pre">credentialsSecret</span></code>, i.e. <code class="docutils literal notranslate"><span class="pre">my-cluster-name-backup-minio</span></code> in the
+backup to Minio example, and also contains the proper <code class="docutils literal notranslate"><span class="pre">AWS_ACCESS_KEY_ID</span></code> and
+<code class="docutils literal notranslate"><span class="pre">AWS_SECRET_ACCESS_KEY</span></code> keys. After you have finished editing the file, the secrets
+object are created or updated when you run the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl apply -f deploy/backup-s3.yaml
+</pre></div>
+</div>
+</li>
+<li><p>When the setup process is completed, making the backup is based on a script.
+Following example illustrates how to make an on-demand backup:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -it --rm pbmctl --image<span class="o">=</span>percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart<span class="o">=</span>Never -- <span class="se">\</span>
+  run backup <span class="se">\</span>
+  --server-address<span class="o">=</span>&lt;cluster-name&gt;-backup-coordinator:10001 <span class="se">\</span>
+  --storage &lt;storage&gt; <span class="se">\</span>
+  --compression-algorithm<span class="o">=</span>gzip <span class="se">\</span>
+  --description<span class="o">=</span>my-backup
+</pre></div>
+</div>
+<p>Don’t forget to specify the name of your cluster instead of the
+<code class="docutils literal notranslate"><span class="pre">&lt;cluster-name&gt;</span></code> part of the Backup Coordinator URL (the
+cluster name is specified in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file). Also substitute <code class="docutils literal notranslate"><span class="pre">&lt;storage&gt;</span></code> with the actual
+storage name located in a subsection inside of the
+<code class="docutils literal notranslate"><span class="pre">backups</span></code> in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file. In the earlier example this value is <code class="docutils literal notranslate"><span class="pre">minio</span></code>.</p>
+</li>
+<li><p>To restore a previously saved backup you must specify the
+backup name. With the proper Backup Coordinator URL and storage name, you can obtain a list of the available backups:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -it --rm pbmctl --image<span class="o">=</span>percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart<span class="o">=</span>Never -- list backups --server-address<span class="o">=</span>&lt;cluster-name&gt;-backup-coordinator:10001
+</pre></div>
+</div>
+<p>Now, restore the backup, using backup name instead of the
+<code class="docutils literal notranslate"><span class="pre">backup-name</span></code> parameter:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -it --rm pbmctl --image<span class="o">=</span>percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart<span class="o">=</span>Never -- <span class="se">\</span>
+  run restore <span class="se">\</span>
+  --server-address<span class="o">=</span>&lt;cluster-name&gt;-backup-coordinator:10001 <span class="se">\</span>
+  --storage &lt;storage&gt; <span class="se">\</span>
+  backup-name
+</pre></div>
+</div>
+</li>
+</ol>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="update.html" title="Update Percona Server for MongoDB Operator"
+             >next</a></li>
+        <li class="right" >
+          <a href="pause.html" title="Pause/resume Percona Server for MongoDB"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="pause.html"
+                        title="previous chapter">Pause/resume Percona Server for MongoDB</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="update.html"
+                        title="next chapter">Update Percona Server for MongoDB Operator</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

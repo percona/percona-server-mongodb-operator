@@ -1,0 +1,310 @@
+
+
+
+    <title>Providing Backups &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Pause/resume Percona Server for MongoDB" href="pause.html" />
+    <link rel="prev" title="Data at rest encryption" href="encryption.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="pause.html" title="Pause/resume Percona Server for MongoDB"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="encryption.html" title="Data at rest encryption"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="providing-backups">
+<h1>Providing Backups</h1>
+<p>The Operator usually stores Server for MongoDB backups on <a class="reference external" href="https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services">Amazon S3 or S3-compatible storage</a> outside the Kubernetes cluster:</p>
+<div class="figure align-center">
+<img alt="Backup on S3-compatible storage" src="_images/backup-s3.png" />
+</div>
+<p>The Operator allows doing cluster backup in two
+ways. <em>Scheduled backups</em> are configured in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file to be executed automatically in proper time. <em>On-demand backups</em>
+can be done manually at any moment. Both ways use the <a class="reference external" href="https://github.com/percona/percona-backup-mongodb">Percona
+Backup for MongoDB</a> tool.</p>
+<div class="contents local topic" id="contents">
+<ul class="simple">
+<li><p><a class="reference internal" href="#making-scheduled-backups" id="id3">Making scheduled backups</a></p></li>
+<li><p><a class="reference internal" href="#making-on-demand-backup" id="id4">Making on-demand backup</a></p></li>
+<li><p><a class="reference internal" href="#restore-the-cluster-from-a-previously-saved-backup" id="id5">Restore the cluster from a previously saved backup</a></p></li>
+<li><p><a class="reference internal" href="#delete-the-unneeded-backup" id="id6">Delete the unneeded backup</a></p></li>
+</ul>
+</div>
+<div class="section" id="making-scheduled-backups">
+<span id="backups-scheduled"></span><h2><a class="toc-backref" href="#id3">Making scheduled backups</a></h2>
+<p>Since backups are stored separately on the Amazon S3, a secret with
+<code class="docutils literal notranslate"><span class="pre">AWS_ACCESS_KEY_ID</span></code> and <code class="docutils literal notranslate"><span class="pre">AWS_SECRET_ACCESS_KEY</span></code> should be present on
+the Kubernetes cluster. The secrets file with these base64-encoded keys should
+be created: for example <code class="docutils literal notranslate"><span class="pre">deploy/backup-s3.yaml</span></code> file with the following
+contents.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="nt">kind</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Secret</span>
+<span class="nt">metadata</span><span class="p">:</span>
+  <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">my-cluster-name-backup-s3</span>
+<span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Opaque</span>
+<span class="nt">data</span><span class="p">:</span>
+  <span class="nt">AWS_ACCESS_KEY_ID</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">UkVQTEFDRS1XSVRILUFXUy1BQ0NFU1MtS0VZ</span>
+  <span class="nt">AWS_SECRET_ACCESS_KEY</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">UkVQTEFDRS1XSVRILUFXUy1TRUNSRVQtS0VZ</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The following command can be used to get a base64-encoded string from
+a plain text one: <code class="docutils literal notranslate"><span class="pre">$</span> <span class="pre">echo</span> <span class="pre">-n</span> <span class="pre">'plain-text-string'</span> <span class="pre">|</span> <span class="pre">base64</span></code></p>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">name</span></code> value is the <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes
+secret</a>
+name which will be used further, and <code class="docutils literal notranslate"><span class="pre">AWS_ACCESS_KEY_ID</span></code> and
+<code class="docutils literal notranslate"><span class="pre">AWS_SECRET_ACCESS_KEY</span></code> are the keys to access S3 storage (and
+obviously they should contain proper values to make this access
+possible). To have effect secrets file should be applied with the
+appropriate command to create the secret object,
+e.g. <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">apply</span> <span class="pre">-f</span> <span class="pre">deploy/backup-s3.yaml</span></code> (for Kubernetes).</p>
+<p>Backups schedule is defined in the <code class="docutils literal notranslate"><span class="pre">backup</span></code> section of the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file. This section contains three subsections:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">storages</span></code> contains data needed to access the S3-compatible cloud to store
+backups.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tasks</span></code> subsection allows to actually schedule backups (the schedule is
+specified in crontab format).</p></li>
+</ul>
+<p>Here is an example which uses Amazon S3 storage for backups:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">...</span>
+<span class="nt">backup</span><span class="p">:</span>
+  <span class="nt">enabled</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">true</span>
+  <span class="nt">version</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">0.3.0</span>
+  <span class="l l-Scalar l-Scalar-Plain">...</span>
+  <span class="nt">storages</span><span class="p">:</span>
+    <span class="nt">s3-us-west</span><span class="p">:</span>
+      <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">s3</span>
+      <span class="nt">s3</span><span class="p">:</span>
+        <span class="nt">bucket</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">S3-BACKUP-BUCKET-NAME-HERE</span>
+        <span class="nt">region</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">us-west-2</span>
+        <span class="nt">credentialsSecret</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">my-cluster-name-backup-s3</span>
+  <span class="l l-Scalar l-Scalar-Plain">...</span>
+  <span class="nt">tasks</span><span class="p">:</span>
+   <span class="p p-Indicator">-</span> <span class="nt">name</span><span class="p">:</span> <span class="s">&quot;sat-night-backup&quot;</span>
+     <span class="nt">schedule</span><span class="p">:</span> <span class="s">&quot;0</span><span class="nv"> </span><span class="s">0</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">6&quot;</span>
+     <span class="nt">storageName</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">s3-us-west</span>
+  <span class="l l-Scalar l-Scalar-Plain">...</span>
+</pre></div>
+</div>
+<p>if you use some S3-compatible storage instead of the original
+Amazon S3, the <a class="reference external" href="https://docs.min.io/docs/aws-cli-with-minio.html">endpointURL</a> is needed in the <code class="docutils literal notranslate"><span class="pre">s3</span></code> subsection which points to the actual cloud used for backups and
+is specific to the cloud provider. For example, using <a class="reference external" href="https://cloud.google.com">Google Cloud</a> involves the <a class="reference external" href="https://storage.googleapis.com">following</a> endpointUrl:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">endpointUrl</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">https://storage.googleapis.com</span>
+</pre></div>
+</div>
+<p>The options within these three subsections are further explained in the
+<a class="reference internal" href="operator.html#operator-backup-section"><span class="std std-ref">Operator Custom Resource options</span></a>.</p>
+<p>One option which should be mentioned separately is
+<code class="docutils literal notranslate"><span class="pre">credentialsSecret</span></code> which is a <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes
+secret</a>
+for backups. Value of this key should be the same as the name used to
+create the secret object (<code class="docutils literal notranslate"><span class="pre">my-cluster-name-backup-s3</span></code> in the last
+example).</p>
+<p>The schedule is specified in crontab format as explained in
+<a class="reference internal" href="operator.html#operator-backup-section"><span class="std std-ref">Operator Custom Resource options</span></a>.</p>
+</div>
+<div class="section" id="making-on-demand-backup">
+<h2><a class="toc-backref" href="#id4">Making on-demand backup</a></h2>
+<p>To make on-demand backup, user should use YAML file with correct names
+for the backup and the PXC Cluster, and correct PVC settings. The
+example of such file is
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup/backup.yaml">deploy/backup/backup.yaml</a>.</p>
+<p>When the backup config file is ready, actual backup command is executed:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl apply -f deploy/backup/backup.yaml
+</pre></div>
+</div>
+<p>The example of such file is <a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup/restore.yaml">deploy/backup/restore.yaml</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Storing backup settings in a separate file can be replaced by</p>
+</div>
+<p>passing its content to the <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">apply</span></code> command as follows:</p>
+<blockquote>
+<div><div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cat <span class="s">&lt;&lt;EOF | kubectl apply -f-</span>
+<span class="s">apiVersion: psmdb.percona.com/v1</span>
+<span class="s">kind: PerconaServerMongoDBBackup</span>
+<span class="s">metadata:</span>
+<span class="s">  name: backup1</span>
+<span class="s">spec:</span>
+<span class="s">  psmdbCluster: my-cluster-name</span>
+<span class="s">  storageName: s3-us-west</span>
+<span class="s">EOF</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="restore-the-cluster-from-a-previously-saved-backup">
+<h2><a class="toc-backref" href="#id5">Restore the cluster from a previously saved backup</a></h2>
+<p>Following steps are needed to restore a previously saved backup:</p>
+<ol class="arabic simple">
+<li><p>First of all make sure that the cluster is running.</p></li>
+<li><p>Now find out correct names for the <strong>backup</strong> and the <strong>cluster</strong>. Available
+backups can be listed with the following command:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>   kubectl get psmdb-backup
+
+And the following <span class="nb">command</span> will list available clusters:
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl get psmdb
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>When both correct names are known, the actual restoration process can
+be started as follows:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl apply -f deploy/backup/restore.yaml
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Storing backup settings in a separate file can be replaced by
+passing its content to the <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">apply</span></code> command as follows:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cat <span class="s">&lt;&lt;EOF | kubectl apply -f-</span>
+<span class="s">apiVersion: psmdb.percona.com/v1</span>
+<span class="s">kind: PerconaServerMongoDBRestore</span>
+<span class="s">metadata:</span>
+<span class="s">  name: restore1</span>
+<span class="s">spec:</span>
+<span class="s">  pxcCluster: my-cluster-name</span>
+<span class="s">  backupName: backup1</span>
+<span class="s">EOF</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="delete-the-unneeded-backup">
+<h2><a class="toc-backref" href="#id6">Delete the unneeded backup</a></h2>
+<p>Deleting a previously saved backup requires not more than the backup
+name. This name can be taken from the list of available backups returned
+by the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl get psmdb-backup
+</pre></div>
+</div>
+<p>When the name is known, backup can be deleted as follows:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl delete psmdb-backup/&lt;backup-name&gt;
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="pause.html" title="Pause/resume Percona Server for MongoDB"
+             >next</a></li>
+        <li class="right" >
+          <a href="encryption.html" title="Data at rest encryption"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Providing Backups</a><ul>
+<li><a class="reference internal" href="#making-scheduled-backups">Making scheduled backups</a></li>
+<li><a class="reference internal" href="#making-on-demand-backup">Making on-demand backup</a></li>
+<li><a class="reference internal" href="#restore-the-cluster-from-a-previously-saved-backup">Restore the cluster from a previously saved backup</a></li>
+<li><a class="reference internal" href="#delete-the-unneeded-backup">Delete the unneeded backup</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="encryption.html"
+                        title="previous chapter">Data at rest encryption</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="pause.html"
+                        title="next chapter">Pause/resume Percona Server for MongoDB</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

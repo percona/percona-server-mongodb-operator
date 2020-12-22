@@ -1,0 +1,183 @@
+
+
+
+    <title>Percona Kubernetes Operator for Percona Server for MongoDB 1.2.0 &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="../_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="../index.html" />
+    <link rel="up" title="Kubernetes Operator for Percona Server for MongoDB Release Notes" href="index.html" />
+    <link rel="next" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.1.0" href="Kubernetes-Operator-for-PSMONGODB-RN1.1.0.html" />
+    <link rel="prev" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.3.0" href="Kubernetes-Operator-for-PSMONGODB-RN1.3.0.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.1.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.1.0"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.3.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.3.0"
+             accesskey="P">previous</a></li>
+        <li><a href="../index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li>
+          <li><a href="index.html" accesskey="U">Kubernetes Operator for Percona Server for MongoDB Release Notes</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="percona-kubernetes-operator-for-percona-server-for-mongodb-1-2-0">
+<h1><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.2.0</h1>
+<p>Percona announces the <em>Percona Kubernetes Operator for Percona Server for
+MongoDB</em> 1.2.0 release on September 20, 2019. This release is now the current
+GA release in the 1.2 series. <a class="reference external" href="https://www.percona.com/doc/kubernetes-operator-for-psmongodb/kubernetes.html">Install the Kubernetes Operator for Percona
+Server for MongoDB by following the instructions</a>.</p>
+<p>The Operator simplifies the deployment and management of the <a class="reference external" href="https://www.percona.com/software/mongo-database/percona-server-for-mongodb">Percona Server
+for MongoDB</a>
+in Kubernetes-based environments. It extends the Kubernetes API with a new
+custom resource for deploying, configuring and managing the application through
+the whole life cycle.</p>
+<p>The Operator source code is available <a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator">in our Github repository</a>.
+All of Percona’s software is open-source and free.</p>
+<div class="section" id="new-features-and-improvements">
+<h2>New Features and Improvements</h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://www.percona.com/doc/kubernetes-operator-for-psmongodb/broker.html">A Service Broker was implemented</a>
+for the Operator, allowing a user to deploy Percona XtraDB Cluster on the
+OpenShift Platform, configuring it with a standard GUI, following the Open
+Service Broker API.</p></li>
+<li><p>Now the Operator supports <a class="reference external" href="https://www.percona.com/doc/percona-monitoring-and-management/2.x/index.html">Percona Monitoring and Management 2</a>,
+which means being able to detect and register to PMM Server of both 1.x and
+2.0 versions.</p></li>
+<li><p>Data-at-rest encryption is now enabled by default unless
+<code class="docutils literal notranslate"><span class="pre">EnableEncryption=false</span></code> is explicitly specified in the <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code>
+configuration file.</p></li>
+<li><p>Now it is possible to set the <code class="docutils literal notranslate"><span class="pre">schedulerName</span></code> option in the operator
+parameters. This allows using storage which depends on a custom scheduler, or
+a cloud provider which optimizes scheduling to run workloads in a
+cost-effective way.</p></li>
+<li><p>The resource constraint values were refined for all containers to eliminate
+the possibility of an out of memory error.</p></li>
+</ul>
+</div>
+<div class="section" id="fixed-bugs">
+<h2>Fixed Bugs</h2>
+<ul class="simple">
+<li><p>Oscillations of the cluster status between “initializing” and “ready” took
+place after an update.</p></li>
+<li><p>The Operator was removing other cron jobs in case of the enabled backups
+without defined tasks (contributed by <a class="reference external" href="https://github.com/mheers">Marcel Heers</a>).</p></li>
+</ul>
+<p><a class="reference external" href="https://www.percona.com/software/mongo-database/percona-server-for-mongodb">Percona Server for MongoDB</a>
+is an enhanced, open source and highly-scalable database that is a
+fully-compatible, drop-in replacement for MongoDB Community Edition. It supports
+MongoDB protocols and drivers. Percona Server for MongoDB extends MongoDB
+Community Edition functionality by including the Percona Memory Engine, as well
+as several enterprise-grade features. It requires no changes to MongoDB
+applications or code.</p>
+<p>Help us improve our software quality by reporting any bugs you encounter using
+<a class="reference external" href="https://jira.percona.com/secure/Dashboard.jspa">our bug tracking system</a>.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.1.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.1.0"
+             >next</a></li>
+        <li class="right" >
+          <a href="Kubernetes-Operator-for-PSMONGODB-RN1.3.0.html" title="Percona Kubernetes Operator for Percona Server for MongoDB 1.3.0"
+             >previous</a></li>
+        <li><a href="../index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li>
+          <li><a href="index.html" >Kubernetes Operator for Percona Server for MongoDB Release Notes</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#"><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.2.0</a><ul>
+<li><a class="reference internal" href="#new-features-and-improvements">New Features and Improvements</a></li>
+<li><a class="reference internal" href="#fixed-bugs">Fixed Bugs</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="Kubernetes-Operator-for-PSMONGODB-RN1.3.0.html"
+                        title="previous chapter"><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.3.0</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="Kubernetes-Operator-for-PSMONGODB-RN1.1.0.html"
+                        title="next chapter"><em>Percona Kubernetes Operator for Percona Server for MongoDB</em> 1.1.0</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

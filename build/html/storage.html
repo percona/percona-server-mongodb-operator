@@ -1,0 +1,177 @@
+
+
+
+    <title>Local Storage support for the Percona Server for MongoDB Operator &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes" href="constraints.html" />
+    <link rel="prev" title="Users" href="users.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="constraints.html" title="Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="users.html" title="Users"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="local-storage-support-for-the-percona-server-for-mongodb-operator">
+<h1>Local Storage support for the Percona Server for MongoDB Operator</h1>
+<p>Among the wide rage of volume types, supported by Kubernetes, there are
+two volume types which allow Pod containers to access part of the local filesystem on
+the node the <em>emptyDir</em> and <em>hostPath</em>.</p>
+<div class="section" id="emptydir">
+<h2>emptyDir</h2>
+<p>A Pod <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#emptydir">emptyDir
+volume</a> is created when the Pod is assigned to a Node. The volume is initially empty and is erased when the Pod is removed from the Node. The containers in the Pod can read and write the files in the emptyDir volume.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">emptyDir</span></code> options in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file can be used to turn the emptyDir volume on by setting the directory
+name.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">emptyDir</span></code> is useful when you use <a class="reference external" href="https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html">Percona Memory
+Engine</a>.</p>
+</div>
+<div class="section" id="hostpath">
+<h2>hostPath</h2>
+<p>A <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#hostpath">hostPath
+volume</a>
+mounts an existing file or directory from the host node’s filesystem into
+the Pod. If the pod is removed, the data persists in the host node’s filesystem.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">volumeSpec.hostPath</span></code> subsection in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file may include <code class="docutils literal notranslate"><span class="pre">path</span></code> and <code class="docutils literal notranslate"><span class="pre">type</span></code> keys to set the node’s filesystem
+object path and to specify whether it is a file, a directory, or
+something else (e.g. a socket):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">volumeSpec</span><span class="p">:</span>
+  <span class="n">hostPath</span><span class="p">:</span>
+    <span class="n">path</span><span class="p">:</span> <span class="o">/</span><span class="n">data</span>
+    <span class="nb">type</span><span class="p">:</span> <span class="n">Directory</span>
+</pre></div>
+</div>
+<p>Please note, you must created the hostPath manually and should have following
+attributes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>access permissions</p></li>
+<li><p>ownership</p></li>
+<li><p>SELinux security context</p></li>
+</ul>
+</div></blockquote>
+<p>The <code class="docutils literal notranslate"><span class="pre">hostPath</span></code> volume is useful when you perform manual actions
+during the first run and require improved disk performance.
+Consider using the tolerations settings to avoid a cluster migration to
+different hardware in case of a reboot or a hardware failure.</p>
+<p>More details can be found in the <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#hostpath">official hostPath Kubernetes
+documentation</a>.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="constraints.html" title="Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes"
+             >next</a></li>
+        <li class="right" >
+          <a href="users.html" title="Users"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Local Storage support for the Percona Server for MongoDB Operator</a><ul>
+<li><a class="reference internal" href="#emptydir">emptyDir</a></li>
+<li><a class="reference internal" href="#hostpath">hostPath</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="users.html"
+                        title="previous chapter">Users</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="constraints.html"
+                        title="next chapter">Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

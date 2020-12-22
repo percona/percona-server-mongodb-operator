@@ -1,0 +1,366 @@
+
+
+
+    <title>Users &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Local Storage support for the Percona Server for MongoDB Operator" href="storage.html" />
+    <link rel="prev" title="Install Percona Server for MongoDB using Helm" href="helm.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="storage.html" title="Local Storage support for the Percona Server for MongoDB Operator"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="helm.html" title="Install Percona Server for MongoDB using Helm"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="users">
+<span id="id1"></span><h1>Users</h1>
+<p>MongoDB user accounts within the Cluster can be divided into two different groups:</p>
+<ul class="simple">
+<li><p><em>application-level users</em>: the unprivileged user accounts,</p></li>
+<li><p><em>system-level users</em>: the accounts needed to automate the cluster deployment
+and management tasks, such as MongoDB Health checks.</p></li>
+</ul>
+<p>As these two groups of user accounts serve different purposes, they are
+considered separately in the following sections.</p>
+<div class="contents local topic" id="contents">
+<ul class="simple">
+<li><p><a class="reference internal" href="#users-unprivileged-users" id="id6">Unprivileged users</a></p></li>
+<li><p><a class="reference internal" href="#users-system-users" id="id7">System Users</a></p>
+<ul>
+<li><p><a class="reference internal" href="#yaml-object-format" id="id8">YAML Object Format</a></p></li>
+<li><p><a class="reference internal" href="#password-rotation-policies-and-timing" id="id9">Password Rotation Policies and Timing</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#users-development-mode" id="id10">Development Mode</a></p></li>
+<li><p><a class="reference internal" href="#users-internal-authentication-key" id="id11">MongoDB Internal Authentication Key (optional)</a></p></li>
+</ul>
+</div>
+<div class="section" id="users-unprivileged-users">
+<span id="id2"></span><h2><a class="reference external" href="users.html#unprivileged-users">Unprivileged users</a></h2>
+<p>There are no unprivileged (general purpose) user accounts created by
+default. If you need general purpose users, please run commands below:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+mongodb@percona-client:/$ mongo <span class="s2">&quot;mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
+rs0:PRIMARY&gt; db.createUser<span class="o">({</span>
+    user: <span class="s2">&quot;myApp&quot;</span>,
+    pwd: <span class="s2">&quot;myAppPassword&quot;</span>,
+    roles: <span class="o">[</span>
+      <span class="o">{</span> db: <span class="s2">&quot;myApp&quot;</span>, role: <span class="s2">&quot;readWrite&quot;</span> <span class="o">}</span>
+    <span class="o">]</span>,
+    mechanisms: <span class="o">[</span>
+       <span class="s2">&quot;SCRAM-SHA-1&quot;</span>
+    <span class="o">]</span>
+
+<span class="o">})</span>
+</pre></div>
+</div>
+<p>Now check the newly created user:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+mongodb@percona-client:/$ mongo <span class="s2">&quot;mongodb+srv://myApp:myAppPassword@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
+rs0:PRIMARY&gt; use myApp
+rs0:PRIMARY&gt; db.test.insert<span class="o">({</span> x: <span class="m">1</span> <span class="o">})</span>
+rs0:PRIMARY&gt; db.test.findOne<span class="o">()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="users-system-users">
+<span id="id3"></span><h2><a class="reference external" href="users.html#system-users">System Users</a></h2>
+<p>To automate the deployment and management of the cluster components,
+the Operator requires system-level MongoDB users.</p>
+<p>During installation, the Operator requires
+Kubernetes Secrets to be deployed before the Operator is started. The name of the
+required secrets can be set in <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> under the
+<code class="docutils literal notranslate"><span class="pre">spec.secrets</span></code> section.</p>
+<p><em>Default Secret name:</em> <code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code></p>
+<p><em>Secret name field:</em> <code class="docutils literal notranslate"><span class="pre">spec.secrets.users</span></code></p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>These users should not be used to run an application.</p>
+</div>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>User Purpose</p></th>
+<th class="head"><p>Username Secret Key</p></th>
+<th class="head"><p>Password Secret Key</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Backup/Restore</p></td>
+<td><p>MONGODB_BACKUP_USER</p></td>
+<td><p>MONGODB_BACKUP_PASSWORD</p></td>
+</tr>
+<tr class="row-odd"><td><p>Cluster Admin</p></td>
+<td><p>MONGODB_CLUSTER_ADMIN_USER</p></td>
+<td><p>MONGODB_CLUSTER_ADMIN_PASSWORD</p></td>
+</tr>
+<tr class="row-even"><td><p>Cluster Monitor</p></td>
+<td><p>MONGODB_CLUSTER_MONITOR_USER</p></td>
+<td><p>MONGODB_CLUSTER_MONITOR_PASSWORD</p></td>
+</tr>
+<tr class="row-odd"><td><p>User Admin</p></td>
+<td><p>MONGODB_USER_ADMIN_USER</p></td>
+<td><p>MONGODB_USER_ADMIN_PASSWORD</p></td>
+</tr>
+<tr class="row-even"><td><p>PMM Server</p></td>
+<td><p>PMM_SERVER_USER</p></td>
+<td><p>PMM_SERVER_PASSWORD</p></td>
+</tr>
+</tbody>
+</table>
+<p><cite>Backup/Restore</cite> - MongoDB Role: <a class="reference external" href="https://docs.mongodb.com/manual/reference/built-in-roles/#backup">backup</a>, <a class="reference external" href="https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor">clusterMonitor</a>, <a class="reference external" href="https://docs.mongodb.com/manual/reference/built-in-roles/#restore">restore</a></p>
+<p><cite>Cluster Admin</cite> - MongoDB Role: <a class="reference external" href="https://docs.mongodb.com/manual/reference/built-in-roles/#clusterAdmin">clusterAdmin</a></p>
+<p><cite>Cluster Monitor</cite> - MongoDB Role: <a class="reference external" href="https://docs.mongodb.com/manual/reference/built-in-roles/#clusterMonitor">clusterMonitor</a></p>
+<p><cite>User Admin</cite> - MongoDB Role: <a class="reference external" href="https://docs.mongodb.com/manual/reference/built-in-roles/#userAdmin">userAdmin</a></p>
+<div class="section" id="yaml-object-format">
+<h3><a class="toc-backref" href="#id8">YAML Object Format</a></h3>
+<p>The default name of the Secrets object for these users is
+<code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code> and can be set in the CR for your cluster in
+<code class="docutils literal notranslate"><span class="pre">spec.secrets.users</span></code> to something different. When you create the object
+yourself, the corresponding YAML file should match the following simple format:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="nt">kind</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Secret</span>
+<span class="nt">metadata</span><span class="p">:</span>
+  <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">my-cluster-name-secrets</span>
+<span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">Opaque</span>
+<span class="nt">stringData</span><span class="p">:</span>
+  <span class="nt">MONGODB_BACKUP_USER</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">backup</span>
+  <span class="nt">MONGODB_BACKUP_PASSWORD</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">backup123456</span>
+  <span class="nt">MONGODB_CLUSTER_ADMIN_USER</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">clusterAdmin</span>
+  <span class="nt">MONGODB_CLUSTER_ADMIN_PASSWORD</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">clusterAdmin123456</span>
+  <span class="nt">MONGODB_CLUSTER_MONITOR_USER</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">clusterMonitor</span>
+  <span class="nt">MONGODB_CLUSTER_MONITOR_PASSWORD</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">clusterMonitor123456</span>
+  <span class="nt">MONGODB_USER_ADMIN_USER</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">userAdmin</span>
+  <span class="nt">MONGODB_USER_ADMIN_PASSWORD</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">userAdmin123456</span>
+  <span class="nt">PMM_SERVER_USER</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">pmm</span>
+  <span class="nt">PMM_SERVER_PASSWORD</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">supa|^|pazz</span>
+</pre></div>
+</div>
+<p>The example above matches
+<a class="reference internal" href="#users-development-mode"><span class="std std-ref">what is shipped in deploy/secrets.yaml</span></a> which
+contains default passwords. You should NOT use these in production, but they are
+present to assist in automated testing or simple use in a development
+environment.</p>
+<p>As you can see, because we use the <code class="docutils literal notranslate"><span class="pre">stringData</span></code> type when creating the Secrets
+object, all values for each key/value pair are stated in plain text format
+convenient from the user’s point of view. But the resulting Secrets
+object contains passwords stored as <code class="docutils literal notranslate"><span class="pre">data</span></code> - i.e., base64-encoded strings.
+If you want to update any field, you’ll need to encode the value into base64
+format. To do this, you can run <code class="docutils literal notranslate"><span class="pre">echo</span> <span class="pre">-n</span> <span class="pre">&quot;password&quot;</span> <span class="pre">|</span> <span class="pre">base64</span></code> in your local
+shell to get valid values. For example, setting the PMM Server user’s password
+to <code class="docutils literal notranslate"><span class="pre">new_password</span></code> in the <code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code> object can be done
+with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl patch secret/my-cluster-name-secrets -p <span class="s1">&#39;{&quot;data&quot;:{&quot;PMM_SERVER_PASSWORD&quot;: &#39;</span><span class="k">$(</span><span class="nb">echo</span> -n new_password <span class="p">|</span> base64<span class="k">)</span><span class="s1">&#39;}}&#39;</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The operator creates and updates an additional Secrets object named
+based on the cluster name, like <code class="docutils literal notranslate"><span class="pre">internal-my-cluster-name-users</span></code>. It is
+used only by the Operator and should undergo no manual changes by the user.
+This object contains secrets with the same passwords as the one specified
+in <code class="docutils literal notranslate"><span class="pre">spec.secrets.users</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code>). When the user
+updates <code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code>, the Operator propagates these changes to
+the internal <code class="docutils literal notranslate"><span class="pre">internal-my-cluster-name-users</span></code> Secrets object.</p>
+</div>
+</div>
+<div class="section" id="password-rotation-policies-and-timing">
+<h3><a class="toc-backref" href="#id9">Password Rotation Policies and Timing</a></h3>
+<p>When there is a change in user secrets, the Operator
+creates the necessary transaction to change passwords. This rotation happens
+almost instantly (the delay can be up to a few seconds), and it’s not needed to
+take any action beyond changing the password.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Please don’t change <code class="docutils literal notranslate"><span class="pre">secrets.users</span></code> option in CR, make changes
+inside the secrets object itself.</p>
+</div>
+</div>
+</div>
+<div class="section" id="users-development-mode">
+<span id="id4"></span><h2><a class="reference external" href="users.html#development-mode">Development Mode</a></h2>
+<p>To make development and testing easier, <code class="docutils literal notranslate"><span class="pre">deploy/secrets.yaml</span></code> secrets
+file contains default passwords for MongoDB system users.</p>
+<p>These development-mode credentials from <code class="docutils literal notranslate"><span class="pre">deploy/secrets.yaml</span></code> are:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 62%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Secret Key</p></th>
+<th class="head"><p>Secret Value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>MONGODB_BACKUP_USER</p></td>
+<td><p>backup</p></td>
+</tr>
+<tr class="row-odd"><td><p>MONGODB_BACKUP_PASSWORD</p></td>
+<td><p>backup123456</p></td>
+</tr>
+<tr class="row-even"><td><p>MONGODB_CLUSTER_ADMIN_USER</p></td>
+<td><p>clusterAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>MONGODB_CLUSTER_ADMIN_PASSWORD</p></td>
+<td><p>clusterAdmin123456</p></td>
+</tr>
+<tr class="row-even"><td><p>MONGODB_CLUSTER_MONITOR_USER</p></td>
+<td><p>clusterMonitor</p></td>
+</tr>
+<tr class="row-odd"><td><p>MONGODB_CLUSTER_MONITOR_PASSWORD</p></td>
+<td><p>clusterMonitor123456</p></td>
+</tr>
+<tr class="row-even"><td><p>MONGODB_USER_ADMIN_USER</p></td>
+<td><p>userAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>MONGODB_USER_ADMIN_PASSWORD</p></td>
+<td><p>userAdmin123456</p></td>
+</tr>
+<tr class="row-even"><td><p>PMM_SERVER_USER</p></td>
+<td><p>pmm</p></td>
+</tr>
+<tr class="row-odd"><td><p>PMM_SERVER_PASSWORD</p></td>
+<td><p>supa|^|pazz</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Do not use the default MongoDB Users in production!</p>
+</div>
+</div>
+<div class="section" id="users-internal-authentication-key">
+<span id="id5"></span><h2><a class="reference external" href="users.html#internal-authentication-key">MongoDB Internal Authentication Key (optional)</a></h2>
+<p><em>Default Secret name:</em> <code class="docutils literal notranslate"><span class="pre">my-cluster-name-mongodb-key</span></code></p>
+<p><em>Secret name field:</em> <code class="docutils literal notranslate"><span class="pre">spec.secrets.key</span></code></p>
+<p>By default, the operator will create a random, 1024-byte key for
+<a class="reference external" href="https://docs.mongodb.com/manual/core/security-internal-authentication/">MongoDB Internal
+Authentication</a>
+if it does not already exist. If you would like to deploy a different
+key, create the secret manually before starting the operator.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="storage.html" title="Local Storage support for the Percona Server for MongoDB Operator"
+             >next</a></li>
+        <li class="right" >
+          <a href="helm.html" title="Install Percona Server for MongoDB using Helm"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Users</a><ul>
+<li><a class="reference internal" href="#users-unprivileged-users">Unprivileged users</a></li>
+<li><a class="reference internal" href="#users-system-users">System Users</a><ul>
+<li><a class="reference internal" href="#yaml-object-format">YAML Object Format</a></li>
+<li><a class="reference internal" href="#password-rotation-policies-and-timing">Password Rotation Policies and Timing</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#users-development-mode">Development Mode</a></li>
+<li><a class="reference internal" href="#users-internal-authentication-key">MongoDB Internal Authentication Key (optional)</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="helm.html"
+                        title="previous chapter">Install Percona Server for MongoDB using Helm</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="storage.html"
+                        title="next chapter">Local Storage support for the Percona Server for MongoDB Operator</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

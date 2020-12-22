@@ -1,0 +1,140 @@
+
+
+
+    <title>Scale Percona Server for MongoDB on Kubernetes and OpenShift &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Monitoring" href="monitoring.html" />
+    <link rel="prev" title="Update Percona Server for MongoDB Operator" href="update.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="monitoring.html" title="Monitoring"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="update.html" title="Update Percona Server for MongoDB Operator"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="scale-percona-server-for-mongodb-on-kubernetes-and-openshift">
+<h1>Scale Percona Server for MongoDB on Kubernetes and OpenShift</h1>
+<p>One of the great advantages brought by Kubernetes and the OpenShift
+platform is the ease of an application scaling. Scaling a Deployment up
+or down ensures new Pods are created and set to available Kubernetes
+nodes.</p>
+<p>Size of the cluster is controlled by a <a class="reference internal" href="operator.html#replsets-size"><span class="std std-ref">size key</span></a> in the <a class="reference internal" href="operator.html#operator-custom-resource-options"><span class="std std-ref">Custom Resource options</span></a> configuration.. That’s why scaling the cluster needs
+nothing more but changing this option and applying the updated
+configuration file. This may be done in a specifically saved config, or
+on the fly, using the following command, which saves the current
+configuration, updates it and applies the changed version:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl get psmdb/my-cluster-name -o yaml <span class="p">|</span> sed -e <span class="s1">&#39;s/size: 3/size: 5/&#39;</span> <span class="p">|</span> kubectl apply -f -
+</pre></div>
+</div>
+<p>In this example we have changed the size of the Percona Server for
+MongoDB from <code class="docutils literal notranslate"><span class="pre">3</span></code>, which is a minimum recommended value, to <code class="docutils literal notranslate"><span class="pre">5</span></code>
+nodes.</p>
+<p><strong>Note:</strong> <em>Using ``kubectl scale StatefulSet_name`` command to rescale
+Percona Server for MongoDB is not recommended, as it makes ``size``
+configuration option out of sync, and the next config change may result
+in reverting the previous number of nodes.</em></p>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="monitoring.html" title="Monitoring"
+             >next</a></li>
+        <li class="right" >
+          <a href="update.html" title="Update Percona Server for MongoDB Operator"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="update.html"
+                        title="previous chapter">Update Percona Server for MongoDB Operator</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="monitoring.html"
+                        title="next chapter">Monitoring</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

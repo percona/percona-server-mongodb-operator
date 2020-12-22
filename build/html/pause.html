@@ -1,0 +1,133 @@
+
+
+
+    <title>Pause/resume Percona Server for MongoDB &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Creating a private S3-compatible cloud for backups" href="private.html" />
+    <link rel="prev" title="Providing Backups" href="backups.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="private.html" title="Creating a private S3-compatible cloud for backups"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="backups.html" title="Providing Backups"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="operator-pause">
+<span id="id1"></span><h1><a class="reference external" href="pause.html#operator-pause">Pause/resume Percona Server for MongoDB</a></h1>
+<p>There may be external situations when it is needed to shutdown the cluster
+for a while and then start it back up (some works related to the maintenance of
+the enterprise infrastructure, etc.).</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> file contains a special <code class="docutils literal notranslate"><span class="pre">spec.pause</span></code> key for this.
+Setting it to <code class="docutils literal notranslate"><span class="pre">true</span></code> gracefully stops the cluster:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">spec</span><span class="p">:</span>
+  <span class="o">.......</span>
+  <span class="n">pause</span><span class="p">:</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>To start the cluster after it was shut down just revert the <code class="docutils literal notranslate"><span class="pre">spec.pause</span></code> key
+to <code class="docutils literal notranslate"><span class="pre">false</span></code>.</p>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="private.html" title="Creating a private S3-compatible cloud for backups"
+             >next</a></li>
+        <li class="right" >
+          <a href="backups.html" title="Providing Backups"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="backups.html"
+                        title="previous chapter">Providing Backups</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="private.html"
+                        title="next chapter">Creating a private S3-compatible cloud for backups</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

@@ -1,0 +1,196 @@
+
+
+
+    <title>Percona Kubernetes Operator for Percona Server for MongoDB &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="#" />
+    <link rel="next" title="System Requirements" href="System-Requirements.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="System-Requirements.html" title="System Requirements"
+             accesskey="N">next</a></li>
+        <li><a href="#">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="percona-kubernetes-operator-for-percona-server-for-mongodb">
+<h1>Percona Kubernetes Operator for Percona Server for MongoDB</h1>
+<p>The <a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator">Percona Kubernetes Operator for Percona Server for MongoDB</a> automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment. The Operator contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.</p>
+<p>The Percona Kubernetes Operators are based on best practices for the configuration of a Percona Server for MongoDB replica set. The Operator provides many benefits but saving time, a consistent environment are the most important.</p>
+</div>
+<div class="section" id="requirements">
+<h1>Requirements</h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="System-Requirements.html">System Requirements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Design overview</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="quickstart-guides">
+<h1>Quickstart guides</h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="minikube.html">Install Percona Server for MongoDB on Minikube</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gke.html">Install Percona server for MongoDB on Google Kubernetes Engine (GKE)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="eks.html">Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="advanced-installation-guides">
+<h1>Advanced Installation Guides</h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="kubernetes.html">Install Percona server for MongoDB on Kubernetes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="openshift.html">Install Percona server for MongoDB on OpenShift</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom-registry.html">Use Docker images from a custom registry</a></li>
+<li class="toctree-l1"><a class="reference internal" href="broker.html">Deploy Percona server for MongoDB with Service Broker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="helm.html">Install Percona Server for MongoDB using Helm</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="configuration">
+<h1>Configuration</h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="users.html">Users</a></li>
+<li class="toctree-l1"><a class="reference internal" href="storage.html">Local Storage support for the Percona Server for MongoDB Operator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="constraints.html">Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="expose.html">Exposing cluster nodes with dedicated IP addresses</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arbiter.html">Enabling Replica Set Arbiter nodes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sharding.html">Percona Server for MongoDB Sharding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="TLS.html">Transport Layer Security (TLS)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="encryption.html">Data at rest encryption</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="management">
+<h1>Management</h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="backups.html">Providing Backups</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pause.html">Pause/resume Percona Server for MongoDB</a></li>
+<li class="toctree-l1"><a class="reference internal" href="private.html">Creating a private S3-compatible cloud for backups</a></li>
+<li class="toctree-l1"><a class="reference internal" href="update.html">Update Percona Server for MongoDB Operator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scaling.html">Scale Percona Server for MongoDB on Kubernetes and OpenShift</a></li>
+<li class="toctree-l1"><a class="reference internal" href="monitoring.html">Monitoring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="debug.html">Debug</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="reference">
+<h1>Reference</h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="operator.html">Custom Resource options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="images.html">Percona certified images</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">PSMDB API Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="RN/index.html">Release Notes</a></li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="System-Requirements.html" title="System Requirements"
+             >next</a></li>
+        <li><a href="#">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Percona Kubernetes Operator for Percona Server for MongoDB</a></li>
+<li><a class="reference internal" href="#requirements">Requirements</a></li>
+<li><a class="reference internal" href="#quickstart-guides">Quickstart guides</a></li>
+<li><a class="reference internal" href="#advanced-installation-guides">Advanced Installation Guides</a></li>
+<li><a class="reference internal" href="#configuration">Configuration</a></li>
+<li><a class="reference internal" href="#management">Management</a></li>
+<li><a class="reference internal" href="#reference">Reference</a></li>
+</ul>
+
+  <h4>Next topic</h4>
+  <p class="topless"><a href="System-Requirements.html"
+                        title="next chapter">System Requirements</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

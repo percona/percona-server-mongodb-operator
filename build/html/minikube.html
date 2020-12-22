@@ -1,0 +1,202 @@
+
+
+
+    <title>Install Percona Server for MongoDB on Minikube &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Install Percona server for MongoDB on Google Kubernetes Engine (GKE)" href="gke.html" />
+    <link rel="prev" title="Design overview" href="architecture.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="gke.html" title="Install Percona server for MongoDB on Google Kubernetes Engine (GKE)"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="architecture.html" title="Design overview"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="install-percona-server-for-mongodb-on-minikube">
+<span id="install-minikube"></span><h1>Install Percona Server for MongoDB on Minikube</h1>
+<p>Installing the PSMDB Operator on <a class="reference external" href="https://github.com/kubernetes/minikube">Minikube</a>
+is the easiest way to try it locally without a cloud provider. Minikube runs
+Kubernetes on GNU/Linux, Windows, or macOS system using a system-wide
+hypervisor, such as VirtualBox, KVM/QEMU, VMware Fusion or Hyper-V. Using it is
+a popular way to test Kubernetes application locally prior to deploying it on a
+cloud.</p>
+<p>The following steps are needed to run PSMDB Operator on minikube:</p>
+<ol class="arabic" start="0">
+<li><p><a class="reference external" href="https://kubernetes.io/docs/tasks/tools/install-minikube/">Install minikube</a>, using a way recommended for your system. This includes the installation of the following three components:
+#. kubectl tool,
+#. a hypervisor, if it is not already installed,
+#. actual minikube package</p>
+<p>After the installation, run <code class="docutils literal notranslate"><span class="pre">minikube</span> <span class="pre">start</span> <span class="pre">--memory=4096</span> <span class="pre">--cpus=3</span></code>
+(parameters increase the virtual machine limits for the CPU cores and memory,
+to ensure stable work of the Operator). Being executed, this command will
+download needed virtualized images, then initialize and run the
+cluster. After Minikube is successfully started, you can optionally run the
+Kubernetes dashboard, which visually represents the state of your cluster.
+Executing <code class="docutils literal notranslate"><span class="pre">minikube</span> <span class="pre">dashboard</span></code> will start the dashboard and open it in your
+default web browser.</p>
+</li>
+<li><p>Clone the percona-server-mongodb-operator repository:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="o">-</span><span class="n">b</span> <span class="n">v1</span><span class="o">.</span><span class="mf">6.0</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">percona</span><span class="o">/</span><span class="n">percona</span><span class="o">-</span><span class="n">server</span><span class="o">-</span><span class="n">mongodb</span><span class="o">-</span><span class="n">operator</span>
+<span class="n">cd</span> <span class="n">percona</span><span class="o">-</span><span class="n">server</span><span class="o">-</span><span class="n">mongodb</span><span class="o">-</span><span class="n">operator</span>
+</pre></div>
+</div>
+</li>
+<li><p>Deploy the operator with the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kubectl</span> <span class="n">apply</span> <span class="o">-</span><span class="n">f</span> <span class="n">deploy</span><span class="o">/</span><span class="n">bundle</span><span class="o">.</span><span class="n">yaml</span>
+</pre></div>
+</div>
+</li>
+<li><p>Because minikube runs locally, the default <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> file should
+be edited to adapt the Operator for the the local installation with limited
+resources. Change the following keys in the <code class="docutils literal notranslate"><span class="pre">replsets</span></code> section:</p>
+<ol class="arabic simple">
+<li><p>comment <code class="docutils literal notranslate"><span class="pre">resources.requests.memory</span></code> and <code class="docutils literal notranslate"><span class="pre">resources.requests.cpu</span></code> keys
+(this will fit the Operator in minikube default limitations)</p></li>
+<li><p>set <code class="docutils literal notranslate"><span class="pre">affinity.antiAffinityTopologyKey</span></code> key to <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> (the Operator
+will be unable to spread the cluster on several nodes)</p></li>
+</ol>
+<p>Also, switch <code class="docutils literal notranslate"><span class="pre">allowUnsafeConfigurations</span></code> key to <code class="docutils literal notranslate"><span class="pre">true</span></code> (this option turns
+off the Operator’s control over the cluster configuration, making it possible to
+deploy Percona Server for MongoDB as a one-node cluster).</p>
+</li>
+<li><p>Now apply the <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> file with the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kubectl</span> <span class="n">apply</span> <span class="o">-</span><span class="n">f</span> <span class="n">deploy</span><span class="o">/</span><span class="n">cr</span><span class="o">.</span><span class="n">yaml</span>
+</pre></div>
+</div>
+</li>
+<li><p>During previous steps, the Operator has generated several <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">secrets</a>,
+including the password for the admin user, which you will need to access the
+cluster. Use <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">secrets</span></code> to see the list of Secrets objects (by
+default Secrets object you are interested in has <code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code>
+name). Then <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">secret</span> <span class="pre">my-cluster-name-secrets</span> <span class="pre">-o</span> <span class="pre">yaml</span></code> will return
+the YAML file with generated secrets, including the <code class="docutils literal notranslate"><span class="pre">MONGODB_USER_ADMIN</span></code>
+and <code class="docutils literal notranslate"><span class="pre">MONGODB_USER_ADMIN_PASSWORD</span></code> strings, which should look as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">...</span>
+<span class="n">data</span><span class="p">:</span>
+  <span class="o">...</span>
+  <span class="n">MONGODB_USER_ADMIN_PASSWORD</span><span class="p">:</span> <span class="n">aDAzQ0pCY3NSWEZ2ZUIzS1I</span><span class="o">=</span>
+  <span class="n">MONGODB_USER_ADMIN_USER</span><span class="p">:</span> <span class="n">dXNlckFkbWlu</span>
+</pre></div>
+</div>
+<p>Here the actual login name and password are base64-encoded, and
+<code class="docutils literal notranslate"><span class="pre">echo</span> <span class="pre">'aDAzQ0pCY3NSWEZ2ZUIzS1I='</span> <span class="pre">|</span> <span class="pre">base64</span> <span class="pre">--decode</span></code> will bring it back to a
+human-readable form.</p>
+</li>
+<li><p>Check connectivity to a newly created cluster.</p>
+<p>First of all, run percona-client and connect its console output to your
+terminal (running it may require some time to deploy the correspondent Pod):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+</pre></div>
+</div>
+<p>Now run <code class="docutils literal notranslate"><span class="pre">mongo</span></code> tool in the percona-client command shell using the login
+(which is <code class="docutils literal notranslate"><span class="pre">userAdmin</span></code>) and password obtained from the secret:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mongo <span class="s2">&quot;mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.default.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="gke.html" title="Install Percona server for MongoDB on Google Kubernetes Engine (GKE)"
+             >next</a></li>
+        <li class="right" >
+          <a href="architecture.html" title="Design overview"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="architecture.html"
+                        title="previous chapter">Design overview</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="gke.html"
+                        title="next chapter">Install Percona server for MongoDB on Google Kubernetes Engine (GKE)</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

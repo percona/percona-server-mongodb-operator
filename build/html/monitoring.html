@@ -1,0 +1,232 @@
+
+
+
+    <title>Monitoring &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Debug" href="debug.html" />
+    <link rel="prev" title="Scale Percona Server for MongoDB on Kubernetes and OpenShift" href="scaling.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="debug.html" title="Debug"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="scaling.html" title="Scale Percona Server for MongoDB on Kubernetes and OpenShift"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="monitoring">
+<span id="operator-monitoring"></span><h1>Monitoring</h1>
+<p>Percona Monitoring and Management (PMM) <a class="reference external" href="https://www.percona.com/doc/percona-monitoring-and-management/2.x/index.html">provides an excellent
+solution</a>
+of monitoring Percona Server for MongoDB.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Only PMM 2.x versions are supported by the Operator.</p>
+</div>
+<p>PMM is a client/server application. <em>PMM Client</em> runs on each node with the
+database you wish to monitor: it collects needed metrics and sends gathered data
+to <em>PMM Server</em>. As a user, you connect to PMM Server to see database metrics on
+a number of dashboards.</p>
+<p>That’s why PMM Server and PMM Client need to be installed separately.</p>
+<div class="section" id="installing-pmm-server">
+<h2>Installing PMM Server</h2>
+<p>PMM Server runs as a <em>Docker image</em>, a <em>virtual appliance</em>, or on an <em>AWS instance</em>.
+Please refer to the <a class="reference external" href="https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/server/index.html">official PMM documentation</a>
+for the installation instructions.</p>
+</div>
+<div class="section" id="installing-pmm-client">
+<h2>Installing PMM Client</h2>
+<p>The following steps are needed for the PMM client installation in your
+Kubernetes-based environment:</p>
+<ol class="arabic">
+<li><p>The PMM client installation is initiated by updating the <code class="docutils literal notranslate"><span class="pre">pmm</span></code>
+section in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file.</p>
+<ul>
+<li><p>set <code class="docutils literal notranslate"><span class="pre">pmm.enabled=true</span></code></p></li>
+<li><p>set the <code class="docutils literal notranslate"><span class="pre">pmm.serverHost</span></code> key to your PMM Server hostname.</p></li>
+<li><p>check that  the``PMM_SERVER_USER`` key in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml">deploy/secrets.yaml</a>
+secrets file contains your PMM Server user name (<code class="docutils literal notranslate"><span class="pre">admin</span></code> by default).</p></li>
+<li><p>make sure the <code class="docutils literal notranslate"><span class="pre">PMM_SERVER_PASSWORD</span></code> key in the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml">deploy/secrets.yaml</a>
+secrets file contains the password specified for the PMM Server during its
+installation.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You use <code class="docutils literal notranslate"><span class="pre">deploy/secrets.yaml</span></code> file to <em>create</em> Secrets Object.
+The file contains all values for each key/value pair in a convenient
+plain text format. But the resulting Secrets contain passwords stored
+as base64-encoded strings. If you want to <em>update</em> password field,
+you’ll need to encode the value into base64 format. To do this, you can
+run <code class="docutils literal notranslate"><span class="pre">echo</span> <span class="pre">-n</span> <span class="pre">&quot;password&quot;</span> <span class="pre">|</span> <span class="pre">base64</span></code> in your local shell to get valid
+values. For example, setting the PMM Server user’s password to
+<cite>new_password`</cite> in the <code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code> object can be done
+with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl patch secret/my-cluster-name-secrets -p <span class="s1">&#39;{&quot;data&quot;:{&quot;PMM_SERVER_PASSWORD&quot;: &#39;</span><span class="k">$(</span><span class="nb">echo</span> -n new_password <span class="p">|</span> base64<span class="k">)</span><span class="s1">&#39;}}&#39;</span>
+</pre></div>
+</div>
+</div>
+</li>
+<li><p>you can also use <code class="docutils literal notranslate"><span class="pre">pmm.mongodParams</span></code> and <code class="docutils literal notranslate"><span class="pre">pmm.mongosParams</span></code> keys to
+specify additional parameters for the <cite>pmm-admin add mongodb &lt;https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring&gt;_ command for ``mongod`</cite> and
+<code class="docutils literal notranslate"><span class="pre">mongos</span></code> Pods respectively, if needed.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Please take into account that Operator automatically manages
+common MongoDB Service Monitoring parameters mentioned in the officiall <code class="docutils literal notranslate"><span class="pre">pmm-admin</span> <span class="pre">add</span> <span class="pre">mongodb</span></code> <a href="#id2"><span class="problematic" id="id3">`documentation&lt;https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring&gt;`_</span></a>,
+such like username, password, service-name, host, etc. Assigning values
+to these parameters is not recommended and can negatively affect the
+functionality of the PMM setup carried out by the Operator.</p>
+</div>
+</li>
+</ul>
+<p>Apply changes with the <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">apply</span> <span class="pre">-f</span> <span class="pre">deploy/secrets.yaml</span></code> command.</p>
+<p>When done, apply the edited <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl apply -f deploy/cr.yaml
+</pre></div>
+</div>
+</li>
+<li><p>Check that corresponding Pods are
+not in a cycle of stopping and restarting. This cycle occurs if there are errors on the previous steps:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl get pods
+$ kubectl logs my-cluster-name-rs0-0 -c pmm-client
+</pre></div>
+</div>
+</li>
+<li><p>Run the following command:</p>
+<p><code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">service/monitoring-service</span> <span class="pre">-o</span> <span class="pre">wide</span></code></p>
+<p>In the results, locate the the <code class="docutils literal notranslate"><span class="pre">EXTERNAL-IP</span></code> field. The external-ip address
+can be used to access PMM via <em>https</em> in a web browser, with the
+login/password authentication, and the browser is configured to <a class="reference external" href="https://www.percona.com/doc/percona-monitoring-and-management/index.metrics-monitor.dashboard.html#pmm-dashboard-mongodb-list">show
+Percona Server for MongoDB
+metrics</a>.</p>
+</li>
+</ol>
+<p>As you can see, because we use the <code class="docutils literal notranslate"><span class="pre">stringData</span></code> type when creating the Secrets
+object, all values for each key/value pair are stated in plain text format
+which is convenient from the user’s point of view. But the resulting Secrets
+object contains passwords stored as <code class="docutils literal notranslate"><span class="pre">data</span></code> - i.e., base64-encoded strings.
+If you want to update any field, you’ll need to encode the value into base64
+format. To do this, you can run <code class="docutils literal notranslate"><span class="pre">echo</span> <span class="pre">-n</span> <span class="pre">&quot;password&quot;</span> <span class="pre">|</span> <span class="pre">base64</span></code> in your local
+shell to get valid values. For example, setting the PMM Server user’s password
+to <code class="docutils literal notranslate"><span class="pre">new_password</span></code> in the <code class="docutils literal notranslate"><span class="pre">my-cluster-name-secrets</span></code> object can be done
+with the following command:
+.. code:: bash</p>
+<blockquote>
+<div><p>kubectl patch secret/my-cluster-name-secrets -p ‘{“data”:{“PMM_SERVER_USER”: ‘$(echo -n new_password | base64)’}}’</p>
+</div></blockquote>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="debug.html" title="Debug"
+             >next</a></li>
+        <li class="right" >
+          <a href="scaling.html" title="Scale Percona Server for MongoDB on Kubernetes and OpenShift"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Monitoring</a><ul>
+<li><a class="reference internal" href="#installing-pmm-server">Installing PMM Server</a></li>
+<li><a class="reference internal" href="#installing-pmm-client">Installing PMM Client</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="scaling.html"
+                        title="previous chapter">Scale Percona Server for MongoDB on Kubernetes and OpenShift</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="debug.html"
+                        title="next chapter">Debug</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

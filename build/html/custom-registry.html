@@ -1,0 +1,199 @@
+
+
+
+    <title>Use Docker images from a custom registry &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Deploy Percona server for MongoDB with Service Broker" href="broker.html" />
+    <link rel="prev" title="Install Percona server for MongoDB on OpenShift" href="openshift.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="broker.html" title="Deploy Percona server for MongoDB with Service Broker"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="openshift.html" title="Install Percona server for MongoDB on OpenShift"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="use-docker-images-from-a-custom-registry">
+<span id="custom-registry"></span><h1>Use Docker images from a custom registry</h1>
+<p>Using images from a private Docker registry may required for
+privacy, security or other reasons. In these cases, Percona Server for
+MongoDB Operator allows the use of a custom registry This following example of the
+Operator deployed in the OpenShift environment demonstrates the process:</p>
+<ol class="arabic">
+<li><p>Log into the OpenShift and create a project.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc login
+Authentication required <span class="k">for</span> https://192.168.1.100:8443 <span class="o">(</span>openshift<span class="o">)</span>
+Username: admin
+Password:
+Login successful.
+$ oc new-project psmdb
+Now using project <span class="s2">&quot;psmdb&quot;</span> on server <span class="s2">&quot;https://192.168.1.100:8443&quot;</span>.
+</pre></div>
+</div>
+</li>
+<li><p>You need obtain the following objects to configure your custom registry
+access:</p>
+<ul class="simple">
+<li><p>A user token</p></li>
+<li><p>the registry IP address</p></li>
+</ul>
+<p>You can view the token with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc whoami -t
+ADO8CqCDappWR4hxjfDqwijEHei31yXAvWg61Jg210s
+</pre></div>
+</div>
+<p>The following command returns the registry IP address:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl get services/docker-registry -n default
+NAME              TYPE        CLUSTER-IP       EXTERNAL-IP   PORT<span class="o">(</span>S<span class="o">)</span>    AGE
+docker-registry   ClusterIP   <span class="m">172</span>.30.162.173   &lt;none&gt;        <span class="m">5000</span>/TCP   1d
+</pre></div>
+</div>
+</li>
+<li><p>Use the user token and the registry IP address to login to the
+registry:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ docker login -u admin -p ADO8CqCDappWR4hxjfDqwijEHei31yXAvWg61Jg210s <span class="m">172</span>.30.162.173:5000
+Login Succeeded
+</pre></div>
+</div>
+</li>
+<li><p>Use the Docker commands to pull the needed image by its SHA digest:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ docker pull docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
+Trying to pull repository docker.io/perconalab/percona-server-mongodb ...
+sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505: Pulling from docker.io/perconalab/percona-server-mongodb
+Digest: sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
+Status: Image is up to date <span class="k">for</span> docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
+</pre></div>
+</div>
+<p>You can find correct names and SHA digests in the
+<a class="reference internal" href="images.html#custom-registry-images"><span class="std std-ref">current list of the Operator-related images officially certified by Percona</span></a>.</p>
+</li>
+<li><p>The following method can push an image to the custom registry
+for the example OpenShift PSMDB project:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ docker tag <span class="se">\</span>
+    docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505 <span class="se">\</span>
+    <span class="m">172</span>.30.162.173:5000/psmdb/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span>
+$ docker push <span class="m">172</span>.30.162.173:5000/psmdb/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span>
+</pre></div>
+</div>
+</li>
+<li><p>Verify the image is available in the OpenShift registry with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc get is
+NAME                              DOCKER REPO                                                             TAGS             UPDATED
+percona-server-mongodb            docker-registry.default.svc:5000/psmdb/percona-server-mongodb  <span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span>  <span class="m">2</span> hours ago
+</pre></div>
+</div>
+</li>
+<li><p>When the custom registry image is available, edit the the <code class="docutils literal notranslate"><span class="pre">image:</span></code> option in <code class="docutils literal notranslate"><span class="pre">deploy/operator.yaml</span></code> configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb:{{{mongodb42recommended}}}``)</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the registry requires authentication, you can specify the <code class="docutils literal notranslate"><span class="pre">imagePullSecrets</span></code> option for all images.</p>
+</div>
+</li>
+<li><p>Repeat steps 3-5 for other images, and update corresponding options
+in the <code class="docutils literal notranslate"><span class="pre">deploy/cr.yaml</span></code> file.</p></li>
+<li><p>Now follow the standard <a class="reference external" href="./openshift.html">Percona Server for MongoDB Operator installation instruction</a></p></li>
+</ol>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="broker.html" title="Deploy Percona server for MongoDB with Service Broker"
+             >next</a></li>
+        <li class="right" >
+          <a href="openshift.html" title="Install Percona server for MongoDB on OpenShift"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="openshift.html"
+                        title="previous chapter">Install Percona server for MongoDB on OpenShift</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="broker.html"
+                        title="next chapter">Deploy Percona server for MongoDB with Service Broker</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

@@ -1,0 +1,188 @@
+
+
+
+    <title>Install Percona Server for MongoDB using Helm &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Users" href="users.html" />
+    <link rel="prev" title="Deploy Percona server for MongoDB with Service Broker" href="broker.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="users.html" title="Users"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="broker.html" title="Deploy Percona server for MongoDB with Service Broker"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="install-percona-server-for-mongodb-using-helm">
+<span id="install-helm"></span><h1>Install Percona Server for MongoDB using Helm</h1>
+<p><a class="reference external" href="https://github.com/helm/helm">Helm</a> is the package manager for Kubernetes.</p>
+<div class="section" id="pre-requisites">
+<h2>Pre-requisites</h2>
+<p>Install Helm following its <a class="reference external" href="https://docs.helm.sh/using_helm/#installing-helm">official installation instructions</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>At least <code class="docutils literal notranslate"><span class="pre">2.4.0</span></code> version of Helm is needed to run the following steps.</p>
+</div>
+</div>
+<div class="section" id="installation">
+<h2>Installation</h2>
+<ol class="arabic">
+<li><p>Add the Percona’s Helm charts repository and make your Helm client up to
+date with it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>helm repo add percona https://percona.github.io/percona-helm-charts/
+helm repo update
+</pre></div>
+</div>
+</li>
+<li><p>Install Percona Operator for Percona Server for MongoDB:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>helm install my-op percona/psmdb-operator
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">my-op</span></code> parameter in the above example is the name of <a class="reference external" href="https://helm.sh/docs/intro/using_helm/#three-big-concepts">a new release object</a>
+which is created for the Operator when you install its Helm chart. Use any
+arbitrary name with Helm 3.x or omit it with Helm 2.x.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If nothing explicitly specified, <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">install</span></code> command will work
+with <code class="docutils literal notranslate"><span class="pre">default</span></code> namespace. To use different namespace, provide it with
+the following additional parameter: <code class="docutils literal notranslate"><span class="pre">--namespace</span> <span class="pre">my-namespace</span></code>.</p>
+</div>
+</li>
+<li><p>Install Percona Server for MongoDB:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>helm install my-db percona/psmdb-db
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">my-db</span></code> parameter in the above example is the name of <a class="reference external" href="https://helm.sh/docs/intro/using_helm/#three-big-concepts">a new release object</a>
+which is created for the Percona Server for MongoDB when you install its Helm
+chart. Use any arbitrary name with Helm 3.x or omit it with Helm 2.x.</p>
+</li>
+</ol>
+</div>
+<div class="section" id="installing-percona-server-for-mongodb-with-customized-parameters">
+<h2>Installing Percona Server for MongoDB with customized parameters</h2>
+<p>The command above installs Percona Server for MongoDB with <a class="reference internal" href="operator.html#operator-custom-resource-options"><span class="std std-ref">default parameters</span></a>.
+Custom options can be passed to a <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">install</span></code> command as a
+<code class="docutils literal notranslate"><span class="pre">--set</span> <span class="pre">key=value[,key=value]</span></code> argument. The options passed with a chart can be
+any of the Operator’s <a class="reference internal" href="operator.html#operator-custom-resource-options"><span class="std std-ref">Custom Resource options</span></a>.</p>
+<p>The following example will deploy a Percona Server for MongoDB Cluster in the
+<code class="docutils literal notranslate"><span class="pre">psmdb</span></code> namespace, with disabled backups and 20 Gi storage:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>helm install my-db percona/psmdb-db --namespace psmdb <span class="se">\</span>
+  --set replset.volumeSpec.pvc.resources.requests.storage<span class="o">=</span>20Gi <span class="se">\</span>
+  --set backup.enabled<span class="o">=</span><span class="nb">false</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="users.html" title="Users"
+             >next</a></li>
+        <li class="right" >
+          <a href="broker.html" title="Deploy Percona server for MongoDB with Service Broker"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Install Percona Server for MongoDB using Helm</a><ul>
+<li><a class="reference internal" href="#pre-requisites">Pre-requisites</a></li>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#installing-percona-server-for-mongodb-with-customized-parameters">Installing Percona Server for MongoDB with customized parameters</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="broker.html"
+                        title="previous chapter">Deploy Percona server for MongoDB with Service Broker</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="users.html"
+                        title="next chapter">Users</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

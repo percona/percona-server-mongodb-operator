@@ -1,0 +1,140 @@
+
+
+
+    <title>Enabling Replica Set Arbiter nodes &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Percona Server for MongoDB Sharding" href="sharding.html" />
+    <link rel="prev" title="Exposing cluster nodes with dedicated IP addresses" href="expose.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="sharding.html" title="Percona Server for MongoDB Sharding"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="expose.html" title="Exposing cluster nodes with dedicated IP addresses"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="enabling-replica-set-arbiter-nodes">
+<span id="arbiter"></span><h1>Enabling Replica Set Arbiter nodes</h1>
+<p>Percona Server for MongoDB <a class="reference external" href="https://www.percona.com/blog/2018/05/17/mongodb-replica-set-transport-encryption-part-1/">replication
+model</a>
+is based on elections, when nodes of the Replica Set <a class="reference external" href="https://docs.mongodb.com/manual/core/replica-set-elections/#replica-set-elections">choose which
+node</a>
+becomes the primary node. Elections are the reason to avoid an even
+number of nodes in the cluster. The cluster should have
+at least three nodes. Normally, each node stores a complete copy of the data,
+but there is also a possibility, to reduce disk IO and space used by the
+database, to add an <a class="reference external" href="https://docs.mongodb.com/manual/core/replica-set-arbiter/">arbiter node</a>. An arbiter cannot become a primary and does not have a complete copy of the data. The arbiter does have one election vote and can be the odd number for elections. The arbiter does not demand a persistent volume.</p>
+<p>Percona Server for MongoDB Operator has the ability to create Replica Set Arbiter
+nodes if needed. This feature can be configured in the Replica Set
+section of the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file:</p>
+<ul class="simple">
+<li><p>set <code class="docutils literal notranslate"><span class="pre">arbiter.enabled</span></code> option to <code class="docutils literal notranslate"><span class="pre">true</span></code> to allow Arbiter nodes,</p></li>
+<li><p>use <code class="docutils literal notranslate"><span class="pre">arbiter.size</span></code> option to set the desired amount of the Replica
+Set nodes which should be Arbiter ones instead of containing data.</p></li>
+</ul>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="sharding.html" title="Percona Server for MongoDB Sharding"
+             >next</a></li>
+        <li class="right" >
+          <a href="expose.html" title="Exposing cluster nodes with dedicated IP addresses"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="expose.html"
+                        title="previous chapter">Exposing cluster nodes with dedicated IP addresses</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="sharding.html"
+                        title="next chapter">Percona Server for MongoDB Sharding</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

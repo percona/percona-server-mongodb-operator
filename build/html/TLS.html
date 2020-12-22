@@ -1,0 +1,296 @@
+
+
+
+    <title>Transport Layer Security (TLS) &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Data at rest encryption" href="encryption.html" />
+    <link rel="prev" title="Percona Server for MongoDB Sharding" href="sharding.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="encryption.html" title="Data at rest encryption"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="sharding.html" title="Percona Server for MongoDB Sharding"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="transport-layer-security-tls">
+<span id="tls"></span><h1>Transport Layer Security (TLS)</h1>
+<p>The Percona Kubernetes Operator for PSMDB uses Transport Layer Security (TLS) cryptographic protocol for the following types of communication:</p>
+<ul class="simple">
+<li><p>Internal - communication between PSMDB instances in the cluster</p></li>
+<li><p>External - communication between the client application and the cluster</p></li>
+</ul>
+<p>The internal certificate is also used as an authorization method.</p>
+<p>TLS security can be configured in several ways. By default, the Operator
+generates certificates automatically if there are no certificate secrets
+available. Other options are the following ones:</p>
+<ul class="simple">
+<li><p>The Operator can use a specifically installed <em>cert-manager</em> for the automatic
+certificates generation,</p></li>
+<li><p>Certificates can be generated manually.</p></li>
+</ul>
+<p>You can also use pre-generated certificates available in the
+<code class="docutils literal notranslate"><span class="pre">deploy/ssl-secrets.yaml</span></code> file for test purposes, but we strongly recommend
+<strong>avoiding their usage on any production system</strong>!</p>
+<p>The following subsections explain how to configure TLS security with the
+Operator yourself, as well as how to temporarily disable it if needed.</p>
+<div class="contents local topic" id="contents">
+<ul class="simple">
+<li><p><a class="reference internal" href="#install-and-use-the-cert-manager" id="id1">Install and use the <em>cert-manager</em></a></p>
+<ul>
+<li><p><a class="reference internal" href="#about-the-cert-manager" id="id2">About the <em>cert-manager</em></a></p></li>
+<li><p><a class="reference internal" href="#installation-of-the-cert-manager" id="id3">Installation of the <em>cert-manager</em></a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#generate-certificates-manually" id="id4">Generate certificates manually</a></p></li>
+<li><p><a class="reference internal" href="#run-psmdb-without-tls" id="id5">Run PSMDB without TLS</a></p></li>
+</ul>
+</div>
+<div class="section" id="install-and-use-the-cert-manager">
+<h2><a class="toc-backref" href="#id1">Install and use the <em>cert-manager</em></a></h2>
+<div class="section" id="about-the-cert-manager">
+<h3><a class="toc-backref" href="#id2">About the <em>cert-manager</em></a></h3>
+<p>A <em>cert-manager</em> is a Kubernetes certificate management controller which widely used to automate the management and issuance of TLS certificates. It is community-driven, and open source.</p>
+<p>When you have already installed <em>cert-manager</em> and deploy the operator, the operator requests a certificate from the <em>cert-manager</em>. The <em>cert-manager</em> acts as a self-signed issuer and generates certificates. The Percona Operator self-signed issuer is local to the operator namespace. This self-signed issuer is created because PSMDB requires all certificates are issued by the same CA.</p>
+<p>The creation of the self-signed issuer allows you to deploy and use the Percona Operator without creating a clusterissuer separately.</p>
+</div>
+<div class="section" id="installation-of-the-cert-manager">
+<h3><a class="toc-backref" href="#id3">Installation of the <em>cert-manager</em></a></h3>
+<p>The steps to install the <em>cert-manager</em> are the following:</p>
+<ul class="simple">
+<li><p>Create a namespace</p></li>
+<li><p>Disable resource validations on the cert-manager namespace</p></li>
+<li><p>Install the cert-manager.</p></li>
+</ul>
+<p>The following commands perform all the needed actions:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kubectl</span> <span class="n">apply</span> <span class="o">-</span><span class="n">f</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">jetstack</span><span class="o">/</span><span class="n">cert</span><span class="o">-</span><span class="n">manager</span><span class="o">/</span><span class="n">releases</span><span class="o">/</span><span class="n">download</span><span class="o">/</span><span class="n">v0</span><span class="o">.</span><span class="mf">15.1</span><span class="o">/</span><span class="n">cert</span><span class="o">-</span><span class="n">manager</span><span class="o">.</span><span class="n">yaml</span> <span class="o">--</span><span class="n">validate</span><span class="o">=</span><span class="n">false</span>
+</pre></div>
+</div>
+<p>After the installation, you can verify the <em>cert-manager</em> by running the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kubectl</span> <span class="n">get</span> <span class="n">pods</span> <span class="o">-</span><span class="n">n</span> <span class="n">cert</span><span class="o">-</span><span class="n">manager</span>
+</pre></div>
+</div>
+<p>The result should display the <em>cert-manager</em> and webhook active and running.</p>
+</div>
+</div>
+<div class="section" id="generate-certificates-manually">
+<h2><a class="toc-backref" href="#id4">Generate certificates manually</a></h2>
+<p>To generate certificates manually, follow these steps:</p>
+<ol class="arabic simple">
+<li><p>Provision a Certificate Authority (CA) to generate TLS certificates</p></li>
+<li><p>Generate a CA key and certificate file with the server details</p></li>
+<li><p>Create the server TLS certificates using the CA keys, certs, and server details</p></li>
+</ol>
+<p>The set of commands generate certificates with the following attributes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Server-pem</span></code> - Certificate</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Server-key.pem</span></code> - the private key</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ca.pem</span></code> - Certificate Authority</p></li>
+</ul>
+<p>You should generate certificates twice: one set is for external communications, and another set is for internal ones. A secret created for the external use must be added to <code class="docutils literal notranslate"><span class="pre">cr.yaml/spec/secretsName</span></code>. A certificate generated for internal communications must be added to the <code class="docutils literal notranslate"><span class="pre">cr.yaml/spec/sslInternalSecretName</span></code>.</p>
+<p>Supposing that your cluster name is <code class="docutils literal notranslate"><span class="pre">my-cluster-name-rs0</span></code>, the instructions to generate certificates manually are as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">CLUSTER_NAME</span><span class="o">=</span><span class="n">my</span><span class="o">-</span><span class="n">cluster</span><span class="o">-</span><span class="n">name</span>
+<span class="n">NAMESPACE</span><span class="o">=</span><span class="n">default</span>
+<span class="n">cat</span> <span class="o">&lt;&lt;</span><span class="n">EOF</span> <span class="o">|</span> <span class="n">cfssl</span> <span class="n">gencert</span> <span class="o">-</span><span class="n">initca</span> <span class="o">-</span> <span class="o">|</span> <span class="n">cfssljson</span> <span class="o">-</span><span class="n">bare</span> <span class="n">ca</span>
+  <span class="p">{</span>
+    <span class="s2">&quot;CN&quot;</span><span class="p">:</span> <span class="s2">&quot;Root CA&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span>
+        <span class="s2">&quot;O&quot;</span><span class="p">:</span> <span class="s2">&quot;PSMDB&quot;</span>
+      <span class="p">}</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="p">{</span>
+      <span class="s2">&quot;algo&quot;</span><span class="p">:</span> <span class="s2">&quot;rsa&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">2048</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="n">EOF</span>
+
+<span class="n">cat</span> <span class="o">&lt;&lt;</span><span class="n">EOF</span> <span class="o">&gt;</span> <span class="n">ca</span><span class="o">-</span><span class="n">config</span><span class="o">.</span><span class="n">json</span>
+  <span class="p">{</span>
+    <span class="s2">&quot;signing&quot;</span><span class="p">:</span> <span class="p">{</span>
+      <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;expiry&quot;</span><span class="p">:</span> <span class="s2">&quot;87600h&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;usages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;signing&quot;</span><span class="p">,</span> <span class="s2">&quot;key encipherment&quot;</span><span class="p">,</span> <span class="s2">&quot;server auth&quot;</span><span class="p">,</span> <span class="s2">&quot;client auth&quot;</span><span class="p">]</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="n">EOF</span>
+
+<span class="n">cat</span> <span class="o">&lt;&lt;</span><span class="n">EOF</span> <span class="o">|</span> <span class="n">cfssl</span> <span class="n">gencert</span> <span class="o">-</span><span class="n">ca</span><span class="o">=</span><span class="n">ca</span><span class="o">.</span><span class="n">pem</span>  <span class="o">-</span><span class="n">ca</span><span class="o">-</span><span class="n">key</span><span class="o">=</span><span class="n">ca</span><span class="o">-</span><span class="n">key</span><span class="o">.</span><span class="n">pem</span> <span class="o">-</span><span class="n">config</span><span class="o">=./</span><span class="n">ca</span><span class="o">-</span><span class="n">config</span><span class="o">.</span><span class="n">json</span> <span class="o">-</span> <span class="o">|</span> <span class="n">cfssljson</span> <span class="o">-</span><span class="n">bare</span> <span class="n">server</span>
+  <span class="p">{</span>
+    <span class="s2">&quot;hosts&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">.svc.cluster.local&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;*.$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;*.$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;*.$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">.svc.cluster.local&quot;</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span>
+        <span class="s2">&quot;O&quot;</span><span class="p">:</span> <span class="s2">&quot;PSMDB&quot;</span>
+      <span class="p">}</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;CN&quot;</span><span class="p">:</span> <span class="s2">&quot;${CLUSTER_NAME/-rs0}&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="p">{</span>
+      <span class="s2">&quot;algo&quot;</span><span class="p">:</span> <span class="s2">&quot;rsa&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">2048</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="n">EOF</span>
+<span class="n">cfssl</span> <span class="n">bundle</span> <span class="o">-</span><span class="n">ca</span><span class="o">-</span><span class="n">bundle</span><span class="o">=</span><span class="n">ca</span><span class="o">.</span><span class="n">pem</span> <span class="o">-</span><span class="n">cert</span><span class="o">=</span><span class="n">server</span><span class="o">.</span><span class="n">pem</span> <span class="o">|</span> <span class="n">cfssljson</span> <span class="o">-</span><span class="n">bare</span> <span class="n">server</span>
+
+<span class="n">kubectl</span> <span class="n">create</span> <span class="n">secret</span> <span class="n">generic</span> <span class="n">my</span><span class="o">-</span><span class="n">cluster</span><span class="o">-</span><span class="n">name</span><span class="o">-</span><span class="n">ssl</span><span class="o">-</span><span class="n">internal</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span><span class="o">=</span><span class="n">tls</span><span class="o">.</span><span class="n">crt</span><span class="o">=</span><span class="n">server</span><span class="o">.</span><span class="n">pem</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span><span class="o">=</span><span class="n">tls</span><span class="o">.</span><span class="n">key</span><span class="o">=</span><span class="n">server</span><span class="o">-</span><span class="n">key</span><span class="o">.</span><span class="n">pem</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span><span class="o">=</span><span class="n">ca</span><span class="o">.</span><span class="n">crt</span><span class="o">=</span><span class="n">ca</span><span class="o">.</span><span class="n">pem</span> <span class="o">--</span><span class="nb">type</span><span class="o">=</span><span class="n">kubernetes</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">tls</span>
+
+<span class="n">cat</span> <span class="o">&lt;&lt;</span><span class="n">EOF</span> <span class="o">|</span> <span class="n">cfssl</span> <span class="n">gencert</span> <span class="o">-</span><span class="n">ca</span><span class="o">=</span><span class="n">ca</span><span class="o">.</span><span class="n">pem</span>  <span class="o">-</span><span class="n">ca</span><span class="o">-</span><span class="n">key</span><span class="o">=</span><span class="n">ca</span><span class="o">-</span><span class="n">key</span><span class="o">.</span><span class="n">pem</span> <span class="o">-</span><span class="n">config</span><span class="o">=./</span><span class="n">ca</span><span class="o">-</span><span class="n">config</span><span class="o">.</span><span class="n">json</span> <span class="o">-</span> <span class="o">|</span> <span class="n">cfssljson</span> <span class="o">-</span><span class="n">bare</span> <span class="n">client</span>
+  <span class="p">{</span>
+    <span class="s2">&quot;hosts&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="s2">&quot;$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">.svc.cluster.local&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;*.$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;*.$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;*.$</span><span class="si">{CLUSTER_NAME}</span><span class="s2">-rs0.$</span><span class="si">{NAMESPACE}</span><span class="s2">.svc.cluster.local&quot;</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span>
+        <span class="s2">&quot;O&quot;</span><span class="p">:</span> <span class="s2">&quot;PSMDB&quot;</span>
+      <span class="p">}</span>
+    <span class="p">],</span>
+    <span class="s2">&quot;CN&quot;</span><span class="p">:</span> <span class="s2">&quot;${CLUSTER_NAME/-rs0}&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="p">{</span>
+      <span class="s2">&quot;algo&quot;</span><span class="p">:</span> <span class="s2">&quot;rsa&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">2048</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="n">EOF</span>
+
+<span class="n">kubectl</span> <span class="n">create</span> <span class="n">secret</span> <span class="n">generic</span> <span class="n">my</span><span class="o">-</span><span class="n">cluster</span><span class="o">-</span><span class="n">name</span><span class="o">-</span><span class="n">ssl</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span><span class="o">=</span><span class="n">tls</span><span class="o">.</span><span class="n">crt</span><span class="o">=</span><span class="n">client</span><span class="o">.</span><span class="n">pem</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span><span class="o">=</span><span class="n">tls</span><span class="o">.</span><span class="n">key</span><span class="o">=</span><span class="n">client</span><span class="o">-</span><span class="n">key</span><span class="o">.</span><span class="n">pem</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span><span class="o">=</span><span class="n">ca</span><span class="o">.</span><span class="n">crt</span><span class="o">=</span><span class="n">ca</span><span class="o">.</span><span class="n">pem</span> <span class="o">--</span><span class="nb">type</span><span class="o">=</span><span class="n">kubernetes</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">tls</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="run-psmdb-without-tls">
+<h2><a class="toc-backref" href="#id5">Run PSMDB without TLS</a></h2>
+<p>Omitting TLS is also possible, but we recommend that you run your cluster with the TLS protocol enabled.</p>
+<p>To disable TLS protocol (e.g. for demonstration purposes) edit the <code class="docutils literal notranslate"><span class="pre">cr.yaml/spec/allowUnstafeConfigurations</span></code> setting to <code class="docutils literal notranslate"><span class="pre">true</span></code> and make sure that there are no certificate secrets available.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="encryption.html" title="Data at rest encryption"
+             >next</a></li>
+        <li class="right" >
+          <a href="sharding.html" title="Percona Server for MongoDB Sharding"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Transport Layer Security (TLS)</a><ul>
+<li><a class="reference internal" href="#install-and-use-the-cert-manager">Install and use the <em>cert-manager</em></a><ul>
+<li><a class="reference internal" href="#about-the-cert-manager">About the <em>cert-manager</em></a></li>
+<li><a class="reference internal" href="#installation-of-the-cert-manager">Installation of the <em>cert-manager</em></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#generate-certificates-manually">Generate certificates manually</a></li>
+<li><a class="reference internal" href="#run-psmdb-without-tls">Run PSMDB without TLS</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="sharding.html"
+                        title="previous chapter">Percona Server for MongoDB Sharding</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="encryption.html"
+                        title="next chapter">Data at rest encryption</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

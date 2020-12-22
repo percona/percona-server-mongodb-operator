@@ -1,0 +1,192 @@
+
+
+
+    <title>Exposing cluster nodes with dedicated IP addresses &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Enabling Replica Set Arbiter nodes" href="arbiter.html" />
+    <link rel="prev" title="Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes" href="constraints.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="arbiter.html" title="Enabling Replica Set Arbiter nodes"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="constraints.html" title="Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="exposing-cluster-nodes-with-dedicated-ip-addresses">
+<h1>Exposing cluster nodes with dedicated IP addresses</h1>
+<div class="section" id="using-single-entry-point-vs-accessing-mongodb-instances">
+<h2>Using single entry point vs. accessing MongoDB Instances</h2>
+<p>Percona Operator for Percona Server for MongoDB provides two scenarios for
+accessing the database.</p>
+<ol class="arabic">
+<li><p>If :ref`sharding` mode is turned <strong>on</strong> (default bahaviour), then database
+cluster runs special <code class="docutils literal notranslate"><span class="pre">mongos</span></code> Pods - query routers, which acts as an entry
+point for client applications,</p>
+<img alt="PSMDB Operator, sharding on" src="_images/mongos_espose.png" />
+</li>
+<li><p>If :ref`sharding` mode is turned <strong>off</strong>, the application needs access to all
+MongoDB Pods of the replica set:</p>
+<img alt="PSMDB Operator, sharding off" src="_images/mongod_espose.png" />
+</li>
+</ol>
+<p>You can find more on sharding in the <a class="reference external" href="https://docs.mongodb.com/manual/reference/glossary/#term-sharding">official MongoDB documentation</a>.</p>
+</div>
+<div class="section" id="accessing-the-pod">
+<h2>Accessing the Pod</h2>
+<p>When Kubernetes creates Pods, each Pod has an IP address in the
+internal virtual network of the cluster. Creating and destroying
+Pods is a dynamic process, therefore binding communication between Pods to
+specific IP addresses would cause problems as things change over
+time as a result of the cluster scaling, maintenance, etc. Due to
+this changing environment, you should connect to Percona Server for MongoDB via Kubernetes
+internal DNS names in URI
+(e.g. using <code class="docutils literal notranslate"><span class="pre">mongodb+srv://userAdmin:userAdmin123456&#64;&lt;cluster-name&gt;-rs0.&lt;namespace&gt;.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false</span></code> to access one of the Replica Set Pods).
+URI-based access is strictly recommended.</p>
+<p>Sometimes you cannot communicate with the Pods using the Kubernetes internal DNS
+names. To make Pods of the Replica Set accessible, Percona Server for
+MongoDB Operator can assign a <a class="reference external" href="https://kubernetes.io/docs/concepts/services-networking/service/">Kubernetes
+Service</a>
+to each Pod.</p>
+<p>This feature can be configured in the <code class="docutils literal notranslate"><span class="pre">replsets</span></code> (for MondgoDB instances Pod)
+and <code class="docutils literal notranslate"><span class="pre">sharding</span></code> (for mongos Pod) sections of the
+<a class="reference external" href="https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml">deploy/cr.yaml</a>
+file:</p>
+<ul class="simple">
+<li><p>set ‘expose.enabled’ option to ‘true’ to allow exposing Pods via
+services,</p></li>
+<li><p>set ‘expose.exposeType’ option specifying the IP address type to be
+used:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">ClusterIP</span></code> - expose the Pod’s service with an internal static
+IP address. This variant makes MongoDB Pod only reachable from
+within the Kubernetes cluster.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NodePort</span></code> - expose the Pod’s service on each Kubernetes node’s
+IP address at a static port. ClusterIP service, to which the node
+port will be routed, is automatically created in this variant. As
+an advantage, the service will be reachable from outside the
+cluster by node address and port number, but the address will be
+bound to a specific Kubernetes node.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LoadBalancer</span></code> - expose the Pod’s service externally using a
+cloud provider’s load balancer. Both ClusterIP and NodePort
+services are automatically created in this variant.</p></li>
+</ul>
+</li>
+</ul>
+<p>If this feature is enabled, URI looks like
+<code class="docutils literal notranslate"><span class="pre">mongodb://userAdmin:userAdmin123456&#64;&lt;ip1&gt;:&lt;port1&gt;,&lt;ip2&gt;:&lt;port2&gt;,&lt;ip3&gt;:&lt;port3&gt;/admin?replicaSet=rs0&amp;ssl=false</span></code>
+All IP adresses should be <em>directly</em> reachable by application.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="arbiter.html" title="Enabling Replica Set Arbiter nodes"
+             >next</a></li>
+        <li class="right" >
+          <a href="constraints.html" title="Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Exposing cluster nodes with dedicated IP addresses</a><ul>
+<li><a class="reference internal" href="#using-single-entry-point-vs-accessing-mongodb-instances">Using single entry point vs. accessing MongoDB Instances</a></li>
+<li><a class="reference internal" href="#accessing-the-pod">Accessing the Pod</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="constraints.html"
+                        title="previous chapter">Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="arbiter.html"
+                        title="next chapter">Enabling Replica Set Arbiter nodes</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

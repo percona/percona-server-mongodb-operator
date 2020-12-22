@@ -1,0 +1,183 @@
+
+
+
+    <title>System Requirements &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Design overview" href="architecture.html" />
+    <link rel="prev" title="Percona Kubernetes Operator for Percona Server for MongoDB" href="index.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="architecture.html" title="Design overview"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="index.html" title="Percona Kubernetes Operator for Percona Server for MongoDB"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="system-requirements">
+<h1>System Requirements</h1>
+<p>The Operator was developed and tested with Percona Server for MongoDB 3.6, 4.0,
+and 4.2. Other options may or may not work.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The already deprecated <a class="reference external" href="https://docs.mongodb.com/manual/core/storage-engines/">MMAPv1 storage engine</a>
+for Percona Server for MongoDB 3.6 and 4.0 is not supported by the Operator
+starting from version 1.6.</p>
+</div>
+<p>Also, Operator 1.6 supports Percona Server for MongoDB sharding with only one
+Replica Set.</p>
+<div class="section" id="officially-supported-platforms">
+<h2>Officially supported platforms</h2>
+<p>The following platforms were tested and are officially supported by the Operator
+1.6.0:</p>
+<ul class="simple">
+<li><p>OpenShift 3.11</p></li>
+<li><p>OpenShift 4.5</p></li>
+<li><p>Google Kubernetes Engine (GKE) 1.15 - 1.17</p></li>
+<li><p>Amazon Elastic Container Service for Kubernetes (EKS) 1.15</p></li>
+<li><p>Minikube 1.10</p></li>
+<li><p>VMWare Tanzu</p></li>
+</ul>
+<p>Other Kubernetes platforms may also work but have not been tested.</p>
+</div>
+<div class="section" id="resource-limits">
+<h2>Resource Limits</h2>
+<p>A cluster running an officially supported platform contains at least 3
+Nodes, with the following resources:</p>
+<ul class="simple">
+<li><p>2GB of RAM,</p></li>
+<li><p>2 CPU threads per Node for Pods provisioning,</p></li>
+<li><p>at least 60GB of available storage for Private Volumes provisioning.</p></li>
+</ul>
+<p>Also, the number of Replica Set Nodes should not be odd
+if <a class="reference internal" href="arbiter.html#arbiter"><span class="std std-ref">Arbiter</span></a> is not enabled.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Use Storage Class with XFS as the default filesystem if possible</p>
+</div>
+<p><a class="reference external" href="https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb">to achieve better MongoDB performance</a>.</p>
+</div>
+<div class="section" id="platform-specific-limitations">
+<h2>Platform-specific limitations</h2>
+<p>The Operator is subsequent to specific platform limitations.</p>
+<ul class="simple">
+<li><p>Minikube doesn’t support multi-node cluster configurations because of its
+local nature, which is in collision with the default affinity requirements
+of the Operator. To arrange this, the <a class="reference internal" href="minikube.html#install-minikube"><span class="std std-ref">Install Percona Server for MongoDB on Minikube</span></a> instruction
+includes an additional step which turns off the requirement of having not
+less than three Nodes.</p></li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="architecture.html" title="Design overview"
+             >next</a></li>
+        <li class="right" >
+          <a href="index.html" title="Percona Kubernetes Operator for Percona Server for MongoDB"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">System Requirements</a><ul>
+<li><a class="reference internal" href="#officially-supported-platforms">Officially supported platforms</a></li>
+<li><a class="reference internal" href="#resource-limits">Resource Limits</a></li>
+<li><a class="reference internal" href="#platform-specific-limitations">Platform-specific limitations</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Percona Kubernetes Operator for Percona Server for MongoDB</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="architecture.html"
+                        title="next chapter">Design overview</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>

@@ -1,0 +1,213 @@
+
+
+
+    <title>Install Percona server for MongoDB on Kubernetes &mdash; Percona Kubernetes Operator for Percona Server for MongoDB Documentation</title>
+    
+  <head>
+    
+    
+    
+    <link rel="stylesheet" href="_static/basic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.6.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="Percona Kubernetes Operator for Percona Server for MongoDB Documentation" href="index.html" />
+    <link rel="next" title="Install Percona server for MongoDB on OpenShift" href="openshift.html" />
+    <link rel="prev" title="Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)" href="eks.html" /> 
+  </head>
+  <body>
+    <div class="container">  
+
+    <div class="document row">
+      <div class="documentwrapper col-md-9 col-md-push-3">
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="openshift.html" title="Install Percona server for MongoDB on OpenShift"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="eks.html" title="Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)"
+             accesskey="P">previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="install-percona-server-for-mongodb-on-kubernetes">
+<h1>Install Percona server for MongoDB on Kubernetes</h1>
+<ol class="arabic" start="0">
+<li><p>Clone the percona-server-mongodb-operator repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone -b v1.6.0 https://github.com/percona/percona-server-mongodb-operator
+<span class="nb">cd</span> percona-server-mongodb-operator
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>It is crucial to specify the right branch with <code class="docutils literal notranslate"><span class="pre">-b</span></code>
+option while cloning the code on this step. Please be careful.</p>
+</div>
+</li>
+<li><p>The Custom Resource Definition for PSMDB should be created from the
+<code class="docutils literal notranslate"><span class="pre">deploy/crd.yaml</span></code> file. The Custom Resource Definition extends the
+standard set of resources which Kubernetes “knows” about with the new
+items (in our case resources which are the core of the operator).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl apply -f deploy/crd.yaml
+</pre></div>
+</div>
+<p>This step should be done only once; the step does not need to be repeated
+with any other Operator deployments.</p>
+</li>
+<li><p>Add the <code class="docutils literal notranslate"><span class="pre">psmdb</span></code> namespace to Kubernetes,
+and set the correspondent context for further steps:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl create namespace psmdb
+$ kubectl config set-context <span class="k">$(</span>kubectl config current-context<span class="k">)</span> --namespace<span class="o">=</span>psmdb
+</pre></div>
+</div>
+</li>
+<li><p>The role-based access control (RBAC) for PSMDB is configured with the <code class="docutils literal notranslate"><span class="pre">deploy/rbac.yaml</span></code> file. Role-based access is
+based on defined roles and the available actions which correspond to
+each role. The role and actions are defined for Kubernetes resources in the yaml file. Further details
+about users and roles can be found in <a class="reference external" href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings">Kubernetes
+documentation</a>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl apply -f deploy/rbac.yaml
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Setting RBAC requires your user to have cluster-admin role
+privileges. For example, those using Google Kubernetes Engine can
+grant user needed privileges with the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=$(gcloud config get-value core/account)
+</pre></div>
+</div>
+</div>
+</li>
+<li><p>Start the operator within Kubernetes:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl apply -f deploy/operator.yaml
+</pre></div>
+</div>
+</li>
+<li><p>Add the MongoDB Users secrets to Kubernetes. These secrets
+should be placed as plain text in the stringData section of the
+<code class="docutils literal notranslate"><span class="pre">deploy/secrets.yaml</span></code> file as login name and
+passwords for the user accounts (see <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes
+documentation</a>
+for details).</p>
+<p>After editing the yaml file, MongoDB Users secrets should be created
+using the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl create -f deploy/secrets.yaml
+</pre></div>
+</div>
+<p>More details about secrets can be found in <a class="reference internal" href="users.html#users"><span class="std std-ref">Users</span></a>.</p>
+</li>
+<li><p>Now certificates should be generated. By default, the Operator generates
+certificates automatically, and no actions are required at this step. Still,
+you can generate and apply your own certificates as secrets according
+to the <a class="reference internal" href="TLS.html#tls"><span class="std std-ref">TLS instructions</span></a>.</p></li>
+<li><p>After the operator is started, Percona Server for MongoDB cluster can
+be created with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl apply -f deploy/cr.yaml
+</pre></div>
+</div>
+<p>The creation process may take some time. The process is over when both
+operator and replica set pod have reached their Running status:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl get pods
+NAME                                               READY   STATUS    RESTARTS   AGE
+my-cluster-name-rs0-0                              <span class="m">1</span>/1     Running   <span class="m">0</span>          8m
+my-cluster-name-rs0-1                              <span class="m">1</span>/1     Running   <span class="m">0</span>          8m
+my-cluster-name-rs0-2                              <span class="m">1</span>/1     Running   <span class="m">0</span>          7m
+percona-server-mongodb-operator-754846f95d-sf6h6   <span class="m">1</span>/1     Running   <span class="m">0</span>          9m
+</pre></div>
+</div>
+</li>
+<li><p>Check connectivity to newly created cluster</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+percona-client:/$ mongo <span class="s2">&quot;mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</div>
+
+
+          </div>
+        </div>
+    <div class="related row">
+      
+      <ul class="nav nav-pills">
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="openshift.html" title="Install Percona server for MongoDB on OpenShift"
+             >next</a></li>
+        <li class="right" >
+          <a href="eks.html" title="Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)"
+             >previous</a></li>
+        <li><a href="index.html">Percona Kubernetes Operator for Percona Server for MongoDB Documentation</a></li> 
+      </ul>
+    </div>
+      </div>
+      <div class="sphinxsidebar  col-md-3 col-md-pull-9">
+        <div class="sphinxsidebarwrapper">
+  
+          {@ product_logo @}          
+
+          {@ product_pdf_download @}
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="eks.html"
+                        title="previous chapter">Install Percona server for MongoDB on Amazon Elastic Kubernetes Service (EKS)</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="openshift.html"
+                        title="next chapter">Install Percona server for MongoDB on OpenShift</a></p>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">jQuery(document).ready(function(){ jQuery('#searchbox').show(0); });</script>
+          {@ product_series @}
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+ <script type="text/javascript">
+   ( function($) {
+     $(document).ready(function() {
+        $(".toggle > *").hide();
+        $(".toggle .header").show();
+        $(".toggle .header").click(function() {
+           $(this).parent().children().not(".header").toggle(400);
+           $(this).parent().children(".header").toggleClass("open");
+        })
+     });
+   } ) ( jQuery );
+</script>
+
+  </div>
+  </body>
