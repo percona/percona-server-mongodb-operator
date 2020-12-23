@@ -13,10 +13,10 @@ Install Percona server for MongoDB on Kubernetes
       It is crucial to specify the right branch with ``-b``
       option while cloning the code on this step. Please be careful.
 
-1. The Custom Resource Definition for PSMDB should be created from the
-   ``deploy/crd.yaml`` file. The Custom Resource Definition extends the
-   standard set of resources which Kubernetes “knows” about with the new
-   items (in our case resources which are the core of the operator).
+1. The Custom Resource Definition for Percona Server for MongoDB should be
+   created from the ``deploy/crd.yaml`` file. The Custom Resource Definition
+   extends the standard set of resources which Kubernetes “knows” about with the
+   new items, in our case these items are the core of the operator.
 
    .. code:: bash
 
@@ -25,19 +25,27 @@ Install Percona server for MongoDB on Kubernetes
    This step should be done only once; the step does not need to be repeated
    with any other Operator deployments.
 
-2. Add the ``psmdb`` namespace to Kubernetes,
-   and set the correspondent context for further steps:
+2. Create a namespace and set the context for the namespace. The resource names
+   must be unique within the namespace and provide a way to divide cluster
+   resources between users spread across multiple projects.
+
+   So, create the namespace and save it in the namespace context for subsequent
+   commands as follows (replace the ``<namespace name>`` placeholder with some
+   descriptive name):
 
    .. code:: bash
 
-      $ kubectl create namespace psmdb
-      $ kubectl config set-context $(kubectl config current-context) --namespace=psmdb
+      $ kubectl create namespace <namespace name>
+      $ kubectl config set-context $(kubectl config current-context) --namespace=<namespace name>
 
-3. The role-based access control (RBAC) for PSMDB is configured with the ``deploy/rbac.yaml`` file. Role-based access is
-   based on defined roles and the available actions which correspond to
-   each role. The role and actions are defined for Kubernetes resources in the yaml file. Further details
-   about users and roles can be found in `Kubernetes
-   documentation <https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings>`_.
+   At success, you will see the message that namespace/<namespace name> was
+   created, and the context was modified.
+
+3. The role-based access control (RBAC) for Percona Server for MongoDB is
+   configured with the ``deploy/rbac.yaml`` file. Role-based access is based on
+   defined roles and the available actions which correspond to each role. The
+   role and actions are defined for Kubernetes resources in the yaml file.
+   Further details about users and roles can be found in `Kubernetes documentation <https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings>`_.
 
    .. code:: bash
 
@@ -97,9 +105,11 @@ Install Percona server for MongoDB on Kubernetes
       my-cluster-name-rs0-2                              1/1     Running   0          7m
       percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
 
-8. Check connectivity to newly created cluster
+8. Check connectivity to newly created cluster, using the login (which is
+   ``userAdmin``) and corresponding password from the secret, and the proper
+   namespace instead of the ``<namespace name>`` placeholder:
 
    .. code:: bash
 
       $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
-      percona-client:/$ mongo "mongodb://userAdmin:userAdmin123456@my-cluster-name-mongos.psmdb.svc.cluster.local/admin?ssl=false"
+      percona-client:/$ mongo "mongodb://userAdmin:userAdmin123456@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"

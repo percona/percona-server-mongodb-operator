@@ -79,9 +79,13 @@ by the following command:
 Install the Operator
 =======================
 
-1. Create a namespace and set the context for the namespace. The resource names must be unique within the namespace and provide a way to divide cluster resources between users spread across multiple projects.
+1. Create a namespace and set the context for the namespace. The resource names
+   must be unique within the namespace and provide a way to divide cluster
+   resources between users spread across multiple projects.
 
-   So, create the namespace and save it in the namespace context for subsequent commands as follows (replace the ``<namespace name>`` placeholder with some descriptive name):
+   So, create the namespace and save it in the namespace context for subsequent
+   commands as follows (replace the ``<namespace name>`` placeholder with some
+   descriptive name):
 
    .. code:: bash
 
@@ -158,8 +162,9 @@ Install the Operator
       kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
    
    Now run ``mongo`` tool in the percona-client command shell using the login
-   (which is ``userAdmin``) and password obtained from the secret:
+   (which is ``userAdmin``) and password obtained from the secret, and the
+   proper namespace instead of the ``<namespace name>`` placeholder:
    
    .. code:: bash
 
-      mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"
+      mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
