@@ -103,7 +103,7 @@ Install Percona server for MongoDB on OpenShift
            platform: openshift
          ...
 
-   b (optional). In you're using minishift, please adjust antiaffinity policy to ``none``
+   b. (optional) In you're using minishift, please adjust antiaffinity policy to ``none``
 
        .. code:: yaml
 
@@ -134,4 +134,4 @@ Install Percona server for MongoDB on OpenShift
    .. code:: bash
 
       $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
-      percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+      percona-client:/$ mongo "mongodb://userAdmin:userAdmin123456@my-cluster-name-mongos.psmdb.svc.cluster.local/admin?ssl=false"

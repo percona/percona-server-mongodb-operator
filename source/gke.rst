@@ -165,7 +165,7 @@ Now run ``mongo`` tool in the percona-client command shell using the login
 
 .. code:: bash
 
-   mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.default.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+   mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"
 
 Troubleshooting
 ===============
