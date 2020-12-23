@@ -106,8 +106,7 @@ Install Percona server for MongoDB on Kubernetes
       percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
 
 8. Check connectivity to newly created cluster, using the login (which is
-   ``userAdmin``) and corresponding password from the secret, and the proper
-   namespace instead of the ``<namespace name>`` placeholder:
+   ``userAdmin``) and corresponding password from the secret:
 
    .. code:: bash
 
