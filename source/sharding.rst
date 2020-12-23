@@ -33,7 +33,7 @@ configuration file and is turned on by default.
 
 To enable sharding, set the ``sharding.enabled`` key ``true`` (this will turn
 existing MongoDB replica set nodes into sharded ones). To disable sharding, set
-the ``sharding.enabled`` key ``false``.
+the ``sharding.enabled`` key to ``false``.
 
 When the sharding is turned on, the Operator runs replica sets with config
 servers and mongos instances. Their numbers are controlled by 
@@ -92,4 +92,3 @@ processes of your replica set.
       .. code:: bash
 
          mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.<namespace name>.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
-
