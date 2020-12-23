@@ -31,7 +31,7 @@ Turning sharding on and off
 Sharding is controlled by the ``sharding`` section of the ``deploy/cr.yaml``
 configuration file and is turned on by default.
 
-To enable sharding, set the ``sharding.enabled`` key ``true`` (this will turn
+To enable sharding, set the ``sharding.enabled`` key to ``true`` (this will turn
 existing MongoDB replica set nodes into sharded ones). To disable sharding, set
 the ``sharding.enabled`` key to ``false``.
 
