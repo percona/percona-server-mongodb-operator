@@ -80,8 +80,14 @@ main() {
     }'
     wait_for_running "${CLUSTER}-rs0" "1" "false"
 
-    compare_kubectl service/${CLUSTER}-rs0 "-160"
-    compare_kubectl statefulset/${CLUSTER}-rs0 "-160"
+    # test 1.7.0
+    API="psmdb.percona.com/v1-7-0"
+    kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.7.0"}
+    }'
+    wait_for_running "${CLUSTER}-rs0" "1" "false"
+    compare_kubectl service/${CLUSTER}-rs0 "-170"
+    compare_kubectl statefulset/${CLUSTER}-rs0 "-170"
 
     destroy $namespace
 }
