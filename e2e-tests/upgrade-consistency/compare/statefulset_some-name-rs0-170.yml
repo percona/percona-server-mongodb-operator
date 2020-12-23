@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 6
+  generation: 7
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
