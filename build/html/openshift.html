@@ -169,7 +169,7 @@ percona-server-mongodb-operator-754846f95d-sf6h6   <span class="m">1</span>/1   
 </div>
 </li>
 <li><p>Check connectivity to newly created cluster. Please note that mongo client command shall be executed inside the container manually.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:4.2.11-12 --restart<span class="o">=</span>Never -- bash -il
 percona-client:/$ mongo <span class="s2">&quot;mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
 </pre></div>
 </div>

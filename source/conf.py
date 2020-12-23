@@ -296,6 +296,7 @@ def ultimateReplace(app, docname, source):
 ultimate_replacements = {
     "{{{release}}}" : release,
     "{{{apiversion}}}" : release.replace(".", "-", 2),
+    "{{{mongodb42recommended}}}" : mongodb42recommended,
     "{{{pmm2recommended}}}" : pmm2recommended
 }
 

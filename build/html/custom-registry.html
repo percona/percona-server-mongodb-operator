@@ -109,19 +109,19 @@ Status: Image is up to date <span class="k">for</span> docker.io/perconalab/perc
 for the example OpenShift PSMDB project:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ docker tag <span class="se">\</span>
     docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505 <span class="se">\</span>
-    <span class="m">172</span>.30.162.173:5000/psmdb/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span>
-$ docker push <span class="m">172</span>.30.162.173:5000/psmdb/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span>
+    <span class="m">172</span>.30.162.173:5000/psmdb/percona-server-mongodb:4.2.11-12
+$ docker push <span class="m">172</span>.30.162.173:5000/psmdb/percona-server-mongodb:4.2.11-12
 </pre></div>
 </div>
 </li>
 <li><p>Verify the image is available in the OpenShift registry with the following command:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ oc get is
 NAME                              DOCKER REPO                                                             TAGS             UPDATED
-percona-server-mongodb            docker-registry.default.svc:5000/psmdb/percona-server-mongodb  <span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span>  <span class="m">2</span> hours ago
+percona-server-mongodb            docker-registry.default.svc:5000/psmdb/percona-server-mongodb  <span class="m">4</span>.2.11-12  <span class="m">2</span> hours ago
 </pre></div>
 </div>
 </li>
-<li><p>When the custom registry image is available, edit the the <code class="docutils literal notranslate"><span class="pre">image:</span></code> option in <code class="docutils literal notranslate"><span class="pre">deploy/operator.yaml</span></code> configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb:{{{mongodb42recommended}}}``)</p>
+<li><p>When the custom registry image is available, edit the the <code class="docutils literal notranslate"><span class="pre">image:</span></code> option in <code class="docutils literal notranslate"><span class="pre">deploy/operator.yaml</span></code> configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb:4.2.11-12``)</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>If the registry requires authentication, you can specify the <code class="docutils literal notranslate"><span class="pre">imagePullSecrets</span></code> option for all images.</p>

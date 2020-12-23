@@ -336,7 +336,7 @@ First of all, run percona\sphinxhyphen{}client and connect its console output to
 terminal (running it may require some time to deploy the correspondent Pod):
 
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
-kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}} \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
+kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12 \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
 \end{sphinxVerbatim}
 
 Now run \sphinxcode{\sphinxupquote{mongo}} tool in the percona\sphinxhyphen{}client command shell using the login
@@ -518,7 +518,7 @@ First of all, run percona\sphinxhyphen{}client and connect its console output to
 terminal (running it may require some time to deploy the correspondent Pod):
 
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
-kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}} \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
+kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12 \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
 \end{sphinxVerbatim}
 
 Now run \sphinxcode{\sphinxupquote{mongo}} tool in the percona\sphinxhyphen{}client command shell using the login
@@ -750,7 +750,7 @@ First of all, run percona\sphinxhyphen{}client and connect its console output to
 terminal (running it may require some time to deploy the correspondent Pod):
 
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
-kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}} \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
+kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12 \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
 \end{sphinxVerbatim}
 
 Now run \sphinxcode{\sphinxupquote{mongo}} tool in the percona\sphinxhyphen{}client command shell using the login
@@ -880,7 +880,7 @@ percona\PYGZhy{}server\PYGZhy{}mongodb\PYGZhy{}operator\PYGZhy{}754846f95d\PYGZh
 Check connectivity to newly created cluster
 
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
-\PYGZdl{} kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}} \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
+\PYGZdl{} kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12 \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
 percona\PYGZhy{}client:/\PYGZdl{} mongo \PYG{l+s+s2}{\PYGZdq{}mongodb+srv://userAdmin:userAdmin123456@my\PYGZhy{}cluster\PYGZhy{}name\PYGZhy{}rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0\PYGZam{}ssl=false\PYGZdq{}}
 \end{sphinxVerbatim}
 
@@ -1042,7 +1042,7 @@ percona\PYGZhy{}server\PYGZhy{}mongodb\PYGZhy{}operator\PYGZhy{}754846f95d\PYGZh
 Check connectivity to newly created cluster. Please note that mongo client command shall be executed inside the container manually.
 
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
-\PYGZdl{} oc run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}} \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
+\PYGZdl{} oc run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12 \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
 percona\PYGZhy{}client:/\PYGZdl{} mongo \PYG{l+s+s2}{\PYGZdq{}mongodb+srv://userAdmin:userAdmin123456@my\PYGZhy{}cluster\PYGZhy{}name\PYGZhy{}rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0\PYGZam{}ssl=false\PYGZdq{}}
 \end{sphinxVerbatim}
 
@@ -1127,8 +1127,8 @@ for the example OpenShift PSMDB project:
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
 \PYGZdl{} docker tag \PYG{l+s+se}{\PYGZbs{}}
     docker.io/perconalab/percona\PYGZhy{}server\PYGZhy{}mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505 \PYG{l+s+se}{\PYGZbs{}}
-    \PYG{l+m}{172}.30.162.173:5000/psmdb/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}
-\PYGZdl{} docker push \PYG{l+m}{172}.30.162.173:5000/psmdb/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}
+    \PYG{l+m}{172}.30.162.173:5000/psmdb/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12
+\PYGZdl{} docker push \PYG{l+m}{172}.30.162.173:5000/psmdb/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12
 \end{sphinxVerbatim}
 
 \item {} 
@@ -1137,11 +1137,11 @@ Verify the image is available in the OpenShift registry with the following comma
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
 \PYGZdl{} oc get is
 NAME                              DOCKER REPO                                                             TAGS             UPDATED
-percona\PYGZhy{}server\PYGZhy{}mongodb            docker\PYGZhy{}registry.default.svc:5000/psmdb/percona\PYGZhy{}server\PYGZhy{}mongodb  \PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}  \PYG{l+m}{2} hours ago
+percona\PYGZhy{}server\PYGZhy{}mongodb            docker\PYGZhy{}registry.default.svc:5000/psmdb/percona\PYGZhy{}server\PYGZhy{}mongodb  \PYG{l+m}{4}.2.11\PYGZhy{}12  \PYG{l+m}{2} hours ago
 \end{sphinxVerbatim}
 
 \item {} 
-When the custom registry image is available, edit the the \sphinxcode{\sphinxupquote{image:}} option in \sphinxcode{\sphinxupquote{deploy/operator.yaml}} configuration file with a Docker Repo + Tag string (it should look like\textasciigrave{}\textasciigrave{}docker\sphinxhyphen{}registry.default.svc:5000/psmdb/percona\sphinxhyphen{}server\sphinxhyphen{}mongodb:\{\{\{mongodb42recommended\}\}\}\textasciigrave{}\textasciigrave{})
+When the custom registry image is available, edit the the \sphinxcode{\sphinxupquote{image:}} option in \sphinxcode{\sphinxupquote{deploy/operator.yaml}} configuration file with a Docker Repo + Tag string (it should look like\textasciigrave{}\textasciigrave{}docker\sphinxhyphen{}registry.default.svc:5000/psmdb/percona\sphinxhyphen{}server\sphinxhyphen{}mongodb:4.2.11\sphinxhyphen{}12\textasciigrave{}\textasciigrave{})
 
 \begin{sphinxadmonition}{note}{Note:}
 If the registry requires authentication, you can specify the \sphinxcode{\sphinxupquote{imagePullSecrets}} option for all images.
@@ -1341,7 +1341,7 @@ There are no unprivileged (general purpose) user accounts created by
 default. If you need general purpose users, please run commands below:
 
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
-\PYGZdl{} kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}} \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
+\PYGZdl{} kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12 \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
 mongodb@percona\PYGZhy{}client:/\PYGZdl{} mongo \PYG{l+s+s2}{\PYGZdq{}mongodb+srv://userAdmin:userAdmin123456@my\PYGZhy{}cluster\PYGZhy{}name\PYGZhy{}rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0\PYGZam{}ssl=false\PYGZdq{}}
 rs0:PRIMARY\PYGZgt{} db.createUser\PYG{o}{(}\PYG{o}{\PYGZob{}}
     user: \PYG{l+s+s2}{\PYGZdq{}myApp\PYGZdq{}},
@@ -1359,7 +1359,7 @@ rs0:PRIMARY\PYGZgt{} db.createUser\PYG{o}{(}\PYG{o}{\PYGZob{}}
 Now check the newly created user:
 
 \begin{sphinxVerbatim}[commandchars=\\\{\}]
-\PYGZdl{} kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}\PYG{o}{\PYGZob{}}mongodb42recommended\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}}\PYG{o}{\PYGZcb{}} \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
+\PYGZdl{} kubectl run \PYGZhy{}i \PYGZhy{}\PYGZhy{}rm \PYGZhy{}\PYGZhy{}tty percona\PYGZhy{}client \PYGZhy{}\PYGZhy{}image\PYG{o}{=}percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12 \PYGZhy{}\PYGZhy{}restart\PYG{o}{=}Never \PYGZhy{}\PYGZhy{} bash \PYGZhy{}il
 mongodb@percona\PYGZhy{}client:/\PYGZdl{} mongo \PYG{l+s+s2}{\PYGZdq{}mongodb+srv://myApp:myAppPassword@my\PYGZhy{}cluster\PYGZhy{}name\PYGZhy{}rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0\PYGZam{}ssl=false\PYGZdq{}}
 rs0:PRIMARY\PYGZgt{} use myApp
 rs0:PRIMARY\PYGZgt{} db.test.insert\PYG{o}{(}\PYG{o}{\PYGZob{}} x: \PYG{l+m}{1} \PYG{o}{\PYGZcb{}}\PYG{o}{)}
@@ -2759,7 +2759,7 @@ to the \sphinxcode{\sphinxupquote{1.6.0}} version should look as follows:
 \PYG{n}{kubectl} \PYG{n}{patch} \PYG{n}{psmdb} \PYG{n}{my}\PYG{o}{\PYGZhy{}}\PYG{n}{cluster}\PYG{o}{\PYGZhy{}}\PYG{n}{name} \PYG{o}{\PYGZhy{}}\PYG{o}{\PYGZhy{}}\PYG{n+nb}{type}\PYG{o}{=}\PYG{n}{merge} \PYG{o}{\PYGZhy{}}\PYG{o}{\PYGZhy{}}\PYG{n}{patch} \PYG{l+s+s1}{\PYGZsq{}}\PYG{l+s+s1}{\PYGZob{}}
    \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{spec}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{p}{\PYGZob{}}
        \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{crVersion}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:}\PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{1.6.0}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{,}
-       \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/percona\PYGZhy{}server\PYGZhy{}mongodb:}\PYG{l+s+s2}{\PYGZob{}\PYGZob{}}\PYG{l+s+si}{\PYGZob{}mongodb42recommended\PYGZcb{}}\PYG{l+s+s2}{\PYGZcb{}\PYGZcb{}}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}\PYG{p}{,}
+       \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}\PYG{p}{,}
        \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{backup}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{p}{\PYGZob{}} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/percona\PYGZhy{}server\PYGZhy{}mongodb\PYGZhy{}operator:1.6.0\PYGZhy{}backup}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}\PYG{p}{,}
        \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{pmm}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{p}{\PYGZob{}} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/pmm\PYGZhy{}client:2.12.0}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}
    \PYG{p}{\PYGZcb{}}\PYG{p}{\PYGZcb{}}\PYG{l+s+s1}{\PYGZsq{}}
@@ -2814,7 +2814,7 @@ to the \sphinxcode{\sphinxupquote{1.6.0}} version should look as follows:
 \PYG{n}{kubectl} \PYG{n}{patch} \PYG{n}{psmdb} \PYG{n}{my}\PYG{o}{\PYGZhy{}}\PYG{n}{cluster}\PYG{o}{\PYGZhy{}}\PYG{n}{name} \PYG{o}{\PYGZhy{}}\PYG{o}{\PYGZhy{}}\PYG{n+nb}{type}\PYG{o}{=}\PYG{n}{merge} \PYG{o}{\PYGZhy{}}\PYG{o}{\PYGZhy{}}\PYG{n}{patch} \PYG{l+s+s1}{\PYGZsq{}}\PYG{l+s+s1}{\PYGZob{}}
    \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{spec}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{p}{\PYGZob{}}
        \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{crVersion}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:}\PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{1.6.0}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{,}
-       \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/percona\PYGZhy{}server\PYGZhy{}mongodb:}\PYG{l+s+s2}{\PYGZob{}\PYGZob{}}\PYG{l+s+si}{\PYGZob{}mongodb42recommended\PYGZcb{}}\PYG{l+s+s2}{\PYGZcb{}\PYGZcb{}}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}\PYG{p}{,}
+       \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/percona\PYGZhy{}server\PYGZhy{}mongodb:4.2.11\PYGZhy{}12}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}\PYG{p}{,}
        \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{backup}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{p}{\PYGZob{}} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/percona\PYGZhy{}server\PYGZhy{}mongodb\PYGZhy{}operator:1.6.0\PYGZhy{}backup}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}\PYG{p}{,}
        \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{pmm}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{p}{\PYGZob{}} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{image}\PYG{l+s+s2}{\PYGZdq{}}\PYG{p}{:} \PYG{l+s+s2}{\PYGZdq{}}\PYG{l+s+s2}{percona/pmm\PYGZhy{}client:2.12.0}\PYG{l+s+s2}{\PYGZdq{}} \PYG{p}{\PYGZcb{}}
    \PYG{p}{\PYGZcb{}}\PYG{p}{\PYGZcb{}}\PYG{l+s+s1}{\PYGZsq{}}
@@ -3141,7 +3141,7 @@ To use the debug image instead of the normal one, set the following image name
 for the \sphinxcode{\sphinxupquote{image}} key in the \sphinxcode{\sphinxupquote{deploy/cr.yaml}} configuration file:
 \begin{quote}
 
-\sphinxcode{\sphinxupquote{percona/percona\sphinxhyphen{}server\sphinxhyphen{}mongodb:\{\{\{mongodb42recommended\}\}\}\sphinxhyphen{}debug}}
+\sphinxcode{\sphinxupquote{percona/percona\sphinxhyphen{}server\sphinxhyphen{}mongodb:4.2.11\sphinxhyphen{}12\sphinxhyphen{}debug}}
 \end{quote}
 
 The Pod should be restarted to get the new image.
@@ -9880,7 +9880,7 @@ the exact version is determined by the Docker image in use.
 
 Percona\sphinxhyphen{}certified Docker images used by the Operator are listed \sphinxhref{https://www.percona.com/doc/kubernetes-operator-for-psmongodb/images.html}{here}.
 For example, Percona Server for MongoDB 4.2 is supported with the following
-recommended version: \{\{\{mongodb42recommended\}\}\}. More details on the exact Percona
+recommended version: 4.2.11\sphinxhyphen{}12. More details on the exact Percona
 Server for MongoDB version can be found in the release notes (\sphinxhref{https://www.percona.com/doc/percona-server-for-mongodb/4.2/release\_notes/index.html}{4.2}, \sphinxhref{https://www.percona.com/doc/percona-server-for-mongodb/4.0/release\_notes/index.html}{4.0},
 and \sphinxhref{https://www.percona.com/doc/percona-server-for-mongodb/3.6/release\_notes/index.html}{3.6}).
 

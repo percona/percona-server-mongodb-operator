@@ -78,7 +78,7 @@ considered separately in the following sections.</p>
 <span id="id2"></span><h2><a class="reference external" href="users.html#unprivileged-users">Unprivileged users</a></h2>
 <p>There are no unprivileged (general purpose) user accounts created by
 default. If you need general purpose users, please run commands below:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:4.2.11-12 --restart<span class="o">=</span>Never -- bash -il
 mongodb@percona-client:/$ mongo <span class="s2">&quot;mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
 rs0:PRIMARY&gt; db.createUser<span class="o">({</span>
     user: <span class="s2">&quot;myApp&quot;</span>,
@@ -94,7 +94,7 @@ rs0:PRIMARY&gt; db.createUser<span class="o">({</span>
 </pre></div>
 </div>
 <p>Now check the newly created user:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:4.2.11-12 --restart<span class="o">=</span>Never -- bash -il
 mongodb@percona-client:/$ mongo <span class="s2">&quot;mongodb+srv://myApp:myAppPassword@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&amp;ssl=false&quot;</span>
 rs0:PRIMARY&gt; use myApp
 rs0:PRIMARY&gt; db.test.insert<span class="o">({</span> x: <span class="m">1</span> <span class="o">})</span>

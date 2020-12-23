@@ -124,7 +124,7 @@ human-readable form.</p>
 <li><p>Check connectivity to a newly created cluster.</p>
 <p>First of all, run percona-client and connect its console output to your
 terminal (running it may require some time to deploy the correspondent Pod):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:<span class="o">{{{</span>mongodb42recommended<span class="o">}}}</span> --restart<span class="o">=</span>Never -- bash -il
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kubectl run -i --rm --tty percona-client --image<span class="o">=</span>percona/percona-server-mongodb:4.2.11-12 --restart<span class="o">=</span>Never -- bash -il
 </pre></div>
 </div>
 <p>Now run <code class="docutils literal notranslate"><span class="pre">mongo</span></code> tool in the percona-client command shell using the login
