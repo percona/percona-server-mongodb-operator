@@ -2,14 +2,13 @@ System Requirements
 +++++++++++++++++++
 
 The Operator was developed and tested with Percona Server for MongoDB 3.6, 4.0,
-and 4.2. Other options may or may not work.
+4.2, and 4.4. Other options may also work but have not been tested.
 
-.. note:: The already deprecated `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
-   for Percona Server for MongoDB 3.6 and 4.0 is not supported by the Operator
-   starting from version 1.6.
-
-Also, Operator 1.6 supports Percona Server for MongoDB sharding with only one
-Replica Set.
+.. note:: The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
+   is no longer supported for all MongoDB versions starting from the Operator
+   version 1.6. MMAPv1 was already deprecated by MongoDB for a long time.
+   WiredTiger is the default storage engine since MongoDB 3.2, and MMAPv1 was
+   completely removed in MongoDB 4.2.
 
 Officially supported platforms
 --------------------------------
@@ -30,17 +29,21 @@ Resource Limits
 -----------------------
 
 A cluster running an officially supported platform contains at least 3 
-Nodes, with the following resources:
+Nodes and the following resources (if :ref:`sharding<operator.sharding>` is
+turned off):
 
 * 2GB of RAM,
 * 2 CPU threads per Node for Pods provisioning,
 * at least 60GB of available storage for Private Volumes provisioning.
 
+Сonsider using 4 CPU and 6 GB of RAM if :ref:`sharding<operator.sharding>` is
+turned on (the default behavior).
+
 Also, the number of Replica Set Nodes should not be odd
 if :ref:`Arbiter<arbiter>` is not enabled.
 
 .. note:: Use Storage Class with XFS as the default filesystem if possible
-`to achieve better MongoDB performance <https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb>`_.
+   `to achieve better MongoDB performance <https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb>`_.
 
 Platform-specific limitations
 ------------------------------

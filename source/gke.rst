@@ -160,9 +160,9 @@ terminal (running it may require some time to deploy the correspondent Pod):
 
    kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
    
-   Now run ``mongo`` tool in the percona-client command shell using the login
-   (which is ``userAdmin``) and password obtained from the secret, and the
-   proper namespace instead of the ``<namespace name>`` placeholder:
+Now run ``mongo`` tool in the percona-client command shell using the login 
+(which is ``userAdmin``) and password obtained from the secret, and the proper
+namespace instead of the ``<namespace name>`` placeholder:
 
 .. code:: bash
 

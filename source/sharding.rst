@@ -32,7 +32,8 @@ Sharding is controlled by the ``sharding`` section of the ``deploy/cr.yaml``
 configuration file and is turned on by default.
 
 To enable sharding, set the ``sharding.enabled`` key ``true`` (this will turn
-existing MongoDB replica set nodes into sharded ones).
+existing MongoDB replica set nodes into sharded ones). To disable sharding, set
+the ``sharding.enabled`` key ``false``.
 
 When the sharding is turned on, the Operator runs replica sets with config
 servers and mongos instances. Their numbers are controlled by 
@@ -76,15 +77,19 @@ processes of your replica set.
 3. Now run ``mongo`` tool in the percona-client command shell using the login
    (which is normally ``userAdmin``) and password obtained from the secret.
 
-   a. If sharding is turned on, the command will look as follows:
+   a. If sharding is turned on, the command will look as follows (with your
+      database cluster namespace instead of the ``<namespace name>``
+      placeholder).
    
-   .. code:: bash
+      .. code:: bash
 
-      mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"
+         mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
 
-   b. If sharding is turned off, the command will look as follows:
+   b. If sharding is turned off, the command will look as follows (with your
+      database cluster namespace instead of the ``<namespace name>``
+      placeholder).
    
-   .. code:: bash
+      .. code:: bash
 
-      mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.default.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+         mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.<namespace name>.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
 
