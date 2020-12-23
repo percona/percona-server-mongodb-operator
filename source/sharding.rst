@@ -50,7 +50,7 @@ your database. If you do not use sharding, you have to access ``mongod``
 processes of your replica set.
 
 1. Run percona-client and connect its console output to your terminal (running
-   it may require some time to deploy the correspondent Pod): 
+   it may require some time to deploy the corresponding Pod): 
    
    .. code:: bash
 
