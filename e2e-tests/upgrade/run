@@ -117,6 +117,7 @@ function prepare_cr_yaml() {
         | yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" \
         | yq w - "spec.replsets[*].arbiter.enabled" "false" \
         | yq w - "spec.backup.enabled" "false" \
+        | yq w - "spec.sharding.enabled" "false" \
         | yq w - "spec.image" "" \
         | yq w - "spec.backup.image" -- "-backup" \
         | yq w - "spec.pmm.image" -- "-pmm" > "${cr_yaml}"
