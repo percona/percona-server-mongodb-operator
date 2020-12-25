@@ -107,8 +107,8 @@ Making on-demand backup
 -----------------------
 
 To make on-demand backup, user should use YAML file with correct names
-for the backup and the PXC Cluster, and correct PVC settings. The
-example of such file is
+for the backup and the Percona Server for MongoDB Cluster, and correct PVC
+settings. The example of such file is
 `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup/backup.yaml>`_.
 
 When the backup config file is ready, actual backup command is executed:
@@ -172,7 +172,7 @@ Following steps are needed to restore a previously saved backup:
             metadata:
               name: restore1
             spec:
-              pxcCluster: my-cluster-name
+              clusterName: my-cluster-name
               backupName: backup1
             EOF
 

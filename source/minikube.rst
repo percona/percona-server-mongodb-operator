@@ -3,14 +3,14 @@
 Install Percona Server for MongoDB on Minikube
 ==============================================
 
-Installing the PSMDB Operator on `Minikube <https://github.com/kubernetes/minikube>`_
+Installing the Percona Server for MongoDB Operator on `Minikube <https://github.com/kubernetes/minikube>`_
 is the easiest way to try it locally without a cloud provider. Minikube runs
 Kubernetes on GNU/Linux, Windows, or macOS system using a system-wide
 hypervisor, such as VirtualBox, KVM/QEMU, VMware Fusion or Hyper-V. Using it is
 a popular way to test Kubernetes application locally prior to deploying it on a
 cloud.
 
-The following steps are needed to run PSMDB Operator on minikube:
+The following steps are needed to run Percona Server for MongoDB Operator on minikube:
 
 0. `Install minikube <https://kubernetes.io/docs/tasks/tools/install-minikube/>`_, using a way recommended for your system. This includes the installation of the following three components:
    #. kubectl tool,

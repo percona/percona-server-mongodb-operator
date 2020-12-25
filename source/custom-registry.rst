@@ -64,7 +64,7 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
 
 5. The following method can push an image to the custom registry
-   for the example OpenShift PSMDB project:
+   for the example OpenShift ``psmdb`` project:
 
    .. code:: bash
 

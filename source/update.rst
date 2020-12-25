@@ -148,15 +148,18 @@ updates:
 
    * ``Recommended`` - automatic upgrades will choose the most recent version
      of software flagged as Recommended (for clusters created from scratch,
-     the PSMDB 4.2 version will be selected instead of the PSMDB 4.0 one
+     the Percona Server for MongoDB 4.2 version will be selected instead of the
+     Percona Server for MongoDB 4.0 one
      regardless of the image path; for already existing clusters, the 4.2
      vs. 4.0 branch choice will be preserved),
    * ``Latest`` - automatic upgrades will choose the most recent version of
      the software available (for clusters created from scratch,
-     the PSMDB 4.2 version will be selected instead of the PSMDB 4.0 one
+     the Percona Server for MongoDB 4.2 version will be selected instead of the
+     Percona Server for MongoDB 4.0 one
      regardless of the image path; for already existing clusters, the 4.2
      vs. 4.0 branch choice will be preserved),
-   * *specific version number* - will apply an upgrade if the running PSMDB
+   * *specific version number* - will apply an upgrade if the running Percona
+     Server for MongoDB
      version doesn't match the explicit version number with no future upgrades
      (version numbers are specified as ``4.2.8-8``, ``4.2.7-7``,
      ``4.0.19-12``, etc.),
