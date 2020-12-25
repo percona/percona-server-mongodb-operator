@@ -79,9 +79,13 @@ by the following command:
 Install the Operator
 =======================
 
-1. Create a namespace and set the context for the namespace. The resource names must be unique within the namespace and provide a way to divide cluster resources between users spread across multiple projects.
+1. Create a namespace and set the context for the namespace. The resource names
+   must be unique within the namespace and provide a way to divide cluster
+   resources between users spread across multiple projects.
 
-   So, create the namespace and save it in the namespace context for subsequent commands as follows (replace the ``<namespace name>`` placeholder with some descriptive name):
+   So, create the namespace and save it in the namespace context for subsequent
+   commands as follows (replace the ``<namespace name>`` placeholder with some
+   descriptive name):
 
    .. code:: bash
 
@@ -162,4 +166,4 @@ Install the Operator
    
    .. code:: bash
 
-      mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.default.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+      mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"

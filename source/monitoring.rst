@@ -59,11 +59,11 @@ Kubernetes-based environment:
             kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_PASSWORD": '$(echo -n new_password | base64)'}}'
       
    -  you can also use ``pmm.mongodParams`` and ``pmm.mongosParams`` keys to
-      specify additional parameters for the `pmm-admin add mongodb <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>_ command for ``mongod`` and
+      specify additional parameters for the `pmm-admin add mongodb <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>`_ command for ``mongod`` and
       ``mongos`` Pods respectively, if needed.
       
       .. note:: Please take into account that Operator automatically manages
-         common MongoDB Service Monitoring parameters mentioned in the officiall ``pmm-admin add mongodb`` `documentation<https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>`_,
+         common MongoDB Service Monitoring parameters mentioned in the officiall ``pmm-admin add mongodb`` `documentation <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>`_,
          such like username, password, service-name, host, etc. Assigning values
          to these parameters is not recommended and can negatively affect the
          functionality of the PMM setup carried out by the Operator.
@@ -90,21 +90,6 @@ Kubernetes-based environment:
 
    In the results, locate the the ``EXTERNAL-IP`` field. The external-ip address
    can be used to access PMM via *https* in a web browser, with the
-   login/password authentication, and the browser is configured to `show
-   Percona Server for MongoDB
-   metrics <https://www.percona.com/doc/percona-monitoring-and-management/index.metrics-monitor.dashboard.html#pmm-dashboard-mongodb-list>`__.
+   login/password authentication, and the browser is configured to show
+   Percona Server for MongoDB metrics.
 
-
-
-
-As you can see, because we use the ``stringData`` type when creating the Secrets
-object, all values for each key/value pair are stated in plain text format
-which is convenient from the user's point of view. But the resulting Secrets
-object contains passwords stored as ``data`` - i.e., base64-encoded strings.
-If you want to update any field, you'll need to encode the value into base64
-format. To do this, you can run ``echo -n "password" | base64`` in your local
-shell to get valid values. For example, setting the PMM Server user's password
-to ``new_password`` in the ``my-cluster-name-secrets`` object can be done
-with the following command:
-.. code:: bash
-   kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_USER": '$(echo -n new_password | base64)'}}'

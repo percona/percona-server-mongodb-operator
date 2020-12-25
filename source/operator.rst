@@ -136,9 +136,9 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator.   |
 |                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be   |
-|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of PSMDB (e.g.         |
-|                 | ``4.2.8-8``) that is wished to be version-locked (so that the user can control the          |
-|                 | version running, but use automatic upgrades to move between them).                          |
+|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of Percona Server for  |
+|                 | MongoDB (e.g. ``4.2.8-8``) that is wished to be version-locked (so that the user can control|
+|                 | the version running, but use automatic upgrades to move between them).                      |
 +-----------------+---------------------------------------------------------------------------------------------+
 |                                                                                                               |
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1410,7 +1410,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``false``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables/disables `PSMDB Log Redaction							|
+| **Description** | Enables/disables `Percona Server for MongoDB Log Redaction					|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1423,7 +1423,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``true``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables/disables `PSMDB data at rest encryption						|
+| **Description** | Enables/disables `Percona Server for MongoDB data at rest encryption			|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/				|
 |                 | data_at_rest_encryption.html>`_								|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1451,7 +1451,8 @@ This section contains the Mongod configuration options.
 | **Example**     | ``AES256-CBC``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets											|
-|                 | `PSMDB encryption cipher mode <https://docs.mongodb.com/manual/reference/program/mongod/	|
+|                 | `Percona Server for MongoDB encryption cipher mode						|
+|                 | <https://docs.mongodb.com/manual/reference/program/mongod/					|
 |                 | #cmdoption-mongod-encryptionciphermode>`_							|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1465,7 +1466,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``60``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Sets the PSMDB `ttlMonitorSleepSecs` option							|
+| **Description** | Sets the Percona Server for MongoDB ``ttlMonitorSleepSecs`` option				|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+

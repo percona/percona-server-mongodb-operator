@@ -9,7 +9,7 @@ diagram.
    :width: 250px
    :align: center
    :height: 250px
-   :alt: PSMDB Replication
+   :alt: Percona Server for MongoDB Replication
 
 
 A replica set consists of one primary server and several secondary ones
@@ -43,7 +43,7 @@ dynamically assigned nodes.
    :width: 250px
    :align: center
    :height: 250px
-   :alt: PSMDB Operator
+   :alt: Percona Server for MongoDB Operator
 
 To provide data storage for stateful applications, Kubernetes uses
 Persistent Volumes. A *PersistentVolumeClaim* (PVC) is used to implement
@@ -56,9 +56,9 @@ respectively).
 The Operator functionality extends the Kubernetes API with
 *PerconaServerMongoDB* object, and it is implemented as a golang
 application. Each *PerconaServerMongoDB* object maps to one separate
-PSMDB setup. The Operator listens to all events on the created objects.
-When a new PerconaServerMongoDB object is created, or an existing one
-undergoes some changes or deletion, the operator automatically
+Percona Server for MongoDB setup. The Operator listens to all events on the
+created objects. When a new PerconaServerMongoDB object is created, or an
+existing one undergoes some changes or deletion, the operator automatically
 creates/changes/deletes all needed Kubernetes objects with the
 appropriate settings to provide a properly operating replica set.
 

@@ -107,8 +107,8 @@ Making on-demand backup
 -----------------------
 
 To make on-demand backup, user should use YAML file with correct names
-for the backup and the PXC Cluster, and correct PVC settings. The
-example of such file is
+for the backup and the Percona Server for MongoDB Cluster, and correct PVC
+settings. The example of such file is
 `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup/backup.yaml>`_.
 
 When the backup config file is ready, actual backup command is executed:
@@ -120,7 +120,7 @@ When the backup config file is ready, actual backup command is executed:
 The example of such file is `deploy/backup/restore.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup/restore.yaml>`_.
 
 .. note:: Storing backup settings in a separate file can be replaced by
-passing its content to the ``kubectl apply`` command as follows:
+   passing its content to the ``kubectl apply`` command as follows:
 
    .. code:: bash
 
@@ -144,27 +144,26 @@ Following steps are needed to restore a previously saved backup:
 2. Now find out correct names for the **backup** and the **cluster**. Available
    backups can be listed with the following command:
 
-.. code:: bash
+   .. code:: bash
 
       kubectl get psmdb-backup
 
    And the following command will list available clusters:
 
-.. code:: bash
+   .. code:: bash
 
       kubectl get psmdb
 
-3. When both correct names are known, the actual restoration process can
-   be started as follows:
+3. When both correct names are known, run the actual restoration process:
 
-.. code:: bash
+   .. code:: bash
 
       kubectl apply -f deploy/backup/restore.yaml
 
-.. note:: Storing backup settings in a separate file can be replaced by
-   passing its content to the ``kubectl apply`` command as follows:
+   .. note:: Storing backup settings in a separate file can be replaced by
+      passing its content to the ``kubectl apply`` command as follows:
 
-   .. code:: bash
+      .. code:: bash
 
             cat <<EOF | kubectl apply -f-
             apiVersion: psmdb.percona.com/v1
@@ -172,7 +171,7 @@ Following steps are needed to restore a previously saved backup:
             metadata:
               name: restore1
             spec:
-              pxcCluster: my-cluster-name
+              clusterName: my-cluster-name
               backupName: backup1
             EOF
 

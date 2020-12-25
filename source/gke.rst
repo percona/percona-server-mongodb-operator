@@ -71,7 +71,7 @@ Installing the Operator
       $ kubectl create namespace <namespace name>
       $ kubectl config set-context $(kubectl config current-context) --namespace=<namespace name>
 
-   At success, you will see the message that namespace/<namespace name> was created, and the context (gke_<project name>_<zone location>_<cluster name>) was modified.
+   At success, you will see the message that *namespace/<namespace name>* was created, and the context (*gke_<project name>_<zone location>_<cluster name>*) was modified.
 
 3. Use the following ``git clone`` command to download the correct branch of the percona-server-mongodb-operator repository:
 
@@ -132,8 +132,8 @@ Installing the Operator
 
    Here the actual password is base64-encoded, and ``echo 'aDAzQ0pCY3NSWEZ2ZUIzS1I=' | base64 --decode`` will bring it back to a human-readable form.
 
-Verifying the cluster operator
-==============================
+Verifying the cluster operation
+===============================
 
 It may take ten minutes to get the cluster started. You  can verify its creation with the ``kubectl get pods`` command:
 
@@ -160,12 +160,12 @@ terminal (running it may require some time to deploy the correspondent Pod):
 
    kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
    
-Now run ``mongo`` tool in the percona-client command shell using the login
+Now run ``mongo`` tool in the percona-client command shell using the login 
 (which is ``userAdmin``) and password obtained from the secret:
 
 .. code:: bash
 
-   mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.default.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+   mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
 
 Troubleshooting
 ===============

@@ -13,10 +13,10 @@ Install Percona server for MongoDB on OpenShift
       It is crucial to specify the right branch with ``-b``
       option while cloning the code on this step. Please be careful.
 
-1. The Custom Resource Definition for PSMDB should be created from the
-   ``deploy/crd.yaml`` file. The Custom Resource Definition extends the
-   standard set of resources which Kubernetes “knows” about with the new
-   items, in our case these items are the core of the operator.
+1. The Custom Resource Definition for Percona Server for MongoDB should be
+   created from the ``deploy/crd.yaml`` file. The Custom Resource Definition
+   extends the standard set of resources which Kubernetes “knows” about with the
+   new items, in our case these items are the core of the operator.
 
    This step should be done only once; it does not need to be repeated with other deployments.
 
@@ -29,8 +29,9 @@ Install Percona server for MongoDB on OpenShift
       Setting Custom Resource Definition requires your user to
       have cluster-admin role privileges.
 
-   If you want to manage PSMDB cluster with a non-privileged user, the
-   necessary permissions can be granted by applying the next clusterrole:
+   If you want to manage Percona Server for MongoDB cluster with a
+   non-privileged user, the necessary permissions can be granted by applying the
+   next clusterrole:
 
    .. code:: bash
 
@@ -50,11 +51,11 @@ Install Percona server for MongoDB on OpenShift
 
       $ oc new-project psmdb
 
-3. Add role-based access control (RBAC) for PSMDB is configured with
-   the ``deploy/rbac.yaml`` file. RBAC is
-   based on clearly defined roles and corresponding allowed actions. These actions are allowed on specific Kubernetes resources. The details
-   about users and roles can be found in `OpenShift
-   documentation <https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html>`_.
+3. Add role-based access control (RBAC) for Percona Server for MongoDB is
+   configured with the ``deploy/rbac.yaml`` file. RBAC is
+   based on clearly defined roles and corresponding allowed actions. These
+   actions are allowed on specific Kubernetes resources. The details about users
+   and roles can be found in `OpenShift documentation <https://docs.openshift.com/enterprise/3.0/architecture/additional_concepts/authorization.html>`_.
 
    .. code:: bash
 
@@ -103,7 +104,7 @@ Install Percona server for MongoDB on OpenShift
            platform: openshift
          ...
 
-   b (optional). In you're using minishift, please adjust antiaffinity policy to ``none``
+   b. (optional) In you're using minishift, please adjust antiaffinity policy to ``none``
 
        .. code:: yaml
 
@@ -134,4 +135,4 @@ Install Percona server for MongoDB on OpenShift
    .. code:: bash
 
       $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
-      percona-client:/$ mongo "mongodb+srv://userAdmin:userAdmin123456@my-cluster-name-rs0.psmdb.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+      percona-client:/$ mongo "mongodb://userAdmin:userAdmin123456@my-cluster-name-mongos.psmdb.svc.cluster.local/admin?ssl=false"

@@ -12,12 +12,12 @@ accessing the database.
    point for client applications,
    
    .. image:: ./assets/images/mongos_espose.png
-      :alt: PSMDB Operator, sharding on
+      :alt: Percona Server for MongoDB Operator, sharding on
 #. If :ref`sharding` mode is turned **off**, the application needs access to all
    MongoDB Pods of the replica set:
 
    .. image:: assets/images/mongod_espose.png
-      :alt: PSMDB Operator, sharding off
+      :alt: Percona Server for MongoDB Operator, sharding off
 
 You can find more on sharding in the `official MongoDB documentation <https://docs.mongodb.com/manual/reference/glossary/#term-sharding>`_.
 
