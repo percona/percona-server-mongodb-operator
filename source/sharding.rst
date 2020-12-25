@@ -35,9 +35,9 @@ To enable sharding, set the ``sharding.enabled`` key to ``true`` (this will turn
 existing MongoDB replica set nodes into sharded ones). To disable sharding, set
 the ``sharding.enabled`` key to ``false``.
 
-When the sharding is turned on, the Operator runs replica sets with config
-servers and mongos instances. Their numbers are controlled by 
-``configsvrReplSet.size`` and ``mongos.size`` keys respectively.
+When sharding is turned on, the Operator runs replica sets with config
+servers and mongos instances. Their number is controlled by 
+``configsvrReplSet.size`` and ``mongos.size`` keys, respectively.
 
 .. note:: Config servers for now can properly work only with WiredTiger engine,
    and sharded MongoDB nodes can use either WiredTiger or InMemory one.
@@ -51,7 +51,7 @@ processes of your replica set.
 
 1. Run percona-client and connect its console output to your terminal (running
    it may require some time to deploy the corresponding Pod): 
-   
+
    .. code:: bash
 
       kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
@@ -61,9 +61,10 @@ processes of your replica set.
    default Secrets object you are interested in has ``my-cluster-name-secrets``
    name). Then ``kubectl get secret my-cluster-name-secrets -o yaml`` will return
    the YAML file with generated secrets, including the ``MONGODB_USER_ADMIN``
-   and ``MONGODB_USER_ADMIN_PASSWORD`` strings, which should look as follows:
+   and ``MONGODB_USER_ADMIN_PASSWORD`` strings:
 
    .. code:: yaml
+
       ...
       data:
         ...
@@ -77,18 +78,18 @@ processes of your replica set.
 3. Now run ``mongo`` tool in the percona-client command shell using the login
    (which is normally ``userAdmin``) and password obtained from the secret.
 
-   a. If sharding is turned on, the command will look as follows (with your
-      database cluster namespace instead of the ``<namespace name>``
-      placeholder).
+   - If sharding is turned on, the command will look as follows (with your
+     database cluster namespace instead of the ``<namespace name>``
+     placeholder).
    
-      .. code:: bash
+     .. code:: bash
 
-         mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
+        mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
 
-   b. If sharding is turned off, the command will look as follows (with your
-      database cluster namespace instead of the ``<namespace name>``
-      placeholder).
+   - If sharding is turned off, the command will look as follows (with your
+     database cluster namespace instead of the ``<namespace name>``
+     placeholder).
    
-      .. code:: bash
+     .. code:: bash
 
-         mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.<namespace name>.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+        mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.<namespace name>.svc.cluster.local/admin?replicaSet=rs0&ssl=false"

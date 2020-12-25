@@ -1,19 +1,17 @@
 Install Percona server for MongoDB on Kubernetes
 ================================================
 
-0. Clone the percona-server-mongodb-operator repository:
+#. Clone the percona-server-mongodb-operator repository:
 
    .. code:: bash
 
       git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
-   .. note::
-
-      It is crucial to specify the right branch with ``-b``
+   .. note:: It is crucial to specify the right branch with ``-b``
       option while cloning the code on this step. Please be careful.
 
-1. The Custom Resource Definition for Percona Server for MongoDB should be
+#. The Custom Resource Definition for Percona Server for MongoDB should be
    created from the ``deploy/crd.yaml`` file. The Custom Resource Definition
    extends the standard set of resources which Kubernetes “knows” about with the
    new items, in our case these items are the core of the operator.
@@ -25,7 +23,7 @@ Install Percona server for MongoDB on Kubernetes
    This step should be done only once; the step does not need to be repeated
    with any other Operator deployments.
 
-2. Create a namespace and set the context for the namespace. The resource names
+#. Create a namespace and set the context for the namespace. The resource names
    must be unique within the namespace and provide a way to divide cluster
    resources between users spread across multiple projects.
 
@@ -41,7 +39,7 @@ Install Percona server for MongoDB on Kubernetes
    At success, you will see the message that namespace/<namespace name> was
    created, and the context was modified.
 
-3. The role-based access control (RBAC) for Percona Server for MongoDB is
+#. The role-based access control (RBAC) for Percona Server for MongoDB is
    configured with the ``deploy/rbac.yaml`` file. Role-based access is based on
    defined roles and the available actions which correspond to each role. The
    role and actions are defined for Kubernetes resources in the yaml file.
@@ -51,21 +49,19 @@ Install Percona server for MongoDB on Kubernetes
 
       $ kubectl apply -f deploy/rbac.yaml
 
-   .. note::
-
-      Setting RBAC requires your user to have cluster-admin role
+   .. note:: Setting RBAC requires your user to have cluster-admin role
       privileges. For example, those using Google Kubernetes Engine can
       grant user needed privileges with the following command::
 
          $ kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=$(gcloud config get-value core/account)
 
-4. Start the operator within Kubernetes:
+#. Start the operator within Kubernetes:
 
    .. code:: bash
 
       $ kubectl apply -f deploy/operator.yaml
 
-5. Add the MongoDB Users secrets to Kubernetes. These secrets
+#. Add the MongoDB Users secrets to Kubernetes. These secrets
    should be placed as plain text in the stringData section of the
    ``deploy/secrets.yaml`` file as login name and
    passwords for the user accounts (see `Kubernetes
@@ -81,12 +77,12 @@ Install Percona server for MongoDB on Kubernetes
 
    More details about secrets can be found in :ref:`users`.
 
-6. Now certificates should be generated. By default, the Operator generates
+#. Now certificates should be generated. By default, the Operator generates
    certificates automatically, and no actions are required at this step. Still,
    you can generate and apply your own certificates as secrets according
    to the :ref:`TLS instructions <tls>`.
 
-7. After the operator is started, Percona Server for MongoDB cluster can
+#. After the operator is started, Percona Server for MongoDB cluster can
    be created with the following command:
 
    .. code:: bash
@@ -105,7 +101,7 @@ Install Percona server for MongoDB on Kubernetes
       my-cluster-name-rs0-2                              1/1     Running   0          7m
       percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
 
-8. Check connectivity to newly created cluster, using the login (which is
+#. Check connectivity to newly created cluster, using the login (which is
    ``userAdmin``) and corresponding password from the secret:
 
    .. code:: bash
