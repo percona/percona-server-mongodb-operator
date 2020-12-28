@@ -166,6 +166,25 @@ func IsBalancerRunning(ctx context.Context, client *mongo.Client) (bool, error) 
 	return res.Mode == "full", nil
 }
 
+func ListDBs(ctx context.Context, client *mongo.Client) (DBList, error) {
+	dbList := DBList{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "listDatabases", Value: 1}})
+	if resp.Err() != nil {
+		return dbList, errors.Wrap(resp.Err(), "listDatabases")
+	}
+
+	if err := resp.Decode(&dbList); err != nil {
+		return dbList, errors.Wrap(err, "failed to decode db list")
+	}
+
+	if dbList.OK != 1 {
+		return dbList, errors.Errorf("mongo says: %s", dbList.Errmsg)
+	}
+
+	return dbList, nil
+}
+
 func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
 	shardList := ShardList{}
 

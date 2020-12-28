@@ -45,7 +45,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
 	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	session, err := r.mongoClient(cr, replset, pods, username, password)
+	session, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, pods, username, password)
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
@@ -128,7 +128,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			break
 		}
 
-		host, err := psmdb.MongoHost(r.client, cr, replset, pod)
+		host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return clusterError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -209,15 +209,15 @@ func inShard(client *mgo.Client, podName string) (bool, error) {
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList,
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods corev1.PodList,
 	username, password string) (*mgo.Client, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replSet, pods.Items)
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, rsName, rsExposed, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
 	conf := &mongo.Config{
-		ReplSetName: replSet.Name,
+		ReplSetName: rsName,
 		Hosts:       rsAddrs,
 		Username:    username,
 		Password:    password,
@@ -304,6 +304,80 @@ const (
 	`
 )
 
+func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
+	podList, err := r.getMongosPods(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get mongos pods")
+	}
+
+	rspods, err := r.getRSPods(cr, rsName)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get rs %s pods", rsName)
+	}
+
+	mongosPod := podList.Items[0]
+	rspod := rspods.Items[0]
+
+	var reOK = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
+	var reState = regexp.MustCompile(`(?m)"state"\s*:\s*"completed",`)
+	// var reChunks = regexp.MustCompile(`(?m)"chunks"\s*:\s*NumberLong\((?P<chunk>\d+)\),`)
+	// var reJumboChunks = regexp.MustCompile(`(?m)"jumboChunks"\s*:\s*NumberLong\((?P<jumbo>\d+)\),`)
+
+	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
+		return errors.New("rsPod is not redy")
+	}
+	if !isContainerAndPodRunning(mongosPod, "mongos") || !isPodReady(mongosPod) {
+		return errors.New("mongos pod is not ready")
+	}
+
+	for {
+		cmd := []string{
+			"sh", "-c",
+			fmt.Sprintf(
+				`
+				cat <<-EOF | mongo "mongodb://${MONGODB_CLUSTER_ADMIN_USER}:${MONGODB_CLUSTER_ADMIN_PASSWORD}@localhost"
+				db.adminCommand( { removeShard: "%s" } )
+				EOF
+			`, rsName),
+		}
+
+		var errb, outb bytes.Buffer
+		err = r.clientcmd.Exec(&mongosPod, "mongos", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec sh.removeShard: %v / %s / %s", err, outb.String(), errb.String())
+		}
+
+		if !reOK.Match(outb.Bytes()) {
+			return errors.Errorf("failed to remove shard: %s", outb.String())
+		}
+
+		log.Info("DEBUG: " + outb.String())
+
+		if reState.Match(outb.Bytes()) {
+			return nil
+		}
+
+		// result := make(map[string]string)
+
+		// chunkMatch := reChunks.FindStringSubmatch(outb.String())
+		// jumboChunkMatch := reJumboChunks.FindStringSubmatch(outb.String())
+
+		// for i, name := range reChunks.SubexpNames() {
+		// 	if i != 0 && name != "" {
+		// 		result[name] = chunkMatch[i]
+		// 	}
+		// }
+		// for i, name := range reJumboChunks.SubexpNames() {
+		// 	if i != 0 && name != "" {
+		// 		result[name] = jumboChunkMatch[i]
+		// 	}
+		// }
+
+		log.Info("waiting for draining to complete")
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPod corev1.Pod) error {
 
@@ -334,7 +408,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 	}
 
 	if !re.Match(outb.Bytes()) {
-		return errors.New("failed to add shard")
+		return errors.Errorf("failed to add shard: %s", outb.String())
 	}
 
 	return nil
@@ -353,7 +427,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(r.client, m, replset, pod)
+		host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}

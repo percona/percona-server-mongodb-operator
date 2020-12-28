@@ -367,7 +367,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServer
 		if err != nil {
 			return "", errors.Wrap(err, "list psmdb pods")
 		}
-		addrs, err := psmdb.GetReplsetAddrs(r.client, cr, rs, list.Items)
+		addrs, err := psmdb.GetReplsetAddrs(r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
 		if err != nil {
 			return "", err
 		}

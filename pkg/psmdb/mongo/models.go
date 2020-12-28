@@ -82,6 +82,13 @@ type BalancerStatus struct {
 	OKResponse `bson:",inline"`
 }
 
+type DBList struct {
+	DBs []struct {
+		Name string `json:"name"`
+	} `json:"databases"`
+	OKResponse `bson:",inline"`
+}
+
 type ShardList struct {
 	Shards []struct {
 		ID    string `json:"_id"`
