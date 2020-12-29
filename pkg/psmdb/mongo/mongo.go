@@ -204,6 +204,25 @@ func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
 	return shardList, nil
 }
 
+func RemoveShard(ctx context.Context, client *mongo.Client, shard string) (ShardRemoveResp, error) {
+	removeResp := ShardRemoveResp{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "removeShard", Value: shard}})
+	if resp.Err() != nil {
+		return removeResp, errors.Wrap(resp.Err(), "remove shard")
+	}
+
+	if err := resp.Decode(&removeResp); err != nil {
+		return removeResp, errors.Wrap(err, "failed to decode shard list")
+	}
+
+	if removeResp.OK != 1 {
+		return removeResp, errors.Errorf("mongo says: %s", removeResp.Errmsg)
+	}
+
+	return removeResp, nil
+}
+
 func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {
 	bi := BuildInfo{}
 

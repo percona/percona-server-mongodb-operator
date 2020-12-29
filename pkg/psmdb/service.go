@@ -220,6 +220,7 @@ func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, err
 		return "", fmt.Errorf("get service hostname: %v", err)
 	}
 
+
 	return hostname.String(), nil
 }
 

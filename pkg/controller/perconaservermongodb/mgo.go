@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -78,16 +77,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 {
 
-		conf := mongo.Config{
-			Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-				":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
-			Username: username,
-			Password: password,
-		}
-
-		mongosSession, err := mongo.Dial(&conf)
+		mongosSession, err := r.mongosConnection(cr, username, password)
 		if err != nil {
-			return clusterError, errors.Wrap(err, "failed to connect to mongos")
+			return clusterError, errors.Wrap(err, "failed to get mongos connection")
 		}
 
 		defer func() {
@@ -304,77 +296,36 @@ const (
 	`
 )
 
-func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
-	podList, err := r.getMongosPods(cr)
+func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, secret *corev1.Secret, rsName string) error {
+	username := string(secret.Data[envMongoDBClusterAdminUser])
+	password := string(secret.Data[envMongoDBClusterAdminPassword])
+	cli, err := r.mongosConnection(cr, username, password)
 	if err != nil {
-		return errors.Wrap(err, "failed to get mongos pods")
+		return errors.Errorf("failed to get mongos connection: %v", err)
 	}
 
-	rspods, err := r.getRSPods(cr, rsName)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get rs %s pods", rsName)
-	}
-
-	mongosPod := podList.Items[0]
-	rspod := rspods.Items[0]
-
-	var reOK = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
-	var reState = regexp.MustCompile(`(?m)"state"\s*:\s*"completed",`)
-	// var reChunks = regexp.MustCompile(`(?m)"chunks"\s*:\s*NumberLong\((?P<chunk>\d+)\),`)
-	// var reJumboChunks = regexp.MustCompile(`(?m)"jumboChunks"\s*:\s*NumberLong\((?P<jumbo>\d+)\),`)
-
-	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
-		return errors.New("rsPod is not redy")
-	}
-	if !isContainerAndPodRunning(mongosPod, "mongos") || !isPodReady(mongosPod) {
-		return errors.New("mongos pod is not ready")
-	}
+	defer func() {
+		err := cli.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongos connection")
+		}
+	}()
 
 	for {
-		cmd := []string{
-			"sh", "-c",
-			fmt.Sprintf(
-				`
-				cat <<-EOF | mongo "mongodb://${MONGODB_CLUSTER_ADMIN_USER}:${MONGODB_CLUSTER_ADMIN_PASSWORD}@localhost"
-				db.adminCommand( { removeShard: "%s" } )
-				EOF
-			`, rsName),
-		}
-
-		var errb, outb bytes.Buffer
-		err = r.clientcmd.Exec(&mongosPod, "mongos", cmd, nil, &outb, &errb, false)
+		resp, err := mongo.RemoveShard(context.Background(), cli, rsName)
 		if err != nil {
-			return fmt.Errorf("exec sh.removeShard: %v / %s / %s", err, outb.String(), errb.String())
+			return errors.Wrap(err, "remove shard")
 		}
 
-		if !reOK.Match(outb.Bytes()) {
-			return errors.Errorf("failed to remove shard: %s", outb.String())
-		}
-
-		log.Info("DEBUG: " + outb.String())
-
-		if reState.Match(outb.Bytes()) {
+		if resp.State == mongo.ShardRemoveCompleted {
+			log.Info(resp.Msg, "shard", rsName)
 			return nil
 		}
 
-		// result := make(map[string]string)
+		log.Info(resp.Msg, "shard", rsName,
+			"chunk remaining", resp.Remaining.Chunks, "jumbo chunks remaining", resp.Remaining.JumboChunks)
 
-		// chunkMatch := reChunks.FindStringSubmatch(outb.String())
-		// jumboChunkMatch := reJumboChunks.FindStringSubmatch(outb.String())
-
-		// for i, name := range reChunks.SubexpNames() {
-		// 	if i != 0 && name != "" {
-		// 		result[name] = chunkMatch[i]
-		// 	}
-		// }
-		// for i, name := range reJumboChunks.SubexpNames() {
-		// 	if i != 0 && name != "" {
-		// 		result[name] = jumboChunkMatch[i]
-		// 	}
-		// }
-
-		log.Info("waiting for draining to complete")
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
 

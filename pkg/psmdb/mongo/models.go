@@ -98,6 +98,18 @@ type ShardList struct {
 	OKResponse `bson:",inline"`
 }
 
+const ShardRemoveCompleted string = "completed"
+
+type ShardRemoveResp struct {
+	Msg       string `json:"msg" bson:"msg"`
+	State     string `json:"state" bson:"state"`
+	Remaining struct {
+		Chunks      int `json:"chunks" bson:"chunks"`
+		JumboChunks int `json:"jumboChunks" bson:"jumboChunks"`
+	} `json:"remaining" bson:"remaining"`
+	OKResponse `bson:",inline"`
+}
+
 type Status struct {
 	Set                     string         `bson:"set" json:"set"`
 	Date                    time.Time      `bson:"date" json:"date"`

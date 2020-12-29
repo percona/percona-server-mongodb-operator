@@ -258,7 +258,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	for _, v := range removed {
-		log.Info("DEBUG: removed", "name", v.Name)
 		rsName := v.Labels["app.kubernetes.io/replset"]
 
 		err := r.checkIfPossibleToRemove(cr, secrets, rsName)
@@ -266,7 +265,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, errors.Wrapf(err, "failed to check remove posibility for rs %s", rsName)
 		}
 
-		err = r.removeRSFromShard(cr, rsName)
+		err = r.removeRSFromShard(cr, secrets, rsName)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
 		}
@@ -497,7 +496,6 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 			continue
 		}
 
-		log.Info("DEBUG: sfs", "sfs", v.Name)
 		if _, ok := appliedRSNames[v.Name]; !ok {
 			removed = append(removed, v)
 		}
@@ -556,7 +554,6 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 	}
 
 	for _, db := range list.DBs {
-		log.Info("DEBUG: DB NAME", "name", db.Name)
 		if _, ok := systemDBs[db.Name]; !ok {
 			return errors.Errorf("non system db found: %s", db)
 		}
