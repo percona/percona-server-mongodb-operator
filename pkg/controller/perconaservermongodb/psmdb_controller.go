@@ -262,7 +262,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		err := r.checkIfPossibleToRemove(cr, secrets, rsName)
 		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "failed to check remove posibility for rs %s", rsName)
+			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
 
 		err = r.removeRSFromShard(cr, secrets, rsName)
