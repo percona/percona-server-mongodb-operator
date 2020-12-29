@@ -504,31 +504,14 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 	return removed, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret,
-	rsName string) error {
-
+func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret, rsName string) error {
 	systemDBs := map[string]struct{}{
 		"local": {},
 		"admin": {},
 		"test":  {},
 	}
 
-	matchLabels := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/replset":    rsName,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-
-	pods := corev1.PodList{}
-	err := r.client.List(context.TODO(),
-		&pods,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(matchLabels),
-		},
-	)
+	pods, err := r.getRSPods(cr, rsName)
 	if err != nil {
 		return errors.Wrapf(err, "get pods list for replset %s", rsName)
 	}
