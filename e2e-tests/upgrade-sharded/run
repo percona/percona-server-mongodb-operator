@@ -26,15 +26,11 @@ INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator
 if [[ "${INIT_OPERATOR_VER}" == "${TARGET_OPERATOR_VER}" ]]; then
     INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator | jq -r '.versions[].operator' | sort -V | tail -n2 | head -n1)
 fi
-# TODO: REMOVE NEXT LINE AND UNCOMMENT ONE BELOW IT AFTER 1.6.0 RELEASE !!!
-GIT_TAG="master"
-#GIT_TAG="v${INIT_OPERATOR_VER}"
+GIT_TAG="v${INIT_OPERATOR_VER}"
 INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
 OPERATOR_NAME='percona-server-mongodb-operator'
 API="psmdb.percona.com/v${INIT_OPERATOR_VER//./-}"
-# TODO: REMOVE NEXT LINE AND UNCOMMENT ONE BELOW IT AFTER 1.6.0 RELEASE !!!
-IMAGE="${TARGET_IMAGE}"
-#IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
+IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
 # we use the starting image from the same repo so we don't need to use initImage option
 if [[ "$(echo ${TARGET_IMAGE}|cut -d'/' -f1)" == "perconalab" ]]; then
     IMAGE="${IMAGE/percona\//perconalab\/}"

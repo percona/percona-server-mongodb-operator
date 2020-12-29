@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 1
+  generation: 7
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: upgrade-sharded
+    app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: upgrade-sharded-rs0
+  name: some-name-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: upgrade-sharded
+      name: some-name
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -21,35 +21,23 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: upgrade-sharded
+      app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: upgrade-sharded-rs0
+  serviceName: some-name-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: upgrade-sharded
+        app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
         app.kubernetes.io/replset: rs0
     spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app.kubernetes.io/component: mongod
-                  app.kubernetes.io/instance: upgrade-sharded
-                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
-                  app.kubernetes.io/name: percona-server-mongodb
-                  app.kubernetes.io/part-of: percona-server-mongodb
-                  app.kubernetes.io/replset: rs0
-              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
@@ -62,13 +50,11 @@ spec:
             - --sslAllowInvalidCertificates
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
-            - --shardsvr
             - --slowms=100
             - --profile=1
-            - --rateLimit=100
+            - --rateLimit=1
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-            - --encryptionCipherMode=AES256-CBC
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerCollectionBlockCompressor=snappy
             - --wiredTigerJournalCompressor=snappy
@@ -83,14 +69,14 @@ spec:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: upgrade-sharded
+              value: some-name
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: internal-upgrade-sharded-users
+                name: internal-some-name-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -121,11 +107,11 @@ spec:
             timeoutSeconds: 2
           resources:
             limits:
-              cpu: 300m
+              cpu: 500m
               memory: 500M
             requests:
-              cpu: 300m
-              memory: 500M
+              cpu: 100m
+              memory: 100M
           securityContext:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
@@ -134,7 +120,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: upgrade-sharded-mongodb-keyfile
+              name: some-name-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -143,7 +129,7 @@ spec:
               name: ssl-internal
               readOnly: true
             - mountPath: /etc/mongodb-encryption
-              name: my-cluster-name-mongodb-encryption-key
+              name: some-name-mongodb-encryption-key
               readOnly: true
           workingDir: /data/db
       dnsPolicy: ClusterFirst
@@ -154,11 +140,11 @@ spec:
           name: mongo-init
           resources:
             limits:
-              cpu: 300m
+              cpu: 500m
               memory: 500M
             requests:
-              cpu: 300m
-              memory: 500M
+              cpu: 100m
+              memory: 100M
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -167,30 +153,34 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
+      serviceAccount: default
+      serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: upgrade-sharded-mongodb-keyfile
+        - name: some-name-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: upgrade-sharded-mongodb-keyfile
-        - name: my-cluster-name-mongodb-encryption-key
+            secretName: some-name-mongodb-keyfile
+        - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: my-cluster-name-mongodb-encryption-key
+            secretName: some-name-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: upgrade-sharded-ssl
+            secretName: some-name-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: upgrade-sharded-ssl-internal
+            secretName: some-name-ssl-internal
   updateStrategy:
-    type: OnDelete
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
   volumeClaimTemplates:
     - metadata:
         name: mongod-data
@@ -199,6 +189,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 3Gi
+            storage: 1Gi
       status:
         phase: Pending

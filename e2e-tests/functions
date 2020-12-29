@@ -5,7 +5,7 @@ BASH_XTRACEFD="5"
 
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-API="psmdb.percona.com/v1-6-0"
+API="psmdb.percona.com/v1-7-0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:master-mongod4.2"}
@@ -106,7 +106,7 @@ wait_backup_agent() {
     set +o xtrace
     retry=0
     echo -n $agent_pod
-    until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
+    until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
         sleep 5
         echo -n .
         let retry+=1
@@ -372,6 +372,7 @@ compare_kubectl() {
         | yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
         | yq d - 'spec.volumeClaimTemplates.*.kind' \
         | $sed "s/${namespace}/NAME_SPACE/g" \
+        | $sed "s#^apiVersion: extensions/v1beta1#apiVersion: apps/v1#" \
         > ${new_result}
 
     diff -u "$expected_result" "$new_result"

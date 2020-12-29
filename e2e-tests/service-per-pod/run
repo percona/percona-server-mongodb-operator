@@ -27,11 +27,12 @@ check_cr_config() {
         'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
         "userAdmin:userAdmin123456@$URI" \
         "mongodb" ":27017"
-    sleep 2
+    sleep 10
     run_mongo \
         'use myApp\n db.test.insert({ x: 100500 })' \
         "myApp:myPass@$URI" \
         "mongodb" ":27017"
+    sleep 10
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
     compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
