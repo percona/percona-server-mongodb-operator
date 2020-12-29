@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -56,25 +57,37 @@ func (cnf *Config) configureSSLDialInfo() error {
 		InsecureSkipVerify: cnf.SSL.Insecure,
 	}
 	if len(cnf.SSL.PEMKeyFile) > 0 {
-		log.Debugf("Loading SSL/TLS PEM certificate: %s", cnf.SSL.PEMKeyFile)
-		certificates, err := tls.LoadX509KeyPair(cnf.SSL.PEMKeyFile, cnf.SSL.PEMKeyFile)
+		ok, err := isFileExists(cnf.SSL.PEMKeyFile)
 		if err != nil {
-			return fmt.Errorf(
-				"Cannot load key pair from '%s' to connect to server '%s'. Got: %v",
-				cnf.SSL.PEMKeyFile,
-				cnf.DialInfo.Addrs,
-				err,
-			)
+			return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.PEMKeyFile, err)
 		}
-		config.Certificates = []tls.Certificate{certificates}
+		if ok {
+			log.Debugf("Loading SSL/TLS PEM certificate: %s", cnf.SSL.PEMKeyFile)
+			certificates, err := tls.LoadX509KeyPair(cnf.SSL.PEMKeyFile, cnf.SSL.PEMKeyFile)
+			if err != nil {
+				return fmt.Errorf(
+					"Cannot load key pair from '%s' to connect to server '%s'. Got: %v",
+					cnf.SSL.PEMKeyFile,
+					cnf.DialInfo.Addrs,
+					err,
+				)
+			}
+			config.Certificates = []tls.Certificate{certificates}
+		}
 	}
 	if len(cnf.SSL.CAFile) > 0 {
-		log.Debugf("Loading SSL/TLS Certificate Authority: %s", cnf.SSL.CAFile)
-		ca, err := cnf.SSL.loadCaCertificate()
+		ok, err := isFileExists(cnf.SSL.PEMKeyFile)
 		if err != nil {
-			return fmt.Errorf("Couldn't load client CAs from %s. Got: %s", cnf.SSL.CAFile, err)
+			return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.PEMKeyFile, err)
 		}
-		config.RootCAs = ca
+		if ok {
+			log.Debugf("Loading SSL/TLS Certificate Authority: %s", cnf.SSL.CAFile)
+			ca, err := cnf.SSL.loadCaCertificate()
+			if err != nil {
+				return fmt.Errorf("Couldn't load client CAs from %s. Got: %s", cnf.SSL.CAFile, err)
+			}
+			config.RootCAs = ca
+		}
 	}
 	cnf.DialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
 		conn, err := tls.Dial("tcp", addr.String(), config)
@@ -124,4 +137,14 @@ func validateConnection(conn *tls.Conn, tlsConfig *tls.Config, dnsName string) e
 	}
 
 	return nil
+}
+
+func isFileExists(name string) (bool, error) {
+	_, err := os.Stat(name)
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
 }
