@@ -186,11 +186,11 @@ func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 }
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
-func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) ([]string, error) {
+func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
-		host, err := MongoHost(cl, m, replset, pod)
+		host, err := MongoHost(cl, m, rsName, rsExposed, pod)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
 		}
@@ -201,12 +201,12 @@ func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, replset *api
 }
 
 // MongoHost returns the mongo host for given pod
-func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) (string, error) {
-	if replset.Expose.Enabled {
+func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
+	if rsExposed {
 		return getExtAddr(cl, m.Namespace, pod)
 	}
 
-	return GetAddr(m, pod.Name, replset.Name), nil
+	return GetAddr(m, pod.Name, rsName), nil
 }
 
 func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
@@ -219,6 +219,7 @@ func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, err
 	if err != nil {
 		return "", fmt.Errorf("get service hostname: %v", err)
 	}
+
 
 	return hostname.String(), nil
 }

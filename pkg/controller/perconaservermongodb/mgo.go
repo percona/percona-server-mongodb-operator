@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -45,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
 	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	session, err := r.mongoClient(cr, replset, pods, username, password)
+	session, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, pods, username, password)
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
@@ -78,16 +77,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 {
 
-		conf := mongo.Config{
-			Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-				":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
-			Username: username,
-			Password: password,
-		}
-
-		mongosSession, err := mongo.Dial(&conf)
+		mongosSession, err := r.mongosConnection(cr, username, password)
 		if err != nil {
-			return clusterError, errors.Wrap(err, "failed to connect to mongos")
+			return clusterError, errors.Wrap(err, "failed to get mongos connection")
 		}
 
 		defer func() {
@@ -128,7 +120,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			break
 		}
 
-		host, err := psmdb.MongoHost(r.client, cr, replset, pod)
+		host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return clusterError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -209,15 +201,15 @@ func inShard(client *mgo.Client, podName string) (bool, error) {
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, replSet *api.ReplsetSpec, pods corev1.PodList,
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods corev1.PodList,
 	username, password string) (*mgo.Client, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, replSet, pods.Items)
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, rsName, rsExposed, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
 	conf := &mongo.Config{
-		ReplSetName: replSet.Name,
+		ReplSetName: rsName,
 		Hosts:       rsAddrs,
 		Username:    username,
 		Password:    password,
@@ -304,6 +296,39 @@ const (
 	`
 )
 
+func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, secret *corev1.Secret, rsName string) error {
+	username := string(secret.Data[envMongoDBClusterAdminUser])
+	password := string(secret.Data[envMongoDBClusterAdminPassword])
+	cli, err := r.mongosConnection(cr, username, password)
+	if err != nil {
+		return errors.Errorf("failed to get mongos connection: %v", err)
+	}
+
+	defer func() {
+		err := cli.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongos connection")
+		}
+	}()
+
+	for {
+		resp, err := mongo.RemoveShard(context.Background(), cli, rsName)
+		if err != nil {
+			return errors.Wrap(err, "remove shard")
+		}
+
+		if resp.State == mongo.ShardRemoveCompleted {
+			log.Info(resp.Msg, "shard", rsName)
+			return nil
+		}
+
+		log.Info(resp.Msg, "shard", rsName,
+			"chunk remaining", resp.Remaining.Chunks, "jumbo chunks remaining", resp.Remaining.JumboChunks)
+
+		time.Sleep(10 * time.Second)
+	}
+}
+
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPod corev1.Pod) error {
 
@@ -334,7 +359,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 	}
 
 	if !re.Match(outb.Bytes()) {
-		return errors.New("failed to add shard")
+		return errors.Errorf("failed to add shard: %s", outb.String())
 	}
 
 	return nil
@@ -353,7 +378,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(r.client, m, replset, pod)
+		host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}

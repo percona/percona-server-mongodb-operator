@@ -166,6 +166,25 @@ func IsBalancerRunning(ctx context.Context, client *mongo.Client) (bool, error) 
 	return res.Mode == "full", nil
 }
 
+func ListDBs(ctx context.Context, client *mongo.Client) (DBList, error) {
+	dbList := DBList{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "listDatabases", Value: 1}})
+	if resp.Err() != nil {
+		return dbList, errors.Wrap(resp.Err(), "listDatabases")
+	}
+
+	if err := resp.Decode(&dbList); err != nil {
+		return dbList, errors.Wrap(err, "failed to decode db list")
+	}
+
+	if dbList.OK != 1 {
+		return dbList, errors.Errorf("mongo says: %s", dbList.Errmsg)
+	}
+
+	return dbList, nil
+}
+
 func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
 	shardList := ShardList{}
 
@@ -183,6 +202,25 @@ func ListShard(ctx context.Context, client *mongo.Client) (ShardList, error) {
 	}
 
 	return shardList, nil
+}
+
+func RemoveShard(ctx context.Context, client *mongo.Client, shard string) (ShardRemoveResp, error) {
+	removeResp := ShardRemoveResp{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "removeShard", Value: shard}})
+	if resp.Err() != nil {
+		return removeResp, errors.Wrap(resp.Err(), "remove shard")
+	}
+
+	if err := resp.Decode(&removeResp); err != nil {
+		return removeResp, errors.Wrap(err, "failed to decode shard list")
+	}
+
+	if removeResp.OK != 1 {
+		return removeResp, errors.Errorf("mongo says: %s", removeResp.Errmsg)
+	}
+
+	return removeResp, nil
 }
 
 func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {

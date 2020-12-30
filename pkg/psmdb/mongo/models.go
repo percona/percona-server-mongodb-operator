@@ -82,12 +82,31 @@ type BalancerStatus struct {
 	OKResponse `bson:",inline"`
 }
 
+type DBList struct {
+	DBs []struct {
+		Name string `json:"name"`
+	} `json:"databases"`
+	OKResponse `bson:",inline"`
+}
+
 type ShardList struct {
 	Shards []struct {
 		ID    string `json:"_id"`
 		Host  string `json:"host"`
 		State int    `json:"state"`
 	} `json:"shards"`
+	OKResponse `bson:",inline"`
+}
+
+const ShardRemoveCompleted string = "completed"
+
+type ShardRemoveResp struct {
+	Msg       string `json:"msg" bson:"msg"`
+	State     string `json:"state" bson:"state"`
+	Remaining struct {
+		Chunks      int `json:"chunks" bson:"chunks"`
+		JumboChunks int `json:"jumboChunks" bson:"jumboChunks"`
+	} `json:"remaining" bson:"remaining"`
 	OKResponse `bson:",inline"`
 }
 

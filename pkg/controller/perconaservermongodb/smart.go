@@ -93,7 +93,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	client, err := r.mongoClient(cr, replset, list, username, password)
+	client, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, list, username, password)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}
