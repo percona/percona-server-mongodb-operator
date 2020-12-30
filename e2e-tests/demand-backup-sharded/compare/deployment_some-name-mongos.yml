@@ -77,6 +77,12 @@ spec:
                 - liveness
                 - --component
                 - mongos
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 4
             initialDelaySeconds: 60
             periodSeconds: 30
@@ -95,6 +101,12 @@ spec:
                 - readiness
                 - --component
                 - mongos
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 3
             initialDelaySeconds: 10
             periodSeconds: 1
