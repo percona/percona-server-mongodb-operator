@@ -1,6 +1,6 @@
 # Percona Server for MongoDB Operator
 
-[![Build Status](https://travis-ci.org/percona/percona-server-mongodb-operator.svg?branch=master)](https://travis-ci.org/percona/percona-server-mongodb-operator)
+[![Build Status](https://travis-ci.org/percona/percona-server-mongodb-operator.svg?branch=main)](https://travis-ci.org/percona/percona-server-mongodb-operator)
 [![Go Report Card](https://goreportcard.com/badge/github.com/percona/percona-server-mongodb-operator)](https://goreportcard.com/report/github.com/percona/percona-server-mongodb-operator)
 
 A Kubernetes operator for [Percona Server for MongoDB](https://www.percona.com/software/mongo-database/percona-server-for-mongodb) based on the [Operator SDK](https://github.com/operator-framework/operator-sdk).
