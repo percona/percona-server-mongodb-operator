@@ -62,7 +62,6 @@ spec:
             - --sslAllowInvalidCertificates
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
-            - --shardsvr
             - --slowms=100
             - --profile=1
             - --rateLimit=100
