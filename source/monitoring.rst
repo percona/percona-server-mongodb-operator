@@ -31,16 +31,16 @@ Kubernetes-based environment:
 
 #. The PMM client installation is initiated by updating the ``pmm``
    section in the
-   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_
+   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
    file.
 
    -  set ``pmm.enabled=true``
    -  set the ``pmm.serverHost`` key to your PMM Server hostname.
    -  check that  the``PMM_SERVER_USER`` key in the
-      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
+      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/secrets.yaml>`_
       secrets file contains your PMM Server user name (``admin`` by default).
    -  make sure the ``PMM_SERVER_PASSWORD`` key in the
-      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/secrets.yaml>`_
+      `deploy/secrets.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/secrets.yaml>`_
       secrets file contains the password specified for the PMM Server during its
       installation.
       
