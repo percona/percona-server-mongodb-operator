@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: version-service-exact
 spec:
-  image: perconalab/percona-server-mongodb-operator:master-mongod4.0
+  image:
   initImage: #initImage
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
