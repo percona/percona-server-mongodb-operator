@@ -9,7 +9,7 @@ The Operator usually stores Server for MongoDB backups on `Amazon S3 or S3-compa
 
 The Operator allows doing cluster backup in two
 ways. *Scheduled backups* are configured in the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file to be executed automatically in proper time. *On-demand backups*
 can be done manually at any moment. Both ways use the `Percona
 Backup for MongoDB <https://github.com/percona/percona-backup-mongodb>`_ tool.
@@ -51,7 +51,7 @@ appropriate command to create the secret object,
 e.g. ``kubectl apply -f deploy/backup-s3.yaml`` (for Kubernetes).
 
 Backups schedule is defined in the ``backup`` section of the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file. This section contains three subsections:
 
 * ``storages`` contains data needed to access the S3-compatible cloud to store
@@ -109,7 +109,7 @@ Making on-demand backup
 To make on-demand backup, user should use YAML file with correct names
 for the backup and the Percona Server for MongoDB Cluster, and correct PVC
 settings. The example of such file is
-`deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup/backup.yaml>`_.
+`deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/backup.yaml>`_.
 
 When the backup config file is ready, actual backup command is executed:
 
@@ -117,7 +117,7 @@ When the backup config file is ready, actual backup command is executed:
 
    kubectl apply -f deploy/backup/backup.yaml
 
-The example of such file is `deploy/backup/restore.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup/restore.yaml>`_.
+The example of such file is `deploy/backup/restore.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/restore.yaml>`_.
 
 .. note:: Storing backup settings in a separate file can be replaced by
    passing its content to the ``kubectl apply`` command as follows:

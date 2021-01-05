@@ -53,7 +53,7 @@ backups involves following steps:
    and ``some-secret-key`` with the values used on the previous step).
 
 3. Now edit the backup section of the
-   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
+   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
    file to set proper values for the ``bucket`` (the S3 bucket for
    backups created on the previous step), ``region``,
    ``credentialsSecret`` and the ``endpointUrl`` (which should point to
@@ -78,9 +78,9 @@ backups involves following steps:
 
    The option which should be specially mentioned is
    ``credentialsSecret`` which is a `Kubernetes
-   secret <https://kubernetes.io/docs/concepts/configuration/secret/>`__
+   secret <https://kubernetes.io/docs/concepts/configuration/secret/>`_
    for backups. Sample
-   `backup-s3.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/backup-s3.yaml>`__
+   `backup-s3.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup-s3.yaml>`_
    can be used to create this secret object. Check that the object contains the
    proper ``name`` value and is equal to the one specified for
    ``credentialsSecret``, i.e. \ ``my-cluster-name-backup-minio`` in the
@@ -107,11 +107,11 @@ backups involves following steps:
    Don’t forget to specify the name of your cluster instead of the
    ``<cluster-name>`` part of the Backup Coordinator URL (the
    cluster name is specified in the
-   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
+   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
    file). Also substitute ``<storage>`` with the actual
    storage name located in a subsection inside of the
    ``backups`` in the
-   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
+   `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
    file. In the earlier example this value is ``minio``.
 
 5. To restore a previously saved backup you must specify the

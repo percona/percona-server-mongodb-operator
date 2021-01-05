@@ -4,7 +4,7 @@ Custom Resource options
 =======================
 
 The operator is configured via the spec section of the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file. This file contains the following spec sections:
 
 .. list-table::
@@ -108,7 +108,7 @@ file. This file contains the following spec sections:
 `Upgrade Options Section <operator.html#operator-upgradeoptions-section>`_
 --------------------------------------------------------------------------------
 
-The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_ file contains various configuration options to control Percona Server for MongoDB upgrades.
+The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_ file contains various configuration options to control Percona Server for MongoDB upgrades.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -1716,7 +1716,7 @@ This section contains the Mongod configuration options.
 ----------------------------------------------------------
 
 The ``backup`` section in the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`__
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file contains the following configuration options for the regular
 Percona Server for MongoDB backups.
 

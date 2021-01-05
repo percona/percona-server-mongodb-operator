@@ -42,7 +42,7 @@ to each Pod.
 
 This feature can be configured in the ``replsets`` (for MondgoDB instances Pod) 
 and ``sharding`` (for mongos Pod) sections of the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/master/deploy/cr.yaml>`_
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file:
 
 -  set ‘expose.enabled’ option to ‘true’ to allow exposing Pods via
