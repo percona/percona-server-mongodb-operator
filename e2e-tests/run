@@ -34,3 +34,4 @@ fail() {
 "$dir/version-service/run" || fail "version-service"
 "$dir/users/run" || fail "users"
 "$dir/rs-shard-migration/run" || fail "rs-shard-migration"
+"$dir/data-sharded/run" || fail "data-sharded"

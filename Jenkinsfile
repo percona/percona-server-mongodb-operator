@@ -274,6 +274,7 @@ pipeline {
                         runTest('smart-update', 'basic')
                         runTest('version-service', 'basic')
                         runTest('users', 'basic')
+                        runTest('data-sharded', 'basic')
                         ShutdownCluster('basic')
                     }
                 }
