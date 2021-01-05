@@ -1,0 +1,71 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+
+create_namespace "$namespace"
+deploy_operator
+
+desc 'create PSMDB cluster'
+cluster="some-name"
+kubectl_bin apply \
+    -f "$conf_dir/cloud-secret.yml" \
+    -f "$conf_dir/secrets.yml" \
+    -f "$conf_dir/client.yml"
+
+apply_cluster "$test_dir/conf/$cluster.yml"
+desc 'check if all 3 Pods started'
+wait_for_running $cluster-rs0 3
+wait_for_running $cluster-cfg 3 "false"
+
+desc 'create user, enable sharding'
+
+run_mongos \
+    'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+    "userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+sleep 2
+
+run_mongos \
+    'sh.enableSharding("app")' \
+    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+sleep 2
+
+run_mongos \
+    'sh.shardCollection("app.city", { zipcode: 1 } )' \
+    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+sleep 2
+
+desc 'set chunk size to 1 MB'
+run_mongos \
+    "use config\n db.settings.save( { _id:\"chunksize\", value: 1 } )" \
+    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+sleep 2
+
+desc 'write data'
+for i in {1..100}; do
+    run_mongos \
+        "use app\n db.city.insertMany($(cat "${test_dir}/data"))" \
+        "user:pass@$cluster-mongos.$namespace"
+done
+
+sleep 10
+desc 'check chunks'
+shards=0
+for i in "rs0" "rs1" "rs2"; do
+    out=$(run_mongos \
+        "use config\n db.chunks.count({\"ns\" : \"app.city\", \"shard\": \"$i\"})" \
+        "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" |
+        grep "switched to db config" -A 1 | grep -v "switched to db config")
+
+    if [[ "$out" -ne 0 ]]; then
+        ((shards = shards + 1))
+    fi
+done
+
+if [[ "$shards" -eq 0 ]]; then
+    echo "data is only on one shard, maybe sharding is not working"
+    exit 1
+fi
