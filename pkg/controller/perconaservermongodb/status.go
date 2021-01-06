@@ -61,6 +61,9 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	} else {
 		delete(cr.Status.Replsets, api.ConfigReplSetName)
+		for i := range cr.Status.Replsets {
+			cr.Status.Replsets[i].AddedAsShard = nil
+		}
 	}
 
 	for _, rs := range repls {

@@ -100,7 +100,7 @@ type ReplsetStatus struct {
 	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
 
 	Initialized  bool     `json:"initialized,omitempty"`
-	AddedAsShard bool     `json:"added_as_shard,omitempty"`
+	AddedAsShard *bool    `json:"added_as_shard,omitempty"`
 	Size         int32    `json:"size"`
 	Ready        int32    `json:"ready"`
 	Status       AppState `json:"status,omitempty"`
