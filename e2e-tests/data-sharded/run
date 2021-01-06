@@ -69,3 +69,5 @@ if [[ "$shards" -eq 0 ]]; then
     echo "data is only on one shard, maybe sharding is not working"
     exit 1
 fi
+
+destroy "$namespace"

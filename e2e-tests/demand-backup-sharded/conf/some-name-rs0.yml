@@ -112,6 +112,38 @@ spec:
           requests:
             storage: 1Gi
     size: 3
+  - name: rs1
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  - name: rs2
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
   secrets:
     key: some-key
     users: some-users

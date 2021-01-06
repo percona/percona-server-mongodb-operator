@@ -23,9 +23,12 @@ apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
 wait_for_running $cluster-cfg 3 "false"
+sleep 10
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0
+compare_kubectl statefulset/$cluster-rs1
+compare_kubectl statefulset/$cluster-rs2
 compare_kubectl statefulset/$cluster-cfg
 compare_kubectl deployment/$cluster-mongos ""
 
@@ -43,7 +46,12 @@ compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 wait_backup_agent $cluster-rs0-0
 wait_backup_agent $cluster-rs0-1
 wait_backup_agent $cluster-rs0-2
-
+wait_backup_agent $cluster-rs1-0
+wait_backup_agent $cluster-rs1-1
+wait_backup_agent $cluster-rs1-2
+wait_backup_agent $cluster-rs2-0
+wait_backup_agent $cluster-rs2-1
+wait_backup_agent $cluster-rs2-2
 backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
