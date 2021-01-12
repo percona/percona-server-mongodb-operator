@@ -160,6 +160,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 		return nil
 	}
 
+	time.Sleep(10 * time.Second)
 	bcp, err := r.newBackup(cr)
 	if err != nil {
 		return errors.Wrap(err, "create backup object")
