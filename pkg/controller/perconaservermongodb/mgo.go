@@ -104,7 +104,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 			log.Info("added to shard", "rs", replset.Name)
 
-			cr.Status.Replsets[replset.Name].AddedAsShard = true
+			t := true
+			cr.Status.Replsets[replset.Name].AddedAsShard = &t
 		}
 	}
 
