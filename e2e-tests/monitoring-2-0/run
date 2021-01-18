@@ -21,9 +21,9 @@ if [[ -n "${OPENSHIFT}" ]]; then
     platform=openshift
     oc adm policy add-scc-to-user privileged -z percona-server-mongodb-operator
     oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
-    retry 10 60 helm install monitoring --set platform=$platform --set sa=percona-server-mongodb-operator --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-2.12.3.tgz
+    retry 10 60 helm install monitoring --set platform=$platform --set sa=percona-server-mongodb-operator --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-2.12.4.tgz
 else
-    retry 10 60 helm install monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-2.12.3.tgz
+    retry 10 60 helm install monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-2.12.4.tgz
 fi
 sleep 20
 
