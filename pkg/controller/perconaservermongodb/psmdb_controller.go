@@ -218,6 +218,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	err = r.checkFinalizers(cr)
+	if err != nil {
+		reqLogger.Error(err, "failed to run finalizers")
+		return rr, err
+	}
+
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
@@ -465,6 +471,44 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) error {
+	var err error = nil
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		finalizers := []string{}
+		for _, f := range cr.GetFinalizers() {
+			switch f {
+			case "delete-psmdb-pvc":
+				err = r.deleteAllPVC(cr)
+				if err != nil {
+					log.Error(err, "failed to delete PVC")
+					finalizers = append(finalizers, f)
+				}
+			}
+		}
+
+		cr.SetFinalizers(finalizers)
+		err = r.client.Update(context.TODO(), cr)
+	}
+
+	return err
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteAllPVC(cr *api.PerconaServerMongoDB) error {
+	pvcList, err := r.getAllPVCs(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get PVC list")
+	}
+
+	for _, pvc := range pvcList.Items {
+		err := r.client.Delete(context.TODO(), &pvc)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete PVC")
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
