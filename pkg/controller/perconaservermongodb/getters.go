@@ -4,6 +4,7 @@ import (
 	"context"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,6 +34,20 @@ func (r *ReconcilePerconaServerMongoDB) getRSPods(cr *api.PerconaServerMongoDB, 
 	)
 
 	return pods, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+	list := appsv1.StatefulSetList{}
+
+	err := r.client.List(context.TODO(),
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(clusterLabels(cr)),
+		},
+	)
+
+	return list, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getAllPVCs(cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
