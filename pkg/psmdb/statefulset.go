@@ -40,11 +40,17 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
 	}
 
+	customLabels := make(map[string]string, len(ls))
+	for k, v := range ls {
+		customLabels[k] = v
+	}
+
 	for k, v := range multiAZ.Labels {
-		if _, ok := ls[k]; !ok {
-			ls[k] = v
+		if _, ok := customLabels[k]; !ok {
+			customLabels[k] = v
 		}
 	}
+
 	volumes := []corev1.Volume{
 		{
 			Name: ikeyName,
@@ -91,12 +97,12 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels:      ls,
+				Labels:      customLabels,
 				Annotations: multiAZ.Annotations,
 			},
 			Spec: corev1.PodSpec{
 				SecurityContext:    replset.PodSecurityContext,
-				Affinity:           PodAffinity(m, multiAZ.Affinity, ls),
+				Affinity:           PodAffinity(m, multiAZ.Affinity, customLabels),
 				NodeSelector:       multiAZ.NodeSelector,
 				Tolerations:        multiAZ.Tolerations,
 				PriorityClassName:  multiAZ.PriorityClassName,
