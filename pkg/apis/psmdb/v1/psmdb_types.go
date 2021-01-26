@@ -188,6 +188,7 @@ type MultiAZ struct {
 	Annotations         map[string]string        `json:"annotations,omitempty"`
 	Labels              map[string]string        `json:"labels,omitempty"`
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	Sidecars            []corev1.Container       `json:"sidecars,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {

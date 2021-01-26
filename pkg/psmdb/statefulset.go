@@ -109,7 +109,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				ServiceAccountName: multiAZ.ServiceAccountName,
 				RestartPolicy:      corev1.RestartPolicyAlways,
 				ImagePullSecrets:   m.Spec.ImagePullSecrets,
-				Containers:         []corev1.Container{c},
+				Containers:         addUniqueContainers(c, multiAZ.Sidecars...),
 				InitContainers:     initContainers,
 				Volumes:            volumes,
 				SchedulerName:      m.Spec.SchedulerName,

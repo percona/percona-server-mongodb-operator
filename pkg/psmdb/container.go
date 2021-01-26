@@ -299,3 +299,21 @@ func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float
 	}
 	return sizeGB
 }
+
+func addUniqueContainers(c corev1.Container, others ...corev1.Container) (unique []corev1.Container) {
+	unique = append(unique, c)
+	alreadyContains := func(c corev1.Container) bool {
+		for _, u := range unique {
+			if u.Name == c.Name && u.Image == c.Image {
+				return true
+			}
+		}
+		return false
+	}
+	for _, o := range others {
+		if !alreadyContains(o) {
+			unique = append(unique, o)
+		}
+	}
+	return
+}

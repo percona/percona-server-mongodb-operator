@@ -65,7 +65,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 				PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
 				RestartPolicy:     corev1.RestartPolicyAlways,
 				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
-				Containers:        []corev1.Container{c},
+				Containers:        addUniqueContainers(c, cr.Spec.Sharding.Mongos.MultiAZ.Sidecars...),
 				InitContainers:    initContainers,
 				Volumes:           volumes(cr),
 				SchedulerName:     cr.Spec.SchedulerName,
