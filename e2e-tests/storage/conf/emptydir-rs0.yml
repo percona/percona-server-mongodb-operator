@@ -9,8 +9,6 @@ spec:
       enableEncryption: true
   replsets:
   - name: rs0
-    affinity:
-      antiAffinityTopologyKey: none
     volumeSpec:
       emptyDir: {}
     size: 3
