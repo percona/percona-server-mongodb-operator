@@ -20,31 +20,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-const (
-	envMongoDBClusterAdminUser       = "MONGODB_CLUSTER_ADMIN_USER"
-	envMongoDBClusterAdminPassword   = "MONGODB_CLUSTER_ADMIN_PASSWORD"
-	envMongoDBUserAdminUser          = "MONGODB_USER_ADMIN_USER"
-	envMongoDBUserAdminPassword      = "MONGODB_USER_ADMIN_PASSWORD"
-	envMongoDBBackupUser             = "MONGODB_BACKUP_USER"
-	envMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
-	envMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
-	envMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	envPMMServerUser                 = "PMM_SERVER_USER"
-	envPMMServerPassword             = "PMM_SERVER_PASSWORD"
-)
-
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	pods corev1.PodList, usersSecret *corev1.Secret, mongosPods []corev1.Pod) (mongoClusterState, error) {
+	pods corev1.PodList, mongosPods []corev1.Pod, c Credentials) (mongoClusterState, error) {
 
 	if replset.Size == 0 {
 		return clusterReady, nil
 	}
 
-	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
-	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	session, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, pods, username, password)
+	session, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, pods, c)
 	if err != nil {
 		// try to init replset and if succseed
 		// we'll go further on the next reconcile iteration
@@ -77,7 +62,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 {
 
-		mongosSession, err := r.mongosConnection(cr, username, password)
+		mongosSession, err := r.mongosConnection(cr, c)
 		if err != nil {
 			return clusterError, errors.Wrap(err, "failed to get mongos connection")
 		}
@@ -203,7 +188,7 @@ func inShard(client *mgo.Client, podName string) (bool, error) {
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods corev1.PodList,
-	username, password string) (*mgo.Client, error) {
+	c Credentials) (*mgo.Client, error) {
 	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, rsName, rsExposed, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
@@ -212,8 +197,8 @@ func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB
 	conf := &mongo.Config{
 		ReplSetName: rsName,
 		Hosts:       rsAddrs,
-		Username:    username,
-		Password:    password,
+		Username:    c.Username,
+		Password:    c.Password,
 	}
 
 	if !cr.Spec.UnsafeConf {
@@ -297,10 +282,8 @@ const (
 	`
 )
 
-func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, secret *corev1.Secret, rsName string) error {
-	username := string(secret.Data[envMongoDBClusterAdminUser])
-	password := string(secret.Data[envMongoDBClusterAdminPassword])
-	cli, err := r.mongosConnection(cr, username, password)
+func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string, c Credentials) error {
+	cli, err := r.mongosConnection(cr, c)
 	if err != nil {
 		return errors.Errorf("failed to get mongos connection: %v", err)
 	}

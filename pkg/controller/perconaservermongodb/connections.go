@@ -10,12 +10,12 @@ import (
 	mgo "go.mongodb.org/mongo-driver/mongo"
 )
 
-func (r *ReconcilePerconaServerMongoDB) mongosConnection(cr *api.PerconaServerMongoDB, user, pass string) (*mgo.Client, error) {
+func (r *ReconcilePerconaServerMongoDB) mongosConnection(cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
 	conf := mongo.Config{
 		Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
 			":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
-		Username: user,
-		Password: pass,
+		Username: c.Username,
+		Password: c.Password,
 	}
 
 	mongosSession, err := mongo.Dial(&conf)
