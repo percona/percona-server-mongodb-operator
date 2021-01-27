@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"fmt"
+	"github.com/go-logr/logr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +31,7 @@ var secretFileMode int32 = 288
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
-	initContainers []corev1.Container) (appsv1.StatefulSetSpec, error) {
+	initContainers []corev1.Container, log logr.Logger) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
 
@@ -89,6 +90,11 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		initContainers[i].Resources.Requests = c.Resources.Requests
 	}
 
+	containers, ok := multiAZ.WithSidecars(c)
+	if !ok {
+		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
@@ -109,7 +115,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				ServiceAccountName: multiAZ.ServiceAccountName,
 				RestartPolicy:      corev1.RestartPolicyAlways,
 				ImagePullSecrets:   m.Spec.ImagePullSecrets,
-				Containers:         addUniqueContainers(c, multiAZ.Sidecars...),
+				Containers:         containers,
 				InitContainers:     initContainers,
 				Volumes:            volumes,
 				SchedulerName:      m.Spec.SchedulerName,

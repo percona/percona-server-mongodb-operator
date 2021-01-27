@@ -191,6 +191,21 @@ type MultiAZ struct {
 	Sidecars            []corev1.Container       `json:"sidecars,omitempty"`
 }
 
+func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Container, noSkips bool) {
+	withSidecars, noSkips = []corev1.Container{c}, true
+
+	for _, s := range m.Sidecars {
+		if s.Name == c.Name {
+			noSkips = false
+			continue
+		}
+
+		withSidecars = append(withSidecars, s)
+	}
+
+	return
+}
+
 type PodDisruptionBudgetSpec struct {
 	MinAvailable   *intstr.IntOrString `json:"minAvailable,omitempty"`
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`

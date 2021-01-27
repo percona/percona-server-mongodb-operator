@@ -71,10 +71,6 @@ spec:
         command: ["/bin/sh"]
         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
         name: mongos-sidecar-1
-      - image: busybox
-        command: ["/bin/sh"]
-        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
-        name: mongos-sidecar-1
  
   mongod:
     net:

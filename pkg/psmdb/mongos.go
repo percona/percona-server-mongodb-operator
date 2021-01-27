@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"fmt"
+	"github.com/go-logr/logr"
 	"strconv"
 	"strings"
 
@@ -26,7 +27,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) (appsv1.DeploymentSpec, error) {
+func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger) (appsv1.DeploymentSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -44,6 +45,11 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 	for i := range initContainers {
 		initContainers[i].Resources.Limits = c.Resources.Limits
 		initContainers[i].Resources.Requests = c.Resources.Requests
+	}
+
+	containers, ok := cr.Spec.Sharding.Mongos.MultiAZ.WithSidecars(c)
+	if !ok {
+		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
 	}
 
 	zero := intstr.FromInt(0)
@@ -65,7 +71,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 				PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
 				RestartPolicy:     corev1.RestartPolicyAlways,
 				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
-				Containers:        addUniqueContainers(c, cr.Spec.Sharding.Mongos.MultiAZ.Sidecars...),
+				Containers:        containers,
 				InitContainers:    initContainers,
 				Volumes:           volumes(cr),
 				SchedulerName:     cr.Spec.SchedulerName,

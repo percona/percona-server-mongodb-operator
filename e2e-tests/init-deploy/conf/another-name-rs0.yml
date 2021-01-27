@@ -67,11 +67,9 @@ spec:
     - image: busybox
       command: ["/bin/sh"]
       args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
-      name: my-sidecar-1
-    - image: busybox
-      command: ["/bin/sh"]
-      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
       name: my-sidecar-2
+    - image: busybox
+      name: mongod
     size: 3
   secrets:
     key: some-key
