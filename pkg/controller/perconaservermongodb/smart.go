@@ -69,9 +69,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	err = r.disableBalancerIfNeeded(cr, c)
-	if err != nil {
-		return errors.Wrap(err, "failed to stop balancer")
+	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
+		err = r.disableBalancerIfNeeded(cr, c)
+		if err != nil {
+			return errors.Wrap(err, "failed to stop balancer")
+		}
 	}
 
 	list := corev1.PodList{}

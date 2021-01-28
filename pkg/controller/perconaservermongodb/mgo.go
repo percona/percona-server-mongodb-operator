@@ -59,6 +59,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 	if cr.Status.Replsets[replset.Name].Initialized &&
 		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
+		cr.Status.Mongos.Status == api.AppStateReady &&
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 {
 
