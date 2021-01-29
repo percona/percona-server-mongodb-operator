@@ -625,7 +625,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB, annotations map[string]string) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB, secretAnnotations map[string]string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -650,6 +650,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
 	}
 
+	if !k8serrors.IsNotFound(err) && msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
+		log.Info("waiting for mongos update")
+		return nil
+	}
+
 	opPod, err := r.operatorPod()
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator pod")
@@ -667,7 +672,47 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	if deplSpec.Template.Annotations == nil {
 		deplSpec.Template.Annotations = make(map[string]string)
 	}
-	for k, v := range annotations {
+
+	if len(secretAnnotations) == 0 {
+		// we shoud check if sfs secrets were changes
+		// if yes - update mongos secret hash also
+
+		sts, err := r.getCfgStatefulset(cr)
+		if err != nil {
+			return errors.Wrap(err, "failed to get cfg ststefulset")
+		}
+
+		cfgRsSecretHash := ""
+		cfgRsSecretHashTS := ""
+		if v, ok := sts.Spec.Template.Annotations["last-applied-secret"]; ok {
+			cfgRsSecretHash = v
+		}
+		if v, ok := sts.Spec.Template.Annotations["last-applied-secret-ts"]; ok {
+			cfgRsSecretHashTS = v
+		}
+
+		mongosSecretHash := ""
+		mongosSecretHashTS := ""
+		if v, ok := msDepl.Spec.Template.Annotations["last-applied-secret"]; ok {
+			mongosSecretHash = v
+		}
+		if v, ok := msDepl.Spec.Template.Annotations["last-applied-secret-ts"]; ok {
+			mongosSecretHashTS = v
+		}
+
+		secretAnnotations = make(map[string]string)
+		if cfgRsSecretHash != mongosSecretHash && cfgRsSecretHashTS > mongosSecretHashTS {
+			log.Info("update mongos secret hash from confing RS")
+
+			secretAnnotations["last-applied-secret"] = cfgRsSecretHash
+			secretAnnotations["last-applied-secret-ts"] = cfgRsSecretHashTS
+		} else {
+			secretAnnotations["last-applied-secret"] = mongosSecretHash
+			secretAnnotations["last-applied-secret-ts"] = mongosSecretHashTS
+		}
+	}
+
+	for k, v := range secretAnnotations {
 		deplSpec.Template.Annotations[k] = v
 	}
 	for k, v := range sslAnn {

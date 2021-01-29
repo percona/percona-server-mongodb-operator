@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -48,6 +49,14 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServer
 	)
 
 	return list, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getCfgStatefulset(cr *api.PerconaServerMongoDB) (appsv1.StatefulSet, error) {
+	sts := appsv1.StatefulSet{}
+	err := r.client.Get(context.TODO(),
+		types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &sts)
+
+	return sts, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getAllPVCs(cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {

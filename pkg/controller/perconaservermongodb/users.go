@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	mongod "go.mongodb.org/mongo-driver/mongo"
@@ -94,7 +95,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return nil, nil, errors.Wrap(err, "update internal sys users secret")
 	}
 	ann := map[string]string{
-		"last-applied-secret": newSecretDataHash,
+		"last-applied-secret":    newSecretDataHash,
+		"last-applied-secret-ts": time.Now().UTC().String(),
 	}
 	if restartSfs {
 		sfsTemplateAnn = ann
@@ -166,8 +168,9 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 			needRestartMongos: true, // in mgo.go:handleRsAddToShard() we use envs with this user credentials, so we need restart for update this envs
 		},
 		{
-			nameKey: envMongoDBClusterMonitorUser,
-			passKey: envMongoDBClusterMonitorPassword,
+			nameKey:        envMongoDBClusterMonitorUser,
+			passKey:        envMongoDBClusterMonitorPassword,
+			needRestartSfs: true, //need for liveness/readiness ckeck
 		},
 		{
 			nameKey:        envMongoDBBackupUser,
