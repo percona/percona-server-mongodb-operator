@@ -33,7 +33,7 @@ const (
 	roleUserAdmin    UserRole = "userAdmin"
 )
 
-func userInternalSecretName(cr *api.PerconaServerMongoDB) string {
+func userSecretNameInternal(cr *api.PerconaServerMongoDB) string {
 	internalPrefix := "internal-"
 
 	name := cr.Spec.Secrets.Users
@@ -56,7 +56,7 @@ func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongo
 }
 
 func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (Credentials, error) {
-	return r.getCredentials(cr, userInternalSecretName(cr), role)
+	return r.getCredentials(cr, userSecretNameInternal(cr), role)
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (Credentials, error) {

@@ -716,12 +716,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	if cr.Spec.PMM.Enabled {
 		pmmsec := corev1.Secret{}
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: userInternalSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: userSecretNameInternal(cr), Namespace: cr.Namespace}, &pmmsec)
 		if err != nil {
-			return errors.Wrapf(err, "check pmm secrets: %s", userInternalSecretName(cr))
+			return errors.Wrapf(err, "check pmm secrets: %s", userSecretNameInternal(cr))
 		}
 
-		pmmC, err := psmdb.AddPMMContainer(cr, userInternalSecretName(cr), pmmsec, cr.Spec.PMM.MongosParams)
+		pmmC, err := psmdb.AddPMMContainer(cr, userSecretNameInternal(cr), pmmsec, cr.Spec.PMM.MongosParams)
 		if err != nil {
 			return errors.Wrap(err, "failed to create a pmm-client container")
 		}
@@ -914,11 +914,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 		if cr.Spec.PMM.Enabled {
 			pmmsec := corev1.Secret{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Name: userInternalSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
+			err := r.client.Get(context.TODO(), types.NamespacedName{Name: userSecretNameInternal(cr), Namespace: cr.Namespace}, &pmmsec)
 			if err != nil {
 				return nil, fmt.Errorf("check pmm secrets: %v", err)
 			}
-			pmmC, err := psmdb.AddPMMContainer(cr, userInternalSecretName(cr), pmmsec, cr.Spec.PMM.MongodParams)
+			pmmC, err := psmdb.AddPMMContainer(cr, userSecretNameInternal(cr), pmmsec, cr.Spec.PMM.MongodParams)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create a pmm-client container: %v", err)
 			}
