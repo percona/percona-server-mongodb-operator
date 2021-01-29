@@ -241,11 +241,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	c, err := r.getCredentials(cr, roleClusterAdmin)
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "failed to get creds")
-	}
-
 	removed, err := r.getRemovedSfs(cr)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -254,12 +249,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	for _, v := range removed {
 		rsName := v.Labels["app.kubernetes.io/replset"]
 
-		err := r.checkIfPossibleToRemove(cr, rsName, c)
+		err := r.checkIfPossibleToRemove(cr, rsName)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
 
-		err = r.removeRSFromShard(cr, rsName, c)
+		err = r.removeRSFromShard(cr, rsName)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
 		}
@@ -349,14 +344,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, errors.Wrap(err, "get pods list for mongos")
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, c, sfsTemplateAnnotations)
+		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, sfsTemplateAnnotations)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, c, sfsTemplateAnnotations)
+			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, sfsTemplateAnnotations)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -420,12 +415,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
 		}
 
-		isClusterLive, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items, c)
+		isClusterLive, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
 		if err != nil {
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 
-		if err := r.fetchVersionFromMongo(cr, replset, pods, c); err != nil {
+		if err := r.fetchVersionFromMongo(cr, replset, pods); err != nil {
 			return rr, errors.Wrap(err, "update CR version")
 		}
 	}
@@ -435,7 +430,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
 
-	if err := r.enableBalancerIfNeeded(cr, c); err != nil {
+	if err := r.enableBalancerIfNeeded(cr); err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to start balancer: %v", err)
 	}
 
@@ -496,7 +491,7 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 	return removed, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaServerMongoDB, rsName string, c Credentials) error {
+func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaServerMongoDB, rsName string) error {
 	systemDBs := map[string]struct{}{
 		"local": {},
 		"admin": {},
@@ -508,7 +503,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 		return errors.Wrapf(err, "get pods list for replset %s", rsName)
 	}
 
-	client, err := r.mongoClient(cr, rsName, false, pods, c)
+	client, err := r.mongoClientWithRole(cr, rsName, false, pods, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -721,12 +716,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	if cr.Spec.PMM.Enabled {
 		pmmsec := corev1.Secret{}
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: userSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: userInternalSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
 		if err != nil {
-			return errors.Wrapf(err, "check pmm secrets: %s", userSecretName(cr))
+			return errors.Wrapf(err, "check pmm secrets: %s", userInternalSecretName(cr))
 		}
 
-		pmmC, err := psmdb.AddPMMContainer(cr, userSecretName(cr), pmmsec, cr.Spec.PMM.MongosParams)
+		pmmC, err := psmdb.AddPMMContainer(cr, userInternalSecretName(cr), pmmsec, cr.Spec.PMM.MongosParams)
 		if err != nil {
 			return errors.Wrap(err, "failed to create a pmm-client container")
 		}
@@ -800,7 +795,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 
 // TODO: reduce cyclomatic complexity
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB,
-	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string, c Credentials,
+	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string,
 	sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
 
 	sfsName := cr.Name + "-" + replset.Name
@@ -919,11 +914,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 		if cr.Spec.PMM.Enabled {
 			pmmsec := corev1.Secret{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Name: userSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
+			err := r.client.Get(context.TODO(), types.NamespacedName{Name: userInternalSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
 			if err != nil {
 				return nil, fmt.Errorf("check pmm secrets: %v", err)
 			}
-			pmmC, err := psmdb.AddPMMContainer(cr, userSecretName(cr), pmmsec, cr.Spec.PMM.MongodParams)
+			pmmC, err := psmdb.AddPMMContainer(cr, userInternalSecretName(cr), pmmsec, cr.Spec.PMM.MongodParams)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create a pmm-client container: %v", err)
 			}
@@ -976,7 +971,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		}
 	}
 
-	if err := r.smartUpdate(cr, sfs, replset, c); err != nil {
+	if err := r.smartUpdate(cr, sfs, replset); err != nil {
 		return nil, fmt.Errorf("failed to run smartUpdate %v", err)
 	}
 

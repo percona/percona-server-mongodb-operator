@@ -26,11 +26,14 @@ const (
 	envPMMServerPassword             = "PMM_SERVER_PASSWORD"
 )
 
+type UserRole string
+
 const (
-	roleClusterAdmin string = "clusterAdmin"
+	roleClusterAdmin UserRole = "clusterAdmin"
+	roleUserAdmin    UserRole = "userAdmin"
 )
 
-func userSecretName(cr *api.PerconaServerMongoDB) string {
+func userInternalSecretName(cr *api.PerconaServerMongoDB) string {
 	internalPrefix := "internal-"
 
 	name := cr.Spec.Secrets.Users
@@ -41,20 +44,24 @@ func userSecretName(cr *api.PerconaServerMongoDB) string {
 	return name
 }
 
-func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongoDB) (corev1.Secret, error) {
+func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
 	secrets := corev1.Secret{}
 	err := r.client.Get(
 		context.TODO(),
-		types.NamespacedName{Name: userSecretName(cr), Namespace: cr.Namespace},
+		types.NamespacedName{Name: name, Namespace: cr.Namespace},
 		&secrets,
 	)
 
 	return secrets, errors.Wrap(err, "get user secrets")
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, role string) (Credentials, error) {
+func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (Credentials, error) {
+	return r.getCredentials(cr, userInternalSecretName(cr), role)
+}
+
+func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (Credentials, error) {
 	creds := Credentials{}
-	usersSecret, err := r.getUserSecret(cr)
+	usersSecret, err := r.getUserSecret(cr, name)
 	if err != nil {
 		return creds, errors.Wrap(err, "failed to get user secret")
 	}
@@ -63,6 +70,9 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMong
 	case roleClusterAdmin:
 		creds.Username = string(usersSecret.Data[envMongoDBClusterAdminUser])
 		creds.Password = string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	case roleUserAdmin:
+		creds.Username = string(usersSecret.Data[envMongoDBUserAdminUser])
+		creds.Password = string(usersSecret.Data[envMongoDBUserAdminPassword])
 	default:
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}

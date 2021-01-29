@@ -192,7 +192,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB,
-	replset *api.ReplsetSpec, pods corev1.PodList, c Credentials) error {
+	replset *api.ReplsetSpec, pods corev1.PodList) error {
 
 	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
 		cr.Status.State != api.AppStateReady ||
@@ -200,7 +200,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 		return nil
 	}
 
-	session, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, pods, c)
+	session, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
