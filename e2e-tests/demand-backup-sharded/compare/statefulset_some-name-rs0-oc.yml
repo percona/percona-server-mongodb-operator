@@ -133,6 +133,16 @@ spec:
               name: some-name-mongodb-encryption-key
               readOnly: true
           workingDir: /data/db
+        - args:
+            - -c
+            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
+          command:
+            - /bin/sh
+          imagePullPolicy: Always
+          name: rs-sidecar-1
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
         - env:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
@@ -157,16 +167,6 @@ spec:
           resources: {}
           securityContext:
             runAsNonRoot: true
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-        - args:
-            - -c
-            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
-          command:
-            - /bin/sh
-          imagePullPolicy: Always
-          name: rs-sidecar-1
-          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
       dnsPolicy: ClusterFirst
