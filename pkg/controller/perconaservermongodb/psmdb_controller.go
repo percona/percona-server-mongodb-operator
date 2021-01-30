@@ -701,7 +701,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 			secretAnnotations["last-applied-secret"] = cfgRsSecretHash
 			secretAnnotations["last-applied-secret-ts"] = cfgRsSecretHashTS
-		} else {
+		} else if len(mongosSecretHash) > 0 {
 			secretAnnotations["last-applied-secret"] = mongosSecretHash
 			secretAnnotations["last-applied-secret-ts"] = mongosSecretHashTS
 		}
