@@ -416,8 +416,9 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupTaskSpec struct {
-	Name            string              `json:"name"`
-	Enabled         bool                `json:"enabled"`
+	Name            string              `json:"name,omitempty"`
+	Enabled         bool                `json:"enabled,omitempty"`
+	Keep            int                 `json:"keep,omitempty"`
 	Schedule        string              `json:"schedule,omitempty"`
 	StorageName     string              `json:"storageName,omitempty"`
 	CompressionType pbm.CompressionType `json:"compressionType,omitempty"`
