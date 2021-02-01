@@ -40,7 +40,7 @@ spec:
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: aws-s3
-      
+    runtimeClassName: docker-rc
   sharding:
     enabled: true
 
@@ -51,6 +51,7 @@ spec:
           resources:
             requests:
               storage: 3Gi
+      runtimeClassName: docker-rc
 
     mongos:
       size: 3
@@ -61,6 +62,7 @@ spec:
         mode: slowOp
         slowOpThresholdMs: 100
         rateLimit: 100
+      runtimeClassName: docker-rc
  
   mongod:
     net:
@@ -111,6 +113,7 @@ spec:
         resources:
           requests:
             storage: 1Gi
+    runtimeClassName: docker-rc
     size: 3
   secrets:
     key: some-key

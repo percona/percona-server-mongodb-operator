@@ -59,6 +59,7 @@ spec:
         resources:
           requests:
             storage: 1Gi
+    runtimeClassName: docker-rc
     size: 3
   secrets:
     key: some-key

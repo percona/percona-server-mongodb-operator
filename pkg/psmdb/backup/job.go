@@ -37,7 +37,8 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				SecurityContext: backupSpec.ContainerSecurityContext,
 			},
 		},
-		SecurityContext: backupSpec.PodSecurityContext,
+		SecurityContext:  backupSpec.PodSecurityContext,
+		RuntimeClassName: backupSpec.RuntimeClassName,
 	}
 
 	return &batchv1b.CronJob{
