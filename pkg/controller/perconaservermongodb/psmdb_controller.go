@@ -677,23 +677,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 			return errors.Wrap(err, "failed to get cfg ststefulset")
 		}
 
-		cfgRsSecretHash := ""
-		cfgRsSecretHashTS := ""
-		if v, ok := sts.Spec.Template.Annotations["last-applied-secret"]; ok {
-			cfgRsSecretHash = v
-		}
-		if v, ok := sts.Spec.Template.Annotations["last-applied-secret-ts"]; ok {
-			cfgRsSecretHashTS = v
-		}
+		cfgRsSecretHash := sts.Spec.Template.Annotations["last-applied-secret"]
+		cfgRsSecretHashTS := sts.Spec.Template.Annotations["last-applied-secret-ts"]
 
-		mongosSecretHash := ""
-		mongosSecretHashTS := ""
-		if v, ok := msDepl.Spec.Template.Annotations["last-applied-secret"]; ok {
-			mongosSecretHash = v
-		}
-		if v, ok := msDepl.Spec.Template.Annotations["last-applied-secret-ts"]; ok {
-			mongosSecretHashTS = v
-		}
+		mongosSecretHash := msDepl.Spec.Template.Annotations["last-applied-secret"]
+		mongosSecretHashTS := msDepl.Spec.Template.Annotations["last-applied-secret-ts"]
 
 		secretAnnotations = make(map[string]string)
 		if cfgRsSecretHash != mongosSecretHash && cfgRsSecretHashTS > mongosSecretHashTS {
