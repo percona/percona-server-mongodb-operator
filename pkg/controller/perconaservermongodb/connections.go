@@ -42,31 +42,41 @@ func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB
 	}
 
 	if !cr.Spec.UnsafeConf {
-		certSecret := &corev1.Secret{}
-		err := r.client.Get(context.TODO(), types.NamespacedName{
-			Name:      cr.Spec.Secrets.SSL,
-			Namespace: cr.Namespace,
-		}, certSecret)
+		tlsCfg, err := r.tlsConfig(cr)
 		if err != nil {
-			return nil, errors.Wrap(err, "get ssl certSecret")
+			return nil, errors.Wrap(err, "failed to get TLS config")
 		}
-		pool := x509.NewCertPool()
-		pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
 
-		var clientCerts []tls.Certificate
-		cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
-		if err != nil {
-			return nil, errors.Wrap(err, "load keypair")
-		}
-		clientCerts = append(clientCerts, cert)
-		conf.TLSConf = &tls.Config{
-			InsecureSkipVerify: true,
-			RootCAs:            pool,
-			Certificates:       clientCerts,
-		}
+		conf.TLSConf = &tlsCfg
 	}
 
 	return mongo.Dial(conf)
+}
+
+func (r *ReconcilePerconaServerMongoDB) tlsConfig(cr *api.PerconaServerMongoDB) (tls.Config, error) {
+	certSecret := &corev1.Secret{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name:      cr.Spec.Secrets.SSL,
+		Namespace: cr.Namespace,
+	}, certSecret)
+	if err != nil {
+		return tls.Config{}, errors.Wrap(err, "get ssl certSecret")
+	}
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
+
+	var clientCerts []tls.Certificate
+	cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
+	if err != nil {
+		return tls.Config{}, errors.Wrap(err, "load keypair")
+	}
+	clientCerts = append(clientCerts, cert)
+
+	return tls.Config{
+		InsecureSkipVerify: true,
+		RootCAs:            pool,
+		Certificates:       clientCerts,
+	}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(cr *api.PerconaServerMongoDB, role UserRole) (*mgo.Client, error) {
