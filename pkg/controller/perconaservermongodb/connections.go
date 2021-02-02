@@ -85,15 +85,24 @@ func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(cr *api.PerconaServ
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return mongosClient(cr, c)
+	return r.mongosClient(cr, c)
 }
 
-func mongosClient(cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
+func (r *ReconcilePerconaServerMongoDB) mongosClient(cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
 	conf := mongo.Config{
 		Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
 			":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
 		Username: c.Username,
 		Password: c.Password,
+	}
+
+	if !cr.Spec.UnsafeConf {
+		tlsCfg, err := r.tlsConfig(cr)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get TLS config")
+		}
+
+		conf.TLSConf = &tlsCfg
 	}
 
 	return mongo.Dial(&conf)
