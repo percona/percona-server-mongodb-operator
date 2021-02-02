@@ -40,7 +40,7 @@ spec:
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: aws-s3
-      
+    runtimeClassName: docker-rc
   sharding:
     enabled: true
 
@@ -56,6 +56,7 @@ spec:
         command: ["/bin/sh"]
         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
         name: cfg-sidecar-1
+      runtimeClassName: docker-rc
 
     mongos:
       size: 3
@@ -71,6 +72,7 @@ spec:
         command: ["/bin/sh"]
         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
         name: mongos-sidecar-1
+      runtimeClassName: docker-rc
  
   mongod:
     net:
@@ -121,6 +123,7 @@ spec:
         resources:
           requests:
             storage: 1Gi
+    runtimeClassName: docker-rc
     size: 3
     sidecars:
     - image: busybox

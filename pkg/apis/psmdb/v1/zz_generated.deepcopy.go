@@ -58,6 +58,11 @@ func (in *BackupSpec) DeepCopyInto(out *BackupSpec) {
 		*out = new(ResourcesSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.RuntimeClassName != nil {
+		in, out := &in.RuntimeClassName, &out.RuntimeClassName
+		*out = new(string)
+		**out = **in
+	}
 	return
 }
 
@@ -639,6 +644,11 @@ func (in *MultiAZ) DeepCopyInto(out *MultiAZ) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.RuntimeClassName != nil {
+		in, out := &in.RuntimeClassName, &out.RuntimeClassName
+		*out = new(string)
+		**out = **in
 	}
 	return
 }

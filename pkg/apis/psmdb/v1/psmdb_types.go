@@ -188,6 +188,7 @@ type MultiAZ struct {
 	Annotations         map[string]string        `json:"annotations,omitempty"`
 	Labels              map[string]string        `json:"labels,omitempty"`
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	RuntimeClassName    *string                  `json:"runtimeClassName,omitempty"`
 	Sidecars            []corev1.Container       `json:"sidecars,omitempty"`
 }
 
@@ -467,6 +468,7 @@ type BackupSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 	Resources                *ResourcesSpec               `json:"resources,omitempty"`
+	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 }
 
 type Arbiter struct {

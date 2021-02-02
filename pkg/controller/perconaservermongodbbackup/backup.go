@@ -90,7 +90,7 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 		return status, errors.Wrap(err, "get pbm backup meta")
 	}
 	if meta == nil || meta.Name == "" {
-		log.Info("No backup found", "PBM name", cr.Status.PBMname, "backup", cr.Name)
+		log.Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
 

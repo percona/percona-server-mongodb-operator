@@ -196,6 +196,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
+      runtimeClassName: docker-rc
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
