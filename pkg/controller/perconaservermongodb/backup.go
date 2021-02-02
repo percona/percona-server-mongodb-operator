@@ -63,7 +63,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 				}
 
 				for _, todel := range oldjobs {
-					_ = r.client.Delete(context.TODO(), &todel)
+					err = r.client.Delete(context.TODO(), &todel)
+					if err != nil {
+						return fmt.Errorf("failed to delete backup object: %v", err)
+					}
 				}
 			}
 		} else {
@@ -123,9 +126,11 @@ func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(cr *api.PerconaServe
 type minHeap []api.PerconaServerMongoDBBackup
 
 func (h minHeap) Len() int { return len(h) }
+
 func (h minHeap) Less(i, j int) bool {
 	return h[i].CreationTimestamp.Before(&h[j].CreationTimestamp)
 }
+
 func (h minHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
 func (h *minHeap) Push(x interface{}) {

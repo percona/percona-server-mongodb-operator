@@ -88,8 +88,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		RequeueAfter: time.Second * 5,
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
-	instance := &psmdbv1.PerconaServerMongoDBBackup{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	cr := &psmdbv1.PerconaServerMongoDBBackup{}
+	err := r.client.Get(context.TODO(), request.NamespacedName, cr)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -101,26 +101,37 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, err
 	}
 
-	err = instance.CheckFields()
+	err = cr.CheckFields()
 	if err != nil {
 		return rr, errors.Wrap(err, "fields check")
 	}
 
-	switch instance.Status.State {
-	case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
-		return rr, nil
-	}
-
-	err = r.reconcile(instance)
+	bcp, err := r.newBackup(cr)
 	if err != nil {
-		return rr, errors.Wrap(err, "reconcile backup")
+		return rr, errors.Wrap(err, "create backup object")
+	}
+	defer bcp.Close()
+
+	switch cr.Status.State {
+	case psmdbv1.BackupStateError:
+		return rr, nil
+	case psmdbv1.BackupStateReady:
+		err = r.checkFinalizers(cr, bcp)
+		if err != nil {
+			return rr, errors.Wrap(err, "failed to wrun finali")
+		}
+	default:
+		err = r.reconcile(cr, bcp)
+		if err != nil {
+			return rr, errors.Wrap(err, "reconcile backup")
+		}
 	}
 
 	return rr, nil
 }
 
 // reconcile backup. first we chek if there are concurrent job running
-func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup) (err error) {
+func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup, bcp *Backup) (err error) {
 	status := cr.Status
 
 	defer func() {
@@ -152,6 +163,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 	if err != nil {
 		return errors.Wrap(err, "check for concurrent jobs")
 	}
+
 	if cjobs {
 		if status.State != psmdbv1.BackupStateWaiting {
 			log.Info("Waiting to finish another backup/restore.")
@@ -160,18 +172,44 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 		return nil
 	}
 
-	bcp, err := r.newBackup(cr)
-	if err != nil {
-		return errors.Wrap(err, "create backup object")
-	}
-	defer bcp.Close()
-
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
+		time.Sleep(10 * time.Second)
 		status, err = bcp.Start(cr)
 		return err
 	}
 
+	time.Sleep(5 * time.Second)
 	status, err = bcp.Status(cr)
+	return err
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *api.PerconaServerMongoDBBackup, b *Backup) error {
+	var err error = nil
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		finalizers := []string{}
+
+		for _, f := range cr.GetFinalizers() {
+
+			log.Info("finalizer", "name", f)
+
+			switch f {
+			case "delete-backup":
+				if len(cr.Status.PBMname) == 0 {
+					continue
+				}
+
+				err = b.pbm.C.DeleteBackup(cr.Status.PBMname)
+				if err != nil {
+					log.Error(err, "failed to run finalizer", "finalizer", f)
+					finalizers = append(finalizers, f)
+				}
+			}
+		}
+
+		cr.SetFinalizers(finalizers)
+		err = r.client.Update(context.TODO(), cr)
+	}
+
 	return err
 }
 
