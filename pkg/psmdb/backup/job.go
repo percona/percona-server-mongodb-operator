@@ -34,22 +34,6 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 							},
 						},
 					},
-					{
-						Name: "POD_NAME",
-						ValueFrom: &corev1.EnvVarSource{
-							FieldRef: &corev1.ObjectFieldSelector{
-								FieldPath: "metadata.name",
-							},
-						},
-					},
-					{
-						Name: "POD_UID",
-						ValueFrom: &corev1.EnvVarSource{
-							FieldRef: &corev1.ObjectFieldSelector{
-								FieldPath: "metadata.uid",
-							},
-						},
-					},
 				},
 				Args:            newBackupCronJobContainerArgs(backup, jobName),
 				SecurityContext: backupSpec.ContainerSecurityContext,
