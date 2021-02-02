@@ -113,6 +113,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				InitContainers:     initContainers,
 				Volumes:            volumes,
 				SchedulerName:      m.Spec.SchedulerName,
+				RuntimeClassName:   multiAZ.RuntimeClassName,
 			},
 		},
 	}, nil
