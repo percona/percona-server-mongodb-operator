@@ -189,9 +189,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *api.PerconaSer
 		finalizers := []string{}
 
 		for _, f := range cr.GetFinalizers() {
-
-			log.Info("finalizer", "name", f)
-
 			switch f {
 			case "delete-backup":
 				if len(cr.Status.PBMname) == 0 {
