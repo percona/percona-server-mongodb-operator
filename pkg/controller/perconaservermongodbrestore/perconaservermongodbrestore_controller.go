@@ -192,7 +192,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	}
 
 	if meta == nil || meta.Name == "" {
-		log.Info("No restore found", "PBM name", cr.Status.PBMname, "restore", cr.Name, "backup", cr.Spec.BackupName)
+		log.Info("Waiting for restore metadata", "PBM name", cr.Status.PBMname, "restore", cr.Name, "backup", cr.Spec.BackupName)
 		return nil
 	}
 
