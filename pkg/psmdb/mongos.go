@@ -69,6 +69,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) 
 				InitContainers:    initContainers,
 				Volumes:           volumes(cr),
 				SchedulerName:     cr.Spec.SchedulerName,
+				RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 			},
 		},
 		Strategy: appsv1.DeploymentStrategy{

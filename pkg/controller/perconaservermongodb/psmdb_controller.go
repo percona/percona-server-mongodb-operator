@@ -218,6 +218,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	err = r.checkFinalizers(cr)
+	if err != nil {
+		reqLogger.Error(err, "failed to run finalizers")
+		return rr, err
+	}
+
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)

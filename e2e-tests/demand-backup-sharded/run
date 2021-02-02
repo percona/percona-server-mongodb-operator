@@ -19,6 +19,10 @@ kubectl_bin apply \
     -f "$conf_dir/secrets.yml" \
     -f "$conf_dir/client.yml"
 
+if [[ "$OPENSHIFT" != "3.11" ]]; then
+  kubectl_bin apply -f "$conf_dir/docker-rc.yaml"
+fi
+
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
