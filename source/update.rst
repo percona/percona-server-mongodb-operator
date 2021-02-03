@@ -22,7 +22,7 @@ Semi-automatic upgrade
 **********************
 
 .. note:: Only the incremental update to a nearest minor version is supported
-   (for example, update from 1.4.0 to 1.5.0).
+   (for example, update from 1.5.0 to 1.6.0).
    To update to a newer version, which differs from the current version by more
    than one, make several incremental updates sequentially.
 
@@ -49,7 +49,7 @@ Semi-automatic upgrade
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
         "spec": {
             "crVersion":"{{{release}}}",
-            "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
+            "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}" },
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
@@ -66,7 +66,7 @@ Manual upgrade
 **************
 
 .. note:: Only the incremental update to a nearest minor version of the Operator
-   is supported (for example, update from 1.2.0 to 1.3.0).
+   is supported (for example, update from 1.5.0 to 1.6.0).
    To update to a newer version, which differs from the current version by more
    than one, make several incremental updates sequentially.
 
@@ -93,7 +93,7 @@ Manual upgrade
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
         "spec": {
             "crVersion":"{{{release}}}",
-            "image": "percona/percona-server-mongodb:{{{mongodb42recommended}}}" },
+            "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}" },
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
@@ -148,21 +148,21 @@ updates:
 
    * ``Recommended`` - automatic upgrades will choose the most recent version
      of software flagged as Recommended (for clusters created from scratch,
-     the Percona Server for MongoDB 4.2 version will be selected instead of the
-     Percona Server for MongoDB 4.0 one
-     regardless of the image path; for already existing clusters, the 4.2
-     vs. 4.0 branch choice will be preserved),
+     the Percona Server for MongoDB 4.4 version will be selected instead of the
+     Percona Server for MongoDB 4.2 or 4.0 version
+     regardless of the image path; for already existing clusters, the 4.4
+     vs. 4.2 or 4.0 branch choice will be preserved),
    * ``Latest`` - automatic upgrades will choose the most recent version of
      the software available (for clusters created from scratch,
-     the Percona Server for MongoDB 4.2 version will be selected instead of the
-     Percona Server for MongoDB 4.0 one
-     regardless of the image path; for already existing clusters, the 4.2
-     vs. 4.0 branch choice will be preserved),
+     the Percona Server for MongoDB 4.4 version will be selected instead of the
+     Percona Server for MongoDB 4.2 or 4.0 version
+     regardless of the image path; for already existing clusters, the 4.4
+     vs. 4.2 or 4.0 branch choice will be preserved),
    * *specific version number* - will apply an upgrade if the running Percona
      Server for MongoDB
      version doesn't match the explicit version number with no future upgrades
-     (version numbers are specified as ``4.2.8-8``, ``4.2.7-7``,
-     ``4.0.19-12``, etc.),
+     (version numbers are specified as {{{mongodb44recommended}}},
+     {{{mongodb42recommended}}}, etc.),
    * ``Never`` or ``Disabled`` - disable automatic upgrades
 
      .. note:: When automatic upgrades are disabled by the ``apply`` option, 

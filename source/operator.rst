@@ -34,7 +34,7 @@ file. This file contains the following spec sections:
 
    * - image
      - string
-     - ``percona/percona-server-mongodb:4.2.8-8``
+     - ``percona/percona-server-mongodb:{{{mongodb44recommended}}}``
      - The Docker image of `Percona Server for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html>`_ to deploy (actual image names can be found :ref:`in the list of certified images<custom-registry-images>`) 
 
    * - imagePullPolicy
@@ -113,45 +113,46 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _upgradeoptions-versionserviceendpoint:                                                  |
-|                 |                                                                                             |
-| **Key**         | `upgradeOptions.versionServiceEndpoint                                                      |
-|                 | <operator.html#upgradeoptions-versionserviceendpoint>`_                                     |
+|                 | .. _upgradeoptions-versionserviceendpoint:							|
+|                 |												|
+| **Key**         | `upgradeOptions.versionServiceEndpoint							|
+|                 | <operator.html#upgradeoptions-versionserviceendpoint>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value**       | string                                                                                      |
+| **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``https://check.percona.com``                                                               |
+| **Example**     | ``https://check.percona.com``								|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The Version Service URL used to check versions compatibility for upgrade                    |
+| **Description** | The Version Service URL used to check versions compatibility for upgrade			|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                                                                                                               |
+|														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _upgradeoptions-apply:                                                                   |
-|                 |                                                                                             |
-| **Key**         | `upgradeOptions.apply <operator.html#upgradeoptions-apply>`_                                |
+|                 | .. _upgradeoptions-apply:									|
+|                 |												|
+| **Key**         | `upgradeOptions.apply <operator.html#upgradeoptions-apply>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value**       | string                                                                                      |
+| **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``Recommended``                                                                             |
+| **Example**     | ``Recommended``										|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator.   |
-|                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be   |
-|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of Percona Server for  |
-|                 | MongoDB (e.g. ``4.2.8-8``) that is wished to be version-locked (so that the user can control|
-|                 | the version running, but use automatic upgrades to move between them).                      |
+| **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator.	|
+|                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be	|
+|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of Percona Server for	|
+|                 | MongoDB (e.g. ``4.4.2-4``)									|
+|                 | that is wished to be version-locked (so that the user can control				|
+|                 | the version running, but use automatic upgrades to move between them).			|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                                                                                                               |
+|														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _upgradeoptions-schedule:                                                                |
-|                 |                                                                                             |
-| **Key**         | `upgradeOptions.schedule <operator.html#upgradeoptions-schedule>`_                          |
+|                 | .. _upgradeoptions-schedule:								|
+|                 |												|
+| **Key**         | `upgradeOptions.schedule <operator.html#upgradeoptions-schedule>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value**       | string                                                                                      |
+| **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``0 2 * * *``                                                                               |
+| **Example**     | ``0 2 * * *``										|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Scheduled time to check for updates, specified in the                                       |
-|                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_                                      |
+| **Description** | Scheduled time to check for updates, specified in the					|
+|                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 
 .. _operator.secrets-section:

@@ -57,6 +57,7 @@ version = '1.6.0'
 release = '1.6.0'
 
 # the MongoDB recommended versions to be used in docs
+mongodb44recommended = '4.4.2-4'
 mongodb42recommended = '4.2.11-12'
 pmm2recommended = '2.12.0'
 
@@ -296,6 +297,7 @@ def ultimateReplace(app, docname, source):
 ultimate_replacements = {
     "{{{release}}}" : release,
     "{{{apiversion}}}" : release.replace(".", "-", 2),
+    "{{{mongodb44recommended}}}" : mongodb44recommended,
     "{{{mongodb42recommended}}}" : mongodb42recommended,
     "{{{pmm2recommended}}}" : pmm2recommended
 }

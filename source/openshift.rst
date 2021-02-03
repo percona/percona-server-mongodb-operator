@@ -134,5 +134,5 @@ Install Percona server for MongoDB on OpenShift
 
    .. code:: bash
 
-      $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
+      $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
       percona-client:/$ mongo "mongodb://userAdmin:userAdmin123456@my-cluster-name-mongos.psmdb.svc.cluster.local/admin?ssl=false"
