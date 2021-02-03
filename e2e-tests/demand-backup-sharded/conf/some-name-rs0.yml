@@ -51,6 +51,11 @@ spec:
           resources:
             requests:
               storage: 3Gi
+      sidecars:
+      - image: busybox
+        command: ["/bin/sh"]
+        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+        name: cfg-sidecar-1
       runtimeClassName: docker-rc
 
     mongos:
@@ -62,6 +67,11 @@ spec:
         mode: slowOp
         slowOpThresholdMs: 100
         rateLimit: 100
+      sidecars:
+      - image: busybox
+        command: ["/bin/sh"]
+        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+        name: mongos-sidecar-1
       runtimeClassName: docker-rc
  
   mongod:
@@ -115,6 +125,11 @@ spec:
             storage: 1Gi
     runtimeClassName: docker-rc
     size: 3
+    sidecars:
+    - image: busybox
+      command: ["/bin/sh"]
+      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+      name: rs-sidecar-1
   secrets:
     key: some-key
     users: some-users
