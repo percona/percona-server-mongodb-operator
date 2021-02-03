@@ -118,7 +118,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	case psmdbv1.BackupStateReady:
 		err = r.checkFinalizers(cr, bcp)
 		if err != nil {
-			return rr, errors.Wrap(err, "failed to wrun finali")
+			return rr, errors.Wrap(err, "failed to run finalizer")
 		}
 	default:
 		err = r.reconcile(cr, bcp)
