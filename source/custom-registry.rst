@@ -53,11 +53,11 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
    .. code:: bash
 
-      $ docker pull docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
+      $ docker pull docker.io/perconalab/percona-server-mongodb@sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0
       Trying to pull repository docker.io/perconalab/percona-server-mongodb ...
-      sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505: Pulling from docker.io/perconalab/percona-server-mongodb
-      Digest: sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
-      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
+      sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0: Pulling from docker.io/perconalab/percona-server-mongodb
+      Digest: sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0
+      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb@sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0
 
    You can find correct names and SHA digests in the
    :ref:`current list of the Operator-related images officially certified by Percona<custom-registry-images>`.
@@ -69,7 +69,7 @@ Operator deployed in the OpenShift environment demonstrates the process:
    .. code:: bash
 
       $ docker tag \
-          docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505 \
+          docker.io/perconalab/percona-server-mongodb@sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0 \
           172.30.162.173:5000/psmdb/percona-server-mongodb:{{{mongodb44recommended}}}
       $ docker push 172.30.162.173:5000/psmdb/percona-server-mongodb:{{{mongodb44recommended}}}
 
