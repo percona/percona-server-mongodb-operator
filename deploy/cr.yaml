@@ -307,10 +307,12 @@ spec:
 #      - name: daily-s3-us-west
 #        enabled: true
 #        schedule: "0 0 * * *"
+#        keep: 3
 #        storageName: s3-us-west
 #        compressionType: gzip
 #      - name: weekly-s3-us-west
 #        enabled: false
 #        schedule: "0 0 * * 0"
+#        keep: 5
 #        storageName: s3-us-west
 #        compressionType: gzip
