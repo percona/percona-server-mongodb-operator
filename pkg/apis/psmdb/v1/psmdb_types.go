@@ -189,6 +189,22 @@ type MultiAZ struct {
 	Labels              map[string]string        `json:"labels,omitempty"`
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 	RuntimeClassName    *string                  `json:"runtimeClassName,omitempty"`
+	Sidecars            []corev1.Container       `json:"sidecars,omitempty"`
+}
+
+func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Container, noSkips bool) {
+	withSidecars, noSkips = []corev1.Container{c}, true
+
+	for _, s := range m.Sidecars {
+		if s.Name == c.Name {
+			noSkips = false
+			continue
+		}
+
+		withSidecars = append(withSidecars, s)
+	}
+
+	return
 }
 
 type PodDisruptionBudgetSpec struct {
