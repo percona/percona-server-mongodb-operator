@@ -230,7 +230,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
 
 	var sfsTemplateAnnotations, mongosTemplateAnnotations map[string]string
