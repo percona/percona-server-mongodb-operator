@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +21,7 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
-	replset *api.ReplsetSpec, secret *corev1.Secret) error {
+	replset *api.ReplsetSpec) error {
 
 	if replset.Size == 0 {
 		return nil
@@ -69,11 +68,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	username := string(secret.Data[envMongoDBClusterAdminUser])
-	password := string(secret.Data[envMongoDBClusterAdminPassword])
-	err = r.disableBalancerIfNeeded(cr, username, password)
-	if err != nil {
-		return errors.Wrap(err, "failed to stop balancer")
+	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
+		err = r.disableBalancerIfNeeded(cr)
+		if err != nil {
+			return errors.Wrap(err, "failed to stop balancer")
+		}
 	}
 
 	list := corev1.PodList{}
@@ -93,7 +92,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	client, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, list, username, password)
+	client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, list, roleClusterAdmin)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}
@@ -147,7 +146,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -162,7 +161,7 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(cr *api.PerconaS
 		return errors.Wrapf(err, "get mongos deployment %s", msDepl.Name)
 	}
 
-	mongosSession, err := mongosConn(cr, username, password)
+	mongosSession, err := r.mongosClientWithRole(cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}
@@ -213,7 +212,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMo
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB, username, password string) error {
+func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 {
 		return nil
 	}
@@ -279,7 +278,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 		}
 	}
 
-	mongosSession, err := mongosConn(cr, username, password)
+	mongosSession, err := r.mongosClientWithRole(cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}
@@ -306,17 +305,6 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 	}
 
 	return nil
-}
-
-func mongosConn(cr *api.PerconaServerMongoDB, username, password string) (*mgo.Client, error) {
-	conf := mongo.Config{
-		Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-			":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
-		Username: username,
-		Password: password,
-	}
-
-	return mongo.Dial(&conf)
 }
 
 func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMongoDB) (bool, error) {

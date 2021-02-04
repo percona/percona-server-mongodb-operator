@@ -6,11 +6,79 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+const (
+	envMongoDBClusterAdminUser       = "MONGODB_CLUSTER_ADMIN_USER"
+	envMongoDBClusterAdminPassword   = "MONGODB_CLUSTER_ADMIN_PASSWORD"
+	envMongoDBUserAdminUser          = "MONGODB_USER_ADMIN_USER"
+	envMongoDBUserAdminPassword      = "MONGODB_USER_ADMIN_PASSWORD"
+	envMongoDBBackupUser             = "MONGODB_BACKUP_USER"
+	envMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
+	envMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
+	envMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
+	envPMMServerUser                 = "PMM_SERVER_USER"
+	envPMMServerPassword             = "PMM_SERVER_PASSWORD"
+)
+
+type UserRole string
+
+const (
+	roleClusterAdmin UserRole = "clusterAdmin"
+	roleUserAdmin    UserRole = "userAdmin"
+)
+
+func userSecretNameInternal(cr *api.PerconaServerMongoDB) string {
+	internalPrefix := "internal-"
+
+	name := cr.Spec.Secrets.Users
+	if cr.CompareVersion("1.5.0") >= 0 {
+		name = internalPrefix + cr.Name + "-users"
+	}
+
+	return name
+}
+
+func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
+	secrets := corev1.Secret{}
+	err := r.client.Get(
+		context.TODO(),
+		types.NamespacedName{Name: name, Namespace: cr.Namespace},
+		&secrets,
+	)
+
+	return secrets, errors.Wrap(err, "get user secrets")
+}
+
+func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (Credentials, error) {
+	return r.getCredentials(cr, userSecretNameInternal(cr), role)
+}
+
+func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (Credentials, error) {
+	creds := Credentials{}
+	usersSecret, err := r.getUserSecret(cr, name)
+	if err != nil {
+		return creds, errors.Wrap(err, "failed to get user secret")
+	}
+
+	switch role {
+	case roleClusterAdmin:
+		creds.Username = string(usersSecret.Data[envMongoDBClusterAdminUser])
+		creds.Password = string(usersSecret.Data[envMongoDBClusterAdminPassword])
+	case roleUserAdmin:
+		creds.Username = string(usersSecret.Data[envMongoDBUserAdminUser])
+		creds.Password = string(usersSecret.Data[envMongoDBUserAdminPassword])
+	default:
+		return creds, errors.Errorf("not implemented for role: %s", role)
+	}
+
+	return creds, nil
+}
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServerMongoDB) error {
 	secretObj := corev1.Secret{}
@@ -23,7 +91,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	)
 	if err == nil {
 		return nil
-	} else if !errors.IsNotFound(err) {
+	} else if !k8serrors.IsNotFound(err) {
 		return fmt.Errorf("get users secret: %v", err)
 	}
 
@@ -63,4 +131,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	}
 
 	return nil
+}
+
+type Credentials struct {
+	Username string
+	Password string
 }
