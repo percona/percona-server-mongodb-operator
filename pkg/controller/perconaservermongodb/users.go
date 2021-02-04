@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	mongod "go.mongodb.org/mongo-driver/mongo"
@@ -94,7 +95,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return nil, nil, errors.Wrap(err, "update internal sys users secret")
 	}
 	ann := map[string]string{
-		"last-applied-secret": newSecretDataHash,
+		"last-applied-secret":    newSecretDataHash,
+		"last-applied-secret-ts": time.Now().UTC().String(),
 	}
 	if restartSfs {
 		sfsTemplateAnn = ann
@@ -166,8 +168,9 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 			needRestartMongos: true, // in mgo.go:handleRsAddToShard() we use envs with this user credentials, so we need restart for update this envs
 		},
 		{
-			nameKey: envMongoDBClusterMonitorUser,
-			passKey: envMongoDBClusterMonitorPassword,
+			nameKey:        envMongoDBClusterMonitorUser,
+			passKey:        envMongoDBClusterMonitorPassword,
+			needRestartSfs: true, //need for liveness/readiness ckeck
 		},
 		{
 			nameKey:        envMongoDBBackupUser,
@@ -209,12 +212,12 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		return false, false, nil
 	}
 
-	err = r.updateUsers(cr, su.users, currUsersSec, repls)
+	err = r.updateUsers(cr, su.users, repls)
 
 	return restartSfs, restartMongos, errors.Wrap(err, "mongo: update system users")
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, usersSecret *corev1.Secret, repls []*api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, repls []*api.ReplsetSpec) error {
 	for _, replset := range repls {
 		matchLabels := map[string]string{
 			"app.kubernetes.io/name":       "percona-server-mongodb",
@@ -233,15 +236,15 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 			},
 		)
 
-		username := string(usersSecret.Data[envMongoDBUserAdminUser])
-		password := string(usersSecret.Data[envMongoDBUserAdminPassword])
 		if err != nil {
-			return errors.Wrapf(err, "get pods list for replset %s", replset.Name)
+			return errors.Wrap(err, "failed to get pods for RS")
 		}
-		client, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, pods, username, password)
+
+		client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}
+
 		defer func() {
 			err := client.Disconnect(context.TODO())
 			if err != nil {
@@ -252,7 +255,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 		for _, user := range users {
 			err := user.updateMongo(client)
 			if err != nil {
-				return errors.Wrapf(err, "updateUsers in mongo for replset %s", replset.Name)
+				return errors.Wrapf(err, "update users in mongo for replset %s", replset.Name)
 			}
 		}
 	}

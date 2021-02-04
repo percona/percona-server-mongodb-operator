@@ -191,16 +191,16 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods corev1.PodList, usersSecret *corev1.Secret) error {
+func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec, pods corev1.PodList) error {
+
 	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
 		cr.Status.State != api.AppStateReady ||
 		cr.Status.MongoImage == cr.Spec.Image {
 		return nil
 	}
 
-	username := string(usersSecret.Data[envMongoDBClusterAdminUser])
-	password := string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	session, err := r.mongoClient(cr, replset.Name, replset.Expose.Enabled, pods, username, password)
+	session, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
