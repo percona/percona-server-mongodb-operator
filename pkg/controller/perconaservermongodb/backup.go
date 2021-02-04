@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 
@@ -14,14 +15,14 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServerMongoDB) error {
-	ctasks := make(map[string]struct{})
+	ctasks := make(map[string]api.BackupTaskSpec)
 	ls := backup.NewBackupCronJobLabels(cr.Name)
 
 	for _, task := range cr.Spec.Backup.Tasks {
 		cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
 		ls = cjob.ObjectMeta.Labels
 		if task.Enabled {
-			ctasks[cjob.Name] = struct{}{}
+			ctasks[cjob.Name] = task
 
 			err := setControllerReference(cr, cjob, r.scheme)
 			if err != nil {
@@ -54,7 +55,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	}
 
 	for _, t := range tasksList.Items {
-		if _, ok := ctasks[t.Name]; !ok {
+		if spec, ok := ctasks[t.Name]; ok {
+			if spec.Keep > 0 {
+				oldjobs, err := r.oldScheduledBackups(cr, t.Name, spec.Keep)
+				if err != nil {
+					return fmt.Errorf("remove old backups: %v", err)
+				}
+
+				for _, todel := range oldjobs {
+					err = r.client.Delete(context.TODO(), &todel)
+					if err != nil {
+						return fmt.Errorf("failed to delete backup object: %v", err)
+					}
+				}
+			}
+		} else {
 			err := r.client.Delete(context.TODO(), &t)
 			if err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("delete backup task %s: %v", t.Name, err)
@@ -63,4 +78,69 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	}
 
 	return nil
+}
+
+// oldScheduledBackups returns list of the most old psmdb-bakups that execeed `keep` limit
+func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(cr *api.PerconaServerMongoDB,
+	ancestor string, keep int) ([]api.PerconaServerMongoDBBackup, error) {
+	bcpList := api.PerconaServerMongoDBBackupList{}
+	err := r.client.List(context.TODO(),
+		&bcpList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"cluster":  cr.Name,
+				"ancestor": ancestor,
+			}),
+		},
+	)
+	if err != nil {
+		return []api.PerconaServerMongoDBBackup{}, err
+	}
+
+	if len(bcpList.Items) <= keep {
+		return []api.PerconaServerMongoDBBackup{}, nil
+	}
+
+	h := &minHeap{}
+	heap.Init(h)
+	for _, bcp := range bcpList.Items {
+		if bcp.Status.State == api.BackupStateReady {
+			heap.Push(h, bcp)
+		}
+	}
+
+	if h.Len() <= keep {
+		return []api.PerconaServerMongoDBBackup{}, nil
+	}
+
+	ret := make([]api.PerconaServerMongoDBBackup, 0, h.Len()-keep)
+	for i := h.Len() - keep; i > 0; i-- {
+		o := heap.Pop(h).(api.PerconaServerMongoDBBackup)
+		ret = append(ret, o)
+	}
+
+	return ret, nil
+}
+
+type minHeap []api.PerconaServerMongoDBBackup
+
+func (h minHeap) Len() int { return len(h) }
+
+func (h minHeap) Less(i, j int) bool {
+	return h[i].CreationTimestamp.Before(&h[j].CreationTimestamp)
+}
+
+func (h minHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+
+func (h *minHeap) Push(x interface{}) {
+	*h = append(*h, x.(api.PerconaServerMongoDBBackup))
+}
+
+func (h *minHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
 }

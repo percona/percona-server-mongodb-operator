@@ -59,6 +59,17 @@ spec:
         resources:
           requests:
             storage: 1Gi
+    sidecars:
+    - image: busybox
+      command: ["/bin/sh"]
+      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+      name: my-sidecar-1
+    - image: busybox
+      command: ["/bin/sh"]
+      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+      name: my-sidecar-2
+    - image: busybox
+      name: mongod
     runtimeClassName: docker-rc
     size: 3
   secrets:

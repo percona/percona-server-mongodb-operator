@@ -10,6 +10,8 @@ import (
 )
 
 func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) *batchv1b.CronJob {
+	jobName := crName + "-backup-" + backup.Name
+
 	backupPod := corev1.PodSpec{
 		RestartPolicy:      corev1.RestartPolicyNever,
 		ImagePullSecrets:   imagePullSecrets,
@@ -33,7 +35,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 						},
 					},
 				},
-				Args:            newBackupCronJobContainerArgs(backup),
+				Args:            newBackupCronJobContainerArgs(backup, jobName),
 				SecurityContext: backupSpec.ContainerSecurityContext,
 			},
 		},
@@ -47,7 +49,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 			Kind:       "CronJob",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName + "-backup-" + backup.Name,
+			Name:      jobName,
 			Namespace: namespace,
 			Labels:    NewBackupCronJobLabels(crName),
 		},
@@ -79,7 +81,7 @@ func NewBackupCronJobLabels(crName string) map[string]string {
 	}
 }
 
-func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec) []string {
+func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) []string {
 	return []string{
 		"-c",
 		`curl \
@@ -92,9 +94,10 @@ func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec) []string {
 				\"kind\":\"PerconaServerMongoDBBackup\",
 				\"apiVersion\":\"psmdb.percona.com/v1\",
 				\"metadata\":{
+					\"finalizers\":  [\"delete-backup\"],
 					\"generateName\":\"cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-\",
 					\"labels\":{
-						\"ancestor\":\"` + backup.Name + `\",
+						\"ancestor\":\"` + jobName + `\",
 						\"cluster\":\"${psmdbCluster}\",
 						\"type\":\"cron\"
 					}

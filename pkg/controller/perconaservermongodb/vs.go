@@ -74,7 +74,7 @@ func (vs VersionServiceClient) GetExactVersion(endpoint string, vm VersionMeta) 
 		MongoVersion:  mongoVersion,
 		BackupImage:   resp.Payload.Versions[0].Matrix.Backup[backupVersion].ImagePath,
 		BackupVersion: backupVersion,
-		PMMImage:      resp.Payload.Versions[0].Matrix.Mongod[pmmVersion].ImagePath,
+		PMMImage:      resp.Payload.Versions[0].Matrix.Pmm[pmmVersion].ImagePath,
 		PMMVersion:    pmmVersion,
 	}, nil
 }
