@@ -402,6 +402,20 @@ run_mongos() {
         bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
 }
 
+run_script_mongos() {
+    local script="$1"
+    local uri="$2"
+    local driver=${3:-mongodb}
+    local suffix=${4:-.svc.cluster.local}
+    local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+
+    name="$(basename $script)"
+
+    kubectl_bin cp ${script} $namespace/${client_container}:/tmp
+    kubectl_bin exec ${client_container} -- \
+        bash -c "mongo $driver://$uri$suffix/admin /tmp/${name}"
+}
+
 get_service_ip() {
     local service=$1
     if [ "$(kubectl_bin get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
