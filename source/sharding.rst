@@ -54,7 +54,7 @@ processes of your replica set.
 
    .. code:: bash
 
-      kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
+      kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
 
 2. Find the password for the admin user, which you will need to access the
    cluster. Use ``kubectl get secrets`` to see the list of Secrets objects (by

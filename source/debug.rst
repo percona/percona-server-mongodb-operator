@@ -19,7 +19,7 @@ and so a special approach is needed to make fixes.
 To use the debug image instead of the normal one, set the following image name
 for the ``image`` key in the ``deploy/cr.yaml`` configuration file:
 
-  ``percona/percona-server-mongodb:{{{mongodb42recommended}}}-debug``
+  ``percona/percona-server-mongodb:{{{mongodb44recommended}}}-debug``
 
 The Pod should be restarted to get the new image.
 

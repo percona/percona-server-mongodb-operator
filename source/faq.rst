@@ -57,12 +57,11 @@ Which versions of MongoDB the Operator supports?
 
 Percona Operator for Percona Server for MongoDB provides a ready-to-use
 installation of the MongoDB-based database cluster inside your Kubernetes
-installation. It works with Percona Server for MongoDB 3.6, 4.0, and 4.2, and
-the exact version is determined by the Docker image in use.
+installation. It works with Percona Server for MongoDB 3.6, 4.0, 4.2, and 4.4,
+and the exact version is determined by the Docker image in use.
 
 Percona-certified Docker images used by the Operator are listed `here <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/images.html>`_.
-For example, Percona Server for MongoDB 4.2 is supported with the following
-recommended version: {{{mongodb42recommended}}}. More details on the exact Percona
-Server for MongoDB version can be found in the release notes (`4.2 <https://www.percona.com/doc/percona-server-for-mongodb/4.2/release_notes/index.html>`_, `4.0 <https://www.percona.com/doc/percona-server-for-mongodb/4.0/release_notes/index.html>`_,
-and `3.6 <https://www.percona.com/doc/percona-server-for-mongodb/3.6/release_notes/index.html>`_).
+For example, Percona Server for MongoDB 4.4 is supported with the following
+recommended version: {{{mongodb44recommended}}}. More details on the exact Percona
+Server for MongoDB version can be found in the release notes (`4.4 <https://www.percona.com/doc/percona-server-for-mongodb/4.4/release_notes/index.html>`_, `4.2 <https://www.percona.com/doc/percona-server-for-mongodb/4.2/release_notes/index.html>`_, `4.0 <https://www.percona.com/doc/percona-server-for-mongodb/4.0/release_notes/index.html>`_, and `3.6 <https://www.percona.com/doc/percona-server-for-mongodb/3.6/release_notes/index.html>`_).
 

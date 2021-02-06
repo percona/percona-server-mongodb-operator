@@ -77,7 +77,7 @@ The following steps are needed to run Percona Server for MongoDB Operator on min
    
    .. code:: bash
 
-      kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb42recommended}}} --restart=Never -- bash -il
+      kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
    
    Now run ``mongo`` tool in the percona-client command shell using the login
    (which is ``userAdmin``) and password obtained from the secret:

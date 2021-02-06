@@ -53,11 +53,11 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
    .. code:: bash
 
-      $ docker pull docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
+      $ docker pull docker.io/perconalab/percona-server-mongodb@sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0
       Trying to pull repository docker.io/perconalab/percona-server-mongodb ...
-      sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505: Pulling from docker.io/perconalab/percona-server-mongodb
-      Digest: sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
-      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
+      sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0: Pulling from docker.io/perconalab/percona-server-mongodb
+      Digest: sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0
+      Status: Image is up to date for docker.io/perconalab/percona-server-mongodb@sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0
 
    You can find correct names and SHA digests in the
    :ref:`current list of the Operator-related images officially certified by Percona<custom-registry-images>`.
@@ -69,9 +69,9 @@ Operator deployed in the OpenShift environment demonstrates the process:
    .. code:: bash
 
       $ docker tag \
-          docker.io/perconalab/percona-server-mongodb@sha256:a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505 \
-          172.30.162.173:5000/psmdb/percona-server-mongodb:{{{mongodb42recommended}}}
-      $ docker push 172.30.162.173:5000/psmdb/percona-server-mongodb:{{{mongodb42recommended}}}
+          docker.io/perconalab/percona-server-mongodb@sha256:991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0 \
+          172.30.162.173:5000/psmdb/percona-server-mongodb:{{{mongodb44recommended}}}
+      $ docker push 172.30.162.173:5000/psmdb/percona-server-mongodb:{{{mongodb44recommended}}}
 
 6. Verify the image is available in the OpenShift registry with the following command:
 
@@ -79,9 +79,9 @@ Operator deployed in the OpenShift environment demonstrates the process:
 
       $ oc get is
       NAME                              DOCKER REPO                                                             TAGS             UPDATED
-      percona-server-mongodb            docker-registry.default.svc:5000/psmdb/percona-server-mongodb  {{{mongodb42recommended}}}  2 hours ago
+      percona-server-mongodb            docker-registry.default.svc:5000/psmdb/percona-server-mongodb  {{{mongodb44recommended}}}  2 hours ago
 
-7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb:{{{mongodb42recommended}}}``)
+7. When the custom registry image is available, edit the the ``image:`` option in ``deploy/operator.yaml`` configuration file with a Docker Repo + Tag string (it should look like``docker-registry.default.svc:5000/psmdb/percona-server-mongodb:{{{mongodb44recommended}}}``)
 
    .. note::
 
