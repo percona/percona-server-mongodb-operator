@@ -89,17 +89,16 @@ Install Percona server for MongoDB on Kubernetes
 
       $ kubectl apply -f deploy/cr.yaml
 
-   The creation process may take some time. The process is over when both
-   operator and replica set pod have reached their Running status:
+   The creation process may take some time. The process is over when all Pods
+   have reached their Running status. You can check it with the following command:
 
    .. code:: bash
 
       $ kubectl get pods
-      NAME                                               READY   STATUS    RESTARTS   AGE
-      my-cluster-name-rs0-0                              1/1     Running   0          8m
-      my-cluster-name-rs0-1                              1/1     Running   0          8m
-      my-cluster-name-rs0-2                              1/1     Running   0          7m
-      percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
+
+   The result should look as follows:
+
+   .. include:: ./assets/code/kubectl-get-pods-response.txt
 
 #. Check connectivity to newly created cluster, using the login (which is
    ``userAdmin``) and corresponding password from the secret:

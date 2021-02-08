@@ -52,6 +52,18 @@ The following steps are needed to run Percona Server for MongoDB Operator on min
 
      kubectl apply -f deploy/cr.yaml
 
+   The creation process may take some time. The process is over when all Pods
+   have reached their Running status. You can check it with the following command:
+
+   .. code:: bash
+
+      kubectl get pods
+
+   The result should look as follows:
+
+   .. include:: ./assets/code/kubectl-get-pods-response.txt
+
+
 5. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
    including the password for the admin user, which you will need to access the
    cluster. Use ``kubectl get secrets`` to see the list of Secrets objects (by

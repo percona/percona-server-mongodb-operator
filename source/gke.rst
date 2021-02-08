@@ -137,14 +137,13 @@ Verifying the cluster operation
 
 It may take ten minutes to get the cluster started. You  can verify its creation with the ``kubectl get pods`` command:
 
-.. code:: text
+.. code:: bash
 
    $ kubectl get pods
-   NAME                                                      READY   STATUS    RESTARTS   AGE
-   my-cluster-name-rs0-0                                     2/2     Running   0          8m
-   my-cluster-name-rs0-1                                     2/2     Running   0          8m
-   my-cluster-name-rs0-2                                     2/2     Running   0          7m
-   percona-server-mongodb-operator-5bcc66fb65-lxzw5          1/1     Running   0          9m
+
+The result should look as follows:
+
+.. include:: ./assets/code/kubectl-get-pods-response.txt
 
 Also, you can see the same information when browsing Pods of your cluster in Google Cloud console via the *Object Browser*:
 

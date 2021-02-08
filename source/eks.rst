@@ -130,12 +130,16 @@ Install the Operator
 
       $ kubectl apply -f deploy/cr.yaml
 
-   The process could take some time.
-   The return statement confirms the creation:
+   The creation process may take some time. The process is over when all Pods
+   have reached their Running status. You can check it with the following command:
 
-   .. code:: text
+   .. code:: bash
 
-      perconaservermongodb.psmdb.percona.com/my-cluster-name created
+      kubectl get pods
+
+   The result should look as follows:
+
+   .. include:: ./assets/code/kubectl-get-pods-response.txt
 
 5. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_, including the password for the ``root`` user, which you will need to access the cluster.
 
