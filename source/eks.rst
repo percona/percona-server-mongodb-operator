@@ -158,15 +158,17 @@ Install the Operator
 
 6. Check connectivity to a newly created cluster.
 
-   First of all, run percona-client and connect its console output to your
-   terminal (running it may require some time to deploy the correspondent Pod): 
+   First of all, run a container with a MongoDB client and connect its console
+   output to your terminal. The following command will do this, naming the new
+   Pod ``percona-client``:
    
    .. code:: bash
 
       kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
    
-   Now run ``mongo`` tool in the percona-client command shell using the login
-   (which is ``userAdmin``) and password obtained from the secret:
+   Executing it may require some time to deploy the correspondent Pod. Now run
+   ``mongo`` tool in the percona-client command shell using the login (which is
+   ``userAdmin``) and password obtained from the secret:
    
    .. code:: bash
 
