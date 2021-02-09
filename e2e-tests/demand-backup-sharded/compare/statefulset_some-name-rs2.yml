@@ -8,8 +8,8 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: rs0
-  name: some-name-rs0
+    app.kubernetes.io/replset: rs2
+  name: some-name-rs2
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -25,8 +25,8 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: rs0
-  serviceName: some-name-rs0
+      app.kubernetes.io/replset: rs2
+  serviceName: some-name-rs2
   template:
     metadata:
       annotations: {}
@@ -36,7 +36,7 @@ spec:
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: rs0
+        app.kubernetes.io/replset: rs2
     spec:
       containers:
         - args:
@@ -44,7 +44,7 @@ spec:
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=rs0
+            - --replSet=rs2
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
@@ -74,7 +74,7 @@ spec:
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: rs0
+              value: rs2
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -140,6 +140,16 @@ spec:
               name: some-name-mongodb-encryption-key
               readOnly: true
           workingDir: /data/db
+        - args:
+            - -c
+            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
+          command:
+            - /bin/sh
+          imagePullPolicy: Always
+          name: rs-sidecar-1
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
         - env:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
@@ -154,7 +164,7 @@ spec:
                   name: internal-some-name-users
                   optional: false
             - name: PBM_MONGODB_REPLSET
-              value: rs0
+              value: rs2
             - name: PBM_MONGODB_PORT
               value: "27017"
             - name: SHARDED
@@ -186,7 +196,6 @@ spec:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
-      runtimeClassName: docker-rc
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
