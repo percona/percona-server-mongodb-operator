@@ -194,6 +194,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		"--bind_ip_all",
 		"--port=" + strconv.Itoa(int(msSpec.Port)),
 		"--sslAllowInvalidCertificates",
+		"--relaxPermChecks",
 		"--configdb",
 		configDB,
 	}
