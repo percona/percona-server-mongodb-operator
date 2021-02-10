@@ -159,8 +159,6 @@ function main() {
     apply_cluster "${cr_yaml}"
     wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
     wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
-    compare_kubectl "statefulset/${cluster}-rs0"
-    compare_kubectl "statefulset/${cluster}-cfg"
     wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
     run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
               "userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
