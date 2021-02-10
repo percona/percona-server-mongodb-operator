@@ -17,8 +17,8 @@ The following steps are needed to run Percona Server for MongoDB Operator on min
    #. a hypervisor, if it is not already installed,
    #. actual minikube package
 
-   After the installation, run ``minikube start --memory=4096 --cpus=3``
-   (parameters increase the virtual machine limits for the CPU cores and memory,
+   After the installation, run ``minikube start --memory=5120 --cpus=4 --disk-size=30g``
+   (parameters increase the virtual machine limits for the CPU cores, memory, and disk,
    to ensure stable work of the Operator). Being executed, this command will
    download needed virtualized images, then initialize and run the
    cluster. After Minikube is successfully started, you can optionally run the
@@ -39,10 +39,12 @@ The following steps are needed to run Percona Server for MongoDB Operator on min
    be edited to adapt the Operator for the the local installation with limited
    resources. Change the following keys in the ``replsets`` section:
 
-   #. comment ``resources.requests.memory`` and ``resources.requests.cpu`` keys
-      (this will fit the Operator in minikube default limitations)
-   #. set ``affinity.antiAffinityTopologyKey`` key to ``"none"`` (the Operator
-      will be unable to spread the cluster on several nodes)
+   #. comment **all occurrences** of the ``resources.requests.memory`` and
+      ``resources.requests.cpu`` keys (this will fit the Operator in minikube
+      default limitations)
+   #. set **all occurrences** of the ``affinity.antiAffinityTopologyKey`` key to
+      ``"none"`` (the Operator will be unable to spread the cluster on several
+      nodes)
 
    Also, switch ``allowUnsafeConfigurations`` key to ``true`` (this option turns
    off the Operator’s control over the cluster configuration, making it possible to
@@ -51,6 +53,18 @@ The following steps are needed to run Percona Server for MongoDB Operator on min
 4. Now apply the ``deploy/cr.yaml`` file with the following command::
 
      kubectl apply -f deploy/cr.yaml
+
+   The creation process may take some time. The process is over when all Pods
+   have reached their Running status. You can check it with the following command:
+
+   .. code:: bash
+
+      kubectl get pods
+
+   The result should look as follows:
+
+   .. include:: ./assets/code/kubectl-get-pods-response.txt
+
 
 5. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
    including the password for the admin user, which you will need to access the
@@ -72,15 +86,17 @@ The following steps are needed to run Percona Server for MongoDB Operator on min
 
 6. Check connectivity to a newly created cluster.
 
-   First of all, run percona-client and connect its console output to your
-   terminal (running it may require some time to deploy the correspondent Pod): 
-   
+   First of all, run a container with a MongoDB client and connect its console
+   output to your terminal. The following command will do this, naming the new
+   Pod ``percona-client``:
+
    .. code:: bash
 
       kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
    
-   Now run ``mongo`` tool in the percona-client command shell using the login
-   (which is ``userAdmin``) and password obtained from the secret:
+   Executing it may require some time to deploy the correspondent Pod.  Now run
+   ``mongo`` tool in the percona-client command shell using the login (which is
+   ``userAdmin``) and password obtained from the secret:
    
    .. code:: bash
 

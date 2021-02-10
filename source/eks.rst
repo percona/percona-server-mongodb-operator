@@ -130,12 +130,16 @@ Install the Operator
 
       $ kubectl apply -f deploy/cr.yaml
 
-   The process could take some time.
-   The return statement confirms the creation:
+   The creation process may take some time. The process is over when all Pods
+   have reached their Running status. You can check it with the following command:
 
-   .. code:: text
+   .. code:: bash
 
-      perconaservermongodb.psmdb.percona.com/my-cluster-name created
+      kubectl get pods
+
+   The result should look as follows:
+
+   .. include:: ./assets/code/kubectl-get-pods-response.txt
 
 5. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_, including the password for the ``root`` user, which you will need to access the cluster.
 
@@ -154,15 +158,17 @@ Install the Operator
 
 6. Check connectivity to a newly created cluster.
 
-   First of all, run percona-client and connect its console output to your
-   terminal (running it may require some time to deploy the correspondent Pod): 
+   First of all, run a container with a MongoDB client and connect its console
+   output to your terminal. The following command will do this, naming the new
+   Pod ``percona-client``:
    
    .. code:: bash
 
       kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
    
-   Now run ``mongo`` tool in the percona-client command shell using the login
-   (which is ``userAdmin``) and password obtained from the secret:
+   Executing it may require some time to deploy the correspondent Pod. Now run
+   ``mongo`` tool in the percona-client command shell using the login (which is
+   ``userAdmin``) and password obtained from the secret:
    
    .. code:: bash
 

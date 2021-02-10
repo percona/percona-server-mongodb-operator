@@ -137,14 +137,13 @@ Verifying the cluster operation
 
 It may take ten minutes to get the cluster started. You  can verify its creation with the ``kubectl get pods`` command:
 
-.. code:: text
+.. code:: bash
 
    $ kubectl get pods
-   NAME                                                      READY   STATUS    RESTARTS   AGE
-   my-cluster-name-rs0-0                                     2/2     Running   0          8m
-   my-cluster-name-rs0-1                                     2/2     Running   0          8m
-   my-cluster-name-rs0-2                                     2/2     Running   0          7m
-   percona-server-mongodb-operator-5bcc66fb65-lxzw5          1/1     Running   0          9m
+
+The result should look as follows:
+
+.. include:: ./assets/code/kubectl-get-pods-response.txt
 
 Also, you can see the same information when browsing Pods of your cluster in Google Cloud console via the *Object Browser*:
 
@@ -153,15 +152,17 @@ Also, you can see the same information when browsing Pods of your cluster in Goo
 
 If all nodes are up and running, you can try to connect to the cluster.
 
-First of all, run percona-client and connect its console output to your
-terminal (running it may require some time to deploy the correspondent Pod): 
+First of all, run a container with a MongoDB client and connect its console
+output to your terminal. The following command will do this, naming the new Pod
+``percona-client``:
    
 .. code:: bash
 
    kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
-   
-Now run ``mongo`` tool in the percona-client command shell using the login 
-(which is ``userAdmin``) and password obtained from the secret:
+
+Executing it may require some time to deploy the correspondent Pod. Now run
+``mongo`` tool in the percona-client command shell using the login (which is
+``userAdmin``) and password obtained from the secret:
 
 .. code:: bash
 
@@ -203,7 +204,7 @@ You can clean up the cluster with the ``gcloud`` command as follows:
 
 The return statement requests your confirmation of the deletion. Type ``y`` to confirm.
 
-Also, you can delete your cluster via the GKE console. Just click the appropriate trashcan icon in the clusters list:
+Also, you can delete your cluster via the GKE console. Just click the ``Delete`` popup menu item in the clusters list:
 
 .. image:: ./img/gke-quickstart-cluster-connect.png
    :align: center

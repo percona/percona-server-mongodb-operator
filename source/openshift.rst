@@ -118,17 +118,16 @@ Install Percona server for MongoDB on OpenShift
 
          $ oc apply -f deploy/cr.yaml
 
-   The creation process will take time. The process is complete when both the
-   operator and the replica set pod have reached their Running status:
+   The creation process will take time. The process is complete when all Pods
+   have reached their Running status. You can check it with the following command:
 
    .. code:: bash
 
       $ oc get pods
-      NAME                                               READY   STATUS    RESTARTS   AGE
-      my-cluster-name-rs0-0                              1/1     Running   0          8m
-      my-cluster-name-rs0-1                              1/1     Running   0          8m
-      my-cluster-name-rs0-2                              1/1     Running   0          7m
-      percona-server-mongodb-operator-754846f95d-sf6h6   1/1     Running   0          9m
+
+   The result should look as follows:
+
+   .. include:: ./assets/code/kubectl-get-pods-response.txt
 
 8. Check connectivity to newly created cluster. Please note that mongo client command shall be executed inside the container manually.
 
