@@ -13,6 +13,7 @@ cloud.
 The following steps are needed to run Percona Server for MongoDB Operator on minikube:
 
 0. `Install minikube <https://kubernetes.io/docs/tasks/tools/install-minikube/>`_, using a way recommended for your system. This includes the installation of the following three components:
+
    #. kubectl tool,
    #. a hypervisor, if it is not already installed,
    #. actual minikube package
