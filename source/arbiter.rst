@@ -22,3 +22,18 @@ file:
 -  set ``arbiter.enabled`` option to ``true`` to allow Arbiter nodes,
 -  use ``arbiter.size`` option to set the desired amount of the Replica
    Set nodes which should be Arbiter ones instead of containing data.
+
+For example, the following keys in ``deploy/cr.yaml`` will create a cluster
+with 2 data instances and 1 Arbiter:
+
+.. code:: yaml
+
+   ....
+   replsets:
+     ....
+     size: 3
+     ....
+     arbiter:
+       enabled: true
+       size: 1
+       ....
