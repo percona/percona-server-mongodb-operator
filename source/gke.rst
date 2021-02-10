@@ -204,7 +204,7 @@ You can clean up the cluster with the ``gcloud`` command as follows:
 
 The return statement requests your confirmation of the deletion. Type ``y`` to confirm.
 
-Also, you can delete your cluster via the GKE console. Just click the appropriate trashcan icon in the clusters list:
+Also, you can delete your cluster via the GKE console. Just click the ``Delete`` popup menu item in the clusters list:
 
 .. image:: ./img/gke-quickstart-cluster-connect.png
    :align: center
