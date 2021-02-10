@@ -15,6 +15,8 @@
 package db
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -57,7 +59,7 @@ func getDefaultMongoDBAddress() string {
 	return hostname + ":" + DefaultMongoDBPort
 }
 
-func NewConfig(app *kingpin.Application, envUser string, envPassword string) *Config {
+func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*Config, error) {
 	db := &Config{
 		DialInfo: &mgo.DialInfo{},
 	}
@@ -77,10 +79,18 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) *Co
 		"username",
 		"mongodb auth username, this flag or env var "+envUser+" is required",
 	).Envar(envUser).Required().StringVar(&db.DialInfo.Username)
-	app.Flag(
-		"password",
-		"mongodb auth password, this flag or env var "+envPassword+" is required",
-	).Envar(envPassword).Required().StringVar(&db.DialInfo.Password)
+	pass, err := ioutil.ReadFile("/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD")
+	if err != nil && err != os.ErrNotExist {
+		return nil, fmt.Errorf("read MONGODB_CLUSTER_MONITOR_PASSWORD: %v", err)
+	}
+	if len(pass) > 0 {
+		db.DialInfo.Password = string(pass)
+	} else {
+		app.Flag(
+			"password",
+			"mongodb auth password, this flag or env var "+envPassword+" is required",
+		).Envar(envPassword).Required().StringVar(&db.DialInfo.Password)
+	}
 	app.Flag(
 		"authDb",
 		"mongodb auth database",
@@ -95,7 +105,7 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) *Co
 	).Default("true").BoolVar(&db.DialInfo.FailFast)
 
 	db.SSL = NewSSLConfig(app)
-	return db
+	return db, nil
 }
 
 func NewSSLConfig(app *kingpin.Application) *SSLConfig {
