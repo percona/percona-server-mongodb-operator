@@ -39,10 +39,10 @@ The following steps are needed to run Percona Server for MongoDB Operator on min
    be edited to adapt the Operator for the the local installation with limited
    resources. Change the following keys in the ``replsets`` section:
 
-   #. comment **all occurancies** of the ``resources.requests.memory`` and
+   #. comment **all occurrences** of the ``resources.requests.memory`` and
       ``resources.requests.cpu`` keys (this will fit the Operator in minikube
       default limitations)
-   #. set **all occurancies** of the ``affinity.antiAffinityTopologyKey`` key to
+   #. set **all occurrences** of the ``affinity.antiAffinityTopologyKey`` key to
       ``"none"`` (the Operator will be unable to spread the cluster on several
       nodes)
 
