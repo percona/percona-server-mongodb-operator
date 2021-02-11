@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -161,6 +160,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	if err != nil {
 		return clusterError, errors.Wrap(err, "unable to get replset members")
 	}
+
 	membersLive := 0
 	for _, member := range rsStatus.Members {
 		switch member.State {
@@ -172,9 +172,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			return clusterError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
 		}
 	}
+
 	if membersLive == len(pods.Items) {
 		return clusterReady, nil
 	}
+
 	return clusterInit, nil
 }
 
@@ -239,7 +241,6 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerM
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPod corev1.Pod) error {
 
-	var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
 		return errors.New("rsPod is not redy")
 	}
@@ -249,24 +250,21 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 
 	host := psmdb.GetAddr(m, rspod.Name, replset.Name)
 
-	cmd := []string{
-		"sh", "-c",
-		fmt.Sprintf(
-			`
-				cat <<-EOF | mongo "mongodb://${MONGODB_CLUSTER_ADMIN_USER}:${MONGODB_CLUSTER_ADMIN_PASSWORD}@localhost"
-				sh.addShard("%s/%s")
-				EOF
-			`, replset.Name, host),
-	}
-
-	var errb, outb bytes.Buffer
-	err := r.clientcmd.Exec(&mongosPod, "mongos", cmd, nil, &outb, &errb, false)
+	cli, err := r.mongosClientWithRole(m, roleClusterAdmin)
 	if err != nil {
-		return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
+		return errors.Wrap(err, "failed to get mongos client")
 	}
 
-	if !re.Match(outb.Bytes()) {
-		return errors.Errorf("failed to add shard: %s", outb.String())
+	defer func() {
+		err := cli.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongos connection")
+		}
+	}()
+
+	err = mongo.AddShard(context.Background(), cli, replset.Name, host)
+	if err != nil {
+		return errors.Wrap(err, "failed to add shard")
 	}
 
 	return nil

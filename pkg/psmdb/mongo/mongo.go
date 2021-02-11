@@ -141,6 +141,25 @@ func CreateUser(ctx context.Context, client *mongo.Client, user, pwd string, rol
 	return nil
 }
 
+func AddShard(ctx context.Context, client *mongo.Client, rsName, host string) error {
+	resp := OKResponse{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "addShard", Value: rsName + "/" + host}})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "add shard")
+	}
+
+	if err := res.Decode(&resp); err != nil {
+		return errors.Wrap(err, "failed to decode addShard responce")
+	}
+
+	if resp.OK != 1 {
+		return errors.Errorf("add shard: %s", resp.Errmsg)
+	}
+
+	return nil
+}
+
 func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error {
 	resp := OKResponse{}
 
