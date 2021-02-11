@@ -26,33 +26,28 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return clusterReady, nil
 	}
 
-	session, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleClusterAdmin)
-	if err != nil {
-		// try to init replset and if succseed
-		// we'll go further on the next reconcile iteration
-		if !cr.Status.Replsets[replset.Name].Initialized {
-			err = r.handleReplsetInit(cr, replset, pods.Items)
-			if err != nil {
-				return clusterInit, errors.Wrap(err, "handleReplsetInit:")
-			}
-			cr.Status.Replsets[replset.Name].Initialized = true
-			cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
-				Status:             api.ConditionTrue,
-				Type:               api.ClusterRSInit,
-				Message:            replset.Name,
-				LastTransitionTime: metav1.NewTime(time.Now()),
-			})
-			return clusterInit, nil
-		}
-		return clusterError, errors.Wrap(err, "dial:")
-	}
-
-	defer func() {
-		err := session.Disconnect(context.TODO())
+	if !cr.Status.Replsets[replset.Name].Initialized {
+		err := r.handleReplsetInit(cr, replset, pods.Items)
 		if err != nil {
-			log.Error(err, "failed to close connection")
+			return clusterInit, errors.Wrap(err, "handleReplsetInit:")
 		}
-	}()
+
+		err = r.createSystemUsers(cr, replset, pods.Items)
+		if err != nil {
+			return clusterInit, errors.Wrap(err, "create system users")
+		}
+
+		cr.Status.Replsets[replset.Name].Initialized = true
+
+		cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+			Status:             api.ConditionTrue,
+			Type:               api.ClusterRSInit,
+			Message:            replset.Name,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		})
+
+		return clusterInit, nil
+	}
 
 	if cr.Spec.Sharding.Enabled &&
 		cr.Status.Replsets[replset.Name].Initialized &&
@@ -92,6 +87,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			cr.Status.Replsets[replset.Name].AddedAsShard = &t
 		}
 	}
+
+	session, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleClusterAdmin)
+	if err != nil {
+		return clusterInit, errors.Wrap(err, "faile to get mongo connection")
+	}
+
+	defer func() {
+		err := session.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
 
 	cnf, err := mongo.ReadConfig(context.TODO(), session)
 	if err != nil {
@@ -188,56 +195,15 @@ func inShard(client *mgo.Client, podName string) (bool, error) {
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
-const (
-	mongoInitAdminUser = `
-	db.getSiblingDB("admin").createUser(
+func mongoInitAdminUser(user, pwd string) string {
+	return fmt.Sprintf(`db.getSiblingDB("admin").createUser(
 		{
-			user: "${MONGODB_USER_ADMIN_USER}",
-			pwd: "${MONGODB_USER_ADMIN_PASSWORD}",
+			user: "%s",
+			pwd: "%s",
 			roles: [ "userAdminAnyDatabase" ] 
 		}
-	)
-	`
-
-	mongoInitUsers = `
-	db.getSiblingDB("admin").createUser(
-		{
-			user: "${MONGODB_CLUSTER_ADMIN_USER}",
-			pwd: "${MONGODB_CLUSTER_ADMIN_PASSWORD}",
-			roles: [ "clusterAdmin" ] 
-		}
-	)
-	db.getSiblingDB("admin").createUser(
-		{
-			user: "${MONGODB_CLUSTER_MONITOR_USER}",
-			pwd: "${MONGODB_CLUSTER_MONITOR_PASSWORD}",
-			roles: [ "clusterMonitor" ] 
-		}
-	)
-	
-	db.getSiblingDB("admin").createRole({ "role": "pbmAnyAction",
-		  "privileges": [
-			 { "resource": { "anyResource": true },
-			   "actions": [ "anyAction" ]
-			 }
-		  ],
-		  "roles": []
-	   });
-	db.getSiblingDB("admin").createUser(
-		{
-			user: "${MONGODB_BACKUP_USER}",
-			pwd: "${MONGODB_BACKUP_PASSWORD}",
-			"roles" : [
-				{ "db" : "admin", "role" : "readWrite", "collection": "" },
-				{ "db" : "admin", "role" : "backup" },
-				{ "db" : "admin", "role" : "clusterMonitor" },
-				{ "db" : "admin", "role" : "restore" },
-				{ "db" : "admin", "role" : "pbmAnyAction" }
-			 ]
-		}
-	)
-	`
-)
+	)`, user, pwd)
+}
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
 	cli, err := r.mongosClientWithRole(cr, roleClusterAdmin)
@@ -317,7 +283,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			continue
 		}
 
-		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
+		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
@@ -350,12 +316,15 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		time.Sleep(time.Second * 5)
 
-		cmd[2] = fmt.Sprintf(
-			`
+		userAdmin, err := r.getInternalCredentials(m, roleUserAdmin)
+		if err != nil {
+			return errors.Wrap(err, "failed to get userAdmin credentials")
+		}
+
+		cmd[2] = fmt.Sprintf(`
 			cat <<-EOF | mongo 
 			%s
-			EOF
-			`, mongoInitAdminUser)
+			EOF`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
@@ -363,22 +332,75 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		cmd[2] = fmt.Sprintf(
-			`
-			cat <<-EOF | mongo "mongodb://${MONGODB_USER_ADMIN_USER}:${MONGODB_USER_ADMIN_PASSWORD}@%s/?replicaSet=%s"
-			%s
-			EOF
-			`, host, replset.Name, mongoInitUsers)
-		errb.Reset()
-		outb.Reset()
-		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			return fmt.Errorf("exec add users: %v / %s / %s", err, outb.String(), errb.String())
-		}
+		log.Info("replset was initialized", "replset", replset.Name, "pod", pod.Name)
 
 		return nil
 	}
+
 	return errNoRunningMongodContainers
+}
+
+func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
+	cli, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleUserAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to get mongo client")
+	}
+
+	defer func() {
+		err := cli.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongo connection")
+		}
+	}()
+
+	clusterAdmin, err := r.getInternalCredentials(cr, roleClusterAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to get cluster admin")
+	}
+
+	err = mongo.CreateUser(context.Background(), cli, clusterAdmin.Username, clusterAdmin.Password, []interface{}{"clusterAdmin"})
+	if err != nil {
+		return errors.Wrap(err, "failed to create clusterAdmin")
+	}
+
+	monitorUser, err := r.getInternalCredentials(cr, roleMonitorUser)
+	if err != nil {
+		return errors.Wrap(err, "failed to get cluster admin")
+	}
+
+	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password, []interface{}{"clusterMonitor"})
+	if err != nil {
+		return errors.Wrap(err, "failed to create monitorUser")
+	}
+
+	err = mongo.CreateRole(context.Background(), cli, "pbmAnyAction",
+		[]interface{}{
+			map[string]interface{}{
+				"resource": map[string]bool{"anyResource": true},
+				"actions":  []string{"anyAction"},
+			},
+		}, []interface{}{})
+	if err != nil {
+		return errors.Wrap(err, "failed to create role")
+	}
+
+	backupUser, err := r.getInternalCredentials(cr, roleBackupUser)
+	if err != nil {
+		return errors.Wrap(err, "failed to get cluster admin")
+	}
+
+	err = mongo.CreateUser(context.Background(), cli, backupUser.Username, backupUser.Password, []interface{}{
+		map[string]string{"db": "admin", "role": "readWrite", "collection": ""},
+		map[string]string{"db": "admin", "role": "backup"},
+		map[string]string{"db": "admin", "role": "clusterMonitor"},
+		map[string]string{"db": "admin", "role": "restore"},
+		map[string]string{"db": "admin", "role": "pbmAnyAction"},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create backup")
+	}
+
+	return nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod

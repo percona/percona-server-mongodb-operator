@@ -240,7 +240,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 			return errors.Wrap(err, "failed to get pods for RS")
 		}
 
-		client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleUserAdmin)
+		client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}

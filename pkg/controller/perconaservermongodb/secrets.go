@@ -31,6 +31,8 @@ type UserRole string
 const (
 	roleClusterAdmin UserRole = "clusterAdmin"
 	roleUserAdmin    UserRole = "userAdmin"
+	roleMonitorUser  UserRole = "clusterMonitor"
+	roleBackupUser   UserRole = "backupUser"
 )
 
 func userSecretNameInternal(cr *api.PerconaServerMongoDB) string {
@@ -73,6 +75,12 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMong
 	case roleUserAdmin:
 		creds.Username = string(usersSecret.Data[envMongoDBUserAdminUser])
 		creds.Password = string(usersSecret.Data[envMongoDBUserAdminPassword])
+	case roleMonitorUser:
+		creds.Username = string(usersSecret.Data[envMongoDBClusterMonitorUser])
+		creds.Password = string(usersSecret.Data[envMongoDBClusterMonitorPassword])
+	case roleBackupUser:
+		creds.Username = string(usersSecret.Data[envMongoDBBackupUser])
+		creds.Password = string(usersSecret.Data[envMongoDBBackupPassword])
 	default:
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}
