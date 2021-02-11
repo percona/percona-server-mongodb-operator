@@ -32,6 +32,9 @@ spec:
       storage: false
       served: true
     - name: v1-6-0
+      storage: false
+      served: true
+    - name: v1-7-0
       storage: true
       served: true
     - name: v1alpha1
@@ -145,9 +148,11 @@ rules:
   verbs:
   - get
   - list
-  - update
   - watch
   - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - ""
   resources:
@@ -253,7 +258,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.6.0
+          image: percona/percona-server-mongodb-operator:1.7.0
           ports:
           - containerPort: 60000
             name: metrics
