@@ -12,6 +12,8 @@ spec:
 
     configsvrReplSet:
       size: 3
+      affinity:
+        antiAffinityTopologyKey: none
       volumeSpec:
         persistentVolumeClaim:
           resources:
@@ -20,6 +22,8 @@ spec:
 
     mongos:
       size: 3
+      affinity:
+        antiAffinityTopologyKey: none
       expose:
         enabled: false
         exposeType: ClusterIP
