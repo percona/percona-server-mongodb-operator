@@ -143,6 +143,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: no-requests-no-limits-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -184,6 +186,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: no-requests-no-limits-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-no-requests-no-limits-users
   updateStrategy:
     rollingUpdate:
       partition: 0
