@@ -135,7 +135,18 @@ function main() {
 
     local cr_yaml="${tmp_dir}/cr_${GIT_TAG}.yaml"
     prepare_cr_yaml "${cr_yaml}"
-    spinup_psmdb "${CLUSTER}-rs0" "${cr_yaml}"
+
+    desc 'create first PSMDB cluster'
+    apply_cluster "${cr_yaml}"
+
+    desc 'check if Pod is started'
+    wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
+    sleep 20
+
+    desc 'write data'
+    run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+              "userAdmin:userAdmin123456@${CLUSTER}-rs0.${namespace}"
+    run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${CLUSTER}-rs0.${namespace}"
 
     compare_generation "1" "statefulset" "${CLUSTER}-rs0"
     compare_generation "1" "psmdb" "${CLUSTER}"
