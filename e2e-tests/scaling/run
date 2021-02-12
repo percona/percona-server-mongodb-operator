@@ -32,7 +32,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 desc 'scale up from 3 to 5'
 kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-    | yq d - 'metadata.managedFields' \
+    | yq eval 'del(.metadata.managedFields)' - \
     | sed -e 's/size: 3/size: 5/' \
     | kubectl_bin apply -f-
 
@@ -49,7 +49,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-4.$cluster.$namespace"
 
 desc 'scale down from 5 to 3'
 kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-    | yq d - 'metadata.managedFields' \
+    | yq eval 'del(.metadata.managedFields)' - \
     | sed -e 's/size: 5/size: 3/' \
     | kubectl_bin apply -f-
 

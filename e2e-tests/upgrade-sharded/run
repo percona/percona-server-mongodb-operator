@@ -113,17 +113,17 @@ function prepare_cr_yaml() {
     # spinup function expects images to have suffix like "-backup"
     # to replace them with images from environment variables
     curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" \
-        | yq w - "metadata.name" "${cluster}" \
-        | yq w - "spec.upgradeOptions.apply" "disabled" \
-        | yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" \
-        | yq w - "spec.replsets[*].arbiter.enabled" "false" \
-        | yq w - "spec.backup.enabled" "false" \
-        | yq w - "spec.sharding.enabled" "true" \
-        | yq w - "spec.sharding.configsvrReplSet.size" "${CLUSTER_SIZE}" \
-        | yq w - "spec.sharding.mongos.size" "${CLUSTER_SIZE}" \
-        | yq w - "spec.image" "" \
-        | yq w - "spec.backup.image" -- "-backup" \
-        | yq w - "spec.pmm.image" -- "-pmm" > "${cr_yaml}"
+        | yq eval ".metadata.name = \"${cluster}\"" - \
+        | yq eval ".spec.upgradeOptions.apply = \"disabled\"" - \
+        | yq eval ".spec.replsets[*].size = \"${CLUSTER_SIZE}\"" - \
+        | yq eval ".spec.replsets[*].arbiter.enabled = \"false\"" - \
+        | yq eval ".spec.backup.enabled = \"false\"" - \
+        | yq eval ".spec.sharding.enabled = \"true\"" - \
+        | yq eval ".spec.sharding.configsvrReplSet.size = \"${CLUSTER_SIZE}\"" - \
+        | yq eval ".spec.sharding.mongos.size = \"${CLUSTER_SIZE}\"" - \
+        | yq eval ".spec.image = \"\"" - \
+        | yq eval ".spec.backup.image = \"-backup\"" - \
+        | yq eval ".spec.pmm.image = \"-pmm\"" - > "${cr_yaml}"
 }
 
 function check_upgrade_order() {
