@@ -393,35 +393,35 @@ compare_kubectl() {
     fi
 
     kubectl_bin get -o yaml ${resource} \
-        | yq d - 'metadata.ownerReferences.*.apiVersion' \
-        | yq d - 'metadata.managedFields' \
-        | yq d - '**.creationTimestamp' \
-        | yq d - '**.namespace' \
-        | yq d - '**.uid' \
-        | yq d - 'metadata.resourceVersion' \
-        | yq d - 'metadata.selfLink' \
-        | yq d - '**.creationTimestamp' \
-        | yq d - '**.image' \
-        | yq d - '**.clusterIP' \
-        | yq d - 'spec.clusterIPs' \
-        | yq d - '**.dataSource' \
-        | yq d - '**.procMount' \
-        | yq d - '**.storageClassName' \
-        | yq d - '**.finalizers' \
-        | yq d - '**."kubernetes.io/pvc-protection"' \
-        | yq d - '**.volumeName' \
-        | yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
-        | yq d - 'spec.volumeMode' \
-        | yq d - '**."volume.kubernetes.io/selected-node"' \
-        | yq d - '**."percona.com/ssl*"' \
-        | yq d - '**.(volumeMode==Filesystem).volumeMode' \
-        | yq d - '**.healthCheckNodePort' \
-        | yq d - '**.nodePort' \
-        | yq d - 'status' \
-        | yq d - '**.(name==NAMESPACE)' \
-        | yq d - '**.(name==PBM_AGENT_SERVER_ADDRESS)' \
-        | yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
-        | yq d - 'spec.volumeClaimTemplates.*.kind' \
+        | yq eval 'del(.metadata.ownerReferences.*.apiVersion)' - \
+        | yq eval 'del(.metadata.managedFields)' - \
+        | yq eval 'del(.**.creationTimestamp)' - \
+        | yq eval 'del(.**.namespace)' - \
+        | yq eval 'del(.**.uid)' - \
+        | yq eval 'del(.metadata.resourceVersion)' - \
+        | yq eval 'del(.metadata.selfLink)' - \
+        | yq eval 'del(.**.creationTimestamp)' - \
+        | yq eval 'del(.**.image)' - \
+        | yq eval 'del(.**.clusterIP)' - \
+        | yq eval 'del(.spec.clusterIPs)' - \
+        | yq eval 'del(.**.dataSource)' - \
+        | yq eval 'del(.**.procMount)' - \
+        | yq eval 'del(.**.storageClassName)' - \
+        | yq eval 'del(.**.finalizers)' - \
+        | yq eval 'del(.**."kubernetes.io/pvc-protection")' - \
+        | yq eval 'del(.**.volumeName)' - \
+        | yq eval 'del(.**."volume.beta.kubernetes.io/storage-provisioner")' - \
+        | yq eval 'del(.spec.volumeMode)' - \
+        | yq eval 'del(.**."volume.kubernetes.io/selected-node")' - \
+        | yq eval 'del(.**."percona.com/ssl*")' - \
+        | yq eval 'del(.**.(volumeMode==Filesystem).volumeMode)' - \
+        | yq eval 'del(.**.healthCheckNodePort)' - \
+        | yq eval 'del(.**.nodePort)' - \
+        | yq eval 'del(.status)' - \
+        | yq eval 'del(.**.(name==NAMESPACE))' - \
+        | yq eval 'del(.**.(name==PBM_AGENT_SERVER_ADDRESS))' - \
+        | yq eval 'del(.spec.volumeClaimTemplates.*.apiVersion)' - \
+        | yq eval 'del(.spec.volumeClaimTemplates.*.kind)' - \
         | $sed "s/${namespace}/NAME_SPACE/g" \
         | $sed "s#^apiVersion: extensions/v1beta1#apiVersion: apps/v1#" \
         > ${new_result}
@@ -726,7 +726,7 @@ EOF
 cat_config() {
     cat "$1" \
         | $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
-        | $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
+        | $sed -e "s#image:.*-mongod\$#image: $IMAGE_MONGOD#" \
         | $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
         | $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
         | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \

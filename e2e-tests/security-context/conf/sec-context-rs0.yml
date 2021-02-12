@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: sec-context
 spec:
-  image:
+  image: -mongod
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
   mongod:

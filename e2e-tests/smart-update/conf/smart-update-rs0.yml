@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: smart-update
 spec:
-  image:
+  image: -mongod
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate

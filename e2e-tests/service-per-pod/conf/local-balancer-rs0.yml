@@ -4,7 +4,7 @@ metadata:
   name: local-balancer
 spec:
   #platform: openshift
-  image:
+  image: -mongod
   mongod:
     security:
       enableEncryption: true

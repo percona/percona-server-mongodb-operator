@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: version-service-unreachable
 spec:
-  image:
+  image: -mongod
   initImage: #initImage
   imagePullPolicy: Always
   allowUnsafeConfigurations: false

@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: hostpath
 spec:
-  image:
+  image: -mongod
   mongod:
     security:
       enableEncryption: true

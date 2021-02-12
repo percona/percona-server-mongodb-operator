@@ -4,7 +4,7 @@ metadata:
   name: no-requests-no-limits
 spec:
   #platform: openshift
-  image:
+  image: -mongod
   imagePullPolicy: Always
   backup:
     enabled: false

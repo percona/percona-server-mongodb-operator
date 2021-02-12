@@ -4,7 +4,7 @@ metadata:
   name: no-storage
 spec:
   #platform: openshift
-  image:
+  image: -mongod
   imagePullPolicy: Always
   backup:
     enabled: false

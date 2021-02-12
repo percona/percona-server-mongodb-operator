@@ -4,7 +4,7 @@ metadata:
   name: monitoring
 spec:
   #platform: openshift
-  image:
+  image: -mongod
   mongod:
     operationProfiling:
       mode: slowOp
