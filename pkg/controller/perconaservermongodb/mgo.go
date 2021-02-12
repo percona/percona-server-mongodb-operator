@@ -356,17 +356,17 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerM
 		return errors.Wrap(err, "failed to get cluster admin")
 	}
 
-	err = mongo.CreateUser(context.Background(), cli, clusterAdmin.Username, clusterAdmin.Password, []interface{}{"clusterAdmin"})
+	err = mongo.CreateUser(context.Background(), cli, clusterAdmin.Username, clusterAdmin.Password, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to create clusterAdmin")
 	}
 
-	monitorUser, err := r.getInternalCredentials(cr, roleMonitorUser)
+	monitorUser, err := r.getInternalCredentials(cr, roleClusterMonitor)
 	if err != nil {
 		return errors.Wrap(err, "failed to get cluster admin")
 	}
 
-	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password, []interface{}{"clusterMonitor"})
+	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password, roleClusterMonitor)
 	if err != nil {
 		return errors.Wrap(err, "failed to create monitorUser")
 	}
@@ -382,18 +382,18 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerM
 		return errors.Wrap(err, "failed to create role")
 	}
 
-	backupUser, err := r.getInternalCredentials(cr, roleBackupUser)
+	backupUser, err := r.getInternalCredentials(cr, roleBackup)
 	if err != nil {
 		return errors.Wrap(err, "failed to get cluster admin")
 	}
 
-	err = mongo.CreateUser(context.Background(), cli, backupUser.Username, backupUser.Password, []interface{}{
+	err = mongo.CreateUser(context.Background(), cli, backupUser.Username, backupUser.Password,
 		map[string]string{"db": "admin", "role": "readWrite", "collection": ""},
-		map[string]string{"db": "admin", "role": "backup"},
-		map[string]string{"db": "admin", "role": "clusterMonitor"},
+		map[string]string{"db": "admin", "role": string(roleBackup)},
+		map[string]string{"db": "admin", "role": string(roleClusterMonitor)},
 		map[string]string{"db": "admin", "role": "restore"},
 		map[string]string{"db": "admin", "role": "pbmAnyAction"},
-	})
+	)
 	if err != nil {
 		return errors.Wrap(err, "failed to create backup")
 	}

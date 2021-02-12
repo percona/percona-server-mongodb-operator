@@ -117,7 +117,7 @@ func CreateRole(ctx context.Context, client *mongo.Client, role string, privileg
 	return nil
 }
 
-func CreateUser(ctx context.Context, client *mongo.Client, user, pwd string, roles []interface{}) error {
+func CreateUser(ctx context.Context, client *mongo.Client, user, pwd string, roles ...interface{}) error {
 	resp := OKResponse{}
 
 	res := client.Database("admin").RunCommand(context.Background(), bson.D{
