@@ -25,28 +25,40 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return clusterReady, nil
 	}
 
-	if !cr.Status.Replsets[replset.Name].Initialized {
-		err := r.handleReplsetInit(cr, replset, pods.Items)
-		if err != nil {
-			return clusterInit, errors.Wrap(err, "handleReplsetInit:")
+	cli, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleUserAdmin)
+	if err != nil {
+		if !cr.Status.Replsets[replset.Name].Initialized {
+			err := r.handleReplsetInit(cr, replset, pods.Items)
+			if err != nil {
+				return clusterInit, errors.Wrap(err, "handleReplsetInit")
+			}
+
+			err = r.createSystemUsers(cr, replset, pods.Items)
+			if err != nil {
+				return clusterInit, errors.Wrap(err, "create system users")
+			}
+
+			cr.Status.Replsets[replset.Name].Initialized = true
+
+			cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+				Status:             api.ConditionTrue,
+				Type:               api.ClusterRSInit,
+				Message:            replset.Name,
+				LastTransitionTime: metav1.NewTime(time.Now()),
+			})
+
+			return clusterInit, nil
 		}
 
-		err = r.createSystemUsers(cr, replset, pods.Items)
-		if err != nil {
-			return clusterInit, errors.Wrap(err, "create system users")
-		}
-
-		cr.Status.Replsets[replset.Name].Initialized = true
-
-		cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterRSInit,
-			Message:            replset.Name,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		})
-
-		return clusterInit, nil
+		return clusterError, errors.Wrap(err, "dial:")
 	}
+
+	defer func() {
+		err := cli.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongos connection")
+		}
+	}()
 
 	if cr.Spec.Sharding.Enabled &&
 		cr.Status.Replsets[replset.Name].Initialized &&
