@@ -25,7 +25,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return clusterReady, nil
 	}
 
-	cli, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleUserAdmin)
+	cli, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleClusterAdmin)
 	if err != nil {
 		if !cr.Status.Replsets[replset.Name].Initialized {
 			err := r.handleReplsetInit(cr, replset, pods.Items)
@@ -56,7 +56,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	defer func() {
 		err := cli.Disconnect(context.TODO())
 		if err != nil {
-			log.Error(err, "failed to close mongos connection")
+			log.Error(err, "failed to close connection")
 		}
 	}()
 
@@ -99,19 +99,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 	}
 
-	session, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleClusterAdmin)
-	if err != nil {
-		return clusterInit, errors.Wrap(err, "faile to get mongo connection")
-	}
-
-	defer func() {
-		err := session.Disconnect(context.TODO())
-		if err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
-
-	cnf, err := mongo.ReadConfig(context.TODO(), session)
+	cnf, err := mongo.ReadConfig(context.TODO(), cli)
 	if err != nil {
 		return clusterError, errors.Wrap(err, "get mongo config")
 	}
@@ -151,7 +139,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Members.SetVotes()
 
 		cnf.Version++
-		err = mongo.WriteConfig(context.TODO(), session, cnf)
+		err = mongo.WriteConfig(context.TODO(), cli, cnf)
 		if err != nil {
 			return clusterError, errors.Wrap(err, "delete: write mongo config")
 		}
@@ -162,13 +150,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cnf.Members.SetVotes()
 
 		cnf.Version++
-		err = mongo.WriteConfig(context.TODO(), session, cnf)
+		err = mongo.WriteConfig(context.TODO(), cli, cnf)
 		if err != nil {
 			return clusterError, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
 
-	rsStatus, err := mongo.RSStatus(context.TODO(), session)
+	rsStatus, err := mongo.RSStatus(context.TODO(), cli)
 	if err != nil {
 		return clusterError, errors.Wrap(err, "unable to get replset members")
 	}
