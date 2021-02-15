@@ -163,9 +163,8 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 	}
 	users := []user{
 		{
-			nameKey:           envMongoDBClusterAdminUser,
-			passKey:           envMongoDBClusterAdminPassword,
-			needRestartMongos: true, // in mgo.go:handleRsAddToShard() we use envs with this user credentials, so we need restart for update this envs
+			nameKey: envMongoDBClusterAdminUser,
+			passKey: envMongoDBClusterAdminPassword,
 		},
 		{
 			nameKey:        envMongoDBClusterMonitorUser,
