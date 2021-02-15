@@ -178,9 +178,8 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		},
 		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
 		{
-			nameKey:        envMongoDBUserAdminUser,
-			passKey:        envMongoDBUserAdminPassword,
-			needRestartSfs: true,
+			nameKey: envMongoDBUserAdminUser,
+			passKey: envMongoDBUserAdminPassword,
 		},
 	}
 	if cr.Spec.PMM.Enabled {
