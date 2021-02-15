@@ -503,7 +503,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 		return errors.Wrapf(err, "get pods list for replset %s", rsName)
 	}
 
-	client, err := r.mongoClientWithRole(cr, rsName, false, pods, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(cr, rsName, false, pods.Items, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}

@@ -11,9 +11,6 @@ fail() {
     exit 1
 }
 
-"$dir/upgrade/run" || fail "upgrade"
-"$dir/upgrade-sharded/run" || fail "upgrade-sharded"
-"$dir/upgrade-consistency/run" || fail "upgrade-consistency"
 "$dir/init-deploy/run" || fail "init-deploy"
 "$dir/limits/run" || fail "limits"
 "$dir/scaling/run" || fail "scaling"
@@ -35,3 +32,6 @@ fail() {
 "$dir/users/run" || fail "users"
 "$dir/rs-shard-migration/run" || fail "rs-shard-migration"
 "$dir/data-sharded/run" || fail "data-sharded"
+"$dir/upgrade/run" || fail "upgrade"
+"$dir/upgrade-sharded/run" || fail "upgrade-sharded"
+"$dir/upgrade-consistency/run" || fail "upgrade-consistency"

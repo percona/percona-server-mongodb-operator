@@ -29,8 +29,10 @@ const (
 type UserRole string
 
 const (
-	roleClusterAdmin UserRole = "clusterAdmin"
-	roleUserAdmin    UserRole = "userAdmin"
+	roleClusterAdmin   UserRole = "clusterAdmin"
+	roleUserAdmin      UserRole = "userAdmin"
+	roleClusterMonitor UserRole = "clusterMonitor"
+	roleBackup         UserRole = "backup"
 )
 
 func userSecretNameInternal(cr *api.PerconaServerMongoDB) string {
@@ -73,6 +75,12 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMong
 	case roleUserAdmin:
 		creds.Username = string(usersSecret.Data[envMongoDBUserAdminUser])
 		creds.Password = string(usersSecret.Data[envMongoDBUserAdminPassword])
+	case roleClusterMonitor:
+		creds.Username = string(usersSecret.Data[envMongoDBClusterMonitorUser])
+		creds.Password = string(usersSecret.Data[envMongoDBClusterMonitorPassword])
+	case roleBackup:
+		creds.Username = string(usersSecret.Data[envMongoDBBackupUser])
+		creds.Password = string(usersSecret.Data[envMongoDBBackupPassword])
 	default:
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}
@@ -96,22 +104,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	}
 
 	data := make(map[string][]byte)
-	data["MONGODB_BACKUP_USER"] = []byte("backup")
+	data["MONGODB_BACKUP_USER"] = []byte(roleBackup)
 	data["MONGODB_BACKUP_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create backup users pass: %v", err)
 	}
-	data["MONGODB_CLUSTER_ADMIN_USER"] = []byte("clusterAdmin")
+	data["MONGODB_CLUSTER_ADMIN_USER"] = []byte(roleClusterAdmin)
 	data["MONGODB_CLUSTER_ADMIN_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create cluster admin users pass: %v", err)
 	}
-	data["MONGODB_CLUSTER_MONITOR_USER"] = []byte("clusterMonitor")
+	data["MONGODB_CLUSTER_MONITOR_USER"] = []byte(roleClusterMonitor)
 	data["MONGODB_CLUSTER_MONITOR_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create cluster monitor users pass: %v", err)
 	}
-	data["MONGODB_USER_ADMIN_USER"] = []byte("userAdmin")
+	data["MONGODB_USER_ADMIN_USER"] = []byte(roleUserAdmin)
 	data["MONGODB_USER_ADMIN_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create admin users pass: %v", err)
