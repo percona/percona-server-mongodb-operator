@@ -51,6 +51,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 
 		return clusterError, errors.Wrap(err, "dial:")
+	} else if !cr.Status.Replsets[replset.Name].Initialized {
+		// this can happended when cluster was initialized but status update failed
+		cr.Status.Replsets[replset.Name].Initialized = true
+		return clusterInit, nil
 	}
 
 	defer func() {
@@ -93,10 +97,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			}
 
 			log.Info("added to shard", "rs", replset.Name)
-
-			t := true
-			cr.Status.Replsets[replset.Name].AddedAsShard = &t
 		}
+
+		t := true
+		cr.Status.Replsets[replset.Name].AddedAsShard = &t
 	}
 
 	cnf, err := mongo.ReadConfig(context.TODO(), cli)
