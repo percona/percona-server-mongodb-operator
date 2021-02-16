@@ -66,16 +66,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
-	if len(repls) < len(cr.Status.Replsets) {
-		leftRsStatuses := make(map[string]*api.ReplsetStatus)
-		for _, repl := range repls {
-			if v, ok := cr.Status.Replsets[repl.Name]; ok {
-				leftRsStatuses[repl.Name] = v
-			}
+	leftRsStatuses := make(map[string]*api.ReplsetStatus)
+	for _, repl := range repls {
+		if v, ok := cr.Status.Replsets[repl.Name]; ok {
+			leftRsStatuses[repl.Name] = v
 		}
-
-		cr.Status.Replsets = leftRsStatuses
 	}
+
+	cr.Status.Replsets = leftRsStatuses
 
 	for _, rs := range repls {
 		status, err := r.rsStatus(rs, cr.Name, cr.Namespace)
