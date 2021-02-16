@@ -493,9 +493,10 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 
 func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaServerMongoDB, rsName string) error {
 	systemDBs := map[string]struct{}{
-		"local": {},
-		"admin": {},
-		"test":  {},
+		"local":  {},
+		"admin":  {},
+		"test":   {},
+		"config": {},
 	}
 
 	pods, err := r.getRSPods(cr, rsName)
@@ -523,7 +524,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 
 	for _, db := range list.DBs {
 		if _, ok := systemDBs[db.Name]; !ok {
-			return errors.Errorf("non system db found: %s", db)
+			return errors.Errorf("non system db found: %s", db.Name)
 		}
 	}
 
