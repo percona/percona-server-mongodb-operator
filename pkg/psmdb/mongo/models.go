@@ -84,17 +84,17 @@ type BalancerStatus struct {
 
 type DBList struct {
 	DBs []struct {
-		Name string `json:"name"`
-	} `json:"databases"`
+		Name string `bson:"name" json:"name"`
+	} `bson:"databases" json:"databases"`
 	OKResponse `bson:",inline"`
 }
 
 type ShardList struct {
 	Shards []struct {
-		ID    string `json:"_id"`
-		Host  string `json:"host"`
-		State int    `json:"state"`
-	} `json:"shards"`
+		ID    string `json:"_id" bson:"_id"`
+		Host  string `json:"host" bson:"host"`
+		State int    `json:"state" bson:"state"`
+	} `json:"shards" bson:"shards"`
 	OKResponse `bson:",inline"`
 }
 
