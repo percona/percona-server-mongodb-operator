@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+deploy_dir=$(realpath $(dirname $0)/../../deploy)
+. ${test_dir}/../functions
+
+max_conn=10
+
+create_namespace $namespace
+deploy_operator
+cluster="my-cluster-name"
+
+desc 'startup default PSMDB cluster'
+kubectl_bin apply -f $deploy_dir/cr.yaml
+desc 'check if all 3 Pods started'
+wait_cluster_consistency $cluster
+
+compare_kubectl statefulset/$cluster-rs0
+compare_kubectl statefulset/$cluster-cfg
+destroy $namespace
