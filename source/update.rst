@@ -49,7 +49,7 @@ Semi-automatic upgrade
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
         "spec": {
             "crVersion":"{{{release}}}",
-            "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}" },
+            "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
@@ -93,7 +93,7 @@ Manual upgrade
      kubectl patch psmdb my-cluster-name --type=merge --patch '{
         "spec": {
             "crVersion":"{{{release}}}",
-            "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}" },
+            "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
         }}'
