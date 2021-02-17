@@ -88,6 +88,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "manage sys users")
 	}
 
+	internalSysSecretObj.Data = sysUsersSecretObj.Data
+	err = r.client.Update(context.TODO(), &internalSysSecretObj)
+	if err != nil {
+		return errors.Wrap(err, "update internal sys users secret")
+	}
+
 	if restartMongos {
 		list, err := r.getMongosPods(cr)
 		if err != nil {
