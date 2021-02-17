@@ -233,9 +233,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
 
-	var sfsTemplateAnnotations, mongosTemplateAnnotations map[string]string
 	if cr.CompareVersion("1.5.0") >= 0 {
-		sfsTemplateAnnotations, mongosTemplateAnnotations, err = r.reconcileUsers(cr, repls)
+		err := r.reconcileUsers(cr, repls)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
 		}
@@ -344,14 +343,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, errors.Wrap(err, "get pods list for mongos")
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, sfsTemplateAnnotations)
+		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, sfsTemplateAnnotations)
+			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -425,7 +424,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
+	err = r.reconcileMongos(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
@@ -621,7 +620,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB, secretAnnotations map[string]string) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -669,36 +668,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		deplSpec.Template.Annotations = make(map[string]string)
 	}
 
-	if len(secretAnnotations) == 0 {
-		// we shoud check if sfs secrets were changes
-		// if yes - update mongos secret hash also
-
-		sts, err := r.getCfgStatefulset(cr)
-		if err != nil {
-			return errors.Wrap(err, "failed to get cfg ststefulset")
-		}
-
-		cfgRsSecretHash := sts.Spec.Template.Annotations["last-applied-secret"]
-		cfgRsSecretHashTS := sts.Spec.Template.Annotations["last-applied-secret-ts"]
-
-		mongosSecretHash := msDepl.Spec.Template.Annotations["last-applied-secret"]
-		mongosSecretHashTS := msDepl.Spec.Template.Annotations["last-applied-secret-ts"]
-
-		secretAnnotations = make(map[string]string)
-		if cfgRsSecretHash != mongosSecretHash && cfgRsSecretHashTS > mongosSecretHashTS {
-			log.Info("update mongos secret hash from confing RS")
-
-			secretAnnotations["last-applied-secret"] = cfgRsSecretHash
-			secretAnnotations["last-applied-secret-ts"] = cfgRsSecretHashTS
-		} else if len(mongosSecretHash) > 0 {
-			secretAnnotations["last-applied-secret"] = mongosSecretHash
-			secretAnnotations["last-applied-secret-ts"] = mongosSecretHashTS
-		}
-	}
-
-	for k, v := range secretAnnotations {
-		deplSpec.Template.Annotations[k] = v
-	}
 	for k, v := range sslAnn {
 		deplSpec.Template.Annotations[k] = v
 	}
@@ -784,8 +753,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 
 // TODO: reduce cyclomatic complexity
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB,
-	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string,
-	sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
+	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
 
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
@@ -835,10 +803,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
 	for k, v := range sfs.Spec.Template.Annotations {
-		sfsSpec.Template.Annotations[k] = v
-	}
-
-	for k, v := range sfsTemplateAnnotations {
 		sfsSpec.Template.Annotations[k] = v
 	}
 

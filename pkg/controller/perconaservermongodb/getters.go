@@ -11,6 +11,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+	mongosPods := corev1.PodList{}
+	err := r.client.List(context.TODO(),
+		&mongosPods,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+		},
+	)
+
+	return mongosPods, err
+}
+
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	mongosPods := corev1.PodList{}
 	err := r.client.List(context.TODO(),
@@ -85,6 +98,12 @@ func clusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 func rsLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
 	lbls := clusterLabels(cr)
 	lbls["app.kubernetes.io/replset"] = rsName
+	return lbls
+}
+
+func mongodLabels(cr *api.PerconaServerMongoDB) map[string]string {
+	lbls := clusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "mongod"
 	return lbls
 }
 
