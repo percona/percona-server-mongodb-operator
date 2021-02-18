@@ -19,8 +19,10 @@ kubectl_bin apply \
     -f "$conf_dir/secrets.yml" \
     -f "$conf_dir/client.yml"
 
-if [[ "$OPENSHIFT" != "3.11" ]]; then
-  kubectl_bin apply -f "$conf_dir/docker-rc.yaml"
+if [[ "${OPENSHIFT}" == 4 ]]; then
+    cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+elif [[ -z "${OPENSHIFT}" ]]; then
+    kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
@@ -92,4 +94,7 @@ curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.
 run_restore $backup_name_gcp 3 1 "-mongos"
 wait_restore $backup_name_gcp 3 1 "-mongos"
 
+if [[ "$OPENSHIFT" != "3.11" ]]; then
+  kubectl_bin delete -f "$conf_dir/container-rc.yaml"
+fi
 destroy "$namespace"
