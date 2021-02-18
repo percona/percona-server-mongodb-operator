@@ -88,19 +88,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "manage sys users")
 	}
 
-	internalSysSecretObj.Data = sysUsersSecretObj.Data
-	err = r.client.Update(context.TODO(), &internalSysSecretObj)
-	if err != nil {
-		return errors.Wrap(err, "update internal sys users secret")
-	}
-
 	if restartMongos {
 		list, err := r.getMongosPods(cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to get mongos pods")
 		}
 
-		for _, name := range []string{"mongos", "pmm-client", "backup-agent"} {
+		for _, name := range []string{"pmm-client", "backup-agent"} {
 			err = r.killcontainer(list.Items, name)
 			if err != nil {
 				return errors.Wrap(err, "failed to kill pmm-client container")
@@ -133,7 +127,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		}
 	}
 
-	//update secret
+	internalSysSecretObj.Data = sysUsersSecretObj.Data
+	err = r.client.Update(context.TODO(), &internalSysSecretObj)
+	if err != nil {
+		return errors.Wrap(err, "update internal sys users secret")
+	}
 
 	return nil
 }

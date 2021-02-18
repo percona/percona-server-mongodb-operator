@@ -95,7 +95,7 @@ func WaitForPrimary(session *mgo.Session, maxRetries uint, sleepDuration time.Du
 	var err error
 	var tries uint
 	for tries <= maxRetries {
-		err = session.Run(bson.D{{"isMaster", "1"}}, &resp)
+		err = session.Run(bson.D{{Name: "isMaster", Value: "1"}}, &resp)
 		if err == nil && resp.IsMaster && !resp.ReadOnly {
 			return nil
 		}

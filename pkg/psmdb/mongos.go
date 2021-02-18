@@ -127,6 +127,11 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 			MountPath: sslInternalDir,
 			ReadOnly:  true,
 		},
+		{
+			Name:      "users-secret-file",
+			MountPath: "/etc/users-secret",
+			ReadOnly:  true,
+		},
 	}
 
 	container := corev1.Container{
@@ -282,6 +287,14 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 			Name: MongodDataVolClaimName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "users-secret-file",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: api.UserSecretNameInternal(cr),
+				},
 			},
 		},
 	}

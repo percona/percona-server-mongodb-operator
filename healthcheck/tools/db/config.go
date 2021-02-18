@@ -24,6 +24,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/dcos"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/mgo.v2"
 )
 
@@ -79,18 +80,28 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 		"username",
 		"mongodb auth username, this flag or env var "+envUser+" is required",
 	).Envar(envUser).Required().StringVar(&db.DialInfo.Username)
-	pass, err := ioutil.ReadFile("/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD")
-	if err != nil && err != os.ErrNotExist {
-		return nil, errors.Wrap(err, "read MONGODB_CLUSTER_MONITOR_PASSWORD")
-	}
-	if len(pass) > 0 {
+
+	pwdFile := "/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD"
+	if _, err := os.Stat(pwdFile); err == nil {
+		log.Info("reading password from secret")
+
+		pass, err := ioutil.ReadFile(pwdFile)
+		if err != nil {
+			return nil, errors.Wrapf(err, "read %s", pwdFile)
+		}
+
 		db.DialInfo.Password = string(pass)
-	} else {
+	} else if os.IsNotExist(err) {
 		app.Flag(
 			"password",
 			"mongodb auth password, this flag or env var "+envPassword+" is required",
 		).Envar(envPassword).Required().StringVar(&db.DialInfo.Password)
+	} else {
+		return nil, errors.Wrap(err, "failed to get password")
 	}
+
+	log.Infof("USER: %s, PASS: %s", db.DialInfo.Username, db.DialInfo.Password)
+
 	app.Flag(
 		"authDb",
 		"mongodb auth database",
