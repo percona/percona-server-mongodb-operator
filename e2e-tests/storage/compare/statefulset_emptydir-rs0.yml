@@ -134,6 +134,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: emptydir-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -175,6 +177,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: emptydir-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-emptydir-users
         - emptyDir: {}
           name: mongod-data
   updateStrategy:

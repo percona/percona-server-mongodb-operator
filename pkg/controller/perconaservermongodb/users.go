@@ -167,9 +167,8 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 			passKey: envMongoDBClusterAdminPassword,
 		},
 		{
-			nameKey:        envMongoDBClusterMonitorUser,
-			passKey:        envMongoDBClusterMonitorPassword,
-			needRestartSfs: true, //need for liveness/readiness ckeck
+			nameKey: envMongoDBClusterMonitorUser,
+			passKey: envMongoDBClusterMonitorPassword,
 		},
 		{
 			nameKey:        envMongoDBBackupUser,
