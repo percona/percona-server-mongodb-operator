@@ -100,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 			return errors.Wrap(err, "failed to get mongos pods")
 		}
 
-		for _, name := range []string{"pmm-client", "backup-agent"} {
+		for _, name := range []string{"mongos", "pmm-client", "backup-agent"} {
 			err = r.killcontainer(list.Items, name)
 			if err != nil {
 				return errors.Wrap(err, "failed to kill pmm-client container")
@@ -109,13 +109,24 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 	}
 
 	if restartSfs {
-		list, err := r.getMongodPods(cr)
+		rsPodList, err := r.getMongodPods(cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to get mongos pods")
 		}
 
+		pods := rsPodList.Items
+
+		if cr.Spec.Sharding.Enabled {
+			cfgPodlist, err := r.getRSPods(cr, api.ConfigReplSetName)
+			if err != nil {
+				return errors.Wrap(err, "failed to get mongos pods")
+			}
+
+			pods = append(pods, cfgPodlist.Items...)
+		}
+
 		for _, name := range []string{"pmm-client", "backup-agent"} {
-			err = r.killcontainer(list.Items, name)
+			err = r.killcontainer(pods, name)
 			if err != nil {
 				return errors.Wrap(err, "failed to kill pmm-client container")
 			}
@@ -131,24 +142,20 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(pods []corev1.Pod, contain
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
-				log.Info("DEBUG: KILLING CONTAINER", "CONTAINER", containerName, "POD", pod)
+				log.Info("DEBUG: KILLING CONTAINER", "CONTAINER", containerName, "POD", pod.Name)
 
 				stderrBuf := &bytes.Buffer{}
 
-				err := r.clientcmd.Exec(&pod, containerName, []string{"/bin/sh", "-c", "kill -s USR1 1"}, nil, nil, stderrBuf, false)
+				err := r.clientcmd.Exec(&pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
 				if err != nil {
 					return errors.Wrap(err, "exec command in pod")
 				}
 
 				if stderrBuf.Len() != 0 {
-					return errors.Errorf("invalid exec command return: %s", stderrBuf.String())
+					return errors.Errorf("exec command return error: %s", stderrBuf.String())
 				}
-
-				return nil
 			}
 		}
-
-		log.Info("DEBUG: CONTAINER WAS NOT FOUND", "CONTAINER", containerName, "POD", pod)
 	}
 
 	return nil
@@ -212,16 +219,20 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 			nameKey: envMongoDBClusterAdminUser,
 			passKey: envMongoDBClusterAdminPassword,
 		},
+
 		{
-			nameKey:        envMongoDBClusterMonitorUser,
-			passKey:        envMongoDBClusterMonitorPassword,
-			needRestartSfs: true, //need for liveness/readiness ckeck
+			nameKey:           envMongoDBClusterMonitorUser,
+			passKey:           envMongoDBClusterMonitorPassword,
+			needRestartSfs:    true, //need for liveness/readiness ckeck
+			needRestartMongos: true,
 		},
+
 		{
 			nameKey:        envMongoDBBackupUser,
 			passKey:        envMongoDBBackupPassword,
 			needRestartSfs: true,
 		},
+
 		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
 		{
 			nameKey: envMongoDBUserAdminUser,
