@@ -131,6 +131,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: another-name-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
         - args:
             - -c
@@ -198,6 +200,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: another-name-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-another-name-users
   updateStrategy:
     rollingUpdate:
       partition: 0
