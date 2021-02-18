@@ -102,8 +102,6 @@ func (cnf *Config) configureSSLDialInfo() error {
 
 func tlsDial(config *tls.Config) func(addr *mgo.ServerAddr) (net.Conn, error) {
 	return func(addr *mgo.ServerAddr) (net.Conn, error) {
-		log.Info("TLS DIAL")
-
 		conn, err := tls.Dial("tcp", addr.String(), config)
 		if err != nil {
 			log.Errorf("could not connect to %v. got: %v", addr, err)
