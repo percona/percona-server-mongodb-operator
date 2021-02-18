@@ -168,7 +168,7 @@ spec:
         - name: users-secret-file
           secret:
             defaultMode: 420
-            secretName: internal-balancer-users
+            secretName: internal-local-balancer-users
   updateStrategy:
     rollingUpdate:
       partition: 0
