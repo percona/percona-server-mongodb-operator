@@ -79,18 +79,24 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 		"username",
 		"mongodb auth username, this flag or env var "+envUser+" is required",
 	).Envar(envUser).Required().StringVar(&db.DialInfo.Username)
-	pass, err := ioutil.ReadFile("/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD")
-	if err != nil && err != os.ErrNotExist {
-		return nil, errors.Wrap(err, "read MONGODB_CLUSTER_MONITOR_PASSWORD")
-	}
-	if len(pass) > 0 {
+
+	pwdFile := "/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD"
+	if _, err := os.Stat(pwdFile); err == nil {
+		pass, err := ioutil.ReadFile(pwdFile)
+		if err != nil {
+			return nil, errors.Wrapf(err, "read %s", pwdFile)
+		}
+
 		db.DialInfo.Password = string(pass)
-	} else {
+	} else if os.IsNotExist(err) {
 		app.Flag(
 			"password",
 			"mongodb auth password, this flag or env var "+envPassword+" is required",
 		).Envar(envPassword).Required().StringVar(&db.DialInfo.Password)
+	} else {
+		return nil, errors.Wrap(err, "failed to get password")
 	}
+
 	app.Flag(
 		"authDb",
 		"mongodb auth database",
@@ -117,15 +123,16 @@ func NewSSLConfig(app *kingpin.Application) *SSLConfig {
 	app.Flag(
 		"sslPEMKeyFile",
 		"path to client SSL Certificate file (including key, in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLPEMKeyFile,
-	).Envar(pkg.EnvMongoDBNetSSLPEMKeyFile).ExistingFileVar(&ssl.PEMKeyFile)
+	).Envar(pkg.EnvMongoDBNetSSLPEMKeyFile).StringVar(&ssl.PEMKeyFile)
 	app.Flag(
 		"sslCAFile",
 		"path to SSL Certificate Authority file (in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLCAFile,
-	).Envar(pkg.EnvMongoDBNetSSLCAFile).ExistingFileVar(&ssl.CAFile)
+	).Envar(pkg.EnvMongoDBNetSSLCAFile).StringVar(&ssl.CAFile)
 	app.Flag(
 		"sslInsecure",
 		"skip validation of the SSL certificate and hostname, overridden by env var "+pkg.EnvMongoDBNetSSLInsecure,
 	).Envar(pkg.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
+
 	return ssl
 }
 
