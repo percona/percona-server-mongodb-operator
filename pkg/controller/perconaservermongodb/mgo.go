@@ -255,7 +255,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 	mongosPod corev1.Pod) error {
 
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
-		return errors.New("rsPod is not redy")
+		return errors.New("rsPod is not ready")
 	}
 	if !isContainerAndPodRunning(mongosPod, "mongos") || !isPodReady(mongosPod) {
 		return errors.New("mongos pod is not ready")
