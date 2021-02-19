@@ -50,14 +50,14 @@ func GetSession(cnf *Config) (*mgo.Session, error) {
 	if cnf.SSL.Enabled {
 		err := cnf.configureSSLDialInfo()
 		if err != nil {
-			log.Errorf("Failed to configure SSL/TLS: %s", err)
+			log.Errorf("failed to configure SSL/TLS: %s", err)
 			return nil, err
 		}
 	}
 
 	session, err := mgo.DialWithInfo(cnf.DialInfo)
 	if err != nil && err.Error() == ErrMsgAuthFailedStr {
-		log.Debug("Authentication failed, retrying with authentication disabled")
+		log.Debug("authentication failed, retrying with authentication disabled")
 		cnf.DialInfo.Username = ""
 		cnf.DialInfo.Password = ""
 		session, err = mgo.DialWithInfo(cnf.DialInfo)

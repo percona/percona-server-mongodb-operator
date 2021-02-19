@@ -59,6 +59,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot parse command line: %s", err)
 	}
+
 	if enableSecrets {
 		cnf.DialInfo.Password = tools.PasswordFromFile(
 			os.Getenv(dcos.EnvMesosSandbox),
@@ -69,21 +70,13 @@ func main() {
 
 	session, err := db.GetSession(cnf)
 	if err != nil {
-		log.Info("ssl connection error: " + err.Error())
-	}
-
-	if session == nil {
-		cnf.SSL = nil
-		session, err = db.GetSession(cnf)
-		if err != nil {
-			log.Fatalf("Error connecting to mongodb: %s", err)
-			return
-		}
+		log.Fatalf("connection error: %v", err)
 	}
 
 	defer session.Close()
 
 	switch command {
+
 	case "dcos health":
 		log.Debug("Running DC/OS health check")
 		state, memberState, err := healthcheck.HealthCheck(session, healthcheck.OkMemberStates)
@@ -93,6 +86,7 @@ func main() {
 			os.Exit(state.ExitCode())
 		}
 		log.Debugf("Member passed DC/OS health check with replication state: %s", memberState)
+
 	case "dcos readiness":
 		log.Debug("Running DC/OS readiness check")
 		state, err := healthcheck.ReadinessCheck(session)
@@ -102,9 +96,11 @@ func main() {
 			os.Exit(state.ExitCode())
 		}
 		log.Debug("Member passed DC/OS readiness check")
+
 	case "k8s liveness":
 		log.Infof("Running Kubernetes liveness check for %s", *component)
 		switch *component {
+
 		case "mongod":
 			memberState, err := healthcheck.HealthCheckMongodLiveness(session, int64(*startupDelaySeconds))
 			if err != nil {
@@ -113,6 +109,7 @@ func main() {
 				os.Exit(1)
 			}
 			log.Infof("Member passed Kubernetes liveness check with replication state: %s", memberState)
+
 		case "mongos":
 			err := healthcheck.HealthCheckMongosLiveness(session)
 			if err != nil {
@@ -121,13 +118,16 @@ func main() {
 				os.Exit(1)
 			}
 		}
+
 	case "k8s readiness":
 		log.Infof("Running Kubernetes readiness check for %s", *component)
 		switch *component {
+
 		case "mongod":
 			log.Error("readiness check for mongod is not implemented")
 			session.Close()
 			os.Exit(1)
+
 		case "mongos":
 			err := healthcheck.MongosReadinessCheck(session)
 			if err != nil {
