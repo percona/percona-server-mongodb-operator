@@ -3,6 +3,7 @@ package perconaservermongodbrestore
 import (
 	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -218,7 +219,8 @@ func runRestore(backup string, storage psmdbv1.BackupStorageSpec, pbmc *backup.P
 		return "", errors.Wrap(err, "set pbm config")
 	}
 
-	err = pbmc.C.ResyncBackupList()
+	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResyncBackupList), "", "", primitive.Timestamp{})
+	err = pbmc.C.ResyncStorage(e)
 	if err != nil {
 		return "", errors.Wrap(err, "set resync backup list from the store")
 	}
