@@ -16,7 +16,9 @@ Please make sure to read and observe the Contribution Policy <code-of-conduct.md
 
 ## Submitting a pull request
 
-Improvement and bugfix tasks for the Operator are tracked in [Jira](https://Jira.percona.com/projects/K8SPSMDB/issues), Although not mandatory, it is a good practice to examine already open Jira issues before submitting a pull request. For bigger contributions, we suggest creating a Jira issue first and discussing it with the engineering team and community before proposing any code changes.
+Improvement and bugfix tasks for the Operator are tracked in [Jira](https://Jira.percona.com/projects/K8SPSMDB/issues). Although not mandatory, it is a good practice to examine already open Jira issues before submitting a pull request. For bigger contributions, we suggest creating a Jira issue first and discussing it with the engineering team and community before proposing any code changes.
+
+Another good place to discuss Percona Kubernetes Operator for Percona XtraDB Cluster with developers and other community members is the [community forum](https://forums.percona.com/categories/kubernetes-operator-percona-server-mongodb).
 
 ### 1. Contributing to the source tree
 
@@ -57,7 +59,7 @@ After [installing Sphinx](https://www.sphinx-doc.org/en/master/usage/installatio
 
 ### 1. Automated code review
 
-Your pull request will pass an automated code check using the [Codecov](https://codecov.io/) service.
+Your pull request will go through an automated build and testing process, and you will have a comment with the report once all tests are over (usually, it takes about 3 hours).
 
 ### 2. Code review by the Operator developers
 
