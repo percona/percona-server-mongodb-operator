@@ -483,11 +483,6 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServer
 		}
 	}
 
-	// means we do not have sharded cluster and try to enable sharding
-	if cr.Spec.Sharding.Enabled && k8serrors.IsNotFound(cfgErr) && len(rs.Items) > 1 {
-		return errors.Errorf("failed to enable sharding with %d active replsets", len(rs.Items))
-	}
-
 	return nil
 }
 
