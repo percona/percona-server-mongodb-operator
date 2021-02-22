@@ -79,6 +79,7 @@ Here is an example which uses Amazon S3 storage for backups:
      tasks:
       - name: "sat-night-backup"
         schedule: "0 0 * * 6"
+        keep: 3
         storageName: s3-us-west
      ...
 
