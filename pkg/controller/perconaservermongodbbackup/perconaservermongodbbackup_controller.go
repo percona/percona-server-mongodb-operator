@@ -130,7 +130,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	return rr, nil
 }
 
-// reconcile backup. first we chek if there are concurrent job running
+// reconcile backup. first we check if there are concurrent job running
 func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup, bcp *Backup) (err error) {
 	status := cr.Status
 
