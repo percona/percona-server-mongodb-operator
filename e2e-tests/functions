@@ -30,6 +30,15 @@ fi
 
 create_namespace() {
     local namespace="$1"
+    local skip_clean_namespace="$2"
+
+    if [[ "${CLEAN_NAMESPACE}" == 1 ]] && [[ -z "${skip_clean_namespace}" ]]; then
+        kubectl_bin get ns \
+            | egrep -v "^kube-|^default|Terminating|pxc-operator|openshift|^NAME" \
+            | awk '{print$1}' \
+            | xargs kubectl delete ns &
+    fi
+
     if [ -n "${OPENSHIFT}" ]; then
         oc delete project "$namespace" && sleep 40 || :
         oc new-project "$namespace"
