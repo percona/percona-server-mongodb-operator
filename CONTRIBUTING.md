@@ -12,7 +12,7 @@ Before you can contribute, we kindly ask you to sign our [Contributor License Ag
 
 ### 2. Code of Conduct
 
-Please make sure to read and observe the Contribution Policy <code-of-conduct.md>.
+Please make sure to read and observe the [Contribution Policy](code-of-conduct.md).
 
 ## Submitting a pull request
 
