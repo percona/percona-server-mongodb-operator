@@ -76,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.Replsets = leftRsStatuses
 
 	for _, rs := range repls {
-		status, err := r.rsStatus(rs, cr.Name, cr.Namespace)
+		status, err := r.rsStatus(cr, rs)
 		if err != nil {
 			return errors.Wrapf(err, "get replset %v status", rs.Name)
 		}
@@ -123,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	if cr.Spec.Sharding.Enabled {
-		mongosStatus, err := r.mongosStatus(cr.Name, cr.Namespace)
+		mongosStatus, err := r.mongosStatus(cr)
 		if err != nil {
 			return errors.Wrap(err, "get mongos status")
 		}
@@ -243,21 +243,8 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) rsStatus(rsSpec *api.ReplsetSpec, clusterName, namespace string) (api.ReplsetStatus, error) {
-	list := corev1.PodList{}
-	err := r.client.List(context.TODO(),
-		&list,
-		&client.ListOptions{
-			Namespace: namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   clusterName,
-				"app.kubernetes.io/replset":    rsSpec.Name,
-				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-				"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			}),
-		},
-	)
+func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
+	list, err := r.getRSPods(cr, rsSpec.Name)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)
 	}
@@ -268,6 +255,10 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(rsSpec *api.ReplsetSpec, cluste
 	}
 
 	for _, pod := range list.Items {
+		if v, ok := pod.Labels["app.kubernetes.io/component"]; ok && v == "arbiter" {
+			continue
+		}
+
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
@@ -297,21 +288,8 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(rsSpec *api.ReplsetSpec, cluste
 	return status, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongosStatus(clusterName, namespace string) (api.MongosStatus, error) {
-	list := corev1.PodList{}
-	err := r.client.List(context.TODO(),
-		&list,
-		&client.ListOptions{
-			Namespace: namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   clusterName,
-				"app.kubernetes.io/component":  "mongos",
-				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-				"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			}),
-		},
-	)
+func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoDB) (api.MongosStatus, error) {
+	list, err := r.getMongosPods(cr)
 	if err != nil {
 		return api.MongosStatus{}, fmt.Errorf("get list: %v", err)
 	}
