@@ -3,6 +3,8 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"github.com/percona/percona-backup-mongodb/pbm"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
 
 	"github.com/pkg/errors"
@@ -195,7 +197,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *api.PerconaSer
 					continue
 				}
 
-				err = b.pbm.C.DeleteBackup(cr.Status.PBMname)
+				e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
+				err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
 				if err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
