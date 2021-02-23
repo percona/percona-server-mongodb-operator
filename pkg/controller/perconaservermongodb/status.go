@@ -254,11 +254,11 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, r
 		Status: api.AppStateInit,
 	}
 
-	for _, pod := range list.Items {
-		if v, ok := pod.Labels["app.kubernetes.io/component"]; ok && v == "arbiter" {
-			continue
-		}
+	if rsSpec.Arbiter.Enabled {
+		status.Size += rsSpec.Arbiter.Size
+	}
 
+	for _, pod := range list.Items {
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
