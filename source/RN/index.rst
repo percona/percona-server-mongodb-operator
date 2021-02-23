@@ -7,7 +7,6 @@ Kubernetes Operator for Percona Server for MongoDB Release Notes
 .. toctree::
    :maxdepth: 1
 
-   Kubernetes-Operator-for-PSMONGODB-RN1.7.0
    Kubernetes-Operator-for-PSMONGODB-RN1.6.0
    Kubernetes-Operator-for-PSMONGODB-RN1.5.0
    Kubernetes-Operator-for-PSMONGODB-RN1.4.0
