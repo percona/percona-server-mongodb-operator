@@ -217,6 +217,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	err = r.checkConfiguration(cr)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	err = r.checkFinalizers(cr)
 	if err != nil {
 		reqLogger.Error(err, "failed to run finalizers")
@@ -452,6 +457,33 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServerMongoDB) error {
+	// check if sharding has already been enabled
+	_, cfgErr := r.getCfgStatefulset(cr)
+	if cfgErr != nil && !k8serrors.IsNotFound(cfgErr) {
+		return errors.Wrap(cfgErr, "failed to get cfg replset")
+	}
+
+	rs, rsErr := r.getMongodStatefulsets(cr)
+	if rsErr != nil && !k8serrors.IsNotFound(rsErr) {
+		return errors.Wrap(rsErr, "failed to get all replsets")
+	}
+
+	if !cr.Spec.Sharding.Enabled {
+		// means we have already had sharded cluster and try to disable sharding
+		if cfgErr == nil && len(rs.Items) > 1 {
+			return errors.Errorf("failed to disable sharding with %d active replsets", len(rs.Items))
+		}
+
+		// means we want to run multiple replsets without sharding
+		if len(cr.Spec.Replsets) > 1 {
+			return errors.New("running multiple replsets without sharding is prohibited")
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
