@@ -115,7 +115,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) disableBalancer(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}

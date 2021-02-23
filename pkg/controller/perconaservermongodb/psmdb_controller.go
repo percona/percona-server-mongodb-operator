@@ -620,7 +620,7 @@ func (r *ReconcilePerconaServerMongoDB) doInCaseOfRestore(cr *api.PerconaServerM
 		return nil
 	}
 
-	err = r.disableBalancerIfNeeded(cr)
+	err = r.disableBalancer(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to disable balancer")
 	}
