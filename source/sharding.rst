@@ -21,9 +21,11 @@ A MongoDB Sharding involves the following components:
 * ``config servers`` - a replica set to store metadata and configuration
   settings for the sharded database cluster.
 
-.. note:: Percona Server for MongoDB 1.6.0 supports only one shard of a MongoDB
-   cluster; still, this limited sharding support allows using ``mongos`` as an
-   entry point instead of provisioning a load-balancer per replica set node.
+.. note:: Percona Server for MongoDB Operator 1.6.0 supported only one shard of
+   a MongoDB cluster; still, this limited sharding support allowed using
+   ``mongos`` as an entry point instead of provisioning a load-balancer per
+   replica set node. Multiple shards are supported starting from the Operator
+   1.7.0.
 
 Turning sharding on and off
 ---------------------------
@@ -41,6 +43,12 @@ servers and mongos instances. Their number is controlled by
 
 .. note:: Config servers for now can properly work only with WiredTiger engine,
    and sharded MongoDB nodes can use either WiredTiger or InMemory one.
+
+By default ref:`replsets section<operator.replsets-section>` of the
+``deploy/cr.yaml`` configuration file contains only one replica set, ``rs0``.
+You can add more replica sets with different names to the ``replsets`` section
+in a similar way. Please take into account that having more than one replica set
+is possible only with the sharding turned on.
 
 Checking connectivity to sharded and non-sharded cluster
 --------------------------------------------------------
