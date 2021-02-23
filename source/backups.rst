@@ -179,7 +179,12 @@ Following steps are needed to restore a previously saved backup:
 Delete the unneeded backup
 --------------------------
 
-Deleting a previously saved backup requires not more than the backup
+The maximum amount of stored backups is controlled by the
+:ref:`backup.tasks.keep<backup-tasks-keep>` option. Older backups are
+automatically deleted, so that amount of stored backups do not exceed this
+number.
+
+Manual deleting of a previously saved backup requires not more than the backup
 name. This name can be taken from the list of available backups returned
 by the following command:
 
