@@ -12,7 +12,7 @@ Operator itself, and upgrades of the Percona Server for MongoDB.
 Upgrading the Operator
 ----------------------
 
-This upgrade can be done either in semi-automatic or in manual mode. 
+This upgrade can be done either in semi-automatic or in manual mode.
 
 .. note:: Manual update mode is the recommended way for a production cluster.
 
@@ -152,12 +152,17 @@ updates:
      Percona Server for MongoDB 4.2 or 4.0 version
      regardless of the image path; for already existing clusters, the 4.4
      vs. 4.2 or 4.0 branch choice will be preserved),
+   * ``4.4-recommended``, ``4.2-recommended``, ``4.0-recommended``,
+     ``3.6-recommended`` - same as above, but with preserving specific major
+     version,
    * ``Latest`` - automatic upgrades will choose the most recent version of
      the software available (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
      Percona Server for MongoDB 4.2 or 4.0 version
      regardless of the image path; for already existing clusters, the 4.4
      vs. 4.2 or 4.0 branch choice will be preserved),
+   * ``4.4-latest``, ``4.2-latest``, ``4.0-latest``, ``3.6-latest`` - same as
+     above, but with preserving specific major version,
    * *specific version number* - will apply an upgrade if the running Percona
      Server for MongoDB
      version doesn't match the explicit version number with no future upgrades
