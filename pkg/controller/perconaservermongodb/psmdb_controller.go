@@ -430,7 +430,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
-	err = r.doInCaseOfRestore(cr)
+	err = r.stopMongosInCaseOfRestore(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "on restore")
 	}
@@ -638,7 +638,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) doInCaseOfRestore(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
