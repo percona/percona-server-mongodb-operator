@@ -2,9 +2,10 @@ package psmdb
 
 import (
 	"fmt"
-	"github.com/go-logr/logr"
 	"strconv"
 	"strings"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -194,9 +195,13 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		"--bind_ip_all",
 		"--port=" + strconv.Itoa(int(msSpec.Port)),
 		"--sslAllowInvalidCertificates",
-		"--relaxPermChecks",
 		"--configdb",
 		configDB,
+	}
+	if cr.CompareVersion("1.7.0") >= 0 {
+		args = append(args,
+			"--relaxPermChecks",
+		)
 	}
 
 	if cr.Spec.UnsafeConf {
