@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
