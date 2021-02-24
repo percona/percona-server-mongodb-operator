@@ -27,6 +27,17 @@ if oc get projects ; then
     esac
 fi
 
+apply_s3_storage_secrets() {
+    if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+        kubectl_bin apply \
+            -f $conf_dir/minio-secret.yml \
+            -f $conf_dir/cloud-secret.yml
+    else
+        kubectl_bin apply \
+            -f $conf_dir/minio-secret.yml
+    fi
+}
+
 create_namespace() {
     local namespace="$1"
     local skip_clean_namespace="$2"
@@ -719,8 +730,16 @@ cat_config() {
 }
 
 apply_cluster() {
-    cat_config "$1" \
-        | kubectl_bin apply -f -
+    if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+        cat_config "$1" \
+            | kubectl_bin apply -f -
+    else
+        cat_config "$1" \
+            | yq d - 'spec.backup.tasks.[1]' \
+            | yq d - 'spec.backup.tasks.[1]' \
+            | yq d - 'spec.backup.tasks.[1]' \
+            | kubectl_bin apply -f -
+    fi
 }
 
 spinup_psmdb() {
