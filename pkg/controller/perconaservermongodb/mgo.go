@@ -67,7 +67,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 	}()
 
+	rstRunning, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return clusterInit, errors.Wrap(err, "failed to check running restore")
+	}
+
 	if cr.Spec.Sharding.Enabled &&
+		!rstRunning &&
 		cr.Status.Replsets[replset.Name].Initialized &&
 		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
 		cr.Status.Mongos.Status == api.AppStateReady &&

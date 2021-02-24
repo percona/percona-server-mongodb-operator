@@ -22,8 +22,8 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + "mongos",
-			Namespace: cr.Namespace,
+			Name:      cr.MongosNamespacedName().Name,
+			Namespace: cr.MongosNamespacedName().Namespace,
 		},
 	}
 }

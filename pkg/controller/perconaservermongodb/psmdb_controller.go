@@ -430,6 +430,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
+	err = r.stopMongosInCaseOfRestore(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "on restore")
+	}
+
 	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
@@ -633,11 +638,34 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Sharding.Enabled {
+func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
 
+	rstRunning, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check running restores")
+	}
+
+	if !rstRunning {
+		return nil
+	}
+
+	err = r.disableBalancer(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to disable balancer")
+	}
+
+	err = r.deleteMongos(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete mongos")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
 	msDepl := psmdb.MongosDeployment(cr)
 	err := r.client.Delete(context.TODO(), msDepl)
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -653,6 +681,14 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	return r.deleteMongos(cr)
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB, secretAnnotations map[string]string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
@@ -663,7 +699,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
 	}
 
-	if !uptodate {
+	rstRunning, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check running restores")
+	}
+
+	if !uptodate || rstRunning {
 		return nil
 	}
 

@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -139,7 +142,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	}
 	if cjobs {
 		if cr.Status.State != psmdbv1.RestoreStateWaiting {
-			log.Info("Waiting to finish another backup/restore.")
+			log.Info("waiting to finish another backup/restore.")
 		}
 		status.State = psmdbv1.RestoreStateWaiting
 		return nil
@@ -165,6 +168,21 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
 	if err != nil {
 		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
+	}
+
+	if cluster.Spec.Sharding.Enabled {
+		mongos := appsv1.Deployment{}
+		err = r.client.Get(context.Background(), cluster.MongosNamespacedName(), &mongos)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "failed to get mongos")
+		}
+
+		if err == nil {
+			log.Info("waiting for mongos termination")
+
+			status.State = psmdbv1.RestoreStateWaiting
+			return nil
+		}
 	}
 
 	pbmc, errPBM := backup.NewPBM(r.client, cluster)
