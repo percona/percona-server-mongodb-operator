@@ -461,6 +461,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}
 
+	if b := cr.Spec.Backup; b.Enabled && b.PITR.Enabled {
+		time.Sleep(5 * time.Second) // waiting for DB cluster to be ready
+		if err = r.updatePBMConfig(cr); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	return rr, nil
 }
 

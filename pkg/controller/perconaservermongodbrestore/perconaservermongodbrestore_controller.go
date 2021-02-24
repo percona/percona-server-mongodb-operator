@@ -199,7 +199,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 		}
 
-		status.PBMname, err = runRestore(bcpName, stg, pbmc)
+		status.PBMname, err = runRestore(bcpName, stg, pbmc, cluster.Spec.Backup.PITR)
 		status.State = psmdbv1.RestoreStateRequested
 		return err
 	}
@@ -230,8 +230,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	return nil
 }
 
-func runRestore(backup string, storage psmdbv1.BackupStorageSpec, pbmc *backup.PBM) (string, error) {
-	err := pbmc.SetConfig(storage)
+func runRestore(backup string, storage psmdbv1.BackupStorageSpec, pbmc *backup.PBM, pitr psmdbv1.PITRSpec) (string, error) {
+	err := pbmc.SetConfig(storage, pitr)
 	if err != nil {
 		return "", errors.Wrap(err, "set pbm config")
 	}

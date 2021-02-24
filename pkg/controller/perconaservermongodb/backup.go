@@ -4,7 +4,6 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-
 	batchv1b "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -158,7 +157,7 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(cr *api.PerconaServerMo
 
 	for _, rst := range restores.Items {
 		if rst.Status.State != api.RestoreStateReady &&
-			rst.Status.State != api.RestoreStateError && 
+			rst.Status.State != api.RestoreStateError &&
 			rst.Spec.ClusterName == cr.Name {
 			return true, nil
 		}
@@ -185,4 +184,21 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	}
 
 	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) updatePBMConfig(cr *api.PerconaServerMongoDB) error {
+	pbm, err := backup.NewPBM(r.client, cr)
+	if err != nil {
+		return fmt.Errorf("create pbm object: %w", err)
+	}
+
+	var stg api.BackupStorageSpec // getting the first and only storage from map
+	for _, stg = range cr.Spec.Backup.Storages {
+	}
+
+	if err = pbm.SetConfig(stg, cr.Spec.Backup.PITR); err != nil {
+		return fmt.Errorf("set pbm config: %w", err)
+	}
+
+	return nil
 }

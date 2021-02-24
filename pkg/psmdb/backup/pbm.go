@@ -93,7 +93,7 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 
 // SetConfig sets the pbm config with storage defined in the cluster CR
 // by given storageName
-func (b *PBM) SetConfig(stg api.BackupStorageSpec) error {
+func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec) error {
 	switch stg.Type {
 	case api.BackupStorageS3:
 		if stg.S3.CredentialsSecret == "" {
@@ -104,6 +104,9 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec) error {
 			return errors.Wrap(err, "getting s3 credentials secret name")
 		}
 		conf := pbm.Config{
+			PITR: pbm.PITRConf{
+				Enabled: pitr.Enabled,
+			},
 			Storage: pbm.StorageConf{
 				Type: pbm.StorageS3,
 				S3: s3.Conf{
