@@ -17,8 +17,10 @@ kubectl_bin apply \
     -f $conf_dir/secrets.yml \
     -f $conf_dir/client.yml
 
-if [[ "$OPENSHIFT" != "3.11" ]]; then
-  kubectl_bin apply -f "$conf_dir/docker-rc.yaml"
+if [[ "${OPENSHIFT}" == 4 ]]; then
+    cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+elif [[ -z "${OPENSHIFT}" ]]; then
+    kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
 apply_cluster $conf_dir/$cluster.yml

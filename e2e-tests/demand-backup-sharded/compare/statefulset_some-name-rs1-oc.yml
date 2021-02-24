@@ -8,8 +8,8 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: rs0
-  name: some-name-rs0
+    app.kubernetes.io/replset: rs1
+  name: some-name-rs1
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -25,8 +25,8 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: rs0
-  serviceName: some-name-rs0
+      app.kubernetes.io/replset: rs1
+  serviceName: some-name-rs1
   template:
     metadata:
       annotations: {}
@@ -36,7 +36,7 @@ spec:
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: rs0
+        app.kubernetes.io/replset: rs1
     spec:
       containers:
         - args:
@@ -44,7 +44,7 @@ spec:
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=rs0
+            - --replSet=rs1
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
@@ -74,7 +74,7 @@ spec:
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: rs0
+              value: rs1
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -153,7 +153,7 @@ spec:
                   name: internal-some-name-users
                   optional: false
             - name: PBM_MONGODB_REPLSET
-              value: rs0
+              value: rs1
             - name: PBM_MONGODB_PORT
               value: "27017"
             - name: SHARDED
@@ -184,7 +184,6 @@ spec:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
-      runtimeClassName: container-rc
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: default
