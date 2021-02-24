@@ -462,9 +462,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if b := cr.Spec.Backup; b.Enabled && b.PITR.Enabled {
-		time.Sleep(5 * time.Second) // waiting for DB cluster to be ready
+		// DB cluster can be not ready yet so it's requeued after some time
 		if err = r.updatePBMConfig(cr); err != nil {
-			return reconcile.Result{}, err
+			return reconcile.Result{RequeueAfter: 5 * time.Second}, err
 		}
 	}
 
