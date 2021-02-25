@@ -1,6 +1,30 @@
 Install Percona server for MongoDB on OpenShift
 ===============================================
 
+login to the Red Hat Marketplace and register your cluster `following the official instructions <https://marketplace.redhat.com/en-us/workspace/clusters/add/register>_.
+
+Go to the `Kubernetes Operator for Percona Server for MongoDB <https://marketplace.redhat.com/en-us/products/percona-server-for-mongodb>`_ and click the `` button:
+
+   .. image:: img/marketplace-operator-page.png
+      :align: center
+      :alt: Broker in the OpenShift Console
+
+
+Now ...
+
+   .. image:: img/marketplace-operator-purchase.png
+      :align: center
+      :alt: Broker in the OpenShift Console
+
+Now chose ``Worspace->Sofware`` in the system menu
+
+   .. image:: img/marketplace-operator-install.png
+      :align: center
+      :alt: Broker in the OpenShift Console
+
+Click the ``Install Operator`` button.
+
+
 0. Clone the percona-server-mongodb-operator repository:
 
    .. code:: bash
