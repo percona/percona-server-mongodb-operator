@@ -77,6 +77,12 @@ spec:
 #      successThreshold: 1
 #      timeoutSeconds: 5
 #      startupDelaySeconds: 7200
+#    runtimeClassName: image-rc
+#    sidecars:
+#    - image: busybox
+#      command: ["/bin/sh"]
+#      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+#      name: rs-sidecar-1
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
@@ -174,6 +180,12 @@ spec:
 #            blockCompressor: snappy
 #          indexConfig:
 #            prefixCompression: true
+#      runtimeClassName: image-rc
+#      sidecars:
+#      - image: busybox
+#        command: ["/bin/sh"]
+#        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+#        name: rs-sidecar-1
       podDisruptionBudget:
         maxUnavailable: 1
       resources:
@@ -221,6 +233,12 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
+#      runtimeClassName: image-rc
+#      sidecars:
+#      - image: busybox
+#        command: ["/bin/sh"]
+#        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+#        name: rs-sidecar-1
       podDisruptionBudget:
         maxUnavailable: 1
       resources:
