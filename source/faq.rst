@@ -65,3 +65,24 @@ For example, Percona Server for MongoDB 4.4 is supported with the following
 recommended version: {{{mongodb44recommended}}}. More details on the exact Percona
 Server for MongoDB version can be found in the release notes (`4.4 <https://www.percona.com/doc/percona-server-for-mongodb/4.4/release_notes/index.html>`_, `4.2 <https://www.percona.com/doc/percona-server-for-mongodb/4.2/release_notes/index.html>`_, `4.0 <https://www.percona.com/doc/percona-server-for-mongodb/4.0/release_notes/index.html>`_, and `3.6 <https://www.percona.com/doc/percona-server-for-mongodb/3.6/release_notes/index.html>`_).
 
+How can I add custom sidecar containers to my cluster?
+================================================================================
+
+The Operator allows you to deploy additional (so-called *sidecar*) containers to
+the Pod. You can use this feature to run debugging tools, some specific
+monitoring solutions, etc. Add such sidecar container to the ``deploy/cr.yaml``
+configuration file, specifying at least its name and image as follows:
+
+.. code:: yaml
+
+   spec:
+     replsets:
+     - name: rs0
+       ....
+       sidecars:
+       - name: "sidecar1"
+         image: "gcr.io/percona/sidecar1"
+         ....
+
+You can add ``sidecars`` subsection to ``replsets``,
+``sharding.configsvrReplSet``, and ``sharding.mongos`` sections.
