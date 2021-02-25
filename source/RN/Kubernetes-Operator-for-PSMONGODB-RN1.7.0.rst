@@ -10,7 +10,7 @@
 New Features
 ================================================================================
 
-* :jirabug:`K8SPSMDB-260`: Persistent Volume Claims can now be automatically removed after MongoDB cluster deletion. Learn more about this on operator’s :ref:`documentation page<operator-scale-scale-down>`
+* :jirabug:`K8SPSMDB-260`: Persistent Volume Claims can now be automatically removed after MongoDB cluster deletion. Learn more about this on operator’s :ref:`documentation page<operator.scale.scale-down>`
 * :jirabug:`K8SPSMDB-121`: Add support for :ref:`sharding<operator.sharding>` to scale MongoDB cluster horizontally
 * :jirabug:`K8SPSMDB-294`: Support for :ref:`custom sidecar containers <How can I add custom sidecar containers to my cluster?>` to extend the Operator capabilities
 
