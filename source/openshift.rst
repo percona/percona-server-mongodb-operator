@@ -1,31 +1,41 @@
-Install Percona server for MongoDB on OpenShift
+Install Percona Server for MongoDB on OpenShift
 ===============================================
 
-login to the Red Hat Marketplace and register your cluster `following the official instructions <https://marketplace.redhat.com/en-us/workspace/clusters/add/register>_.
+Installing Percona Server for MongoDB on OpenShift includes two steps:
 
-Go to the `Kubernetes Operator for Percona Server for MongoDB <https://marketplace.redhat.com/en-us/products/percona-server-for-mongodb>`_ and click the `` button:
+* Installing the Percona Operator for Percona Server for MongoDB,
+* Using the Operator to make actual Percona Server for MongoDB installation.
+
+Install the Operator
+--------------------
+
+You can install Percona Operator for Percona Server for MongoDB on OpenShift using the `Red Hat Marketplace <https://marketplace.redhat.com>`_ web interface or using the command line interface.
+
+Install the Operator via the Red Hat Marketplace
+************************************************
+
+1. login to the Red Hat Marketplace and register your cluster `following the official instructions <https://marketplace.redhat.com/en-us/workspace/clusters/add/register>`_.
+
+2. Go to the `Kubernetes Operator for Percona Server for MongoDB <https://marketplace.redhat.com/en-us/products/percona-server-for-mongodb>`_ page and click the `Free trial` button:
 
    .. image:: img/marketplace-operator-page.png
       :align: center
-      :alt: Broker in the OpenShift Console
+      :alt: Percona Operator for Percona Server for MongoDB on Red Hat Marketplace
 
+   Here you can "purchase" the Operator for 0.0 USD.
 
-Now ...
-
-   .. image:: img/marketplace-operator-purchase.png
-      :align: center
-      :alt: Broker in the OpenShift Console
-
-Now chose ``Worspace->Sofware`` in the system menu
+3. When finished, chose ``Worspace->Sofware`` in the system menu on the top and chouse the Operator:
 
    .. image:: img/marketplace-operator-install.png
       :align: center
       :alt: Broker in the OpenShift Console
 
-Click the ``Install Operator`` button.
+   Click the ``Install Operator`` button.
 
+Install the Operator via the command-line interface
+***************************************************
 
-0. Clone the percona-server-mongodb-operator repository:
+1. Clone the percona-server-mongodb-operator repository:
 
    .. code:: bash
 
@@ -37,7 +47,7 @@ Click the ``Install Operator`` button.
       It is crucial to specify the right branch with ``-b``
       option while cloning the code on this step. Please be careful.
 
-1. The Custom Resource Definition for Percona Server for MongoDB should be
+2. The Custom Resource Definition for Percona Server for MongoDB should be
    created from the ``deploy/crd.yaml`` file. The Custom Resource Definition
    extends the standard set of resources which Kubernetes “knows” about with the
    new items, in our case these items are the core of the operator.
@@ -69,13 +79,13 @@ Click the ``Install Operator`` button.
       $ oc create clusterrole cert-admin --verb="*" --resource=iissuers.certmanager.k8s.io,certificates.certmanager.k8s.io
       $ oc adm policy add-cluster-role-to-user cert-admin <some-user>
 
-2. Create a new ``psmdb`` project:
+3. Create a new ``psmdb`` project:
 
    .. code:: bash
 
       $ oc new-project psmdb
 
-3. Add role-based access control (RBAC) for Percona Server for MongoDB is
+4. Add role-based access control (RBAC) for Percona Server for MongoDB is
    configured with the ``deploy/rbac.yaml`` file. RBAC is
    based on clearly defined roles and corresponding allowed actions. These
    actions are allowed on specific Kubernetes resources. The details about users
@@ -85,13 +95,16 @@ Click the ``Install Operator`` button.
 
       $ oc apply -f deploy/rbac.yaml
 
-4. Start the Operator within OpenShift:
+5. Start the Operator within OpenShift:
 
    .. code:: bash
 
       $ oc apply -f deploy/operator.yaml
 
-5. Add the MongoDB Users secrets to OpenShift. These secrets
+Install Percona Server for MongoDB
+----------------------------------
+
+1. Add the MongoDB Users secrets to OpenShift. These secrets
    should be placed as plain text in the stringData section of the
    ``deploy/secrets.yaml`` file as login name and
    passwords for the user accounts (see `Kubernetes
@@ -107,12 +120,12 @@ Click the ``Install Operator`` button.
 
    More details about secrets can be found in :ref:`users`.
 
-6. Now certificates should be generated. By default, the Operator generates
+2. Now certificates should be generated. By default, the Operator generates
    certificates automatically, and no actions are required at this step. Still,
    you can generate and apply your own certificates as secrets according
    to the :ref:`TLS instructions <tls>`.
 
-7. Percona Server for MongoDB cluster can
+3. Percona Server for MongoDB cluster can
    be created at any time with the following two steps:
 
    a. Uncomment the ``deploy/cr.yaml`` field ``#platform:`` and edit the field
@@ -153,7 +166,7 @@ Click the ``Install Operator`` button.
 
    .. include:: ./assets/code/kubectl-get-pods-response.txt
 
-8. Check connectivity to newly created cluster. Please note that mongo client command shall be executed inside the container manually.
+4. Check connectivity to newly created cluster. Please note that mongo client command shall be executed inside the container manually.
 
    .. code:: bash
 
