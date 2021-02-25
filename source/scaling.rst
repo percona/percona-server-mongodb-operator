@@ -39,6 +39,8 @@ MongoDB Replica Set to ``5`` nodes:
 Don't forget to present changed configuration to the Operator as usual, running
 the ``kubectl apply -f deploy/cr.yaml`` command.
 
+.. _operator.scale.scale-down:
+
 Scaling the cluster down is done in a similar way as scaling it up. The only
 thing to consider when you scale your cluster down is how the Operator treats
 `Persistent Volume Claims <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_.
