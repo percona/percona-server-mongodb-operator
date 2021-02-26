@@ -1952,7 +1952,8 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``3``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The amount of most recent backups to store 							|
+| **Description** | The amount of most recent backups to store. Older backups are automatically deleted.	|
+|                 | Set ``keep`` to zero or completely remove it to disable automatic deletion of backups	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
