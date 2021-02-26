@@ -102,6 +102,10 @@ required secrets can be set in ``deploy/cr.yaml`` under the
 
 `User Admin` - MongoDB Role: `userAdmin <https://docs.mongodb.com/manual/reference/built-in-roles/#userAdmin>`__
 
+.. note:: If you change credentials for the ``MONGODB_CLUSTER_MONITOR`` user,
+   the cluster Pods will go into restart cycle, and the cluster can be not
+   accessible through the ``mongos`` service until this cycle finishes.
+
 YAML Object Format
 ******************
 
