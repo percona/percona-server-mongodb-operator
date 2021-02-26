@@ -193,12 +193,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	}
 	defer pbmc.Close()
 
-	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		stg, ok := cluster.Spec.Backup.Storages[storageName]
-		if !ok {
-			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
-		}
+	stg, ok := cluster.Spec.Backup.Storages[storageName]
+	if !ok {
+		return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
+	}
 
+	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
 		status.PBMname, err = runRestore(bcpName, stg, pbmc, cluster.Spec.Backup.PITR)
 		status.State = psmdbv1.RestoreStateRequested
 		return err
@@ -218,10 +218,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	case pbm.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Error
+		if err = reEnablePITR(pbmc, stg, cluster.Spec.Backup.PITR); err != nil {
+			return
+		}
 	case pbm.StatusDone:
 		status.State = psmdbv1.RestoreStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
+		}
+		if err = reEnablePITR(pbmc, stg, cluster.Spec.Backup.PITR); err != nil {
+			return
 		}
 	case pbm.StatusStarting, pbm.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
@@ -230,11 +236,27 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	return nil
 }
 
+func reEnablePITR(pbm *backup.PBM, stg psmdbv1.BackupStorageSpec, pitr psmdbv1.PITRSpec) (err error) {
+	if !pitr.Enabled {
+		return
+	}
+
+	if err = pbm.SetConfig(stg, pitr); err != nil {
+		return errors.Errorf("failed to re-enable PITR: %w", err)
+	}
+
+	return
+}
+
 func runRestore(backup string, storage psmdbv1.BackupStorageSpec, pbmc *backup.PBM, pitr psmdbv1.PITRSpec) (string, error) {
+	pitr.Enabled = false
 	err := pbmc.SetConfig(storage, pitr)
 	if err != nil {
 		return "", errors.Wrap(err, "set pbm config")
 	}
+
+	// pbm agent doesn't disable pitr immediately so operator must wait for it
+	time.Sleep(2 * time.Minute)
 
 	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResyncBackupList), "", "", primitive.Timestamp{})
 	err = pbmc.C.ResyncStorage(e)

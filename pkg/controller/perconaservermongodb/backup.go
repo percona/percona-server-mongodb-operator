@@ -187,6 +187,15 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 }
 
 func (r *ReconcilePerconaServerMongoDB) updatePBMConfig(cr *api.PerconaServerMongoDB) error {
+	isRestoring, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return fmt.Errorf("checking if restore running on pbm update: %w", err)
+	}
+
+	if isRestoring {
+		return nil
+	}
+
 	pbm, err := backup.NewPBM(r.client, cr)
 	if err != nil {
 		return fmt.Errorf("create pbm object: %w", err)
