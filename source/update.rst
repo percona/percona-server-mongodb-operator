@@ -140,7 +140,7 @@ upgraded, the Operator updates the CR to reflect the new image paths and carries
 on sequential Pods deletion in a safe order, allowing StatefulSet to redeploy
 the cluster Pods with the new image.
 
-.. note:: Being enabled, Smart Updates will force the Operator to take MongoDB
+.. note:: Being enabled, Smart Update will force the Operator to take MongoDB
    version from Version Service and not from the ``mongod.image`` option during
    the very first start of the cluster.
 
@@ -210,5 +210,4 @@ Percona's Version Service:
        versionServiceEndpoint: https://check.percona.com
        schedule: "0 0 * * *"
    ...
-
 
