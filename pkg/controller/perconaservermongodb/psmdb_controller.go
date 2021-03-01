@@ -532,7 +532,6 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 	systemDBs := map[string]struct{}{
 		"local":  {},
 		"admin":  {},
-		"test":   {},
 		"config": {},
 	}
 
