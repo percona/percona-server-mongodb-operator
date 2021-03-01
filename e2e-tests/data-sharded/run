@@ -12,7 +12,6 @@ deploy_operator
 desc 'create PSMDB cluster'
 cluster="some-name"
 kubectl_bin apply \
-    -f "$conf_dir/cloud-secret.yml" \
     -f "$conf_dir/secrets.yml" \
     -f "$conf_dir/client.yml"
 
