@@ -65,3 +65,29 @@ For example, Percona Server for MongoDB 4.4 is supported with the following
 recommended version: {{{mongodb44recommended}}}. More details on the exact Percona
 Server for MongoDB version can be found in the release notes (`4.4 <https://www.percona.com/doc/percona-server-for-mongodb/4.4/release_notes/index.html>`_, `4.2 <https://www.percona.com/doc/percona-server-for-mongodb/4.2/release_notes/index.html>`_, `4.0 <https://www.percona.com/doc/percona-server-for-mongodb/4.0/release_notes/index.html>`_, and `3.6 <https://www.percona.com/doc/percona-server-for-mongodb/3.6/release_notes/index.html>`_).
 
+How to provoke the initial sync of a Pod
+========================================
+
+There are certain situations where it might be necessary to delete all MongoDB
+instance data to force the resync. For example, there may be the following
+reasons:
+
+* rebuilding the node to defragment the database,
+* recreating the member failing to sync due to some bug.
+
+In the case of a "regular" MongoDB, wiping the dbpath would trigger such resync.
+In the case of a MongoDB cluster controlled by the Operator, you will need to do
+the following steps:
+
+
+#. Find out the names of the Persistent Volume Claim and Pod you are going to
+   delete (use ``kubectl get pvc`` command for PVC and ``kubectl get pod`` one
+   for Pods).
+#. Delete the appropriate PVC and Pod. For example, wiping out the
+   ``my-cluster-name-rs0-2`` Pod should look as follows:
+
+   .. code:: bash
+      kubectl delete pvc mongod-data-my-cluster-name-rs0-2 &
+      kubectl delete pod my-cluster-name-rs0-2
+
+The Operator will automatically recreate the needed Pod and PVC after deletion.
