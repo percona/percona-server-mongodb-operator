@@ -164,9 +164,7 @@ updates:
      Percona Server for MongoDB 4.2, 4.0, or 3.6 version regardless of the image
      path; for already existing clusters, the 4.4 vs. 4.2, 4.0, or 3.6 branch
      choice will be preserved),
-   * ``4.4-latest``, ``4.2-latest``, ``4.0-latest``, ``3.6-latest`` - same as
-     above, but with preserving specific major version in all cases (useful for
-     creating a MongoDB 4.2, 4.0, or 3.6 cluster from scratch),
+   * ``4.4-latest``, ``4.2-latest``, ``4.0-latest``, ``3.6-latest`` - same as above, but preserves specific major MongoDB version for newly provisioned clusters (ex. 4.2 will not be upgraded to 4.4 automatically),
    * *specific version number* - will apply an upgrade if the running Percona
      Server for MongoDB
      version doesn't match the explicit version number with no future upgrades
