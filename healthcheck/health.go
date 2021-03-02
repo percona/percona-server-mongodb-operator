@@ -114,17 +114,24 @@ func HealthCheckMongodLiveness(session *mgo.Session, startupDelaySeconds int64) 
 	}
 
 	oplogRs := OplogRs{}
-	if err := session.DB("local").Run(bson.D{
-		{Name: "collStats", Value: "oplog.rs"},
-		{Name: "scale", Value: 1024 * 1024 * 1024}, // scale size to gigabytes
-	}, &oplogRs); err != nil {
-		return nil, fmt.Errorf("failed to get oplog.rs info: %v", err)
-	}
-	if oplogRs.Ok == 0 {
-		return nil, errors.New(oplogRs.Errmsg)
+	if !isMasterResp.IsArbiter {
+		if err := session.DB("local").Run(bson.D{
+			{Name: "collStats", Value: "oplog.rs"},
+			{Name: "scale", Value: 1024 * 1024 * 1024}, // scale size to gigabytes
+		}, &oplogRs); err != nil {
+			return nil, fmt.Errorf("failed to get oplog.rs info: %v", err)
+		}
+		if oplogRs.Ok == 0 {
+			return nil, errors.New(oplogRs.Errmsg)
+		}
 	}
 
-	if err := replSetGetStatusResp.CheckState(startupDelaySeconds, oplogRs.StorageSize); err != nil {
+	var storageSize int64 = 0
+	if oplogRs.StorageSize > 0 {
+		storageSize = oplogRs.StorageSize
+	}
+
+	if err := replSetGetStatusResp.CheckState(startupDelaySeconds, storageSize); err != nil {
 		return &replSetGetStatusResp.MyState, err
 	}
 
@@ -137,8 +144,9 @@ type ServerStatus struct {
 }
 
 type IsMasterResp struct {
-	IsMaster bool   `bson:"ismaster" json:"ismaster"`
-	Msg      string `bson:"msg" json:"msg"`
+	IsMaster  bool   `bson:"ismaster" json:"ismaster"`
+	IsArbiter bool   `bson:"arbiterOnly" json:"arbiterOnly"`
+	Msg       string `bson:"msg" json:"msg"`
 
 	Ok     int    `bson:"ok" json:"ok"`
 	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`

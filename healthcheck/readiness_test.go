@@ -15,13 +15,9 @@
 package healthcheck
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/testutils"
-	"github.com/percona/pmgo"
-	"github.com/percona/pmgo/pmgomock"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,15 +25,7 @@ func TestHealthcheckReadinessCheck(t *testing.T) {
 	testutils.DoSkipTest(t)
 
 	assert.NoError(t, testDBSession.Ping(), "Database ping error")
-	state, err := ReadinessCheck(pmgo.NewSessionManager(testDBSession))
+	state, err := ReadinessCheck(testDBSession)
 	assert.NoError(t, err, "healthcheck.ReadinessCheck() returned an error")
 	assert.Equal(t, state, StateOk, "healthcheck.ReadinessCheck() returned incorrect state")
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockSession := pmgomock.NewMockSessionManager(ctrl)
-	mockSession.EXPECT().Ping().Return(errors.New("fake ping failure"))
-	_, err = ReadinessCheck(mockSession)
-	assert.Error(t, err, "healthcheck.ReadinessCheck() did not return an expected error")
 }

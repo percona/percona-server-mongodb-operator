@@ -29,8 +29,8 @@ import (
 const testSSLDirRelPath = "../../docker/test/ssl"
 
 var (
-	sslCertFile = internal.RelPathToAbs(filepath.Join(testSSLDirRelPath, "client.pem"))
-	sslCAFile   = internal.RelPathToAbs(filepath.Join(testSSLDirRelPath, "rootCA.crt"))
+	sslCertFile = tools.RelPathToAbs(filepath.Join(testSSLDirRelPath, "client.pem"))
+	sslCAFile   = tools.RelPathToAbs(filepath.Join(testSSLDirRelPath, "rootCA.crt"))
 )
 
 func TestInternalDBLoadCaCertificate(t *testing.T) {
