@@ -150,7 +150,7 @@ updates:
 
 #. Set the ``apply`` option to one of the following values:
 
-   * ``Recommended`` - automatic upgrades will choose the most recent version
+   * ``Recommended`` - automatic upgrade will choose the most recent version
      of software flagged as Recommended (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
      Percona Server for MongoDB 4.2, 4.0, or 3.6 version regardless of the image
@@ -212,4 +212,3 @@ Percona's Version Service:
        versionServiceEndpoint: https://check.percona.com
        schedule: "0 0 * * *"
    ...
-
