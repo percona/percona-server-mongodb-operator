@@ -23,7 +23,11 @@ brew install coreutils gnu-sed jq kubernetes-cli openshift-cli kubernetes-helm y
 curl https://sdk.cloud.google.com | bash
 ```
 
+### Runtime requirements
+
 Also, you need a Kubernetes platform of [supported version](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/System-Requirements.html#officially-supported-platforms), available via [EKS](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/eks.html), [GKE](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/gke.html), [OpenShift](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/openshift.html) or [minikube](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/minikube.html) to run the Operator.
+
+**Note:** there is no need to build an image if you are going to test some already-released version.
 
 ## Building and testing the Operator with DockerHub
 
@@ -56,6 +60,8 @@ Running all tests at once can be done with the following command:
 ./e2e-tests/run
 ```
 
+(see how to configure the testing infrastructure [here](#using-environment-variables-to-customize-the-testing-process)).
+
 Tests can be executed one-by-one, usingthe following scripts (their names  should be self-explanatory):
 
 
@@ -86,8 +92,6 @@ Now you can use the following script to builds the image:
 ./e2e-tests/build
 ```
 
-**Note:** there is no need to build an image if you are going to test some already-released version.
-
 Tests can be executed one-by-one, using the following scripts (their names should be self-explanatory):
 
 ```
@@ -105,30 +109,17 @@ Tests can be executed one-by-one, using the following scripts (their names shoul
 
 If the test failed, rerun it at least 3 times.
 
-## Using environment variables to customize the building and testing process
+## Using environment variables to customize the testing process
 
 ### Re-declaring default image names
 
 You can use environment variables to re-declare all default images used for testing. The
 full list of variables is the following one:
 
-```
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
-IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
-```
-
-### Using automatic clean-up after testing
-
-By default, each test creates its own namespace and does not clean up objects in case of failure.
-
-To avoid manual deletion of such leftovers, you can run tests on a separate cluster and use the following environment variable to make the ultimate clean-up:
-
-```
-export CLEAN_NAMESPACE=1
-```
-
-**Note:** this will cause **deleting all namespaces** except default and system ones!
+* `IMAGE` - Percona Server for MongoDB Operator, `perconalab/percona-server-mongodb-operator:main` by default,
+* `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod4.4` by default,
+* `IMAGE_PMM` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
+* `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default,
 
 ### Skipping backup tests on S3-compatible storage
 
