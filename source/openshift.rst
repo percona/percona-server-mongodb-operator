@@ -24,7 +24,7 @@ Install the Operator via the Red Hat Marketplace
 
    Here you can "purchase" the Operator for 0.0 USD.
 
-3. When finished, chose ``Worspace->Sofware`` in the system menu on the top and chouse the Operator:
+3. When finished, chose ``Workspace->Software`` in the system menu on the top and choose the Operator:
 
    .. image:: img/marketplace-operator-install.png
       :align: center
