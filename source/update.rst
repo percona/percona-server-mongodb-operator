@@ -160,7 +160,7 @@ updates:
      ``3.6-recommended`` - same as above, but with preserving specific major
      version in all cases (useful for creating a MongoDB 4.2, 4.0, or 3.6
      cluster from scratch),
-   * ``Latest`` - automatic upgrades will choose the most recent version of
+   * ``Latest`` - automatic upgrade will choose the most recent version of
      the software available (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
      Percona Server for MongoDB 4.2, 4.0, or 3.6 version regardless of the image
