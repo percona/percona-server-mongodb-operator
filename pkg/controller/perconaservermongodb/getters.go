@@ -37,6 +37,20 @@ func (r *ReconcilePerconaServerMongoDB) getRSPods(cr *api.PerconaServerMongoDB, 
 	return pods, err
 }
 
+func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+	list := appsv1.StatefulSetList{}
+
+	err := r.client.List(context.TODO(),
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(arbiterLabels(cr)),
+		},
+	)
+
+	return list, err
+}
+
 func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 
@@ -105,6 +119,12 @@ func rsLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
 func mongodLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	lbls := clusterLabels(cr)
 	lbls["app.kubernetes.io/component"] = "mongod"
+	return lbls
+}
+
+func arbiterLabels(cr *api.PerconaServerMongoDB) map[string]string {
+	lbls := clusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "arbiter"
 	return lbls
 }
 
