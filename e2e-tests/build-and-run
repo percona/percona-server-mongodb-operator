@@ -10,11 +10,10 @@ if [[ $BUILD != "0" ]]; then
     echo "building, set BUILD=0 to suppress this"
     "$test_dir"/build || exit
 else
-    echo "run without building"
+  echo "run without building"
 fi
 
 create_namespace run-$GIT_BRANCH-$RANDOM
-kubectl apply -f $src_dir/deploy/secrets.yaml
 deploy_operator
 
 desc 'create PSMDB cluster'
