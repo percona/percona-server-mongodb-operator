@@ -461,6 +461,21 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-runtimeclassname:								|
+|                 |												|
+| **Key**         | `replsets.runtimeClassName									|
+|                 | <operator.html#replsets-runtimeclassname>`_							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``image-rc``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Name of the `Kubernetes Runtime Class							|
+|                 | <https://kubernetes.io/docs/concepts/containers/runtime-class/>`_				|
+|                 | for Replica Set Pods									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-poddisruptionbudget-maxunavailable:						|
 |                 |												|
 | **Key**         | `replsets.podDisruptionBudget.maxUnavailable						|
@@ -960,6 +975,21 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. sharding-configsvrreplset-runtimeclassname:						|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.runtimeClassName							|
+|                 | <operator.html#sharding-configsvrreplset-runtimeclassname>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``image-rc``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Name of the `Kubernetes Runtime Class							|
+|                 | <https://kubernetes.io/docs/concepts/containers/runtime-class/>`_				|
+|                 | for Config Server Pods									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _sharding-configsvrreplset-volumespec-emptydir:						|
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.volumeSpec.emptyDir						|
@@ -1210,6 +1240,21 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | The `Kubernetes nodeSelector								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
 |                 | #nodeselector>`_ affinity constraint for mongos instances					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. sharding-mongos-runtimeclassname:							|
+|                 |												|
+| **Key**         | `sharding.mongos.runtimeClassName								|
+|                 | <operator.html#sharding-mongos-runtimeclassname>`_						|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``image-rc``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Name of the `Kubernetes Runtime Class							|
+|                 | <https://kubernetes.io/docs/concepts/containers/runtime-class/>`_				|
+|                 | for mongos Pods										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
