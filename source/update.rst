@@ -169,12 +169,10 @@ updates:
    * ``4.4-latest``, ``4.2-latest``, ``4.0-latest``, ``3.6-latest`` - same as
      above, but preserves specific major MongoDB version for newly provisioned
      clusters (ex. 4.4 will not be automatically used instead of 4.2),
-   * *specific version number* - will apply an upgrade if the running Percona
-     Server for MongoDB
-     version doesn't match the explicit version number with no future upgrades
+   * *specific version number* - specify the desired version explicitly
      (version numbers are specified as {{{mongodb44recommended}}},
      {{{mongodb42recommended}}}, etc.),
-   * ``Never`` or ``Disabled`` - disable automatic upgrades
+   * ``Never`` or ``Disabled`` - disable automatic upgrades.
 
      .. note:: When automatic upgrades are disabled by the ``apply`` option, 
         Smart Update functionality will continue working for changes triggered
