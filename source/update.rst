@@ -153,20 +153,22 @@ updates:
    * ``Recommended`` - automatic upgrades will choose the most recent version
      of software flagged as Recommended (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
-     Percona Server for MongoDB 4.2 or 4.0 version
-     regardless of the image path; for already existing clusters, the 4.4
-     vs. 4.2 or 4.0 branch choice will be preserved),
+     Percona Server for MongoDB 4.2, 4.0, or 3.6 version regardless of the image
+     path; for already existing clusters, the 4.4 vs. 4.2, 4.0, or 3.6 branch
+     choice will be preserved),
    * ``4.4-recommended``, ``4.2-recommended``, ``4.0-recommended``,
      ``3.6-recommended`` - same as above, but with preserving specific major
-     version in all cases,
+     version in all cases (useful for creating a MongoDB 4.2, 4.0, or 3.6
+     cluster from scratch),
    * ``Latest`` - automatic upgrades will choose the most recent version of
      the software available (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
-     Percona Server for MongoDB 4.2 or 4.0 version
-     regardless of the image path; for already existing clusters, the 4.4
-     vs. 4.2 or 4.0 branch choice will be preserved),
+     Percona Server for MongoDB 4.2, 4.0, or 3.6 version regardless of the image
+     path; for already existing clusters, the 4.4 vs. 4.2, 4.0, or 3.6 branch
+     choice will be preserved),
    * ``4.4-latest``, ``4.2-latest``, ``4.0-latest``, ``3.6-latest`` - same as
-     above, but with preserving specific major version in all cases,
+     above, but with preserving specific major version in all cases (useful for
+     creating a MongoDB 4.2, 4.0, or 3.6 cluster from scratch),
    * *specific version number* - will apply an upgrade if the running Percona
      Server for MongoDB
      version doesn't match the explicit version number with no future upgrades
