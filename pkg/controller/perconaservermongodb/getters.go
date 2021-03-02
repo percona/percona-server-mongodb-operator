@@ -4,6 +4,7 @@ import (
 	"context"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -35,6 +36,27 @@ func (r *ReconcilePerconaServerMongoDB) getRSPods(cr *api.PerconaServerMongoDB, 
 	)
 
 	return pods, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
+	list := appsv1.StatefulSetList{}
+
+	l := arbiterLabels(cr)
+	l["app.kubernetes.io/replset"] = rs
+
+	err := r.client.List(context.TODO(),
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(l),
+		},
+	)
+
+	if len(list.Items) != 1 {
+		return appsv1.StatefulSet{}, errors.Errorf("invalid sfs arbiter count: %d", len(list.Items))
+	}
+
+	return list.Items[0], err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
