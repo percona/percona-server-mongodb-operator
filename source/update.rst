@@ -157,9 +157,7 @@ updates:
      path; for already existing clusters, the 4.4 vs. 4.2, 4.0, or 3.6 branch
      choice will be preserved),
    * ``4.4-recommended``, ``4.2-recommended``, ``4.0-recommended``,
-     ``3.6-recommended`` - same as above, but with preserving specific major
-     version in all cases (useful for creating a MongoDB 4.2, 4.0, or 3.6
-     cluster from scratch),
+     ``3.6-recommended`` - same as above, but preserves specific major MongoDB version for newly provisioned clusters (ex. 4.2 will not be upgraded to 4.4 automatically),
    * ``Latest`` - automatic upgrade will choose the most recent version of
      the software available (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
