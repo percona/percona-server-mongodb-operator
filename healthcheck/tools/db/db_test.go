@@ -52,7 +52,7 @@ func TestInternalDBGetSession(t *testing.T) {
 		} `bson:"users"`
 		Ok int `bson:"ok"`
 	}{}
-	err = testPrimarySession.Run(bson.D{{"usersInfo", testutils.MongodbAdminUser}}, &resp)
+	err = testPrimarySession.Run(bson.D{{Name: "usersInfo", Value: testutils.MongodbAdminUser}}, &resp)
 	assert.NoError(t, err, "session returned by .GetSession() should succeed at running 'usersInfo'")
 	assert.NotNil(t, resp, "got empty response from 'usersInfo' server command")
 	assert.Equal(t, resp.Ok, 1, "got 'ok' code that is not 1")

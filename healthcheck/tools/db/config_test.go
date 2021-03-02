@@ -46,7 +46,8 @@ func TestInternalDBUri(t *testing.T) {
 
 func TestInternalDBNewConfig(t *testing.T) {
 	app := kingpin.New(t.Name(), t.Name())
-	cnf := NewConfig(app, "", "")
+	cnf, err := NewConfig(app, "", "")
+	assert.NoError(t, err)
 	assert.NotNil(t, cnf)
 
 	os.Setenv(pkg.EnvMongoDBNetSSLEnabled, "true")
@@ -56,7 +57,7 @@ func TestInternalDBNewConfig(t *testing.T) {
 	defer os.Unsetenv(pkg.EnvMongoDBPort)
 	defer os.Unsetenv(pkg.EnvMongoDBReplset)
 
-	_, err := app.Parse([]string{"--username=test", "--password=test"})
+	_, err = app.Parse([]string{"--username=test", "--password=test"})
 	assert.NoError(t, err)
 	assert.Equal(t, []string{getDefaultMongoDBAddress()}, cnf.DialInfo.Addrs)
 	assert.Equal(t, t.Name(), cnf.DialInfo.ReplicaSetName)
@@ -64,12 +65,13 @@ func TestInternalDBNewConfig(t *testing.T) {
 
 func TestInternalDBNewSSLConfig(t *testing.T) {
 	app := kingpin.New(t.Name(), t.Name())
-	cnf := NewConfig(app, "", "")
+	cnf, err := NewConfig(app, "", "")
+	assert.NoError(t, err)
 	assert.NotNil(t, cnf)
 
 	os.Setenv(pkg.EnvMongoDBNetSSLEnabled, "true")
 	defer os.Unsetenv(pkg.EnvMongoDBNetSSLEnabled)
-	_, err := app.Parse([]string{"--username=test", "--password=test"})
+	_, err = app.Parse([]string{"--username=test", "--password=test"})
 	assert.NoError(t, err)
 	assert.True(t, cnf.SSL.Enabled)
 }
