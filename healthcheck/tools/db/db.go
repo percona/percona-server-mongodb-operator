@@ -16,6 +16,7 @@ package db
 
 import (
 	"errors"
+	"net/url"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -30,6 +31,8 @@ var (
 )
 
 func GetSession(cnf *Config) (*mgo.Session, error) {
+	cnf.DialInfo.Password = url.QueryEscape(cnf.DialInfo.Password)
+
 	if cnf.SSL == nil {
 		cnf.SSL = &SSLConfig{}
 	}

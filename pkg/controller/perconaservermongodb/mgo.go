@@ -217,13 +217,15 @@ func inShard(client *mgo.Client, podName string) (bool, error) {
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
 func mongoInitAdminUser(user, pwd string) string {
-	return fmt.Sprintf(`db.getSiblingDB("admin").createUser(
+	q := fmt.Sprintf(`db.getSiblingDB("admin").createUser(
 		{
 			user: "%s",
 			pwd: "%s",
-			roles: [ "userAdminAnyDatabase" ] 
+			roles: [ "userAdminAnyDatabase" ]
 		}
 	)`, user, pwd)
+
+	return q
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
