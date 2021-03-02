@@ -4,7 +4,7 @@ Install Percona Server for MongoDB on OpenShift
 Installing Percona Server for MongoDB on OpenShift includes two steps:
 
 * Installing the Percona Operator for Percona Server for MongoDB,
-* Using the Operator to make actual Percona Server for MongoDB installation.
+* Install Percona Server for MongoDB using the Operator.
 
 Install the Operator
 --------------------
