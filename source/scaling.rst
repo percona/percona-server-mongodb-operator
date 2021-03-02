@@ -6,7 +6,7 @@ platform is the ease of an application scaling. Scaling a Deployment up
 or down ensures new Pods are created and set to available Kubernetes
 nodes.
 
-The size of the cluster is controlled by ``size`` keys in the
+The size of the cluster is controlled by the ``size`` key in the
 :ref:`operator.custom-resource-options` configuration.
 
 .. note:: Using ``kubectl scale StatefulSet_name`` command to rescale
