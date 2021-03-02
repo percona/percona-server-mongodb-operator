@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -98,9 +97,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			}
 		}()
 
-		in, err := inShard(mongosSession, psmdb.GetAddr(cr, pods.Items[0].Name, replset.Name))
+		in, err := inShard(mongosSession, replset.Name)
 		if err != nil {
-			return clusterError, errors.Wrap(err, "add shard")
+			return clusterError, errors.Wrap(err, "get shard")
 		}
 
 		if !in {
@@ -126,7 +125,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	members := mongo.ConfigMembers{}
 	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
-			err = errReplsetLimit
+			log.Error(errReplsetLimit, "rs", replset.Name)
 			break
 		}
 
@@ -199,14 +198,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	return clusterInit, nil
 }
 
-func inShard(client *mgo.Client, podName string) (bool, error) {
+func inShard(client *mgo.Client, rsName string) (bool, error) {
 	shardList, err := mongo.ListShard(context.TODO(), client)
 	if err != nil {
 		return false, errors.Wrap(err, "unable to get shard list")
 	}
 
 	for _, shard := range shardList.Shards {
-		if strings.Contains(shard.Host, podName) {
+		if shard.ID == rsName {
 			return true, nil
 		}
 	}
@@ -217,15 +216,13 @@ func inShard(client *mgo.Client, podName string) (bool, error) {
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
 func mongoInitAdminUser(user, pwd string) string {
-	q := fmt.Sprintf(`db.getSiblingDB("admin").createUser(
+	return fmt.Sprintf(`db.getSiblingDB("admin").createUser(
 		{
 			user: "%s",
 			pwd: "%s",
-			roles: [ "userAdminAnyDatabase" ]
+			roles: [ "userAdminAnyDatabase" ] 
 		}
 	)`, user, pwd)
-
-	return q
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
@@ -263,7 +260,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 	mongosPod corev1.Pod) error {
 
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
-		return errors.New("rsPod is not ready")
+		return errors.Errorf("rsPod %s is not ready", rspod.Name)
 	}
 	if !isContainerAndPodRunning(mongosPod, "mongos") || !isPodReady(mongosPod) {
 		return errors.New("mongos pod is not ready")
