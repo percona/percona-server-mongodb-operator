@@ -29,7 +29,7 @@ Also, you need a Kubernetes platform of [supported version](https://www.percona.
 
 **Note:** there is no need to build an image if you are going to test some already-released version.
 
-## Building and testing the Operator with DockerHub
+## Building and testing the Operator
 
 There are scripts which build the image and run tests. Both building and testing
 needs some repository for the newly created docker images. If nothing is
@@ -77,37 +77,6 @@ Tests can be executed one-by-one, usingthe following scripts (their names  shoul
 ./e2e-tests/operator-self-healing/run
 ....
 ```
-
-## Building and testing the Operator without DockerHub
-
-The first thing you need to do is fixing image names, to use your custom Docker registry. For example, if your custom registry has the `172.30.162.173:5000` address, you can proceed with the following command:
-
-```
-export IMAGE=172.30.162.173:5000/namespace/repo:tag
-```
-
-Now you can use the following script to builds the image:
-
-```
-./e2e-tests/build
-```
-
-Tests can be executed one-by-one, using the following scripts (their names should be self-explanatory):
-
-```
-./e2e-tests/init-deploy/run
-./e2e-tests/arbiter/run
-./e2e-tests/limits/run
-./e2e-tests/scaling/run
-./e2e-tests/demand-backup/run
-./e2e-tests/scheduled-backup/run
-./e2e-tests/storage/run
-./e2e-tests/self-healing/run
-./e2e-tests/operator-self-healing/run
-....
-```
-
-If the test failed, rerun it at least 3 times.
 
 ## Using environment variables to customize the testing process
 
