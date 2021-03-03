@@ -123,7 +123,19 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 			primaryPod = pod
 		} else {
 			log.Info(fmt.Sprintf("apply changes to secondary pod %s", pod.Name))
-			if err := r.applyNWait(cr, sfs.Status.UpdateRevision, &pod, waitLimit); err != nil {
+
+			updateRevision := sfs.Status.UpdateRevision
+
+			if pod.Labels["app.kubernetes.io/component"] == "arbiter" {
+				arbiterSfs, err := r.getArbiterStatefulset(cr, pod.Labels["app.kubernetes.io/replset"])
+				if err != nil {
+					return errors.Wrap(err, "failed to get arbiter statefilset")
+				}
+
+				updateRevision = arbiterSfs.Status.UpdateRevision
+			}
+
+			if err := r.applyNWait(cr, updateRevision, &pod, waitLimit); err != nil {
 				return fmt.Errorf("failed to apply changes: %v", err)
 			}
 		}
@@ -194,7 +206,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, po
 
 		ready := false
 		for _, container := range pod.Status.ContainerStatuses {
-			if container.Name == "mongod" {
+			if container.Name == "mongod" || container.Name == "mongod-arbiter" {
 				ready = container.Ready
 			}
 		}
