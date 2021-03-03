@@ -191,7 +191,7 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
 	isRestoring, err := r.isRestoreRunning(cr)
 	if err != nil {
-		return fmt.Errorf("checking if restore running on pbm update: %w", err)
+		return errors.Wrap(err, "checking if restore running on pbm update")
 	}
 
 	if isRestoring {
@@ -200,7 +200,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 
 	pbm, err := backup.NewPBM(r.client, cr)
 	if err != nil {
-		return fmt.Errorf("create pbm object: %w", err)
+		return errors.Wrap(err, "create pbm object")
 	}
 
 	enabled, err := pbm.C.GetConfigVar("pitr.enabled")
@@ -217,13 +217,13 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 
 		err = pbm.SetConfig(storage, cr.Spec.Backup.PITR)
 		if err != nil {
-			return fmt.Errorf("failed to set pbm config: %w", err)
+			return errors.Wrap(err, "failed to set pbm config")
 		}
 
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("failed to get current pitr status: %w", err)
+		return errors.Wrap(err, "failed to get current pitr status")
 	}
 
 	if enabled == cr.Spec.Backup.PITR.Enabled {
@@ -232,7 +232,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 
 	err = pbm.C.SetConfigVar("pitr.enabled", strconv.FormatBool(cr.Spec.Backup.PITR.Enabled))
 	if err != nil {
-		return fmt.Errorf("failed to update pitr status: %w", err)
+		return errors.Wrap(err, "failed to update pitr status")
 	}
 
 	return nil

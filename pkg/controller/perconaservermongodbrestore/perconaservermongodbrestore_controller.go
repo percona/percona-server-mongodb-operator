@@ -242,7 +242,7 @@ func reEnablePITR(pbm *backup.PBM, stg psmdbv1.BackupStorageSpec, pitr psmdbv1.P
 	}
 
 	if err = pbm.SetConfig(stg, pitr); err != nil {
-		return errors.Errorf("failed to re-enable PITR: %w", err)
+		return errors.Wrap(err, "failed to re-enable PITR")
 	}
 
 	return
