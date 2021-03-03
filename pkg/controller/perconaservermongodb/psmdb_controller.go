@@ -462,7 +462,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	// DB cluster can be not ready yet so it's requeued after some time
-	if err = r.updatePBMConfig(cr); err != nil {
+	if err = r.updatePITR(cr); err != nil {
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, err
 	}
 

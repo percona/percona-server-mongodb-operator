@@ -4,10 +4,12 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/mongo"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -186,7 +188,7 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) updatePBMConfig(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
 	isRestoring, err := r.isRestoreRunning(cr)
 	if err != nil {
 		return fmt.Errorf("checking if restore running on pbm update: %w", err)
@@ -201,12 +203,36 @@ func (r *ReconcilePerconaServerMongoDB) updatePBMConfig(cr *api.PerconaServerMon
 		return fmt.Errorf("create pbm object: %w", err)
 	}
 
-	var stg api.BackupStorageSpec // getting the first and only storage from map
-	for _, stg = range cr.Spec.Backup.Storages {
+	enabled, err := pbm.C.GetConfigVar("pitr.enabled")
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		if !cr.Spec.Backup.PITR.Enabled {
+			return nil
+		}
+
+		var storage api.BackupStorageSpec
+
+		// getting the first and only storage
+		for _, storage = range cr.Spec.Backup.Storages {
+		}
+
+		err = pbm.SetConfig(storage, cr.Spec.Backup.PITR)
+		if err != nil {
+			return fmt.Errorf("failed to set pbm config: %w", err)
+		}
+
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get current pitr status: %w", err)
 	}
 
-	if err = pbm.SetConfig(stg, cr.Spec.Backup.PITR); err != nil {
-		return fmt.Errorf("set pbm config: %w", err)
+	if enabled == cr.Spec.Backup.PITR.Enabled {
+		return nil
+	}
+
+	err = pbm.C.SetConfigVar("pitr.enabled", strconv.FormatBool(cr.Spec.Backup.PITR.Enabled))
+	if err != nil {
+		return fmt.Errorf("failed to update pitr status: %w", err)
 	}
 
 	return nil
