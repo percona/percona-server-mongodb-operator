@@ -19,7 +19,7 @@ Improvements
 
 * :jirabug:`K8SPSMDB-335`: Operator can now automatically remove old backups from S3 if :ref:`retention period<backup-tasks-keep>` is set
 * :jirabug:`K8SPSMDB-330`: Add support for runtimeClassName Kubernetes feature for selecting the container runtime
-* :jirabug:`K8SPSMDB-306`: It is now possible to explicitly set the version of MongoDB for newly provisioned clusters. Before that, all new clusters were upgraded to the latest MongoDB version if Version Service was enabled
+* :jirabug:`K8SPSMDB-306`: It is now possible to explicitly set the version of MongoDB for newly provisioned clusters. Before that, all new clusters were started with the latest MongoDB version if Version Service was enabled
 * :jirabug:`K8SPSMDB-370`: Fix confusing log messages about no backup / restore found which were caused by Percona Backup for MongoDB waiting for the backup metadata
 * :jirabug:`K8SPSMDB-342`: MongoDB container liveness probe will now use TLS to follow best practices and remove noisy log messages from mongod log
 
