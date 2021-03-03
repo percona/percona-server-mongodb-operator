@@ -193,12 +193,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	}
 	defer pbmc.Close()
 
-	stg, ok := cluster.Spec.Backup.Storages[storageName]
-	if !ok {
-		return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
-	}
-
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
+		stg, ok := cluster.Spec.Backup.Storages[storageName]
+		if !ok {
+			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
+		}
+
 		status.PBMname, err = runRestore(bcpName, stg, pbmc, cluster.Spec.Backup.PITR)
 		status.State = psmdbv1.RestoreStateRequested
 		return err
@@ -218,7 +218,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	case pbm.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Error
-		if err = reEnablePITR(pbmc, stg, cluster.Spec.Backup.PITR); err != nil {
+		if err = reEnablePITR(pbmc, cluster.Spec.Backup.PITR); err != nil {
 			return
 		}
 	case pbm.StatusDone:
@@ -226,7 +226,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
-		if err = reEnablePITR(pbmc, stg, cluster.Spec.Backup.PITR); err != nil {
+		if err = reEnablePITR(pbmc, cluster.Spec.Backup.PITR); err != nil {
 			return
 		}
 	case pbm.StatusStarting, pbm.StatusRunning:
@@ -236,13 +236,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	return nil
 }
 
-func reEnablePITR(pbm *backup.PBM, stg psmdbv1.BackupStorageSpec, pitr psmdbv1.PITRSpec) (err error) {
+func reEnablePITR(pbm *backup.PBM, pitr psmdbv1.PITRSpec) (err error) {
 	if !pitr.Enabled {
 		return
 	}
 
-	if err = pbm.SetConfig(stg, pitr); err != nil {
-		return errors.Wrap(err, "failed to re-enable PITR")
+	err = pbm.C.SetConfigVar("pitr.enabled", "true")
+	if err != nil {
+		return
 	}
 
 	return

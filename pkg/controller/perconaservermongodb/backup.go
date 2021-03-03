@@ -205,21 +205,6 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 
 	enabled, err := pbm.C.GetConfigVar("pitr.enabled")
 	if errors.Is(err, mongo.ErrNoDocuments) {
-		if !cr.Spec.Backup.PITR.Enabled {
-			return nil
-		}
-
-		var storage api.BackupStorageSpec
-
-		// getting the first and only storage
-		for _, storage = range cr.Spec.Backup.Storages {
-		}
-
-		err = pbm.SetConfig(storage, cr.Spec.Backup.PITR)
-		if err != nil {
-			return errors.Wrap(err, "failed to set pbm config")
-		}
-
 		return nil
 	}
 	if err != nil {
