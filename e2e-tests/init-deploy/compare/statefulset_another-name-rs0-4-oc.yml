@@ -4,16 +4,16 @@ metadata:
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/instance: another-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: some-name-rs0
+  name: another-name-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: some-name
+      name: another-name
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -21,18 +21,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/instance: another-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: some-name-rs0
+  serviceName: another-name-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/instance: another-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
@@ -48,9 +48,8 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --sslMode=preferSSL
-            - --clusterAuthMode=x509
-            - --shardsvr
+            - --clusterAuthMode=keyFile
+            - --keyFile=/etc/mongodb-secrets/mongodb-key
             - --slowms=100
             - --profile=1
             - --rateLimit=1
@@ -70,14 +69,14 @@ spec:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: some-name
+              value: another-name
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: internal-some-name-users
+                name: internal-another-name-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -115,7 +114,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 1G
+              memory: 500M
             requests:
               cpu: 100m
               memory: 100M
@@ -127,7 +126,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: some-name-mongodb-keyfile
+              name: another-name-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -136,33 +135,27 @@ spec:
               name: ssl-internal
               readOnly: true
             - mountPath: /etc/mongodb-encryption
-              name: some-name-mongodb-encryption-key
+              name: another-name-mongodb-encryption-key
               readOnly: true
           workingDir: /data/db
-        - env:
-            - name: PBM_AGENT_MONGODB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  key: MONGODB_BACKUP_USER
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_AGENT_MONGODB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: MONGODB_BACKUP_PASSWORD
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_MONGODB_REPLSET
-              value: rs0
-            - name: PBM_MONGODB_PORT
-              value: "27017"
-            - name: SHARDED
-              value: "TRUE"
+        - args:
+            - -c
+            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
+          command:
+            - /bin/sh
           imagePullPolicy: Always
-          name: backup-agent
+          name: my-sidecar-1
           resources: {}
-          securityContext:
-            runAsNonRoot: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        - args:
+            - -c
+            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
+          command:
+            - /bin/sh
+          imagePullPolicy: Always
+          name: my-sidecar-2
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
       dnsPolicy: ClusterFirst
@@ -174,7 +167,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 1G
+              memory: 500M
             requests:
               cpu: 100m
               memory: 100M
@@ -184,32 +177,33 @@ spec:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
+      runtimeClassName: container-rc
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: some-name-mongodb-keyfile
+        - name: another-name-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-keyfile
-        - name: some-name-mongodb-encryption-key
+            secretName: another-name-mongodb-keyfile
+        - name: another-name-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-encryption-key
+            secretName: another-name-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
-            optional: false
-            secretName: some-name-ssl
+            optional: true
+            secretName: another-name-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: some-name-ssl-internal
+            secretName: another-name-ssl-internal
   updateStrategy:
     rollingUpdate:
       partition: 0
