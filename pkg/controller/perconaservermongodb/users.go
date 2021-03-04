@@ -143,8 +143,6 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(pods []corev1.Pod, contain
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
-				log.Info("DEBUG: KILLING CONTAINER", "CONTAINER", containerName, "POD", pod.Name)
-
 				stderrBuf := &bytes.Buffer{}
 
 				err := r.clientcmd.Exec(&pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
