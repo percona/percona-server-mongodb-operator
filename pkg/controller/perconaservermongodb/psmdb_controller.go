@@ -217,6 +217,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	err = r.checkConfiguration(cr)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	err = r.checkFinalizers(cr)
 	if err != nil {
 		reqLogger.Error(err, "failed to run finalizers")
@@ -424,6 +429,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		}
 	}
 
+	err = r.stopMongosInCaseOfRestore(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "on restore")
+	}
+
 	err = r.reconcileMongos(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
@@ -451,6 +461,33 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServerMongoDB) error {
+	// check if sharding has already been enabled
+	_, cfgErr := r.getCfgStatefulset(cr)
+	if cfgErr != nil && !k8serrors.IsNotFound(cfgErr) {
+		return errors.Wrap(cfgErr, "failed to get cfg replset")
+	}
+
+	rs, rsErr := r.getMongodStatefulsets(cr)
+	if rsErr != nil && !k8serrors.IsNotFound(rsErr) {
+		return errors.Wrap(rsErr, "failed to get all replsets")
+	}
+
+	if !cr.Spec.Sharding.Enabled {
+		// means we have already had sharded cluster and try to disable sharding
+		if cfgErr == nil && len(rs.Items) > 1 {
+			return errors.Errorf("failed to disable sharding with %d active replsets", len(rs.Items))
+		}
+
+		// means we want to run multiple replsets without sharding
+		if len(cr.Spec.Replsets) > 1 {
+			return errors.New("running multiple replsets without sharding is prohibited")
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
@@ -494,7 +531,6 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 	systemDBs := map[string]struct{}{
 		"local":  {},
 		"admin":  {},
-		"test":   {},
 		"config": {},
 	}
 
@@ -600,11 +636,34 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Sharding.Enabled {
+func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
 
+	rstRunning, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check running restores")
+	}
+
+	if !rstRunning {
+		return nil
+	}
+
+	err = r.disableBalancer(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to disable balancer")
+	}
+
+	err = r.deleteMongos(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete mongos")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
 	msDepl := psmdb.MongosDeployment(cr)
 	err := r.client.Delete(context.TODO(), msDepl)
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -620,6 +679,14 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	return r.deleteMongos(cr)
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
@@ -630,7 +697,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
 	}
 
-	if !uptodate {
+	rstRunning, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check running restores")
+	}
+
+	if !uptodate || rstRunning {
 		return nil
 	}
 

@@ -47,8 +47,8 @@ func TestInternalDBUri(t *testing.T) {
 func TestInternalDBNewConfig(t *testing.T) {
 	app := kingpin.New(t.Name(), t.Name())
 	cnf, err := NewConfig(app, "", "")
+	assert.NoError(t, err)
 	assert.NotNil(t, cnf)
-	assert.Nil(t, err)
 
 	os.Setenv(pkg.EnvMongoDBNetSSLEnabled, "true")
 	os.Setenv(pkg.EnvMongoDBPort, "27017")
@@ -66,8 +66,8 @@ func TestInternalDBNewConfig(t *testing.T) {
 func TestInternalDBNewSSLConfig(t *testing.T) {
 	app := kingpin.New(t.Name(), t.Name())
 	cnf, err := NewConfig(app, "", "")
+	assert.NoError(t, err)
 	assert.NotNil(t, cnf)
-	assert.Nil(t, err)
 
 	os.Setenv(pkg.EnvMongoDBNetSSLEnabled, "true")
 	defer os.Unsetenv(pkg.EnvMongoDBNetSSLEnabled)

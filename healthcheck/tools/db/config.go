@@ -100,8 +100,6 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 		return nil, errors.Wrap(err, "failed to get password")
 	}
 
-	log.Infof("USER: %s, PASS: %s", db.DialInfo.Username, db.DialInfo.Password)
-
 	app.Flag(
 		"authDb",
 		"mongodb auth database",
@@ -128,15 +126,16 @@ func NewSSLConfig(app *kingpin.Application) *SSLConfig {
 	app.Flag(
 		"sslPEMKeyFile",
 		"path to client SSL Certificate file (including key, in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLPEMKeyFile,
-	).Envar(pkg.EnvMongoDBNetSSLPEMKeyFile).ExistingFileVar(&ssl.PEMKeyFile)
+	).Envar(pkg.EnvMongoDBNetSSLPEMKeyFile).StringVar(&ssl.PEMKeyFile)
 	app.Flag(
 		"sslCAFile",
 		"path to SSL Certificate Authority file (in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLCAFile,
-	).Envar(pkg.EnvMongoDBNetSSLCAFile).ExistingFileVar(&ssl.CAFile)
+	).Envar(pkg.EnvMongoDBNetSSLCAFile).StringVar(&ssl.CAFile)
 	app.Flag(
 		"sslInsecure",
 		"skip validation of the SSL certificate and hostname, overridden by env var "+pkg.EnvMongoDBNetSSLInsecure,
 	).Envar(pkg.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
+
 	return ssl
 }
 

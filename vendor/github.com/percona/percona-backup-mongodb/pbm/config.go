@@ -2,14 +2,18 @@ package pbm
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"gopkg.in/yaml.v2"
 
+	"github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/blackhole"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
@@ -18,9 +22,18 @@ import (
 
 // Config is a pbm config
 type Config struct {
-	Storage StorageConf `bson:"storage" json:"storage" yaml:"storage"`
+	PITR    PITRConf            `bson:"pitr" json:"pitr" yaml:"pitr"`
+	Storage StorageConf         `bson:"storage" json:"storage" yaml:"storage"`
+	Restore RestoreConf         `bson:"restore" json:"restore,omitempty" yaml:"restore,omitempty"`
+	Epoch   primitive.Timestamp `bson:"epoch" json:"-" yaml:"-"`
 }
 
+// PITRConf is a Point-In-Time Recovery options
+type PITRConf struct {
+	Enabled bool `bson:"enabled" json:"enabled" yaml:"enabled"`
+}
+
+// StorageType represents a type of the destination storage for backups
 type StorageType string
 
 const (
@@ -30,27 +43,44 @@ const (
 	StorageBlackHole  StorageType = "blackhole"
 )
 
+// StorageConf is a configuration of the backup storage
 type StorageConf struct {
 	Type       StorageType `bson:"type" json:"type" yaml:"type"`
 	S3         s3.Conf     `bson:"s3,omitempty" json:"s3,omitempty" yaml:"s3,omitempty"`
 	Filesystem fs.Conf     `bson:"filesystem,omitempty" json:"filesystem,omitempty" yaml:"filesystem,omitempty"`
 }
 
-// ConfKeys returns valid config keys (option names)
-func ConfKeys() []string {
-	return keys(reflect.TypeOf(Config{}))
+// RestoreConf is config options for the restore
+type RestoreConf struct {
+	BatchSize           int `bson:"batchSize" json:"batchSize,omitempty" yaml:"batchSize,omitempty"` // num of documents to buffer
+	NumInsertionWorkers int `bson:"numInsertionWorkers" json:"numInsertionWorkers,omitempty" yaml:"numInsertionWorkers,omitempty"`
 }
 
-func keys(t reflect.Type) []string {
-	var v []string
+type confMap map[string]reflect.Kind
+
+// _confmap is a list of config's valid keys and its types
+var _confmap confMap
+
+func init() {
+	_confmap = keys(reflect.TypeOf(Config{}))
+}
+
+func keys(t reflect.Type) confMap {
+	v := make(confMap)
 	for i := 0; i < t.NumField(); i++ {
 		name := strings.TrimSpace(strings.Split(t.Field(i).Tag.Get("bson"), ",")[0])
-		if t.Field(i).Type.Kind() == reflect.Struct {
-			for _, n := range keys(t.Field(i).Type) {
-				v = append(v, name+"."+n)
+
+		typ := t.Field(i).Type
+		if typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+		switch typ.Kind() {
+		case reflect.Struct:
+			for n, t := range keys(typ) {
+				v[name+"."+n] = t
 			}
-		} else {
-			v = append(v, name)
+		default:
+			v[name] = typ.Kind()
 		}
 	}
 	return v
@@ -72,8 +102,18 @@ func (p *PBM) SetConfig(cfg Config) error {
 			return errors.Wrap(err, "cast storage")
 		}
 	}
+	ct, err := p.ClusterTime()
+	if err != nil {
+		return errors.Wrap(err, "get cluster time")
+	}
 
-	_, err := p.Conn.Database(DB).Collection(ConfigCollection).UpdateOne(
+	cfg.Epoch = ct
+
+	// TODO: if store or pitr changed - need to bump epoch
+	// TODO: struct tags to config opts `pbm:"resync,epoch"`?
+	p.GetConfig()
+
+	_, err = p.Conn.Database(DB).Collection(ConfigCollection).UpdateOne(
 		p.ctx,
 		bson.D{},
 		bson.M{"$set": cfg},
@@ -88,43 +128,88 @@ func (p *PBM) SetConfigVar(key, val string) error {
 	}
 
 	// just check if config was set
-	_, err := p.GetConfigVar(key)
+	_, err := p.GetConfig()
 	if err != nil {
 		if errors.Cause(err) == mongo.ErrNoDocuments {
 			return errors.New("config doesn't set")
 		}
 		return err
 	}
+
+	var v interface{}
+	switch _confmap[key] {
+	case reflect.String:
+		v = val
+	case reflect.Int, reflect.Int64:
+		v, err = strconv.ParseInt(val, 10, 64)
+	case reflect.Float32, reflect.Float64:
+		v, err = strconv.ParseFloat(val, 64)
+	case reflect.Bool:
+		v, err = strconv.ParseBool(val)
+	}
+	if err != nil {
+		return errors.Wrapf(err, "casting value of %s", key)
+	}
+
+	// TODO: how to be with special case options like pitr.enabled
+	if key == "pitr.enabled" {
+		return errors.Wrap(p.confSetPITR(key, v.(bool)), "write to db")
+	}
+
 	_, err = p.Conn.Database(DB).Collection(ConfigCollection).UpdateOne(
 		p.ctx,
 		bson.D{},
-		bson.M{"$set": bson.M{key: val}},
+		bson.M{"$set": bson.M{key: v}},
 	)
 
 	return errors.Wrap(err, "write to db")
 }
 
+func (p *PBM) confSetPITR(k string, v bool) error {
+	ct, err := p.ClusterTime()
+	if err != nil {
+		return errors.Wrap(err, "get cluster time")
+	}
+	_, err = p.Conn.Database(DB).Collection(ConfigCollection).UpdateOne(
+		p.ctx,
+		bson.D{},
+		bson.M{"$set": bson.M{k: v, "pitr.changed": time.Now().Unix(), "epoch": ct}},
+	)
+
+	return err
+}
+
 // GetConfigVar returns value of given config vaiable
-func (p *PBM) GetConfigVar(key string) (string, error) {
+func (p *PBM) GetConfigVar(key string) (interface{}, error) {
 	if !ValidateConfigKey(key) {
-		return "", errors.New("invalid config key")
+		return nil, errors.New("invalid config key")
 	}
 
 	bts, err := p.Conn.Database(DB).Collection(ConfigCollection).FindOne(p.ctx, bson.D{}).DecodeBytes()
 	if err != nil {
-		return "", errors.Wrap(err, "get from db")
+		return nil, errors.Wrap(err, "get from db")
 	}
-	return string(bts.Lookup(strings.Split(key, ".")...).Value), nil
+	v, err := bts.LookupErr(strings.Split(key, ".")...)
+	switch v.Type {
+	case bson.TypeBoolean:
+		return v.Boolean(), nil
+	case bson.TypeInt32:
+		return v.Int32(), nil
+	case bson.TypeInt64:
+		return v.Int64(), nil
+	case bson.TypeDouble:
+		return v.Double(), nil
+	case bson.TypeString:
+		return v.String(), nil
+	default:
+		return nil, errors.Errorf("unexpected type %v", v.Type)
+	}
 }
 
 // ValidateConfigKey checks if a config key valid
 func ValidateConfigKey(k string) bool {
-	for _, v := range ConfKeys() {
-		if k == v {
-			return true
-		}
-	}
-	return false
+	_, ok := _confmap[k]
+	return ok
 }
 
 func (p *PBM) GetConfigYaml(fieldRedaction bool) ([]byte, error) {
@@ -167,7 +252,7 @@ var ErrStorageUndefined = errors.New("storage undefined")
 
 // GetStorage reads current storage config and creates and
 // returns respective storage.Storage object
-func (p *PBM) GetStorage() (storage.Storage, error) {
+func (p *PBM) GetStorage(l *log.Event) (storage.Storage, error) {
 	c, err := p.GetConfig()
 	if err != nil {
 		return nil, errors.Wrap(err, "get config")
@@ -175,7 +260,7 @@ func (p *PBM) GetStorage() (storage.Storage, error) {
 
 	switch c.Storage.Type {
 	case StorageS3:
-		return s3.New(c.Storage.S3)
+		return s3.New(c.Storage.S3, l)
 	case StorageFilesystem:
 		return fs.New(c.Storage.Filesystem), nil
 	case StorageBlackHole:

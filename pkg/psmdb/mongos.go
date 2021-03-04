@@ -2,9 +2,10 @@ package psmdb
 
 import (
 	"fmt"
-	"github.com/go-logr/logr"
 	"strconv"
 	"strings"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -21,8 +22,8 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + "mongos",
-			Namespace: cr.Namespace,
+			Name:      cr.MongosNamespacedName().Name,
+			Namespace: cr.MongosNamespacedName().Namespace,
 		},
 	}
 }

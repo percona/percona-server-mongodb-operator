@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
@@ -73,6 +74,8 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMong
 	default:
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}
+
+	creds.Password = url.QueryEscape(creds.Password)
 
 	return creds, nil
 }
