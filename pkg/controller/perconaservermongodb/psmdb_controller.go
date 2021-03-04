@@ -273,9 +273,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	version := cr.Version()
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		err := r.ensureVersion(cr, VersionServiceClient{
-			OpVersion: version.String(),
-		})
+		err := r.ensureVersion(cr, VersionServiceClient{})
 		if err != nil {
 			reqLogger.Info(fmt.Sprintf("failed to ensure version: %v; running with default", err))
 		}
@@ -454,9 +452,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "delete config server")
 	}
 
-	err = r.sheduleEnsureVersion(cr, VersionServiceClient{
-		OpVersion: version.String(),
-	})
+	err = r.sheduleEnsureVersion(cr, VersionServiceClient{})
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
 	}
