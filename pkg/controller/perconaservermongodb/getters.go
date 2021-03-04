@@ -13,16 +13,16 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
-	mongosPods := corev1.PodList{}
+	mongodPods := corev1.PodList{}
 	err := r.client.List(context.TODO(),
-		&mongosPods,
+		&mongodPods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
 		},
 	)
 
-	return mongosPods, err
+	return mongodPods, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
