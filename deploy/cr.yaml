@@ -11,7 +11,6 @@ spec:
   crVersion: 1.8.0
   image: percona/percona-server-mongodb:4.4.2-4
   imagePullPolicy: Always
-  initImage: perconalab/percona-server-mongodb-operator:k8spsmdb-381-1
 #  imagePullSecrets:
 #    - name: private-registry-credentials
 #  runUid: 1001
