@@ -134,6 +134,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: arbiter-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -173,6 +175,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: arbiter-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-arbiter-users
         - emptyDir: {}
           name: mongod-data
   updateStrategy:

@@ -138,6 +138,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: liveness-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
         - env:
             - name: PBM_AGENT_MONGODB_USERNAME
@@ -210,6 +212,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: liveness-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-liveness-users
   updateStrategy:
     rollingUpdate:
       partition: 0

@@ -56,13 +56,21 @@ func (cnf *Config) configureSSLDialInfo() error {
 	config := &tls.Config{
 		InsecureSkipVerify: cnf.SSL.Insecure,
 	}
-	if len(cnf.SSL.PEMKeyFile) > 0 {
-		ok, err := isFileExists(cnf.SSL.PEMKeyFile)
+
+	if len(cnf.SSL.PEMKeyFile) > 0 && len(cnf.SSL.CAFile) > 0 {
+		pemOk, err := isFileExists(cnf.SSL.PEMKeyFile)
 		if err != nil {
 			return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.PEMKeyFile, err)
 		}
-		if ok {
+
+		caOk, err := isFileExists(cnf.SSL.CAFile)
+		if err != nil {
+			return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.CAFile, err)
+		}
+
+		if pemOk && caOk {
 			log.Debugf("Loading SSL/TLS PEM certificate: %s", cnf.SSL.PEMKeyFile)
+
 			certificates, err := tls.LoadX509KeyPair(cnf.SSL.PEMKeyFile, cnf.SSL.PEMKeyFile)
 			if err != nil {
 				return fmt.Errorf(
@@ -72,30 +80,35 @@ func (cnf *Config) configureSSLDialInfo() error {
 					err,
 				)
 			}
+
 			config.Certificates = []tls.Certificate{certificates}
-		}
-	}
-	if len(cnf.SSL.CAFile) > 0 {
-		ok, err := isFileExists(cnf.SSL.PEMKeyFile)
-		if err != nil {
-			return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.PEMKeyFile, err)
-		}
-		if ok {
+
 			log.Debugf("Loading SSL/TLS Certificate Authority: %s", cnf.SSL.CAFile)
 			ca, err := cnf.SSL.loadCaCertificate()
 			if err != nil {
 				return fmt.Errorf("Couldn't load client CAs from %s. Got: %s", cnf.SSL.CAFile, err)
 			}
+
 			config.RootCAs = ca
+
+			cnf.DialInfo.DialServer = tlsDial(config)
+		} else {
+			cnf.SSL = nil
 		}
 	}
-	cnf.DialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+
+	return nil
+}
+
+func tlsDial(config *tls.Config) func(addr *mgo.ServerAddr) (net.Conn, error) {
+	return func(addr *mgo.ServerAddr) (net.Conn, error) {
 		conn, err := tls.Dial("tcp", addr.String(), config)
 		if err != nil {
-			log.Errorf("Could not connect to %v. Got: %v", addr, err)
+			log.Errorf("could not connect to %v. got: %v", addr, err)
 			lastSSLErr = err
 			return nil, err
 		}
+
 		if !config.InsecureSkipVerify {
 			dnsName := strings.SplitN(addr.String(), ":", 2)[0]
 			err = validateConnection(conn, config, dnsName)
@@ -103,9 +116,9 @@ func (cnf *Config) configureSSLDialInfo() error {
 				log.Errorf("Could not disable hostname validation. Got: %v", err)
 			}
 		}
+
 		return conn, err
 	}
-	return nil
 }
 
 func validateConnection(conn *tls.Conn, tlsConfig *tls.Config, dnsName string) error {

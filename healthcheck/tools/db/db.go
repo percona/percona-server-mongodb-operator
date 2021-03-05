@@ -16,6 +16,7 @@ package db
 
 import (
 	"errors"
+	"net/url"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -30,6 +31,8 @@ var (
 )
 
 func GetSession(cnf *Config) (*mgo.Session, error) {
+	cnf.DialInfo.Password = url.QueryEscape(cnf.DialInfo.Password)
+
 	if cnf.SSL == nil {
 		cnf.SSL = &SSLConfig{}
 	}
@@ -50,14 +53,14 @@ func GetSession(cnf *Config) (*mgo.Session, error) {
 	if cnf.SSL.Enabled {
 		err := cnf.configureSSLDialInfo()
 		if err != nil {
-			log.Errorf("Failed to configure SSL/TLS: %s", err)
+			log.Errorf("failed to configure SSL/TLS: %s", err)
 			return nil, err
 		}
 	}
 
 	session, err := mgo.DialWithInfo(cnf.DialInfo)
 	if err != nil && err.Error() == ErrMsgAuthFailedStr {
-		log.Debug("Authentication failed, retrying with authentication disabled")
+		log.Debug("authentication failed, retrying with authentication disabled")
 		cnf.DialInfo.Username = ""
 		cnf.DialInfo.Password = ""
 		session, err = mgo.DialWithInfo(cnf.DialInfo)
@@ -95,7 +98,7 @@ func WaitForPrimary(session *mgo.Session, maxRetries uint, sleepDuration time.Du
 	var err error
 	var tries uint
 	for tries <= maxRetries {
-		err = session.Run(bson.D{{"isMaster", "1"}}, &resp)
+		err = session.Run(bson.D{{Name: "isMaster", Value: "1"}}, &resp)
 		if err == nil && resp.IsMaster && !resp.ReadOnly {
 			return nil
 		}

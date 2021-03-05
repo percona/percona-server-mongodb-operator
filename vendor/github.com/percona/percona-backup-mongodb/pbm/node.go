@@ -2,6 +2,8 @@ package pbm
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -10,10 +12,12 @@ import (
 )
 
 type Node struct {
-	name string
-	ctx  context.Context
-	cn   *mongo.Client
-	curi string
+	rs        string
+	me        string
+	ctx       context.Context
+	cn        *mongo.Client
+	curi      string
+	dumpConns int
 }
 
 // ReplRole is a replicaset role in sharded cluster
@@ -23,20 +27,50 @@ const (
 	ReplRoleUnknown   = "unknown"
 	ReplRoleShard     = "shard"
 	ReplRoleConfigSrv = "configsrv"
+
+	// TmpUsersCollection and TmpRoles are tmp collections used to avoid
+	// user related issues while resoring on new cluster.
+	// See https://jira.percona.com/browse/PBM-425
+	//
+	// Backup should ensure abscense of this collection to avoid
+	// restore conflicts. See https://jira.percona.com/browse/PBM-460
+	TmpUsersCollection = `pbmRUsers`
+	TmpRolesCollection = `pbmRRoles`
 )
 
-func NewNode(ctx context.Context, name string, curi string) (*Node, error) {
+func NewNode(ctx context.Context, curi string, dumpConns int) (*Node, error) {
 	n := &Node{
-		name: name,
-		ctx:  ctx,
-		curi: curi,
+		ctx:       ctx,
+		curi:      curi,
+		dumpConns: dumpConns,
 	}
 	err := n.Connect()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "connect")
 	}
 
+	nodeInfo, err := n.GetInfo()
+	if err != nil {
+		return nil, errors.Wrap(err, "get node info")
+	}
+	n.rs, n.me = nodeInfo.SetName, nodeInfo.Me
+
 	return n, nil
+}
+
+// ID returns node ID
+func (n *Node) ID() string {
+	return fmt.Sprintf("%s/%s", n.rs, n.me)
+}
+
+// RS return replicaset name node belongs to
+func (n *Node) RS() string {
+	return n.rs
+}
+
+// Name returns node name
+func (n *Node) Name() string {
+	return n.me
 }
 
 func (n *Node) Connect() error {
@@ -65,31 +99,35 @@ func (n *Node) Connect() error {
 	return nil
 }
 
-func (n *Node) GetIsMaster() (*IsMaster, error) {
-	im := &IsMaster{}
-	err := n.cn.Database(DB).RunCommand(n.ctx, bson.D{{"isMaster", 1}}).Decode(im)
+func (n *Node) GetInfo() (*NodeInfo, error) {
+	i := &NodeInfo{}
+	err := n.cn.Database(DB).RunCommand(n.ctx, bson.D{{"isMaster", 1}}).Decode(i)
 	if err != nil {
-		return nil, errors.Wrap(err, "run mongo command isMaster")
+		return nil, errors.Wrap(err, "run mongo command")
 	}
-	return im, nil
+	return i, nil
+}
+
+// SizeDBs returns the total size in bytes of all databases' files on disk on replicaset
+func (n *Node) SizeDBs() (int, error) {
+	i := &struct {
+		TotalSize int `bson:"totalSize"`
+	}{}
+	err := n.cn.Database(DB).RunCommand(n.ctx, bson.D{{"listDatabases", 1}}).Decode(i)
+	if err != nil {
+		return 0, errors.Wrap(err, "run mongo command listDatabases")
+	}
+	return i.TotalSize, nil
 }
 
 // IsSharded return true if node is part of the sharded cluster (in shard or configsrv replset).
 func (n *Node) IsSharded() (bool, error) {
-	im, err := n.GetIsMaster()
+	i, err := n.GetInfo()
 	if err != nil {
 		return false, err
 	}
 
-	return im.IsSharded(), nil
-}
-
-func (n *Node) Name() (string, error) {
-	im, err := n.GetIsMaster()
-	if err != nil {
-		return "", err
-	}
-	return im.Me, nil
+	return i.IsSharded(), nil
 }
 
 type MongoVersion struct {
@@ -118,10 +156,7 @@ func (n *Node) Status() (*NodeStatus, error) {
 		return nil, errors.Wrap(err, "get replset status")
 	}
 
-	name, err := n.Name()
-	if err != nil {
-		return nil, errors.Wrap(err, "get node name")
-	}
+	name := n.Name()
 
 	for _, m := range s.Members {
 		if m.Name == name {
@@ -139,10 +174,7 @@ func (n *Node) ReplicationLag() (int, error) {
 		return -1, errors.Wrap(err, "get replset status")
 	}
 
-	name, err := n.Name()
-	if err != nil {
-		return -1, errors.Wrap(err, "get node name")
-	}
+	name := n.Name()
 
 	var primaryOptime, nodeOptime int
 	for _, m := range s.Members {
@@ -161,6 +193,10 @@ func (n *Node) ConnURI() string {
 	return n.curi
 }
 
+func (n *Node) DumpConns() int {
+	return n.dumpConns
+}
+
 func (n *Node) Session() *mongo.Client {
 	return n.cn
 }
@@ -173,4 +209,39 @@ func (n *Node) CurrentUser() (*AuthInfo, error) {
 	}
 
 	return &c.AuthInfo, nil
+}
+
+func (n *Node) DropTMPcoll() error {
+	err := n.cn.Database(DB).Collection(TmpRolesCollection).Drop(n.ctx)
+	if err != nil {
+		return errors.Wrapf(err, "drop tmp roles collection %s", TmpRolesCollection)
+	}
+
+	err = n.cn.Database(DB).Collection(TmpUsersCollection).Drop(n.ctx)
+	if err != nil {
+		return errors.Wrapf(err, "drop tmp users collection %s", TmpUsersCollection)
+	}
+
+	return nil
+}
+
+func (n *Node) EnsureNoTMPcoll() error {
+	cols, err := n.cn.Database(DB).ListCollectionNames(n.ctx, bson.D{})
+	if err != nil {
+		return errors.Wrapf(err, "list collections in %s", DB)
+	}
+
+	var ext []string
+	for _, n := range cols {
+		if n == TmpRolesCollection || n == TmpUsersCollection {
+			ext = append(ext, DB+"."+n)
+		}
+	}
+	if len(ext) > 0 {
+		return errors.Errorf(
+			"PBM temporary collections exist. It will lead to a failed restore. Please, drop next collections manually: %s",
+			strings.Join(ext, ", "),
+		)
+	}
+	return nil
 }

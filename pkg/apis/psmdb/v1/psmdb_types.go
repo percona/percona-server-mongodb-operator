@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -546,4 +547,8 @@ func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 
 	//using Must because "version" must be right format
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
+}
+
+func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
+	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }

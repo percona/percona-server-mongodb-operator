@@ -5,11 +5,12 @@ BASH_XTRACEFD="5"
 
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-API="psmdb.percona.com/v1-7-0"
+API="psmdb.percona.com/v1-8-0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+SKIP_BACKUPS_TO_AWS_GCP=${SKIP_BACKUPS_TO_AWS_GCP:-1}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -19,6 +20,10 @@ namespace="${test_name}-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 
+if [ -f "$conf_dir/cloud-secret.yml" ]; then
+    SKIP_BACKUPS_TO_AWS_GCP=''
+fi
+
 if oc get projects ; then
     # Guessing Openshift version from master node API version
     case "$(oc get nodes --no-headers=true | grep master | head -n1 | grep -Eo 'v[0-9]+\.[0-9]+')" in
@@ -27,9 +32,28 @@ if oc get projects ; then
     esac
 fi
 
+apply_s3_storage_secrets() {
+    if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+        kubectl_bin apply \
+            -f $conf_dir/minio-secret.yml \
+            -f $conf_dir/cloud-secret.yml
+    else
+        kubectl_bin apply \
+            -f $conf_dir/minio-secret.yml
+    fi
+}
 
 create_namespace() {
     local namespace="$1"
+    local skip_clean_namespace="$2"
+
+    if [[ "${CLEAN_NAMESPACE}" == 1 ]] && [[ -z "${skip_clean_namespace}" ]]; then
+        kubectl_bin get ns \
+            | egrep -v "^kube-|^default|Terminating|pxc-operator|openshift|^NAME" \
+            | awk '{print$1}' \
+            | xargs kubectl delete ns &
+    fi
+
     if [ -n "${OPENSHIFT}" ]; then
         oc delete project "$namespace" && sleep 40 || :
         oc new-project "$namespace"
@@ -182,6 +206,30 @@ wait_restore() {
     simple_data_check "${cluster}" "${2}" "$isSharded" "$cluster_pfx"
 }
 
+wait_deployment() {
+    local name=$1
+
+    sleep 10
+    set +o xtrace
+    retry=0
+    echo -n $name
+    until [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')"  ]; do
+        sleep 1
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 360 ]; then
+            kubectl_bin logs $(get_operator_pod) \
+                | grep -v 'level=info' \
+                | grep -v 'level=debug' \
+                | grep -v 'Getting tasks for pod' \
+                | grep -v 'Getting pods from source' \
+                | tail -100
+            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+            exit 1
+        fi
+    done
+}
+
 simple_data_check() {
     cluster_name=${1}
     let last_pod="$2-1" || :
@@ -189,6 +237,8 @@ simple_data_check() {
     local cluster_pfx=$4
 
     if [ $isSharded -eq 1 ]; then
+        wait_deployment "$cluster_name-mongos"
+        sleep 10
         compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
     else
         for i in $(seq 0 $last_pod); do
@@ -685,8 +735,16 @@ cat_config() {
 }
 
 apply_cluster() {
-    cat_config "$1" \
-        | kubectl_bin apply -f -
+    if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+        cat_config "$1" \
+            | kubectl_bin apply -f -
+    else
+        cat_config "$1" \
+            | yq d - 'spec.backup.tasks.[1]' \
+            | yq d - 'spec.backup.tasks.[1]' \
+            | yq d - 'spec.backup.tasks.[1]' \
+            | kubectl_bin apply -f -
+    fi
 }
 
 spinup_psmdb() {
@@ -781,3 +839,4 @@ run_backup() {
 
     kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
 }
+

@@ -131,6 +131,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: version-service-recommended-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -177,6 +179,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: version-service-recommended-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-version-service-recommended-users
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:

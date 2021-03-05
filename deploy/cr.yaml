@@ -77,6 +77,12 @@ spec:
 #      successThreshold: 1
 #      timeoutSeconds: 5
 #      startupDelaySeconds: 7200
+#    runtimeClassName: image-rc
+#    sidecars:
+#    - image: busybox
+#      command: ["/bin/sh"]
+#      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+#      name: rs-sidecar-1
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
@@ -91,29 +97,29 @@ spec:
       enabled: false
       size: 1
       affinity:
-       antiAffinityTopologyKey: "kubernetes.io/hostname"
-#       advanced:
-#         nodeAffinity:
-#           requiredDuringSchedulingIgnoredDuringExecution:
-#             nodeSelectorTerms:
-#             - matchExpressions:
-#               - key: kubernetes.io/e2e-az-name
-#                 operator: In
-#                 values:
-#                 - e2e-az1
-#                 - e2e-az2
-#     tolerations:
-#     - key: "node.alpha.kubernetes.io/unreachable"
-#       operator: "Exists"
-#       effect: "NoExecute"
-#       tolerationSeconds: 6000
-#     priorityClassName: high-priority
-#     annotations:
-#       iam.amazonaws.com/role: role-arn
-#     labels:
-#       rack: rack-22
-#     nodeSelector:
-#       disktype: ssd
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
 #    schedulerName: "default"
     resources:
       limits:
@@ -174,6 +180,12 @@ spec:
 #            blockCompressor: snappy
 #          indexConfig:
 #            prefixCompression: true
+#      runtimeClassName: image-rc
+#      sidecars:
+#      - image: busybox
+#        command: ["/bin/sh"]
+#        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+#        name: rs-sidecar-1
       podDisruptionBudget:
         maxUnavailable: 1
       resources:
@@ -221,6 +233,12 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
+#      runtimeClassName: image-rc
+#      sidecars:
+#      - image: busybox
+#        command: ["/bin/sh"]
+#        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+#        name: rs-sidecar-1
       podDisruptionBudget:
         maxUnavailable: 1
       resources:

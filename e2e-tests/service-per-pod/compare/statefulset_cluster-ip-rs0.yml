@@ -122,6 +122,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: cluster-ip-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -163,6 +165,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: cluster-ip-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-cluster-ip-users
   updateStrategy:
     rollingUpdate:
       partition: 0
