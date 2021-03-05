@@ -149,3 +149,16 @@ func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, err
 	err := cl.Get(context.TODO(), types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
 	return secret, err
 }
+
+func (b *PBM) HasLocks() (bool, error) {
+	locks, err := b.C.GetLocks(&pbm.LockHeader{})
+	if err != nil {
+		return false, errors.Wrap(err, "getting lock data")
+	}
+
+	if len(locks) == 0 {
+		return false, nil
+	}
+
+	return true, nil
+}

@@ -465,6 +465,11 @@ type PITRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 }
 
+func (p PITRSpec) Disabled() PITRSpec {
+	p.Enabled = false
+	return p
+}
+
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`

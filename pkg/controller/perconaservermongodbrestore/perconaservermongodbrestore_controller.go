@@ -199,7 +199,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 		}
 
-		status.PBMname, err = runRestore(bcpName, stg, pbmc, cluster.Spec.Backup.PITR)
+		err := pbmc.SetConfig(stg, cluster.Spec.Backup.PITR.Disabled())
+		if err != nil {
+			return errors.Wrap(err, "set pbm config")
+		}
+
+		isBlockedByPBM, err := pbmc.HasLocks()
+		if err != nil {
+			return errors.Wrap(err, "checking pbm locks")
+		}
+
+		if isBlockedByPBM {
+			log.Info("Waiting for pbm locks.")
+			status.State = psmdbv1.RestoreStateWaiting
+			return nil
+		}
+
+		status.PBMname, err = runRestore(bcpName, pbmc)
 		status.State = psmdbv1.RestoreStateRequested
 		return err
 	}
@@ -249,18 +265,9 @@ func reEnablePITR(pbm *backup.PBM, pitr psmdbv1.PITRSpec) (err error) {
 	return
 }
 
-func runRestore(backup string, storage psmdbv1.BackupStorageSpec, pbmc *backup.PBM, pitr psmdbv1.PITRSpec) (string, error) {
-	pitr.Enabled = false
-	err := pbmc.SetConfig(storage, pitr)
-	if err != nil {
-		return "", errors.Wrap(err, "set pbm config")
-	}
-
-	// pbm agent doesn't disable pitr immediately so operator must wait for it
-	time.Sleep(2 * time.Minute)
-
+func runRestore(backup string, pbmc *backup.PBM) (string, error) {
 	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResyncBackupList), "", "", primitive.Timestamp{})
-	err = pbmc.C.ResyncStorage(e)
+	err := pbmc.C.ResyncStorage(e)
 	if err != nil {
 		return "", errors.Wrap(err, "set resync backup list from the store")
 	}
