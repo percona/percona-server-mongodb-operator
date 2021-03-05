@@ -12,7 +12,7 @@ Operator itself, and upgrades of the Percona Server for MongoDB.
 Upgrading the Operator
 ----------------------
 
-This upgrade can be done either in semi-automatic or in manual mode. 
+This upgrade can be done either in semi-automatic or in manual mode.
 
 .. note:: Manual update mode is the recommended way for a production cluster.
 
@@ -140,30 +140,39 @@ upgraded, the Operator updates the CR to reflect the new image paths and carries
 on sequential Pods deletion in a safe order, allowing StatefulSet to redeploy
 the cluster Pods with the new image.
 
+.. note:: Being enabled, Smart Update will force the Operator to take MongoDB
+   version from Version Service and not from the ``mongod.image`` option during
+   the very first start of the cluster.
+
 The upgrade details are set in the ``upgradeOptions`` section of the 
 ``deploy/cr.yaml`` configuration file. Make the following edits to configure
 updates:
 
 #. Set the ``apply`` option to one of the following values:
 
-   * ``Recommended`` - automatic upgrades will choose the most recent version
+   * ``Recommended`` - automatic upgrade will choose the most recent version
      of software flagged as Recommended (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
-     Percona Server for MongoDB 4.2 or 4.0 version
-     regardless of the image path; for already existing clusters, the 4.4
-     vs. 4.2 or 4.0 branch choice will be preserved),
-   * ``Latest`` - automatic upgrades will choose the most recent version of
+     Percona Server for MongoDB 4.2, 4.0, or 3.6 version regardless of the image
+     path; for already existing clusters, the 4.4 vs. 4.2, 4.0, or 3.6 branch
+     choice will be preserved),
+   * ``4.4-recommended``, ``4.2-recommended``, ``4.0-recommended``,
+     ``3.6-recommended`` - same as above, but preserves specific major MongoDB
+     version for newly provisioned clusters (ex. 4.4 will not be automatically
+     used instead of 4.2),
+   * ``Latest`` - automatic upgrade will choose the most recent version of
      the software available (for clusters created from scratch,
      the Percona Server for MongoDB 4.4 version will be selected instead of the
-     Percona Server for MongoDB 4.2 or 4.0 version
-     regardless of the image path; for already existing clusters, the 4.4
-     vs. 4.2 or 4.0 branch choice will be preserved),
-   * *specific version number* - will apply an upgrade if the running Percona
-     Server for MongoDB
-     version doesn't match the explicit version number with no future upgrades
+     Percona Server for MongoDB 4.2, 4.0, or 3.6 version regardless of the image
+     path; for already existing clusters, the 4.4 vs. 4.2, 4.0, or 3.6 branch
+     choice will be preserved),
+   * ``4.4-latest``, ``4.2-latest``, ``4.0-latest``, ``3.6-latest`` - same as
+     above, but preserves specific major MongoDB version for newly provisioned
+     clusters (ex. 4.4 will not be automatically used instead of 4.2),
+   * *version number* - specify the desired version explicitly
      (version numbers are specified as {{{mongodb44recommended}}},
      {{{mongodb42recommended}}}, etc.),
-   * ``Never`` or ``Disabled`` - disable automatic upgrades
+   * ``Never`` or ``Disabled`` - disable automatic upgrades.
 
      .. note:: When automatic upgrades are disabled by the ``apply`` option, 
         Smart Update functionality will continue working for changes triggered
@@ -201,5 +210,3 @@ Percona's Version Service:
        versionServiceEndpoint: https://check.percona.com
        schedule: "0 0 * * *"
    ...
-
-

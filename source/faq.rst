@@ -89,3 +89,29 @@ You can add ``sidecars`` subsection to ``replsets``,
 
 .. note::  Custom sidecar containers `can easily access other components of your cluster <https://kubernetes.io/docs/concepts/workloads/pods/#resource-sharing-and-communication>`_. Therefore
    they should be used carefully and by experienced users only.
+
+How to provoke the initial sync of a Pod
+========================================
+
+There are certain situations where it might be necessary to delete all MongoDB
+instance data to force the resync. For example, there may be the following
+reasons:
+
+* rebuilding the node to defragment the database,
+* recreating the member failing to sync due to some bug.
+
+In the case of a "regular" MongoDB, wiping the dbpath would trigger such resync.
+In the case of a MongoDB cluster controlled by the Operator, you will need to do
+the following steps:
+
+#. Find out the names of the Persistent Volume Claim and Pod you are going to
+   delete (use ``kubectl get pvc`` command for PVC and ``kubectl get pod`` one
+   for Pods).
+#. Delete the appropriate PVC and Pod. For example, wiping out the
+   ``my-cluster-name-rs0-2`` Pod should look as follows:
+
+   .. code:: bash
+
+      kubectl delete pod/my-cluster-name-rs0-2 pvc/mongod-data-my-cluster-name-rs0-2
+
+The Operator will automatically recreate the needed Pod and PVC after deletion.
