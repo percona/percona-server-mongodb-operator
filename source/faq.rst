@@ -71,7 +71,8 @@ How can I add custom sidecar containers to my cluster?
 The Operator allows you to deploy additional (so-called *sidecar*) containers to
 the Pod. You can use this feature to run debugging tools, some specific
 monitoring solutions, etc. Add such sidecar container to the ``deploy/cr.yaml``
-configuration file, specifying at least its name and image as follows:
+configuration file, specifying its name and image, and possibly a command to
+run:
 
 .. code:: yaml
 
@@ -80,9 +81,11 @@ configuration file, specifying at least its name and image as follows:
      - name: rs0
        ....
        sidecars:
-       - name: "sidecar1"
-         image: "gcr.io/percona/sidecar1"
-         ....
+       - image: busybox
+         command: ["/bin/sh"]
+         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5; done"]
+         name: rs-sidecar-1
+       ....
 
 You can add ``sidecars`` subsection to ``replsets``,
 ``sharding.configsvrReplSet``, and ``sharding.mongos`` sections.
