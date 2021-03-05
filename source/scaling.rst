@@ -6,21 +6,34 @@ platform is the ease of an application scaling. Scaling a Deployment up
 or down ensures new Pods are created and set to available Kubernetes
 nodes.
 
-Size of the cluster is controlled by a :ref:`size key<replsets-size>` in the :ref:`operator.custom-resource-options` configuration.. That’s why scaling the cluster needs
-nothing more but changing this option and applying the updated
-configuration file. This may be done in a specifically saved config, or
-on the fly, using the following command, which saves the current
-configuration, updates it and applies the changed version:
+The size of the cluster is controlled by the ``size`` key in the
+:ref:`operator.custom-resource-options` configuration.
 
-.. code:: bash
+.. note:: The Operator will not allow to scale Percona Server for MongoDB with
+   the ``kubectl scale statefulset <StatefulSet name>`` command as it puts
+``size`` configuration options out of sync.
 
-   $ kubectl get psmdb/my-cluster-name -o yaml | sed -e 's/size: 3/size: 5/' | kubectl apply -f -
+You can change size separately for different components of your cluster by
+setting this option in the appropriate subsections:
 
-In this example we have changed the size of the Percona Server for
-MongoDB from ``3``, which is a minimum recommended value, to ``5``
-nodes.
+* :ref:`replsets.size<replsets-size>` allows to set the size of the MongoDB
+  Replica Set,
+* :ref:`replsets.arbiter.size<replsets-arbiter-size> allows to set the number
+  of :ref:`Replica Set Arbiter instances<arbiter>`,
+* :ref:`sharding.configsvrReplSet.size<sharding-configsvrreplset-size>` allows
+  to set the number of `Config Server instances <https://docs.mongodb.com/manual/core/sharded-cluster-config-servers/>`_,
+* :ref:`sharding.mongos.size<sharding-mongos-size>` allows to set the number of `mongos <https://docs.mongodb.com/manual/core/sharded-cluster-query-router/>`_ instances.
 
-**Note:** *Using ``kubectl scale StatefulSet_name`` command to rescale
-Percona Server for MongoDB is not recommended, as it makes ``size``
-configuration option out of sync, and the next config change may result
-in reverting the previous number of nodes.*
+For example, the following update in ``deploy/cr.yaml`` will set the size of the
+MongoDB Replica Set to ``5`` nodes:
+
+.. code:: yaml
+
+   ....
+   replsets:
+     ....
+     size: 5
+     ....
+
+Don't forget to apply changes as usual, running the
+``kubectl apply -f deploy/cr.yaml`` command.
