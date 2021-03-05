@@ -36,7 +36,7 @@ func (vs VersionServiceClient) GetExactVersion(endpoint string, vm VersionMeta) 
 		CustomResourceUID: &vm.CRUID,
 		DatabaseVersion:   &vm.MongoVersion,
 		KubeVersion:       &vm.KubeVersion,
-		OperatorVersion:   vs.OpVersion,
+		OperatorVersion:   vm.Version,
 		Platform:          &vm.Platform,
 		PmmVersion:        &vm.PMMVersion,
 		Product:           productName,
@@ -103,9 +103,7 @@ type VersionService interface {
 	GetExactVersion(endpoint string, vm VersionMeta) (DepVersion, error)
 }
 
-type VersionServiceClient struct {
-	OpVersion string
-}
+type VersionServiceClient struct{}
 
 type Version struct {
 	Version   string `json:"version"`
@@ -139,4 +137,5 @@ type VersionMeta struct {
 	PMMVersion    string
 	BackupVersion string
 	CRUID         string
+	Version       string
 }

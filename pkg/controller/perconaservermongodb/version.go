@@ -122,6 +122,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		PMMVersion:    cr.Status.PMMVersion,
 		BackupVersion: cr.Status.BackupVersion,
 		CRUID:         string(cr.GetUID()),
+		Version:       cr.Version().String(),
 	}
 	if cr.Spec.Platform != nil {
 		vm.Platform = string(*cr.Spec.Platform)
