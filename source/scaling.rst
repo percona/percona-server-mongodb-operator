@@ -9,10 +9,9 @@ nodes.
 The size of the cluster is controlled by the ``size`` key in the
 :ref:`operator.custom-resource-options` configuration.
 
-.. note:: Using ``kubectl scale StatefulSet_name`` command to rescale
-   Percona Server for MongoDB is not recommended, as it makes ``size``
-   configuration options out of sync, and the next config change may result
-   in reverting the previous number of nodes.
+.. note:: The Operator will not allow rescaling Percona Server for MongoDB with
+   the ``kubectl scale statefulset <StatefulSet name>`` command because this
+   would cause ``size`` configuration options to become out of sync.
 
 You can change size separately for different components of your cluster by
 setting this option in the appropriate subsections:
