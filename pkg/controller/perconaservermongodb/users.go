@@ -84,28 +84,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return nil
 	}
 
-	restartSfs, restartMongos, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
+	containers, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
 	}
 
-	containers := []string{"pmm-client", "backup-agent"}
-
-	if restartMongos {
-		list, err := r.getMongosPods(cr)
-		if err != nil {
-			return errors.Wrap(err, "failed to get mongos pods")
-		}
-
-		for _, name := range containers {
-			err = r.killcontainer(list.Items, name)
-			if err != nil {
-				return errors.Wrapf(err, "failed to kill %s container", name)
-			}
-		}
-	}
-
-	if restartSfs {
+	if len(containers) > 0 {
 		rsPodList, err := r.getMongodPods(cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to get mongos pods")
@@ -114,6 +98,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		pods := rsPodList.Items
 
 		if cr.Spec.Sharding.Enabled {
+			mongosList, err := r.getMongosPods(cr)
+			if err != nil {
+				return errors.Wrap(err, "failed to get mongos pods")
+			}
+
+			pods = append(pods, mongosList.Items...)
+
 			cfgPodlist, err := r.getRSPods(cr, api.ConfigReplSetName)
 			if err != nil {
 				return errors.Wrap(err, "failed to get mongos pods")
@@ -143,6 +134,8 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(pods []corev1.Pod, contain
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
+				log.Info("restart container", "pod", pod.Name, "container", c.Name)
+
 				stderrBuf := &bytes.Buffer{}
 
 				err := r.clientcmd.Exec(&pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
@@ -202,16 +195,17 @@ func (su *systemUsers) len() int {
 	return len(su.users)
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret, repls []*api.ReplsetSpec) (restartSfs, restartMongos bool, err error) {
+func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret,
+	repls []*api.ReplsetSpec) ([]string, error) {
 	su := systemUsers{
 		currData: currUsersSec.Data,
 		newData:  newUsersSec.Data,
 	}
 
+	containers := []string{}
+
 	type user struct {
-		nameKey, passKey  string
-		needRestartSfs    bool
-		needRestartMongos bool
+		nameKey, passKey string
 	}
 	users := []user{
 		{
@@ -225,9 +219,8 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		},
 
 		{
-			nameKey:        envMongoDBBackupUser,
-			passKey:        envMongoDBBackupPassword,
-			needRestartSfs: true,
+			nameKey: envMongoDBBackupUser,
+			passKey: envMongoDBBackupPassword,
 		},
 
 		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
@@ -240,9 +233,8 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		// insert in front
 		users = append([]user{
 			{
-				nameKey:        envPMMServerUser,
-				passKey:        envPMMServerPassword,
-				needRestartSfs: true,
+				nameKey: envPMMServerUser,
+				passKey: envPMMServerPassword,
 			},
 		}, users...)
 	}
@@ -250,23 +242,26 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 	for _, u := range users {
 		changed, err := su.add(u.nameKey, u.passKey)
 		if err != nil {
-			return false, false, err
+			return nil, err
 		}
-		if u.needRestartSfs && changed {
-			restartSfs = true
-		}
-		if u.needRestartMongos && changed {
-			restartMongos = true
+
+		if changed {
+			switch u.nameKey {
+			case envMongoDBBackupUser:
+				containers = append(containers, "backup-agent")
+			case envPMMServerUser:
+				containers = append(containers, "pmm-client")
+			}
 		}
 	}
 
 	if su.len() == 0 {
-		return false, false, nil
+		return containers, nil
 	}
 
-	err = r.updateUsers(cr, su.users, repls)
+	err := r.updateUsers(cr, su.users, repls)
 
-	return restartSfs, restartMongos, errors.Wrap(err, "mongo: update system users")
+	return containers, errors.Wrap(err, "mongo: update system users")
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, repls []*api.ReplsetSpec) error {
