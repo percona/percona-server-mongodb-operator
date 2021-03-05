@@ -42,7 +42,7 @@ Also, you need a Kubernetes platform of [supported version](https://www.percona.
 There are scripts which build the image and run tests. Both building and testing
 needs some repository for the newly created docker images. If nothing is
 specified, scripts use Percona's experimental repository `perconalab/percona-server-mongodb-operator`, which
-obviously requires decent access rights to make a push.
+requires decent access rights to make a push.
 
 To specify your own repository for the Percona Server for MongoDB Operator docker image, you can use IMAGE environment variable:
 
@@ -70,8 +70,7 @@ Running all tests at once can be done with the following command:
 
 (see how to configure the testing infrastructure [here](#using-environment-variables-to-customize-the-testing-process)).
 
-Tests can be executed one-by-one also, using the appropriate scripts (their names should be self-explanatory):
-
+Tests can also be run one-by-one using the appropriate scripts (their names should be self-explanatory):
 
 ```
 ./e2e-tests/init-deploy/run
@@ -97,6 +96,18 @@ full list of variables is the following one:
 * `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod4.4` by default,
 * `IMAGE_PMM` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
 * `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default,
+
+### Using automatic clean-up after testing
+
+By default, each test creates its own namespace and does not clean up objects in case of failure.
+
+To avoid manual deletion of such leftovers, you can run tests on a separate cluster and use the following environment variable to make the ultimate clean-up:
+
+```
+export CLEAN_NAMESPACE=1
+```
+
+**Note:** this will cause **deleting all namespaces** except default and system ones!
 
 ### Skipping backup tests on S3-compatible storage
 
