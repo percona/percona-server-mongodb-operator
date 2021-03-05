@@ -128,11 +128,14 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 			MountPath: sslInternalDir,
 			ReadOnly:  true,
 		},
-		{
+	}
+
+	if cr.CompareVersion("1.8.0") >= 0 {
+		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "users-secret-file",
 			MountPath: "/etc/users-secret",
 			ReadOnly:  true,
-		},
+		})
 	}
 
 	container := corev1.Container{

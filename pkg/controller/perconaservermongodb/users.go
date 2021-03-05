@@ -100,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		for _, name := range containers {
 			err = r.killcontainer(list.Items, name)
 			if err != nil {
-				return errors.Wrap(err, "failed to kill pmm-client container")
+				return errors.Wrapf(err, "failed to kill %s container", name)
 			}
 		}
 	}
@@ -125,7 +125,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		for _, name := range containers {
 			err = r.killcontainer(pods, name)
 			if err != nil {
-				return errors.Wrap(err, "failed to kill pmm-client container")
+				return errors.Wrapf(err, "failed to kill %s container", name)
 			}
 		}
 	}

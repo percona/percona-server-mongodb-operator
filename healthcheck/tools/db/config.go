@@ -24,7 +24,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/dcos"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"gopkg.in/mgo.v2"
 )
 
@@ -83,8 +82,6 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 
 	pwdFile := "/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD"
 	if _, err := os.Stat(pwdFile); err == nil {
-		log.Info("reading password from secret")
-
 		pass, err := ioutil.ReadFile(pwdFile)
 		if err != nil {
 			return nil, errors.Wrapf(err, "read %s", pwdFile)
