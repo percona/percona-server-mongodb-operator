@@ -65,6 +65,34 @@ For example, Percona Server for MongoDB 4.4 is supported with the following
 recommended version: {{{mongodb44recommended}}}. More details on the exact Percona
 Server for MongoDB version can be found in the release notes (`4.4 <https://www.percona.com/doc/percona-server-for-mongodb/4.4/release_notes/index.html>`_, `4.2 <https://www.percona.com/doc/percona-server-for-mongodb/4.2/release_notes/index.html>`_, `4.0 <https://www.percona.com/doc/percona-server-for-mongodb/4.0/release_notes/index.html>`_, and `3.6 <https://www.percona.com/doc/percona-server-for-mongodb/3.6/release_notes/index.html>`_).
 
+How can I add custom sidecar containers to my cluster?
+================================================================================
+
+The Operator allows you to deploy additional (so-called *sidecar*) containers to
+the Pod. You can use this feature to run debugging tools, some specific
+monitoring solutions, etc. Add such sidecar container to the ``deploy/cr.yaml``
+configuration file, specifying its name and image, and possibly a command to
+run:
+
+.. code:: yaml
+
+   spec:
+     replsets:
+     - name: rs0
+       ....
+       sidecars:
+       - image: busybox
+         command: ["/bin/sh"]
+         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5; done"]
+         name: rs-sidecar-1
+       ....
+
+You can add ``sidecars`` subsection to ``replsets``,
+``sharding.configsvrReplSet``, and ``sharding.mongos`` sections.
+
+.. note::  Custom sidecar containers `can easily access other components of your cluster <https://kubernetes.io/docs/concepts/workloads/pods/#resource-sharing-and-communication>`_. Therefore
+   they should be used carefully and by experienced users only.
+
 How to provoke the initial sync of a Pod
 ========================================
 
@@ -78,7 +106,6 @@ reasons:
 In the case of a "regular" MongoDB, wiping the dbpath would trigger such resync.
 In the case of a MongoDB cluster controlled by the Operator, you will need to do
 the following steps:
-
 
 #. Find out the names of the Persistent Volume Claim and Pod you are going to
    delete (use ``kubectl get pvc`` command for PVC and ``kubectl get pod`` one
