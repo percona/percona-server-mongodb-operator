@@ -744,6 +744,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		deplSpec.Template.Annotations[k] = v
 	}
 
+	if cr.CompareVersion("1.8.0") < 0 {
+		depl, err := r.getMongosDeployment(cr)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to get mongos deployment")
+		}
+
+		for k, v := range depl.Spec.Template.Annotations {
+			if k == "last-applied-secret" || k == "last-applied-secret-ts" {
+				deplSpec.Template.Annotations[k] = v
+			}
+		}
+	}
+
 	if cr.Spec.PMM.Enabled {
 		pmmsec := corev1.Secret{}
 		err := r.client.Get(context.TODO(), types.NamespacedName{Name: api.UserSecretNameInternal(cr), Namespace: cr.Namespace}, &pmmsec)
@@ -876,6 +889,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 	for k, v := range sfs.Spec.Template.Annotations {
 		sfsSpec.Template.Annotations[k] = v
+	}
+
+	if cr.CompareVersion("1.8.0") < 0 {
+		sfs, err := r.getRsStatefulset(cr, replset.Name)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, errors.Wrapf(err, "failed to get rs %s statefulset", replset.Name)
+		}
+
+		for k, v := range sfs.Annotations {
+			if k == "last-applied-secret" || k == "last-applied-secret-ts" {
+				sfsSpec.Template.Annotations[k] = v
+			}
+		}
 	}
 
 	// add TLS/SSL Volume
