@@ -293,14 +293,17 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-		{
+	}
+
+	if cr.CompareVersion("1.8.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
 			Name: "users-secret-file",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: api.UserSecretNameInternal(cr),
 				},
 			},
-		},
+		})
 	}
 
 	return volumes
