@@ -4,7 +4,7 @@
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.7.0
 ================================================================================
 
-:Date: March 4, 2021
+:Date: March 8, 2021
 :Installation: `Installing Percona Kubernetes Operator for Percona Server for MongoDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
 New Features
