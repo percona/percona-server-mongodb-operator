@@ -46,7 +46,7 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMon
 
 	err := b.pbm.SetConfig(stg)
 	if err != nil {
-		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with sorage %s", cr.Spec.StorageName)
+		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
 
 	name := time.Now().UTC().Format(time.RFC3339)

@@ -44,7 +44,12 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 			},
 		)
 	}
-
+	if m.CompareVersion("1.8.0") >= 0 {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      "users-secret-file",
+			MountPath: "/etc/users-secret",
+		})
+	}
 	container := corev1.Container{
 		Name:            name,
 		Image:           m.Spec.Image,

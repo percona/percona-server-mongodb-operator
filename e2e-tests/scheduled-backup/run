@@ -37,11 +37,10 @@ EOF
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl_bin apply \
-    -f "$conf_dir/cloud-secret.yml" \
-    -f "$conf_dir/minio-secret.yml" \
     -f "$conf_dir/secrets.yml" \
     -f "$conf_dir/client.yml"
 
+apply_s3_storage_secrets
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
@@ -67,29 +66,32 @@ wait_backup_agent $cluster-2
 
 desc 'add backups schedule, wait for the first backup'
 apply_cluster "$test_dir/conf/$cluster-2.yml"
-wait_cron ${cluster%%-rs0}-backup-every-min-aws-s3
+
 wait_cron ${cluster%%-rs0}-backup-every-min-minio
-wait_cron ${cluster%%-rs0}-backup-every-min-gcp-cs
-compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-aws-s3
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+    wait_cron ${cluster%%-rs0}-backup-every-min-aws-s3
+    wait_cron ${cluster%%-rs0}-backup-every-min-gcp-cs
+fi
+
 compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-minio
-compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-gcp-cs
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+    compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-aws-s3
+    compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-gcp-cs
+fi
 sleep 35
 
 apply_cluster "$test_dir/conf/$cluster.yml"
-backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+    backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
+    backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
+    wait_backup "$backup_name_aws"
+    wait_backup "$backup_name_gcp"
+fi
+
 backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print$1}' | head -1)
-backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
-wait_backup "$backup_name_aws"
 wait_backup "$backup_name_minio"
-wait_backup "$backup_name_gcp"
 
 sleep 5
-
-desc 'check backup and restore -- aws-s3'
-backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip >/dev/null
-run_restore "$backup_name_aws" 3
-wait_restore "$backup_name_aws" 3
 
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
@@ -100,16 +102,25 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 run_restore "$backup_name_minio" 3
 wait_restore "$backup_name_minio" 3
 
-desc 'check backup and restore -- gcp-cs'
-backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip >/dev/null
-run_restore "$backup_name_gcp" 3
-wait_restore "$backup_name_gcp" 3
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+    desc 'check backup and restore -- aws-s3'
+    backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+    curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip >/dev/null
+    run_restore "$backup_name_aws" 3
+    wait_restore "$backup_name_aws" 3
+
+    desc 'check backup and restore -- gcp-cs'
+    backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
+    curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip >/dev/null
+    run_restore "$backup_name_gcp" 3
+    wait_restore "$backup_name_gcp" 3
+fi
 
 unlabel_node
-
-kubectl patch psmdb-backup -n "$namespace" "$backup_name_aws" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+    kubectl patch psmdb-backup -n "$namespace" "$backup_name_aws" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
+    kubectl patch psmdb-backup -n "$namespace" "$backup_name_gcp" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
+fi
 kubectl patch psmdb-backup -n "$namespace" "$backup_name_minio" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
-kubectl patch psmdb-backup -n "$namespace" "$backup_name_gcp" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
 
 destroy "$namespace"

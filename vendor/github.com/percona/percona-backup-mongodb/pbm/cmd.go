@@ -49,6 +49,14 @@ func (p *PBM) ListenCmd() (<-chan Cmd, <-chan error, error) {
 					continue
 				}
 
+				opid, ok := cur.Current.Lookup("_id").ObjectIDOK()
+				if !ok {
+					errc <- errors.New("unable to get operation ID")
+					continue
+				}
+
+				c.OPID = OPID(opid)
+
 				lastCmd = c.Cmd
 				lastTs = c.TS
 				cmd <- c

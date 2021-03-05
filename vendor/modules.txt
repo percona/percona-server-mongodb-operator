@@ -192,17 +192,19 @@ github.com/mitchellh/mapstructure
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
-# github.com/operator-framework/operator-sdk v0.17.1
+# github.com/operator-framework/operator-sdk v0.17.2
 github.com/operator-framework/operator-sdk/pkg/k8sutil
 github.com/operator-framework/operator-sdk/pkg/leader
 github.com/operator-framework/operator-sdk/pkg/ready
 github.com/operator-framework/operator-sdk/version
-# github.com/percona/percona-backup-mongodb v1.2.0
+# github.com/percona/percona-backup-mongodb v1.4.1
 github.com/percona/percona-backup-mongodb/pbm
+github.com/percona/percona-backup-mongodb/pbm/log
 github.com/percona/percona-backup-mongodb/pbm/storage
 github.com/percona/percona-backup-mongodb/pbm/storage/blackhole
 github.com/percona/percona-backup-mongodb/pbm/storage/fs
 github.com/percona/percona-backup-mongodb/pbm/storage/s3
+github.com/percona/percona-backup-mongodb/version
 # github.com/percona/pmgo v0.0.0-20171205120904-497d06e28f91
 github.com/percona/pmgo
 github.com/percona/pmgo/pmgomock
