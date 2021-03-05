@@ -6,9 +6,11 @@ You need to install a number of software packages on your system to satisfy the 
 
 ### CentOS
 
+Run the following commands to install the required components:
+
 ```
 sudo yum -y install epel-release https://repo.percona.com/yum/percona-release-latest.noarch.rpm
-sudo yum -y install coreutils sed jq curl yq
+sudo yum -y install coreutils sed jq curl docker yq
 curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
     | tar -C /usr/bin --strip-components 1 --wildcards -zxvpf - '*/oc' '*/kubectl'
 curl -s https://get.helm.sh/helm-v3.2.4-linux-amd64.tar.gz \
@@ -18,8 +20,12 @@ curl https://sdk.cloud.google.com | bash
 
 ### MacOS
 
+Install [Docker](https://docs.docker.com/docker-for-mac/install/), and run the following commands for the other required components:
+
 ```
-brew install coreutils gnu-sed jq kubernetes-cli openshift-cli kubernetes-helm yq
+brew install coreutils gnu-sed jq kubernetes-cli openshift-cli kubernetes-helm
+brew install yq@3
+brew link yq@3
 curl https://sdk.cloud.google.com | bash
 ```
 
@@ -62,7 +68,7 @@ Running all tests at once can be done with the following command:
 
 (see how to configure the testing infrastructure [here](#using-environment-variables-to-customize-the-testing-process)).
 
-Tests can be executed one-by-one, usingthe following scripts (their names  should be self-explanatory):
+Tests can be executed one-by-one also, using the appropriate scripts (their names should be self-explanatory):
 
 
 ```
@@ -92,7 +98,7 @@ full list of variables is the following one:
 
 ### Skipping backup tests on S3-compatible storage
 
-Making backups [on S3-compatible storage](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/backups.html#making-scheduled-backups) needs creating Secrets to have the access to the S3 buckets. There is an environment variable which allows to skip all tests which require such Secrets.
+Making backups [on S3-compatible storage](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/backups.html#making-scheduled-backups) needs creating Secrets to have the access to the S3 buckets. There is an environment variable enabled by default, which skips all tests requiring such Secrets:
 
 ```
 SKIP_BACKUPS_TO_AWS_GCP=1
