@@ -65,6 +65,8 @@ For example, Percona Server for MongoDB 4.4 is supported with the following
 recommended version: {{{mongodb44recommended}}}. More details on the exact Percona
 Server for MongoDB version can be found in the release notes (`4.4 <https://www.percona.com/doc/percona-server-for-mongodb/4.4/release_notes/index.html>`_, `4.2 <https://www.percona.com/doc/percona-server-for-mongodb/4.2/release_notes/index.html>`_, `4.0 <https://www.percona.com/doc/percona-server-for-mongodb/4.0/release_notes/index.html>`_, and `3.6 <https://www.percona.com/doc/percona-server-for-mongodb/3.6/release_notes/index.html>`_).
 
+.. _faq-sidecar:
+
 How can I add custom sidecar containers to my cluster?
 ================================================================================
 

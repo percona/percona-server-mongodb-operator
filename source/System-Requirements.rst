@@ -36,7 +36,7 @@ turned off):
 * 2 CPU threads per Node for Pods provisioning,
 * at least 60GB of available storage for Private Volumes provisioning.
 
-Сonsider using 4 CPU and 6 GB of RAM if :ref:`sharding<operator.sharding>` is
+Consider using 4 CPU and 6 GB of RAM if :ref:`sharding<operator.sharding>` is
 turned on (the default behavior).
 
 Also, the number of Replica Set Nodes should not be odd
