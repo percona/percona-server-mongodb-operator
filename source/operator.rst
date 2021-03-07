@@ -17,7 +17,7 @@ The metadata part of this file contains the following keys:
 The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_ file contains the following sections:
 
 .. list-table::
-   :widths: 15 15 10 60
+   :widths: 15 15 16 54
    :header-rows: 1
 
    * - Key
@@ -27,7 +27,7 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
 
    * - platform
      - string
-     - kubernetes
+     - ``kubernetes``
      - Override/set the Kubernetes platform: *kubernetes* or *openshift*. Set openshift on OpenShift 3.11+
 
    * - pause
@@ -43,7 +43,7 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
 
    * - image
      - string
-     - ``percona/percona-server-mongodb:{{{mongodb44recommended}}}``
+     - ``percona/percona``-``server``-``mongodb:{{{mongodb44recommended}}}``
      - The Docker image of `Percona Server for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html>`_ to deploy (actual image names can be found :ref:`in the list of certified images<custom-registry-images>`) 
 
    * - imagePullPolicy
@@ -53,7 +53,7 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
 
    * - imagePullSecrets.name
      - string
-     - ``private-registry-credentials``
+     - ``private``-``registry``-``credentials``
      - The `Kubernetes ImagePullSecret <https://kubernetes.io/docs/concepts/configuration/secret/#using-imagepullsecrets>`_ to access the :ref:`custom registry<custom-registry>`
 
    * - ClusterServiceDNSSuffix
@@ -495,7 +495,7 @@ The replsets section controls the MongoDB Replica Set.
 | **Example**     | ``busybox``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Image for the										|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Replica Set Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -510,7 +510,7 @@ The replsets section controls the MongoDB Replica Set.
 | **Example**     | ``["/bin/sh"]``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Command for the										|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Replica Set Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -525,7 +525,7 @@ The replsets section controls the MongoDB Replica Set.
 | **Example**     | ``["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]``		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Command arguments for the									|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Replica Set Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -540,7 +540,7 @@ The replsets section controls the MongoDB Replica Set.
 | **Example**     | ``rs-sidecar-1``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Name of the											|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Replica Set Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1068,7 +1068,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``busybox``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Image for the										|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Config Server Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1083,7 +1083,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``["/bin/sh"]``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Command for the										|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Config Server Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1098,7 +1098,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]``		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Command arguments for the									|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Config Server Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1113,7 +1113,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``rs-sidecar-1``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Name of the											|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for Config Server Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1396,7 +1396,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``busybox``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Image for the										|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for mongos Pods										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1411,7 +1411,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``["/bin/sh"]``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Command for the										|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for mongos Pods										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1426,7 +1426,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]``		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Command arguments for the									|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for mongos Pods										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1441,7 +1441,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | ``rs-sidecar-1``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Name of the											|
-|                 | :ref:`custom sidecar container<How can I add custom sidecar containers to my cluster?>`	|
+|                 | :ref:`custom sidecar container<faq-sidecar>`						|
 |                 | for mongos Pods										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|

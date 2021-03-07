@@ -44,7 +44,7 @@ servers and mongos instances. Their number is controlled by
 .. note:: Config servers for now can properly work only with WiredTiger engine,
    and sharded MongoDB nodes can use either WiredTiger or InMemory one.
 
-By default ref:`replsets section<operator.replsets-section>` of the
+By default :ref:`replsets section<operator.replsets-section>` of the
 ``deploy/cr.yaml`` configuration file contains only one replica set, ``rs0``.
 You can add more replica sets with different names to the ``replsets`` section
 in a similar way. Please take into account that having more than one replica set
