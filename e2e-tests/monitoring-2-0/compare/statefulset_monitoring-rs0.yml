@@ -124,6 +124,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: monitoring-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
         - env:
             - name: PMM_SERVER
@@ -290,6 +292,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: monitoring-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-monitoring-users
   updateStrategy:
     rollingUpdate:
       partition: 0

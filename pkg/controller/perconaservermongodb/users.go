@@ -163,14 +163,12 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 	}
 	users := []user{
 		{
-			nameKey:           envMongoDBClusterAdminUser,
-			passKey:           envMongoDBClusterAdminPassword,
-			needRestartMongos: true, // in mgo.go:handleRsAddToShard() we use envs with this user credentials, so we need restart for update this envs
+			nameKey: envMongoDBClusterAdminUser,
+			passKey: envMongoDBClusterAdminPassword,
 		},
 		{
-			nameKey:        envMongoDBClusterMonitorUser,
-			passKey:        envMongoDBClusterMonitorPassword,
-			needRestartSfs: true, //need for liveness/readiness ckeck
+			nameKey: envMongoDBClusterMonitorUser,
+			passKey: envMongoDBClusterMonitorPassword,
 		},
 		{
 			nameKey:        envMongoDBBackupUser,
@@ -179,9 +177,8 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 		},
 		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
 		{
-			nameKey:        envMongoDBUserAdminUser,
-			passKey:        envMongoDBUserAdminPassword,
-			needRestartSfs: true,
+			nameKey: envMongoDBUserAdminUser,
+			passKey: envMongoDBUserAdminPassword,
 		},
 	}
 	if cr.Spec.PMM.Enabled {
@@ -240,7 +237,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB
 			return errors.Wrap(err, "failed to get pods for RS")
 		}
 
-		client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleUserAdmin)
+		client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}

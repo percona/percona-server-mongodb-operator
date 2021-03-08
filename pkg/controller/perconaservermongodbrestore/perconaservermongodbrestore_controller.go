@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -234,7 +236,8 @@ func runRestore(backup string, storage psmdbv1.BackupStorageSpec, pbmc *backup.P
 		return "", errors.Wrap(err, "set pbm config")
 	}
 
-	err = pbmc.C.ResyncBackupList()
+	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResyncBackupList), "", "", primitive.Timestamp{})
+	err = pbmc.C.ResyncStorage(e)
 	if err != nil {
 		return "", errors.Wrap(err, "set resync backup list from the store")
 	}
@@ -267,7 +270,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServ
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1.PerconaServerMongoDBRestore) error {
 	err := r.client.Status().Update(context.TODO(), cr)
 	if err != nil {
-		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
+		// maybe it's k8s v1.10 and earlier (e.g. oc3.9) that doesn't support status updates
 		// so try to update whole CR
 		//TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
 		err := r.client.Update(context.TODO(), cr)

@@ -49,11 +49,14 @@ func main() {
 	startupDelaySeconds := livenessCmd.Flag("startupDelaySeconds", "").Default("7200").Uint64()
 	component := k8sCmd.Flag("component", "").Default("mongod").String()
 
-	cnf := db.NewConfig(
+	cnf, err := db.NewConfig(
 		app,
 		pkg.EnvMongoDBClusterMonitorUser,
 		pkg.EnvMongoDBClusterMonitorPassword,
 	)
+	if err != nil {
+		log.Fatalf("new cfg: %s", err)
+	}
 
 	command, err := app.Parse(os.Args[1:])
 	if err != nil {

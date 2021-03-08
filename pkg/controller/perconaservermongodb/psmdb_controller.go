@@ -534,7 +534,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 		return errors.Wrapf(err, "get pods list for replset %s", rsName)
 	}
 
-	client, err := r.mongoClientWithRole(cr, rsName, false, pods, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(cr, rsName, false, pods.Items, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -932,6 +932,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			},
 		},
 	)
+	if cr.CompareVersion("1.8.0") >= 0 {
+		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
+			corev1.Volume{
+				Name: "users-secret-file",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "internal-" + cr.Name + "-users",
+					},
+				},
+			})
+	}
 
 	if arbiter {
 		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,

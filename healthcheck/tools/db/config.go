@@ -15,6 +15,7 @@
 package db
 
 import (
+	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/alecthomas/kingpin"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/dcos"
+	"github.com/pkg/errors"
 	"gopkg.in/mgo.v2"
 )
 
@@ -57,7 +59,7 @@ func getDefaultMongoDBAddress() string {
 	return hostname + ":" + DefaultMongoDBPort
 }
 
-func NewConfig(app *kingpin.Application, envUser string, envPassword string) *Config {
+func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*Config, error) {
 	db := &Config{
 		DialInfo: &mgo.DialInfo{},
 	}
@@ -77,10 +79,24 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) *Co
 		"username",
 		"mongodb auth username, this flag or env var "+envUser+" is required",
 	).Envar(envUser).Required().StringVar(&db.DialInfo.Username)
-	app.Flag(
-		"password",
-		"mongodb auth password, this flag or env var "+envPassword+" is required",
-	).Envar(envPassword).Required().StringVar(&db.DialInfo.Password)
+
+	pwdFile := "/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD"
+	if _, err := os.Stat(pwdFile); err == nil {
+		pass, err := ioutil.ReadFile(pwdFile)
+		if err != nil {
+			return nil, errors.Wrapf(err, "read %s", pwdFile)
+		}
+
+		db.DialInfo.Password = string(pass)
+	} else if os.IsNotExist(err) {
+		app.Flag(
+			"password",
+			"mongodb auth password, this flag or env var "+envPassword+" is required",
+		).Envar(envPassword).Required().StringVar(&db.DialInfo.Password)
+	} else {
+		return nil, errors.Wrap(err, "failed to get password")
+	}
+
 	app.Flag(
 		"authDb",
 		"mongodb auth database",
@@ -95,7 +111,7 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) *Co
 	).Default("true").BoolVar(&db.DialInfo.FailFast)
 
 	db.SSL = NewSSLConfig(app)
-	return db
+	return db, nil
 }
 
 func NewSSLConfig(app *kingpin.Application) *SSLConfig {

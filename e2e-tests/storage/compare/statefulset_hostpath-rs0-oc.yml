@@ -121,6 +121,8 @@ spec:
         - mountPath: /etc/mongodb-encryption
           name: hostpath-mongodb-encryption-key
           readOnly: true
+        - mountPath: /etc/users-secret
+          name: users-secret-file
         workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -161,6 +163,10 @@ spec:
           defaultMode: 288
           optional: true
           secretName: hostpath-ssl-internal
+      - name: users-secret-file
+        secret:
+          defaultMode: 420
+          secretName: internal-hostpath-users
       - hostPath:
           path: /run/data-dir
           type: Directory

@@ -82,6 +82,8 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 		return nil, errors.Wrapf(err, "create PBM connection to %s", strings.Join(addrs, ","))
 	}
 
+	pbmc.InitLogger("", "")
+
 	return &PBM{
 		C:         pbmc,
 		k8c:       c,

@@ -81,6 +81,85 @@ func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 	return *resp.Config, nil
 }
 
+func CreateRole(ctx context.Context, client *mongo.Client, role string, privileges []interface{}, roles []interface{}) error {
+	resp := OKResponse{}
+
+	privilegesArr := bson.A{}
+	for _, p := range privileges {
+		privilegesArr = append(privilegesArr, p)
+	}
+
+	rolesArr := bson.A{}
+	for _, r := range roles {
+		rolesArr = append(rolesArr, r)
+	}
+
+	m := bson.D{
+		{Key: "createRole", Value: role},
+		{Key: "privileges", Value: privilegesArr},
+		{Key: "roles", Value: rolesArr},
+	}
+
+	res := client.Database("admin").RunCommand(context.Background(), m)
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "failed to create role")
+	}
+
+	err := res.Decode(&resp)
+	if err != nil {
+		return errors.Wrap(err, "failed to decode response")
+	}
+
+	if resp.OK != 1 {
+		return errors.Errorf("mongo says: %s", resp.Errmsg)
+	}
+
+	return nil
+}
+
+func CreateUser(ctx context.Context, client *mongo.Client, user, pwd string, roles ...interface{}) error {
+	resp := OKResponse{}
+
+	res := client.Database("admin").RunCommand(context.Background(), bson.D{
+		{Key: "createUser", Value: user},
+		{Key: "pwd", Value: pwd},
+		{Key: "roles", Value: roles},
+	})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "failed to create user")
+	}
+
+	err := res.Decode(&resp)
+	if err != nil {
+		return errors.Wrap(err, "failed to decode response")
+	}
+
+	if resp.OK != 1 {
+		return errors.Errorf("mongo says: %s", resp.Errmsg)
+	}
+
+	return nil
+}
+
+func AddShard(ctx context.Context, client *mongo.Client, rsName, host string) error {
+	resp := OKResponse{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "addShard", Value: rsName + "/" + host}})
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "add shard")
+	}
+
+	if err := res.Decode(&resp); err != nil {
+		return errors.Wrap(err, "failed to decode addShard responce")
+	}
+
+	if resp.OK != 1 {
+		return errors.Errorf("add shard: %s", resp.Errmsg)
+	}
+
+	return nil
+}
+
 func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error {
 	resp := OKResponse{}
 

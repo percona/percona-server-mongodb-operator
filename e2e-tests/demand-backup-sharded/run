@@ -14,11 +14,10 @@ deploy_minio
 desc 'create first PSMDB cluster'
 cluster="some-name"
 kubectl_bin apply \
-    -f "$conf_dir/cloud-secret.yml" \
-    -f "$conf_dir/minio-secret.yml" \
     -f "$conf_dir/secrets.yml" \
     -f "$conf_dir/client.yml"
 
+apply_s3_storage_secrets
 if [[ "${OPENSHIFT}" == 4 ]]; then
     cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
 elif [[ -z "${OPENSHIFT}" ]]; then
@@ -63,21 +62,31 @@ backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
 
 desc 'run backups'
-run_backup aws-s3
 run_backup minio
-run_backup gcp-cs
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+    run_backup aws-s3
+    run_backup gcp-cs
 
-wait_backup "$backup_name_aws"
+    wait_backup "$backup_name_aws"
+    wait_backup "$backup_name_gcp"
+fi
 wait_backup "$backup_name_minio"
-wait_backup "$backup_name_gcp"
 
 sleep 5
 
-desc 'check backup and restore -- aws-s3'
-backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip >/dev/null
-run_restore $backup_name_aws 3 1 "-mongos"
-wait_restore $backup_name_aws 3 1 "-mongos"
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+    desc 'check backup and restore -- aws-s3'
+    backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+    curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip >/dev/null
+    run_restore $backup_name_aws 3 1 "-mongos"
+    wait_restore $backup_name_aws 3 1 "-mongos"
+
+    desc 'check backup and restore -- gcp-cs'
+    backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
+    curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip >/dev/null
+    run_restore $backup_name_gcp 3 1 "-mongos"
+    wait_restore $backup_name_gcp 3 1 "-mongos"
+fi
 
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
@@ -87,12 +96,6 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
     grep "${backup_dest_minio}_rs0.dump.gz"
 run_restore $backup_name_minio 3 1 "-mongos"
 wait_restore $backup_name_minio 3 1 "-mongos"
-
-desc 'check backup and restore -- gcp-cs'
-backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip >/dev/null
-run_restore $backup_name_gcp 3 1 "-mongos"
-wait_restore $backup_name_gcp 3 1 "-mongos"
 
 if [[ "$OPENSHIFT" != "3.11" ]]; then
   kubectl_bin delete -f "$conf_dir/container-rc.yaml"

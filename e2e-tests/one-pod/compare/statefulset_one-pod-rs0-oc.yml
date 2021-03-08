@@ -144,6 +144,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
         - env:
             - name: PBM_AGENT_MONGODB_USERNAME
@@ -209,6 +211,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: one-pod-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-one-pod-users
   updateStrategy:
     rollingUpdate:
       partition: 0

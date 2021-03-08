@@ -17,7 +17,7 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(cr *api.PerconaServerMongoDB, rsName string,
-	rsExposed bool, pods corev1.PodList, role UserRole) (*mgo.Client, error) {
+	rsExposed bool, pods []corev1.Pod, role UserRole) (*mgo.Client, error) {
 
 	c, err := r.getInternalCredentials(cr, role)
 	if err != nil {
@@ -27,9 +27,9 @@ func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(cr *api.PerconaServe
 	return r.mongoClient(cr, rsName, rsExposed, pods, c)
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods corev1.PodList,
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods []corev1.Pod,
 	c Credentials) (*mgo.Client, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, rsName, rsExposed, pods.Items)
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, rsName, rsExposed, pods)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
