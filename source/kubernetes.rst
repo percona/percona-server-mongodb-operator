@@ -43,7 +43,7 @@ Install Percona server for MongoDB on Kubernetes
    configured with the ``deploy/rbac.yaml`` file. Role-based access is based on
    defined roles and the available actions which correspond to each role. The
    role and actions are defined for Kubernetes resources in the yaml file.
-   Further details about users and roles can be found in `Kubernetes documentation <https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings>`_.
+   Further details about users and roles can be found in `Kubernetes documentation <https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings>`__.
 
    .. code:: bash
 
@@ -65,7 +65,7 @@ Install Percona server for MongoDB on Kubernetes
    should be placed as plain text in the stringData section of the
    ``deploy/secrets.yaml`` file as login name and
    passwords for the user accounts (see `Kubernetes
-   documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`_
+   documentation <https://kubernetes.io/docs/concepts/configuration/secret/>`__
    for details).
 
    After editing the yaml file, MongoDB Users secrets should be created
