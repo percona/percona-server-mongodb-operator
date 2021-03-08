@@ -12,18 +12,11 @@ Release Highlights
 
 * This release brings full support for the :ref:`operator.sharding`. Sharding
   allows you to scale databases horizontally, distributing data across multiple
-  MongoDB Pods, and so it is extremely useful for large data sets. Initial
-  support for sharding was introduced in Percona operator for Percona Server for
-  MongoDB 1.6.0, but it was possible to have a cluster with one shard only.
-  Exposing this single shard through a mongos service allowed to use one entry
-  point instead of provisioning a load-balancer per replica set node. 
-  
-  Starting from this release, it is possible to create multiple shards. By
-  default ref:`replsets section<operator.replsets-section>` of the
-  ``deploy/cr.yaml`` configuration file contains only one replica set, but when
-  you :ref:`turn sharding on<sharding-enabled>`, you can add more replica sets
-  with different names to the ``replsets`` section.
-* A :ref:`possibility was added<finalizers>` to delete Persistent Volume Claims
+  MongoDB Pods, and so it is extremely useful for large data sets. By
+  default of the ``deploy/cr.yaml`` configuration file contains only one replica
+  set, but when you :ref:`turn sharding on<sharding-enabled>`, you can add more
+  replica sets with different names to the ``replsets`` section.
+* It is now :ref:`possible<finalizers>` to clean up Persistent Volume Claims
   automatically after the cluster deletion event. This feature is off by
   default. Particularly it is useful to avoid leftovers in testing environments,
   where the cluster can be re-created and deleted many times.
