@@ -59,6 +59,4 @@ Bugs Fixed
 * :jirabug:`K8SPSMDB-366`: Fix a bug which prevented enabling Percona Monitoring and Management (PMM) due to incorrect request for the recommended PMM Client image version to the Version Service
 * :jirabug:`K8SPSMDB-402`: running multiple replica sets without sharding enabled should be prohibited
 * :jirabug:`K8SPSMDB-382`: Fix a bug which caused mongos process to fail when using ``allowUnsafeConfigurations=true``
-
-* :jirabug:`K8SPSMDB-364`: Fix a bug which caused liveness probe failing if MongoDB password contained special characters
 * :jirabug:`K8SPSMDB-362`: Fix a bug due to which changing secrets in a single-shard mode caused mongos Pods to fail
