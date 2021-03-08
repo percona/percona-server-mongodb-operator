@@ -485,7 +485,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. replsets-sidecars-image:									|
+|                 | .. _replsets-sidecars-image:								|
 |                 |												|
 | **Key**         | `replsets.sidecars.image									|
 |                 | <operator.html#replsets-sidecars-image>`_							|
@@ -500,7 +500,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. replsets-sidecars-command:								|
+|                 | .. _replsets-sidecars-command:								|
 |                 |												|
 | **Key**         | `replsets.sidecars.command									|
 |                 | <operator.html#replsets-sidecars-command>`_							|
@@ -515,7 +515,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. replsets-sidecars-args:									|
+|                 | .. _replsets-sidecars-args:									|
 |                 |												|
 | **Key**         | `replsets.sidecars.args									|
 |                 | <operator.html#replsets-sidecars-args>`_							|
@@ -530,7 +530,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. replsets-sidecars-name:									|
+|                 | .. _replsets-sidecars-name:									|
 |                 |												|
 | **Key**         | `replsets.sidecars.name									|
 |                 | <operator.html#replsets-sidecars-name>`_							|
@@ -1044,7 +1044,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-configsvrreplset-runtimeclassname:						|
+|                 | .. _sharding-configsvrreplset-runtimeclassname:						|
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.runtimeClassName							|
 |                 | <operator.html#sharding-configsvrreplset-runtimeclassname>`_				|
@@ -1057,8 +1057,9 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 |                 | <https://kubernetes.io/docs/concepts/containers/runtime-class/>`_				|
 |                 | for Config Server Pods									|
 +-----------------+---------------------------------------------------------------------------------------------+
+|														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-configsvrreplset-sidecars-image:						|
+|                 | .. _sharding-configsvrreplset-sidecars-image:						|
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.sidecars.image							|
 |                 | <operator.html#sharding-configsvrreplset-sidecars-image>`_					|
@@ -1073,7 +1074,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-configsvrreplset-sidecars-command:						|
+|                 | .. _sharding-configsvrreplset-sidecars-command:						|
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.sidecars.command							|
 |                 | <operator.html#sharding-configsvrreplset-sidecars-command>`_				|
@@ -1088,7 +1089,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-configsvrreplset-sidecars-args:							|
+|                 | .. _sharding-configsvrreplset-sidecars-args:						|
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.sidecars.args							|
 |                 | <operator.html#sharding-configsvrreplset-sidecars-args>`_					|
@@ -1103,7 +1104,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-configsvrreplset-sidecars-name:							|
+|                 | .. _sharding-configsvrreplset-sidecars-name:						|
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.sidecars.name							|
 |                 | <operator.html#sharding-configsvrreplset-sidecars-name>`_					|
@@ -1371,7 +1372,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-mongos-runtimeclassname:							|
+|                 | .. _sharding-mongos-runtimeclassname:							|
 |                 |												|
 | **Key**         | `sharding.mongos.runtimeClassName								|
 |                 | <operator.html#sharding-mongos-runtimeclassname>`_						|
@@ -1386,7 +1387,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-mongos-sidecars-image:								|
+|                 | .. _sharding-mongos-sidecars-image:								|
 |                 |												|
 | **Key**         | `sharding.mongos.sidecars.image								|
 |                 | <operator.html#sharding-mongos-sidecars-image>`_						|
@@ -1401,7 +1402,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-mongos-sidecars-command:							|
+|                 | .. _sharding-mongos-sidecars-command:							|
 |                 |												|
 | **Key**         | `sharding.mongos.sidecars.command								|
 |                 | <operator.html#sharding-mongos-sidecars-command>`_						|
@@ -1416,7 +1417,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-mongos-sidecars-args:								|
+|                 | .. _sharding-mongos-sidecars-args:								|
 |                 |												|
 | **Key**         | `sharding.mongos.sidecars.args								|
 |                 | <operator.html#sharding-mongos-sidecars-args>`_						|
@@ -1431,7 +1432,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. sharding-mongos-sidecars-name:								|
+|                 | .. _sharding-mongos-sidecars-name:								|
 |                 |												|
 | **Key**         | `sharding.mongos.sidecars.name								|
 |                 | <operator.html#sharding-mongos-sidecars-name>`_						|

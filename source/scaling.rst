@@ -11,7 +11,7 @@ The size of the cluster is controlled by the ``size`` key in the
 
 .. note:: The Operator will not allow to scale Percona Server for MongoDB with
    the ``kubectl scale statefulset <StatefulSet name>`` command as it puts
-``size`` configuration options out of sync.
+   ``size`` configuration options out of sync.
 
 You can change size separately for different components of your cluster by
 setting this option in the appropriate subsections:
