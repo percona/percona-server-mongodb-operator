@@ -57,14 +57,14 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	sv, err := version.Server()
 	if err != nil {
-		return nil, fmt.Errorf("get server version: %v", err)
+		return nil, errors.Wrap(err, "get server version")
 	}
 
 	log.Info("server version", "platform", sv.Platform, "version", sv.Info)
 
 	cli, err := clientcmd.NewClient()
 	if err != nil {
-		return nil, fmt.Errorf("create clientcmd: %v", err)
+		return nil, errors.Wrap(err, "create clientcmd")
 	}
 
 	return &ReconcilePerconaServerMongoDB{
@@ -230,7 +230,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
+		return reconcile.Result{}, errors.Wrap(err, "reconcile users secret")
 	}
 
 	repls := cr.Spec.Replsets
@@ -242,7 +242,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if cr.CompareVersion("1.5.0") >= 0 {
 		sfsTemplateAnnotations, mongosTemplateAnnotations, err = r.reconcileUsers(cr, repls)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("failed to reconcile users: %v", err)
+			return reconcile.Result{}, errors.Wrap(err, "failed to reconcile users")
 		}
 	}
 
@@ -273,7 +273,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
 		err := r.ensureVersion(cr, VersionServiceClient{})
 		if err != nil {
-			reqLogger.Info(fmt.Sprintf("failed to ensure version: %v; running with default", err))
+			reqLogger.Info("failed to ensure version, running with default", "error", err)
 		}
 	}
 
@@ -894,26 +894,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
 	err := setControllerReference(cr, sfs, r.scheme)
 	if err != nil {
-		return nil, fmt.Errorf("set owner ref for StatefulSet %s: %v", sfs.Name, err)
+		return nil, errors.Wrapf(err, "set owner ref for StatefulSet %s", sfs.Name)
 	}
 
 	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
 	if errGet != nil && !k8serrors.IsNotFound(errGet) {
-		return nil, fmt.Errorf("get StatefulSet %s: %v", sfs.Name, err)
+		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
 	inits := []corev1.Container{}
 	if cr.CompareVersion("1.5.0") >= 0 {
 		operatorPod, err := r.operatorPod()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get operator pod: %v", err)
+			return nil, errors.Wrap(err, "failed to get operator pod")
 		}
 		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits, log)
 	if err != nil {
-		return nil, fmt.Errorf("create StatefulSet.Spec %s: %v", sfs.Name, err)
+		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
 	if sfsSpec.Template.Annotations == nil {
 		sfsSpec.Template.Annotations = make(map[string]string)
@@ -991,7 +991,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		if cr.Spec.Backup.Enabled {
 			agentC, err := backup.AgentContainer(cr, replset.Name, replset.Size)
 			if err != nil {
-				return nil, fmt.Errorf("create a backup container: %v", err)
+				return nil, errors.Wrap(err, "create a backup container")
 			}
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
@@ -1000,11 +1000,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			pmmsec := corev1.Secret{}
 			err := r.client.Get(context.TODO(), types.NamespacedName{Name: userSecretNameInternal(cr), Namespace: cr.Namespace}, &pmmsec)
 			if err != nil {
-				return nil, fmt.Errorf("check pmm secrets: %v", err)
+				return nil, errors.Wrap(err, "check pmm secrets")
 			}
 			pmmC, err := psmdb.AddPMMContainer(cr, userSecretNameInternal(cr), pmmsec, cr.Spec.PMM.MongodParams)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create a pmm-client container: %v", err)
+				return nil, errors.Wrap(err, "failed to create a pmm-client container")
 			}
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, pmmC)
 		}
@@ -1041,22 +1041,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	if k8serrors.IsNotFound(errGet) {
 		err = r.client.Create(context.TODO(), sfs)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
-			return nil, fmt.Errorf("create StatefulSet %s: %v", sfs.Name, err)
+			return nil, errors.Wrapf(err, "create StatefulSet %s", sfs.Name)
 		}
 	} else {
 		err := r.reconcilePDB(pdbspec, matchLabels, cr.Namespace, sfs)
 		if err != nil {
-			return nil, fmt.Errorf("PodDisruptionBudget for %s: %v", sfs.Name, err)
+			return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 		}
 		sfs.Spec.Replicas = &size
 		err = r.client.Update(context.TODO(), sfs)
 		if err != nil {
-			return nil, fmt.Errorf("update StatefulSet %s: %v", sfs.Name, err)
+			return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 		}
 	}
 
 	if err := r.smartUpdate(cr, sfs, replset); err != nil {
-		return nil, fmt.Errorf("failed to run smartUpdate %v", err)
+		return nil, errors.Wrap(err, "failed to run smartUpdate")
 	}
 
 	return sfs, nil
@@ -1111,7 +1111,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudg
 	pdb := psmdb.PodDisruptionBudget(spec, labels, namespace)
 	err := setControllerReference(owner, pdb, r.scheme)
 	if err != nil {
-		return fmt.Errorf("set owner reference: %v", err)
+		return errors.Wrap(err, "set owner reference")
 	}
 
 	cpdb := &policyv1beta1.PodDisruptionBudget{}
@@ -1119,7 +1119,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudg
 	if err != nil && k8serrors.IsNotFound(err) {
 		return r.client.Create(context.TODO(), pdb)
 	} else if err != nil {
-		return fmt.Errorf("get: %v", err)
+		return errors.Wrap(err, "get pod disruption budget")
 	}
 
 	cpdb.Spec = pdb.Spec
@@ -1137,17 +1137,17 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(currentObj runtime.Object
 	if err != nil && k8serrors.IsNotFound(err) {
 		err := r.client.Create(ctx, currentObj)
 		if err != nil {
-			return fmt.Errorf("create: %v", err)
+			return errors.Wrapf(err, "create object %s", name)
 		}
 		return nil
 	} else if err != nil {
-		return fmt.Errorf("get: %v", err)
+		return errors.Wrapf(err, "get object %s", name)
 	}
 
 	currentObj.GetObjectKind().SetGroupVersionKind(foundObj.GetObjectKind().GroupVersionKind())
 	err = r.client.Update(ctx, currentObj)
 	if err != nil {
-		return fmt.Errorf("update: %v", err)
+		return errors.Wrapf(err, "update object %s", name)
 	}
 
 	return nil
