@@ -128,6 +128,9 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
+              readOnly: true
           workingDir: /data/db
         - args:
             - -c
@@ -174,3 +177,7 @@ spec:
             secretName: some-name-ssl-internal
         - emptyDir: {}
           name: mongod-data
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-some-name-users
