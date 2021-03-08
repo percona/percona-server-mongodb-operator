@@ -7,12 +7,41 @@
 :Date: March 8, 2021
 :Installation: `Installing Percona Kubernetes Operator for Percona Server for MongoDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
+Release Highlights
+================================================================================
+
+* This release brings full support for the :ref:`operator.sharding`. Sharding
+  allows you to scale databases horizontally, distributing data across multiple
+  MongoDB Pods, and so it is extremely useful for large data sets. Initial
+  support for sharding was introduced in Percona operator for Percona Server for
+  MongoDB 1.6.0, but it was possible to have a cluster with one shard only.
+  Exposing this single shard through a mongos service allowed to use one entry
+  point instead of provisioning a load-balancer per replica set node. 
+  
+  Starting from this release, it is possible to create multiple shards. By
+  default ref:`replsets section<operator.replsets-section>` of the
+  ``deploy/cr.yaml`` configuration file contains only one replica set, but when
+  you :ref:`turn sharding on<sharding-enabled>`, you can add more replica sets
+  with different names to the ``replsets`` section.
+* A :ref:`possibility was added<finalizers>` to delete Persistent Volume Claims
+  automatically after the cluster deletion event. This feature is off by
+  default. Particularly it is useful to avoid leftovers in testing environments,
+  where the cluster can be re-created and deleted many times.
+  Support for :ref:`custom sidecar containers<faq-sidecar>`. The Operator makes
+  it possible now to deploy additional (*sidecar*) containers to the Pod. This
+  feature can be useful to run debugging tools or some specific monitoring
+  solutions, etc. The sidecar container can be added to
+  :ref:`replsets<replsets-sidecars-image>`,
+  :ref:`sharding.configsvrReplSet<sharding-configsvrreplset-sidecars-image>`, and
+  :ref:`sharding.mongos<sharding-mongos-sidecars-image>` sections of the 
+  ``deploy/cr.yaml`` configuration file.
+
 New Features
 ================================================================================
 
-* :jirabug:`K8SPSMDB-260`: Persistent Volume Claims can now be automatically removed after MongoDB cluster deletion. Learn more about this on operator’s :ref:`documentation page<operator.scale.scale-down>`
 * :jirabug:`K8SPSMDB-121`: Add support for :ref:`sharding<operator.sharding>` to scale MongoDB cluster horizontally
-* :jirabug:`K8SPSMDB-294`: Support for :ref:`custom sidecar containers <How can I add custom sidecar containers to my cluster?>` to extend the Operator capabilities
+* :jirabug:`K8SPSMDB-294`: Support for :ref:`custom sidecar container<faq-sidecar>` to extend the Operator capabilities
+* :jirabug:`K8SPSMDB-260`: Persistent Volume Claims :ref:`can now be automatically removed<finalizers>` after MongoDB cluster deletion.
 
 Improvements
 ================================================================================

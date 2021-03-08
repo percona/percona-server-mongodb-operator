@@ -45,16 +45,16 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Percona Kubernetes Operator for Percona Server for MongoDB'
-copyright = u'Percona LLC and/or its affiliates 2009-2020'
+copyright = u'Percona LLC and/or its affiliates 2009-2021'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
 # The short X.Y version.
-version = '1.6.0'
+version = '1.7.0'
 # The full version, including alpha/beta/rc tags.
-release = '1.6.0'
+release = '1.7.0'
 
 # the MongoDB recommended versions to be used in docs
 mongodb44recommended = '4.4.2-4'
@@ -251,7 +251,7 @@ htmlhelp_basename = 'PSMDBOperator'
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
   ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes Operator for Percona Server for MongoDB Documentation',
-   u'Percona LLC and/or its affiliates 2009-2020', 'manual'),
+   u'Percona LLC and/or its affiliates 2009-2021', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -285,7 +285,7 @@ latex_toplevel_sectioning = 'part'
 # (source start file, name, description, authors, manual section).
 man_pages = [
     ('index', 'PerconaKubernetesOperatorPerconaServerMongoDB.tex', u'Percona Kubernetes for Percona Server for MongoDB Documentation',
-     [u'Percona LLC and/or its affiliates 2009-2020'], 1)
+     [u'Percona LLC and/or its affiliates 2009-2021'], 1)
 ]
 
 def ultimateReplace(app, docname, source):
