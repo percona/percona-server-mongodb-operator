@@ -34,7 +34,7 @@ New Features
 
 * :jirabug:`K8SPSMDB-121`: Add support for :ref:`sharding<operator.sharding>` to scale MongoDB cluster horizontally
 * :jirabug:`K8SPSMDB-294`: Support for :ref:`custom sidecar container<faq-sidecar>` to extend the Operator capabilities
-* :jirabug:`K8SPSMDB-260`: Persistent Volume Claims :ref:`can now be automatically removed<finalizers>` after MongoDB cluster deletion.
+* :jirabug:`K8SPSMDB-260`: Persistent Volume Claims :ref:`can now be automatically removed<finalizers>` after MongoDB cluster deletion
 
 Improvements
 ================================================================================
