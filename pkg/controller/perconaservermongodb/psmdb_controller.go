@@ -437,7 +437,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if err := r.enableBalancerIfNeeded(cr); err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed to start balancer: %v", err)
+		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
 
 	err = r.deleteMongosIfNeeded(cr)
@@ -452,7 +452,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{})
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed to ensure version: %v", err)
+		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 	}
 
 	return rr, nil
@@ -807,11 +807,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrapf(err, "get monogs service %s", mongosSvc.Name)
 	}
 
-	if !k8serrors.IsNotFound(err) && mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
+	if !k8serrors.IsNotFound(err) &&
+		(mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType ||
+			!mapsEqual(mongosSvc.Annotations, cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations)) {
 		err = r.client.Delete(context.TODO(), &mongosSvc)
 		if err != nil {
 			return errors.Wrapf(err, "delete service %s", mongosSvc.Name)
 		}
+
+		mongosSvc = psmdb.MongosService(cr)
 	}
 
 	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
@@ -826,6 +830,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	return nil
 }
 
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for ka, va := range a {
+		if vb, ok := b[ka]; !ok || vb != va {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
 
@@ -833,13 +851,13 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 	if is110 {
 		sslHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSL)
 		if err != nil {
-			return nil, fmt.Errorf("get secret hash error: %v", err)
+			return nil, errors.Wrap(err, "get secret hash error")
 		}
 		annotation["percona.com/ssl-hash"] = sslHash
 
 		sslInternalHash, err := r.getTLSHash(cr, cr.Spec.Secrets.SSLInternal)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return nil, fmt.Errorf("get secret hash error: %v", err)
+			return nil, errors.Wrap(err, "get secret hash error")
 		} else if err == nil {
 			annotation["percona.com/ssl-internal-hash"] = sslInternalHash
 		}
