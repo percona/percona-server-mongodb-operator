@@ -24,6 +24,15 @@ check_cr_config() {
     local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)"
     sleep 240
 
+    # check arbiter liveness
+    if [[ $(kubectl_bin get pod \
+                        --selector=statefulset.kubernetes.io/pod-name="${cluster}-arbiter-0" \
+                        -o jsonpath='{.items[*].status.containerStatuses[?(@.name == "mongod-arbiter")].restartCount}') \
+          -gt 0 ]]; then
+        echo "Something went wrong with arbiter. Exiting..."
+        exit 1
+    fi
+
     run_mongo "rs.conf()" "clusterAdmin:clusterAdmin123456@$URI" "mongodb" ":27017" \
         | grep '"host" :' \
         | grep "$arbiter_ip"

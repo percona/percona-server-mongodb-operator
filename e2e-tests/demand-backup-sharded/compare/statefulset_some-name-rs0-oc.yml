@@ -86,6 +86,12 @@ spec:
                 - /data/db/mongodb-healthcheck
                 - k8s
                 - liveness
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
                 - --startupDelaySeconds
                 - "7200"
             failureThreshold: 4
@@ -135,16 +141,6 @@ spec:
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
-        - args:
-            - -c
-            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
-          command:
-            - /bin/sh
-          imagePullPolicy: Always
-          name: rs-sidecar-1
-          resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
         - env:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
@@ -190,7 +186,6 @@ spec:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
-      runtimeClassName: docker-rc
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: default

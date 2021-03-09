@@ -18,8 +18,10 @@ kubectl_bin apply \
     -f "$conf_dir/client.yml"
 
 apply_s3_storage_secrets
-if [[ "$OPENSHIFT" != "3.11" ]]; then
-  kubectl_bin apply -f "$conf_dir/docker-rc.yaml"
+if [[ "${OPENSHIFT}" == 4 ]]; then
+    cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+elif [[ -z "${OPENSHIFT}" ]]; then
+    kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
@@ -95,4 +97,7 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 run_restore $backup_name_minio 3 1 "-mongos"
 wait_restore $backup_name_minio 3 1 "-mongos"
 
+if [[ "$OPENSHIFT" != "3.11" ]]; then
+  kubectl_bin delete -f "$conf_dir/container-rc.yaml"
+fi
 destroy "$namespace"

@@ -4,16 +4,16 @@ metadata:
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: smart-update
+    app.kubernetes.io/instance: another-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: smart-update-rs0
+  name: another-name-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: smart-update
+      name: another-name
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -21,18 +21,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: smart-update
+      app.kubernetes.io/instance: another-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: smart-update-rs0
+  serviceName: another-name-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: smart-update
+        app.kubernetes.io/instance: another-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
@@ -48,8 +48,8 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --sslMode=preferSSL
-            - --clusterAuthMode=x509
+            - --clusterAuthMode=keyFile
+            - --keyFile=/etc/mongodb-secrets/mongodb-key
             - --slowms=100
             - --profile=1
             - --rateLimit=1
@@ -69,14 +69,14 @@ spec:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: smart-update
+              value: another-name
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: internal-smart-update-users
+                name: internal-another-name-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -126,7 +126,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: smart-update-mongodb-keyfile
+              name: another-name-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -135,11 +135,29 @@ spec:
               name: ssl-internal
               readOnly: true
             - mountPath: /etc/mongodb-encryption
-              name: smart-update-mongodb-encryption-key
+              name: another-name-mongodb-encryption-key
               readOnly: true
-            - mountPath: /etc/users-secret
-              name: users-secret-file
           workingDir: /data/db
+        - args:
+            - -c
+            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
+          command:
+            - /bin/sh
+          imagePullPolicy: Always
+          name: my-sidecar-1
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        - args:
+            - -c
+            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
+          command:
+            - /bin/sh
+          imagePullPolicy: Always
+          name: my-sidecar-2
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -159,38 +177,37 @@ spec:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
+      runtimeClassName: container-rc
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: smart-update-mongodb-keyfile
+        - name: another-name-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-mongodb-keyfile
-        - name: smart-update-mongodb-encryption-key
+            secretName: another-name-mongodb-keyfile
+        - name: another-name-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-mongodb-encryption-key
+            secretName: another-name-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
-            optional: false
-            secretName: smart-update-ssl
+            optional: true
+            secretName: another-name-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: smart-update-ssl-internal
-        - name: users-secret-file
-          secret:
-            defaultMode: 420
-            secretName: internal-smart-update-users
+            secretName: another-name-ssl-internal
   updateStrategy:
-    type: OnDelete
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
   volumeClaimTemplates:
     - metadata:
         name: mongod-data
