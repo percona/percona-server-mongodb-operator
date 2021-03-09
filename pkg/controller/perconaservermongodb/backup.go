@@ -158,28 +158,8 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(cr *api.PerconaServerMo
 
 	for _, rst := range restores.Items {
 		if rst.Status.State != api.RestoreStateReady &&
-			rst.Status.State != api.RestoreStateError && 
+			rst.Status.State != api.RestoreStateError &&
 			rst.Spec.ClusterName == cr.Name {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMongoDB) (bool, error) {
-	bcps := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(context.TODO(), &bcps, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
-		if k8sErrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, errors.Wrap(err, "get backup list")
-	}
-
-	for _, bcp := range bcps.Items {
-		if bcp.Status.State != api.BackupStateReady &&
-			bcp.Status.State != api.BackupStateError &&
-			bcp.Spec.PSMDBCluster == cr.Name {
 			return true, nil
 		}
 	}

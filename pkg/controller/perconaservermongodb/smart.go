@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"sort"
 	"strings"
 	"time"
@@ -58,12 +59,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	ok, err := r.isBackupRunning(cr)
+	ok, err := backup.HasActiveJobs(r.client, cr, backup.Job{})
 	if err != nil {
 		return fmt.Errorf("failed to check active backups: %v", err)
 	}
 	if ok {
-		log.Info("can't start 'SmartUpdate': waiting for running backups finished")
+		log.Info("can't start 'SmartUpdate': waiting for running backups/restores finished")
 		return nil
 	}
 

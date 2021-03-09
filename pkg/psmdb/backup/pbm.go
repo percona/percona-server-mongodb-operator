@@ -146,3 +146,59 @@ func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, err
 	err := cl.Get(context.TODO(), types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
 	return secret, err
 }
+
+type LockHeaderPredicate func(pbm.LockHeader) bool
+
+func NotPITRLock(l pbm.LockHeader) bool {
+	if l.Type == pbm.CmdPITR {
+		return false
+	}
+	return true
+}
+
+func NotJobLock(j Job) LockHeaderPredicate {
+	return func(h pbm.LockHeader) bool {
+		var jobCommand pbm.Command
+
+		switch j.Type {
+		case TypeBackup:
+			jobCommand = pbm.CmdBackup
+		case TypeRestore:
+			jobCommand = pbm.CmdRestore
+		default:
+			return true
+		}
+
+		if h.Type != jobCommand {
+			return true
+		}
+
+		return false
+	}
+}
+
+func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
+	locks, err := b.C.GetLocks(&pbm.LockHeader{})
+	if err != nil {
+		return false, errors.Wrap(err, "getting lock data")
+	}
+
+	allowedByAll := func(l pbm.LockHeader) bool {
+		for _, allow := range predicates {
+			if !allow(l) {
+				return false
+			}
+		}
+		return true
+	}
+
+	for i := range locks {
+		if !allowedByAll(locks[i].LockHeader) {
+			continue
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
