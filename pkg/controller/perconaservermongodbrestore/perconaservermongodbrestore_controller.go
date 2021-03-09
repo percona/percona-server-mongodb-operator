@@ -142,7 +142,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
 
-	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr.Name))
+	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr.Name), backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "check for concurrent jobs")
 	}
@@ -204,13 +204,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			return errors.Wrap(err, "set pbm config")
 		}
 
-		isBlockedByPBM, err := pbmc.HasLocks()
+		isBlockedByPITR, err := pbmc.HasLocks(backup.IsPITRLock)
 		if err != nil {
-			return errors.Wrap(err, "checking pbm locks")
+			return errors.Wrap(err, "checking pbm pitr locks")
 		}
 
-		if isBlockedByPBM {
-			log.Info("Waiting for pbm locks.")
+		if isBlockedByPITR {
+			log.Info("Waiting for PITR to be disabled.")
 			status.State = psmdbv1.RestoreStateWaiting
 			return nil
 		}

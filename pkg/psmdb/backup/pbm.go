@@ -153,7 +153,11 @@ func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, err
 type LockHeaderPredicate func(pbm.LockHeader) bool
 
 func NotPITRLock(l pbm.LockHeader) bool {
-	return l.Type != pbm.CmdPITR
+	return !IsPITRLock(l)
+}
+
+func IsPITRLock(l pbm.LockHeader) bool {
+	return l.Type == pbm.CmdPITR
 }
 
 func NotJobLock(j Job) LockHeaderPredicate {
