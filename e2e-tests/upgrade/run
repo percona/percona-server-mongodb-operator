@@ -9,7 +9,7 @@ test_dir=$(realpath $(dirname $0))
 CLUSTER='upgrade'
 CLUSTER_SIZE=3
 TARGET_API="${API}"
-TARGET_OPERATOR_VER=$(echo -n "${API//psmdb.percona.com\/v}" | $sed 's/-/./g')
+TARGET_OPERATOR_VER=$(echo -n "${API//psmdb.percona.com\/v/}" | $sed 's/-/./g')
 TARGET_IMAGE="${IMAGE}"
 TARGET_IMAGE_MONGOD="${IMAGE_MONGOD}"
 TARGET_IMAGE_PMM="${IMAGE_PMM}"
@@ -20,11 +20,13 @@ else
     MONGO_VER=$(echo -n "${TARGET_IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 fi
 
-INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator | jq -r '.versions[].operator' | sort -V | tail -n1)
+INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator |
+    jq -r '.versions[].operator' | sort -V | tail -n1)
 # if testing on release branch and version service is already updated with new operator images
 # use the older version of operator as initial point for test
 if [[ "${INIT_OPERATOR_VER}" == "${TARGET_OPERATOR_VER}" ]]; then
-    INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator | jq -r '.versions[].operator' | sort -V | tail -n2 | head -n1)
+    INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator |
+        jq -r '.versions[].operator' | sort -V | tail -n2 | head -n1)
 fi
 GIT_TAG="v${INIT_OPERATOR_VER}"
 INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
@@ -32,7 +34,7 @@ OPERATOR_NAME='percona-server-mongodb-operator'
 API="psmdb.percona.com/v${INIT_OPERATOR_VER//./-}"
 IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
 # we use the starting image from the same repo so we don't need to use initImage option
-if [[ "$(echo ${TARGET_IMAGE}|cut -d'/' -f1)" == "perconalab" ]]; then
+if [[ "$(echo ${TARGET_IMAGE} | cut -d'/' -f1)" == "perconalab" ]]; then
     IMAGE="${IMAGE/percona\//perconalab\/}"
 fi
 IMAGE_MONGOD=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.mongod[].imagePath')
@@ -58,8 +60,8 @@ function compare_generation() {
 }
 
 function wait_cluster_consistency() {
-    until [[ "$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.state}')" == "ready" \
-             && "$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" ]]; do
+    until [[ "$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.state}')" == "ready" && \
+    "$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" ]]; do
         echo 'waiting for cluster readyness'
         sleep 20
     done
@@ -69,28 +71,28 @@ function check_applied_images() {
     local updated_image="$1"
 
     case "${updated_image}" in
-        "operator")
-            if [[ "${TARGET_IMAGE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
-                && "${IMAGE_BACKUP}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') \
-                && "${IMAGE_PMM}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') \
-                && "${IMAGE_MONGOD}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
-                : Operator image has been updated correctly
-            else
-                echo 'Operator image has not been updated'
-                exit 1
-            fi
-            ;;
-        "all")
-            if [[ "${TARGET_IMAGE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') \
-                && "${TARGET_IMAGE_BACKUP}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') \
-                && "${TARGET_IMAGE_PMM}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') \
-                && "${TARGET_IMAGE_MONGOD}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
-                : Cluster images have been updated correctly
-            else
-                echo 'Cluster images have not been updated'
-                exit 1
-            fi
-            ;;
+    "operator")
+        if [[ "${TARGET_IMAGE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
+        "${IMAGE_BACKUP}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') && \
+        "${IMAGE_PMM}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') && \
+        "${IMAGE_MONGOD}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+            : Operator image has been updated correctly
+        else
+            echo 'Operator image has not been updated'
+            exit 1
+        fi
+        ;;
+    "all")
+        if [[ "${TARGET_IMAGE}" == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
+        "${TARGET_IMAGE_BACKUP}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') && \
+        "${TARGET_IMAGE_PMM}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') && \
+        "${TARGET_IMAGE_MONGOD}" == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+            : Cluster images have been updated correctly
+        else
+            echo 'Cluster images have not been updated'
+            exit 1
+        fi
+        ;;
     esac
 }
 
@@ -98,7 +100,7 @@ function deploy_operator_gh() {
     desc 'start operator'
     kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
     kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/rbac.yaml"
-    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/operator.yaml" > "${tmp_dir}/operator_${GIT_TAG}.yaml"
+    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/operator.yaml" >"${tmp_dir}/operator_${GIT_TAG}.yaml"
     $sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/operator_${GIT_TAG}.yaml"
     kubectl_bin apply -f "${tmp_dir}/operator_${GIT_TAG}.yaml"
 
@@ -111,16 +113,16 @@ function prepare_cr_yaml() {
 
     # spinup function expects images to have suffix like "-backup"
     # to replace them with images from environment variables
-    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" \
-        | yq w - "metadata.name" "${CLUSTER}" \
-        | yq w - "spec.upgradeOptions.apply" "disabled" \
-        | yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" \
-        | yq w - "spec.replsets[*].arbiter.enabled" "false" \
-        | yq w - "spec.backup.enabled" "false" \
-        | yq w - "spec.sharding.enabled" "false" \
-        | yq w - "spec.image" "" \
-        | yq w - "spec.backup.image" -- "-backup" \
-        | yq w - "spec.pmm.image" -- "-pmm" > "${cr_yaml}"
+    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" |
+        yq w - "metadata.name" "${CLUSTER}" |
+        yq w - "spec.upgradeOptions.apply" "disabled" |
+        yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" |
+        yq w - "spec.replsets[*].arbiter.enabled" "false" |
+        yq w - "spec.backup.enabled" "false" |
+        yq w - "spec.sharding.enabled" "false" |
+        yq w - "spec.image" "" |
+        yq w - "spec.backup.image" -- "-backup" |
+        yq w - "spec.pmm.image" -- "-pmm" >"${cr_yaml}"
 }
 
 function main() {
@@ -129,9 +131,9 @@ function main() {
     create_namespace "${namespace}"
     deploy_operator_gh
 
-    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" > "${tmp_dir}/secrets.yaml"
+    curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
     kubectl_bin apply -f "${conf_dir}/client.yml" \
-                      -f "${tmp_dir}/secrets.yaml"
+        -f "${tmp_dir}/secrets.yaml"
 
     local cr_yaml="${tmp_dir}/cr_${GIT_TAG}.yaml"
     prepare_cr_yaml "${cr_yaml}"
@@ -145,7 +147,7 @@ function main() {
 
     desc 'write data'
     run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
-              "userAdmin:userAdmin123456@${CLUSTER}-rs0.${namespace}"
+        "userAdmin:userAdmin123456@${CLUSTER}-rs0.${namespace}"
     run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${CLUSTER}-rs0.${namespace}"
 
     compare_generation "1" "statefulset" "${CLUSTER}-rs0"
@@ -160,8 +162,8 @@ function main() {
 
     desc 'wait for operator upgrade'
     until [[ $(kubectl_bin get pods --selector=name="${OPERATOR_NAME}" \
-                    -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image' \
-                    | grep -vc 'NAME' | awk '{print $1}') -eq 1 ]]; do
+        -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image' |
+        grep -vc 'NAME' | awk '{print $1}') -eq 1 ]]; do
         sleep 5
     done
     sleep 10
