@@ -10,7 +10,6 @@ spec:
 #  pause: true
   crVersion: 1.8.0
   image: percona/percona-server-mongodb:4.4.2-4
-  initImage: perconalab/percona-server-mongodb-operator:k8spsmdb-381-1
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
