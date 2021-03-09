@@ -52,9 +52,9 @@ spec:
             - --bind_ip_all
             - --port=27017
             - --sslAllowInvalidCertificates
-            - --relaxPermChecks
             - --configdb
             - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017
+            - --relaxPermChecks
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
           command:

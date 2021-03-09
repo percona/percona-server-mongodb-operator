@@ -4,16 +4,16 @@ metadata:
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: smart-update
+    app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: rs0
-  name: smart-update-rs0
+    app.kubernetes.io/replset: rs2
+  name: some-name-rs2
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: smart-update
+      name: some-name
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -21,22 +21,22 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: smart-update
+      app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: rs0
-  serviceName: smart-update-rs0
+      app.kubernetes.io/replset: rs2
+  serviceName: some-name-rs2
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: smart-update
+        app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: rs0
+        app.kubernetes.io/replset: rs2
     spec:
       containers:
         - args:
@@ -44,12 +44,13 @@ spec:
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=rs0
+            - --replSet=rs2
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
+            - --shardsvr
             - --slowms=100
             - --profile=1
             - --rateLimit=1
@@ -69,14 +70,14 @@ spec:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: smart-update
+              value: some-name
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: rs0
+              value: rs2
           envFrom:
             - secretRef:
-                name: internal-smart-update-users
+                name: internal-some-name-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -114,7 +115,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 500M
+              memory: 1G
             requests:
               cpu: 100m
               memory: 100M
@@ -126,7 +127,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: smart-update-mongodb-keyfile
+              name: some-name-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -135,11 +136,45 @@ spec:
               name: ssl-internal
               readOnly: true
             - mountPath: /etc/mongodb-encryption
-              name: smart-update-mongodb-encryption-key
+              name: some-name-mongodb-encryption-key
               readOnly: true
-            - mountPath: /etc/users-secret
-              name: users-secret-file
           workingDir: /data/db
+        - args:
+            - -c
+            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
+          command:
+            - /bin/sh
+          imagePullPolicy: Always
+          name: rs-sidecar-1
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        - env:
+            - name: PBM_AGENT_MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_USER
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_AGENT_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_PASSWORD
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_MONGODB_REPLSET
+              value: rs2
+            - name: PBM_MONGODB_PORT
+              value: "27017"
+            - name: SHARDED
+              value: "TRUE"
+          imagePullPolicy: Always
+          name: backup-agent
+          resources: {}
+          securityContext:
+            runAsNonRoot: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -149,7 +184,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 500M
+              memory: 1G
             requests:
               cpu: 100m
               memory: 100M
@@ -165,32 +200,30 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: smart-update-mongodb-keyfile
+        - name: some-name-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-mongodb-keyfile
-        - name: smart-update-mongodb-encryption-key
+            secretName: some-name-mongodb-keyfile
+        - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-mongodb-encryption-key
+            secretName: some-name-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-ssl
+            secretName: some-name-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: smart-update-ssl-internal
-        - name: users-secret-file
-          secret:
-            defaultMode: 420
-            secretName: internal-smart-update-users
+            secretName: some-name-ssl-internal
   updateStrategy:
-    type: OnDelete
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
   volumeClaimTemplates:
     - metadata:
         name: mongod-data
