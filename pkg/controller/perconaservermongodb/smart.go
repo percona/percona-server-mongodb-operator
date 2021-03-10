@@ -3,10 +3,11 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -59,20 +60,20 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	isBlocked, err := r.isBackupRunning(cr)
+	isBackupRunning, err := r.isBackupRunning(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active backups")
 	}
-	if isBlocked {
+	if isBackupRunning {
 		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
 		return nil
 	}
 
-	isBlocked, err = backup.HasActiveJobs(r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := backup.HasActiveJobs(r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
-	if isBlocked {
+	if hasActiveJobs {
 		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
 	}

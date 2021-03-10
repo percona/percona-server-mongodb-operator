@@ -150,10 +150,7 @@ func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, err
 type LockHeaderPredicate func(pbm.LockHeader) bool
 
 func NotPITRLock(l pbm.LockHeader) bool {
-	if l.Type == pbm.CmdPITR {
-		return false
-	}
-	return true
+	return l.Type != pbm.CmdPITR
 }
 
 func NotJobLock(j Job) LockHeaderPredicate {
@@ -169,11 +166,7 @@ func NotJobLock(j Job) LockHeaderPredicate {
 			return true
 		}
 
-		if h.Type != jobCommand {
-			return true
-		}
-
-		return false
+		return h.Type != jobCommand
 	}
 }
 
@@ -192,8 +185,8 @@ func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
 		return true
 	}
 
-	for i := range locks {
-		if !allowedByAll(locks[i].LockHeader) {
+	for _, l := range locks {
+		if !allowedByAll(l.LockHeader) {
 			continue
 		}
 
