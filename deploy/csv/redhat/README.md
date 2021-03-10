@@ -9,7 +9,7 @@ Please pay attention to the following:
 - Technically you can remove all of the yaml files from within the 1.6.0/ directory as well as the packagel.yaml. As the Bundle image when built ignores those anyway. The COPY lines from your Dockerfile only pull the metadata/ and manifests/ files and there is a LABEL in the dockerfile that handles the package.yaml. (LABEL operators.operatorframework.io.bundle.package.v1=percona-xtradb-cluster-operator-certified)
 
 ## Release
-In order to deliver package to RedHat you need to login to docker [registry](https://connect.redhat.com/project/5878691/images/upload-image) and execute:
+In order to deliver package to RedHat you need to login to docker [registry](https://connect.redhat.com/project/5878701/images/upload-image) and execute:
 
 ```bash
 export TAG=X.X.X
