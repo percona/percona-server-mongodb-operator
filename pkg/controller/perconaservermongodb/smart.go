@@ -68,7 +68,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	isBlocked, err = backup.HasActiveJobs(r.client, cr, backup.Job{})
+	isBlocked, err = backup.HasActiveJobs(r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
