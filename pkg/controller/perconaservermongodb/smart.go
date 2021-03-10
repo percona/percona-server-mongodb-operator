@@ -59,12 +59,21 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	ok, err := backup.HasActiveJobs(r.client, cr, backup.Job{})
+	isBlocked, err := r.isBackupRunning(cr)
 	if err != nil {
-		return fmt.Errorf("failed to check active backups: %v", err)
+		return errors.Wrap(err, "failed to check active backups")
 	}
-	if ok {
-		log.Info("can't start 'SmartUpdate': waiting for running backups/restores finished")
+	if isBlocked {
+		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
+		return nil
+	}
+
+	isBlocked, err = backup.HasActiveJobs(r.client, cr, backup.Job{})
+	if err != nil {
+		return errors.Wrap(err, "failed to check active jobs")
+	}
+	if isBlocked {
+		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
 	}
 
