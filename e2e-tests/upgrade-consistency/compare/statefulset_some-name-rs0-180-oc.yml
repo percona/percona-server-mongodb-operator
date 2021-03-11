@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 1
+  generation: 8
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: smart-update
+    app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: smart-update-rs0
+  name: some-name-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: smart-update
+      name: some-name
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -21,18 +21,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: smart-update
+      app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: smart-update-rs0
+  serviceName: some-name-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: smart-update
+        app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
@@ -69,14 +69,14 @@ spec:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: smart-update
+              value: some-name
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: internal-smart-update-users
+                name: internal-some-name-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -126,7 +126,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: smart-update-mongodb-keyfile
+              name: some-name-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -135,7 +135,7 @@ spec:
               name: ssl-internal
               readOnly: true
             - mountPath: /etc/mongodb-encryption
-              name: smart-update-mongodb-encryption-key
+              name: some-name-mongodb-encryption-key
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
@@ -165,32 +165,34 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: smart-update-mongodb-keyfile
+        - name: some-name-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-mongodb-keyfile
-        - name: smart-update-mongodb-encryption-key
+            secretName: some-name-mongodb-keyfile
+        - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-mongodb-encryption-key
+            secretName: some-name-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: smart-update-ssl
+            secretName: some-name-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: smart-update-ssl-internal
+            secretName: some-name-ssl-internal
         - name: users-secret-file
           secret:
             defaultMode: 420
-            secretName: internal-smart-update-users
+            secretName: internal-some-name-users
   updateStrategy:
-    type: OnDelete
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

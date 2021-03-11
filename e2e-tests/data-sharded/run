@@ -20,31 +20,31 @@ desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
 wait_for_running $cluster-cfg 3 "false"
 
-desc 'create user, enable sharding'
+desc 'create user'
 
 run_mongos \
     'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
     "userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 sleep 2
 
+desc 'set chunk size to 32 MB'
+run_mongos \
+    "use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
+    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+sleep 2
+
+desc 'write data'
+run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace"
+
+desc 'shard collection'
 run_mongos \
     'sh.enableSharding("app")' \
     "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
 sleep 2
 
 run_mongos \
-    'sh.shardCollection("app.city", { zipcode: 1 } )' \
+    'sh.shardCollection("app.city", { _id: 1 } )' \
     "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
-sleep 2
-
-desc 'set chunk size to 1 MB'
-run_mongos \
-    "use config\n db.settings.save( { _id:\"chunksize\", value: 1 } )" \
-    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
-sleep 2
-
-desc 'write data'
-run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace"
 
 sleep 120
 desc 'check chunks'

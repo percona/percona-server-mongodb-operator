@@ -1,4 +1,4 @@
-apiVersion: psmdb.percona.com/v1-6-0
+apiVersion: psmdb.percona.com/v1-7-0
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
@@ -8,8 +8,8 @@ spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
-  crVersion: 1.6.0
-  image: percona/percona-server-mongodb:4.4.2-4
+  crVersion: 1.7.0
+  image: percona/percona-server-mongodb:4.4.3-5
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -97,29 +97,29 @@ spec:
       enabled: false
       size: 1
       affinity:
-       antiAffinityTopologyKey: "kubernetes.io/hostname"
-#       advanced:
-#         nodeAffinity:
-#           requiredDuringSchedulingIgnoredDuringExecution:
-#             nodeSelectorTerms:
-#             - matchExpressions:
-#               - key: kubernetes.io/e2e-az-name
-#                 operator: In
-#                 values:
-#                 - e2e-az1
-#                 - e2e-az2
-#     tolerations:
-#     - key: "node.alpha.kubernetes.io/unreachable"
-#       operator: "Exists"
-#       effect: "NoExecute"
-#       tolerationSeconds: 6000
-#     priorityClassName: high-priority
-#     annotations:
-#       iam.amazonaws.com/role: role-arn
-#     labels:
-#       rack: rack-22
-#     nodeSelector:
-#       disktype: ssd
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
 #    schedulerName: "default"
     resources:
       limits:
@@ -298,7 +298,7 @@ spec:
   backup:
     enabled: true
     restartOnFailure: true
-    image: percona/percona-server-mongodb-operator:1.6.0-backup
+    image: percona/percona-server-mongodb-operator:1.7.0-backup
     serviceAccountName: percona-server-mongodb-operator
 #    resources:
 #      limits:

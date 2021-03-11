@@ -136,7 +136,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		}
 	}()
 
-	cjobs, err := backup.HasActiveJobs(r.client, cr.Spec.ClusterName, cr.Namespace, backup.Job{Name: cr.Name, Type: backup.TypeRestore})
+	cluster := &psmdbv1.PerconaServerMongoDB{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
+	if err != nil {
+		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
+	}
+
+	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr.Name))
 	if err != nil {
 		return errors.Wrap(err, "check for concurrent jobs")
 	}
@@ -162,12 +168,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 
 		bcpName = bcp.Status.PBMname
 		storageName = bcp.Spec.StorageName
-	}
-
-	cluster := &psmdbv1.PerconaServerMongoDB{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
-	if err != nil {
-		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
 
 	if cluster.Spec.Sharding.Enabled {
