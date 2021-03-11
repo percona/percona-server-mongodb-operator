@@ -176,7 +176,7 @@ func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
 		return false, errors.Wrap(err, "getting lock data")
 	}
 
-	allowedByAll := func(l pbm.LockHeader) bool {
+	allowedByAllPredicates := func(l pbm.LockHeader) bool {
 		for _, allow := range predicates {
 			if !allow(l) {
 				return false
@@ -186,11 +186,9 @@ func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
 	}
 
 	for _, l := range locks {
-		if !allowedByAll(l.LockHeader) {
-			continue
+		if allowedByAllPredicates(l.LockHeader) {
+			return true, nil
 		}
-
-		return true, nil
 	}
 
 	return false, nil
