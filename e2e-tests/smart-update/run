@@ -23,6 +23,7 @@ IMAGE_MONGOD="percona:psmdb-$MONGO_VER"
 desc 'create first PSMDB cluster'
 spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
 compare_kubectl "statefulset/${cluster}-rs0"
+compare_kubectl "statefulset/${cluster}-rs0-arbiter"
 sleep 10
 
 initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$cluster-rs0.$namespace" "$cluster")
@@ -49,7 +50,7 @@ if [ "$img" != "$IMAGE_MONGOD" ]; then
 fi
 
 desc "wait for primary $initial_primary update"
-sleep 10
+sleep 15
 wait_pod "$initial_primary"
 img=$(kubectl get pod/$initial_primary -o jsonpath='{.spec.containers[0].image}')
 if [ "$img" != "$IMAGE_MONGOD_TO_UPDATE" ]; then
