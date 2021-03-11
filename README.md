@@ -29,7 +29,7 @@ See full documentation with examples and various advanced cases on [percona.com]
 
 # Contributing
 
-Percona welcomes and encourages community contributions to help improve Percona Kubernetes Operator for Percona XtraDB Cluster.
+Percona welcomes and encourages community contributions to help improve Percona Kubernetes Operator for Percona Server for MongoDB.
 
 See the [Contribution Guide](CONTRIBUTING.md) and [Building and Testing Guide](e2e-tests/README.md) for more information.
 
