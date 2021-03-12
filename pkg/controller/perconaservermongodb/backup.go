@@ -204,6 +204,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
+	defer pbm.Close()
 
 	enabled, err := pbm.C.GetConfigVar("pitr.enabled")
 	if errors.Is(err, mongo.ErrNoDocuments) {
