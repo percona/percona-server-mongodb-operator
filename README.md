@@ -1,5 +1,7 @@
 ![Percona Kubernetes Operator for Percona Server for MongoDB](operator.png)
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 [Percona Server for MongoDB](https://www.percona.com/software/mongodb/percona-server-for-mongodb) (PSMDB) is an open-source enterprise MongoDB solution that helps you to ensure data availability for your applications while improving security and simplifying the development of new applications in the most demanding public, private, and hybrid cloud environments.
 
 Based on our best practices for deployment and configuration, [Percona Kubernetes Operator for PSMDB](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html) contains everything you need to quickly and consistently deploy and scale Percona Server for MongoDB instances into a Kubernetes cluster on-premises or in the cloud. It provides the following capabilities:
