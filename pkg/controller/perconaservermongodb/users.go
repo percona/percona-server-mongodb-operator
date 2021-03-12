@@ -35,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
 	}
 
-	secretName := api.InternalSecretName(cr)
+	secretName := api.InternalUserSecretName(cr)
 	internalSysSecretObj := corev1.Secret{}
 
 	err = r.client.Get(context.TODO(),

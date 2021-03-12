@@ -304,7 +304,7 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 			Name: "users-secret-file",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: api.InternalSecretName(cr),
+					SecretName: api.InternalUserSecretName(cr),
 				},
 			},
 		})
