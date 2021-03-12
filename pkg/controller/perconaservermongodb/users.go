@@ -20,8 +20,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-const internalPrefix = "internal-"
-
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(context.TODO(),
@@ -37,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
 	}
 
-	secretName := internalPrefix + cr.Name + "-users"
+	secretName := api.InternalSecretName(cr)
 	internalSysSecretObj := corev1.Secret{}
 
 	err = r.client.Get(context.TODO(),

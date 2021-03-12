@@ -549,12 +549,17 @@ func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }
 
-func UserSecretNameInternal(cr *PerconaServerMongoDB) string {
-	internalPrefix := "internal-"
+const internalPrefix = "internal-"
+const userPostfix = "-users"
 
+func InternalSecretName(cr *PerconaServerMongoDB) string {
+	return internalPrefix + cr.Name + userPostfix
+}
+
+func UserSecretName(cr *PerconaServerMongoDB) string {
 	name := cr.Spec.Secrets.Users
 	if cr.CompareVersion("1.5.0") >= 0 {
-		name = internalPrefix + cr.Name + "-users"
+		name = InternalSecretName(cr)
 	}
 
 	return name

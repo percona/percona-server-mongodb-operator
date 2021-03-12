@@ -48,7 +48,7 @@ func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongo
 }
 
 func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (Credentials, error) {
-	return r.getCredentials(cr, api.UserSecretNameInternal(cr), role)
+	return r.getCredentials(cr, api.UserSecretName(cr), role)
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (Credentials, error) {

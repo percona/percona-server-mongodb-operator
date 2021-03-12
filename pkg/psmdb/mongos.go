@@ -168,7 +168,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "internal-" + cr.Name + "-users",
+						Name: api.UserSecretName(cr),
 					},
 					Optional: &fvar,
 				},
@@ -304,7 +304,7 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 			Name: "users-secret-file",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: api.UserSecretNameInternal(cr),
+					SecretName: api.UserSecretName(cr),
 				},
 			},
 		})

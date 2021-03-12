@@ -18,10 +18,8 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSiz
 	}
 
 	fvar := false
-	usersSecretName := cr.Spec.Secrets.Users
-	if cr.CompareVersion("1.5.0") >= 0 {
-		usersSecretName = "internal-" + cr.Name + "-users"
-	}
+	usersSecretName := api.UserSecretName(cr)
+
 	c := corev1.Container{
 		Name:            agentContainerName,
 		Image:           cr.Spec.Backup.Image,
