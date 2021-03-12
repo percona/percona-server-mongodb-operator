@@ -21,14 +21,28 @@ type Job struct {
 	Type JobType
 }
 
+func NewBackupJob(name string) Job {
+	return Job{
+		Name: name,
+		Type: TypeBackup,
+	}
+}
+
+func NewRestoreJob(name string) Job {
+	return Job{
+		Name: name,
+		Type: TypeRestore,
+	}
+}
+
 // HasActiveJobs returns true if there are running backups or restores
 // in given cluster and namestpace
-func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bool, error) {
+func HasActiveJobs(cl client.Client, cluster *api.PerconaServerMongoDB, current Job, allowLock ...LockHeaderPredicate) (bool, error) {
 	bcps := &api.PerconaServerMongoDBBackupList{}
 	err := cl.List(context.TODO(),
 		bcps,
 		&client.ListOptions{
-			Namespace: namespace,
+			Namespace: cluster.Namespace,
 		},
 	)
 	if err != nil {
@@ -38,7 +52,7 @@ func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bo
 		if b.Name == current.Name && current.Type == TypeBackup {
 			continue
 		}
-		if b.Spec.PSMDBCluster == cluster &&
+		if b.Spec.PSMDBCluster == cluster.Name &&
 			b.Status.State != api.BackupStateReady &&
 			b.Status.State != api.BackupStateError &&
 			b.Status.State != api.BackupStateWaiting {
@@ -50,7 +64,7 @@ func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bo
 	err = cl.List(context.TODO(),
 		rstrs,
 		&client.ListOptions{
-			Namespace: namespace,
+			Namespace: cluster.Namespace,
 		},
 	)
 	if err != nil {
@@ -60,7 +74,7 @@ func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bo
 		if r.Name == current.Name && current.Type == TypeRestore {
 			continue
 		}
-		if r.Spec.ClusterName == cluster &&
+		if r.Spec.ClusterName == cluster.Name &&
 			r.Status.State != api.RestoreStateReady &&
 			r.Status.State != api.RestoreStateError &&
 			r.Status.State != api.RestoreStateWaiting {
@@ -68,5 +82,12 @@ func HasActiveJobs(cl client.Client, cluster, namespace string, current Job) (bo
 		}
 	}
 
-	return false, nil
+	pbm, err := NewPBM(cl, cluster)
+	if err != nil {
+		return false, errors.Wrap(err, "getting pbm object")
+	}
+
+	allowLock = append(allowLock, NotJobLock(current))
+
+	return pbm.HasLocks(allowLock...)
 }
