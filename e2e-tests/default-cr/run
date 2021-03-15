@@ -50,7 +50,7 @@ function main() {
 	kubectl_bin apply -f $deploy_dir/operator.yaml
 	kubectl_bin apply -f $conf_dir/client.yml
 
-	kubectl_bin apply -f $deploy_dir/cr.yaml
+	yq w $deploy_dir/cr.yaml 'spec.upgradeOptions.versionServiceEndpoint' 'https://check-dev.percona.com' | kubectl_bin apply -f -
 	desc 'check if all 3 Pods started'
 	wait_cluster_consistency $cluster
 
@@ -85,7 +85,6 @@ function main() {
 
 	desc 'checking dev version service'
 	stop_cluster ${cluster}
-	kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/upgradeOptions/versionServiceEndpoint","value": "https://check-dev.percona.com"}]'
 	start_cluster ${cluster}
 
 	destroy $namespace
