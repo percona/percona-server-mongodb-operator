@@ -12,6 +12,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+	mongodPods := corev1.PodList{}
+	err := r.client.List(context.TODO(),
+		&mongodPods,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+		},
+	)
+
+	return mongodPods, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getMongosDeployment(cr *api.PerconaServerMongoDB) (appsv1.Deployment, error) {
+	mongos := appsv1.Deployment{}
+
+	err := r.client.Get(context.TODO(), cr.MongosNamespacedName(), &mongos)
+
+	return mongos, err
+
+}
+
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	mongosPods := corev1.PodList{}
 	err := r.client.List(context.TODO(),
@@ -57,6 +79,14 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(cr *api.PerconaSer
 	}
 
 	return list.Items[0], err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
+	sts := appsv1.StatefulSet{}
+
+	err := r.client.Get(context.TODO(), cr.StatefulsetNamespacedName(rs), &sts)
+
+	return sts, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {

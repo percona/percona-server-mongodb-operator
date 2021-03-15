@@ -549,6 +549,26 @@ func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }
 
+const internalPrefix = "internal-"
+const userPostfix = "-users"
+
+func InternalUserSecretName(cr *PerconaServerMongoDB) string {
+	return internalPrefix + cr.Name + userPostfix
+}
+
+func UserSecretName(cr *PerconaServerMongoDB) string {
+	name := cr.Spec.Secrets.Users
+	if cr.CompareVersion("1.5.0") >= 0 {
+		name = InternalUserSecretName(cr)
+	}
+
+	return name
+}
+
+func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.NamespacedName {
+	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
+}
+
 func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
