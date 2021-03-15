@@ -53,10 +53,8 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
-	usersSecretName := cluster.Spec.Secrets.Users
-	if cluster.CompareVersion("1.5.0") >= 0 {
-		usersSecretName = "internal-" + cluster.Name + "-users"
-	}
+
+	usersSecretName := api.UserSecretName(cluster)
 	scr, err := secret(c, cluster.Namespace, usersSecretName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get secrets")

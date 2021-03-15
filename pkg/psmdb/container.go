@@ -10,7 +10,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, ikeyName string) (corev1.Container, error) {
+func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, ikeyName string) (corev1.Container, error) {
 	fvar := false
 
 	volumes := []corev1.VolumeMount{
@@ -35,16 +35,16 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		},
 	}
 
-	if *m.Spec.Mongod.Security.EnableEncryption {
+	if *cr.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.VolumeMount{
-				Name:      m.Spec.Mongod.Security.EncryptionKeySecret,
+				Name:      cr.Spec.Mongod.Security.EncryptionKeySecret,
 				MountPath: mongodRESTencryptDir,
 				ReadOnly:  true,
 			},
 		)
 	}
-	if m.CompareVersion("1.8.0") >= 0 {
+	if cr.CompareVersion("1.8.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "users-secret-file",
 			MountPath: "/etc/users-secret",
@@ -52,28 +52,28 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 	}
 	container := corev1.Container{
 		Name:            name,
-		Image:           m.Spec.Image,
-		ImagePullPolicy: m.Spec.ImagePullPolicy,
-		Args:            containerArgs(m, replset, resources),
+		Image:           cr.Spec.Image,
+		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Args:            containerArgs(cr, replset, resources),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				HostPort:      m.Spec.Mongod.Net.HostPort,
-				ContainerPort: m.Spec.Mongod.Net.Port,
+				HostPort:      cr.Spec.Mongod.Net.HostPort,
+				ContainerPort: cr.Spec.Mongod.Net.Port,
 			},
 		},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "SERVICE_NAME",
-				Value: m.Name,
+				Value: cr.Name,
 			},
 			{
 				Name:  "NAMESPACE",
-				Value: m.Namespace,
+				Value: cr.Namespace,
 			},
 			{
 				Name:  "MONGODB_PORT",
-				Value: strconv.Itoa(int(m.Spec.Mongod.Net.Port)),
+				Value: strconv.Itoa(int(cr.Spec.Mongod.Net.Port)),
 			},
 			{
 				Name:  "MONGODB_REPLSET",
@@ -84,7 +84,7 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: m.Spec.Secrets.Users,
+						Name: cr.Spec.Secrets.Users,
 					},
 					Optional: &fvar,
 				},
@@ -98,12 +98,12 @@ func container(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name strin
 		VolumeMounts:    volumes,
 	}
 
-	if m.CompareVersion("1.5.0") >= 0 {
+	if cr.CompareVersion("1.5.0") >= 0 {
 		container.EnvFrom = []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "internal-" + m.Name + "-users",
+						Name: api.InternalUserSecretName(cr),
 					},
 					Optional: &fvar,
 				},

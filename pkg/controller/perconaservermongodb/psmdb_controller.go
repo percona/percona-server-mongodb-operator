@@ -238,9 +238,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
 
-	var sfsTemplateAnnotations, mongosTemplateAnnotations map[string]string
 	if cr.CompareVersion("1.5.0") >= 0 {
-		sfsTemplateAnnotations, mongosTemplateAnnotations, err = r.reconcileUsers(cr, repls)
+		err := r.reconcileUsers(cr, repls)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "failed to reconcile users")
 		}
@@ -345,14 +344,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, errors.Wrap(err, "get pods list for mongos")
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey, sfsTemplateAnnotations)
+		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey, sfsTemplateAnnotations)
+			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -431,7 +430,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "on restore")
 	}
 
-	err = r.reconcileMongos(cr, mongosTemplateAnnotations)
+	err = r.reconcileMongos(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
@@ -687,7 +686,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return r.deleteMongos(cr)
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB, secretAnnotations map[string]string) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -740,48 +739,31 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		deplSpec.Template.Annotations = make(map[string]string)
 	}
 
-	if len(secretAnnotations) == 0 {
-		// we shoud check if sfs secrets were changes
-		// if yes - update mongos secret hash also
-
-		sts, err := r.getCfgStatefulset(cr)
-		if err != nil {
-			return errors.Wrap(err, "failed to get cfg ststefulset")
-		}
-
-		cfgRsSecretHash := sts.Spec.Template.Annotations["last-applied-secret"]
-		cfgRsSecretHashTS := sts.Spec.Template.Annotations["last-applied-secret-ts"]
-
-		mongosSecretHash := msDepl.Spec.Template.Annotations["last-applied-secret"]
-		mongosSecretHashTS := msDepl.Spec.Template.Annotations["last-applied-secret-ts"]
-
-		secretAnnotations = make(map[string]string)
-		if cfgRsSecretHash != mongosSecretHash && cfgRsSecretHashTS > mongosSecretHashTS {
-			log.Info("update mongos secret hash from confing RS")
-
-			secretAnnotations["last-applied-secret"] = cfgRsSecretHash
-			secretAnnotations["last-applied-secret-ts"] = cfgRsSecretHashTS
-		} else if len(mongosSecretHash) > 0 {
-			secretAnnotations["last-applied-secret"] = mongosSecretHash
-			secretAnnotations["last-applied-secret-ts"] = mongosSecretHashTS
-		}
-	}
-
-	for k, v := range secretAnnotations {
-		deplSpec.Template.Annotations[k] = v
-	}
 	for k, v := range sslAnn {
 		deplSpec.Template.Annotations[k] = v
 	}
 
-	if cr.Spec.PMM.Enabled {
-		pmmsec := corev1.Secret{}
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: userSecretNameInternal(cr), Namespace: cr.Namespace}, &pmmsec)
-		if err != nil {
-			return errors.Wrapf(err, "check pmm secrets: %s", userSecretNameInternal(cr))
+	if cr.CompareVersion("1.8.0") < 0 {
+		depl, err := r.getMongosDeployment(cr)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to get mongos deployment")
 		}
 
-		pmmC, err := psmdb.AddPMMContainer(cr, userSecretNameInternal(cr), pmmsec, cr.Spec.PMM.MongosParams)
+		for k, v := range depl.Spec.Template.Annotations {
+			if k == "last-applied-secret" || k == "last-applied-secret-ts" {
+				deplSpec.Template.Annotations[k] = v
+			}
+		}
+	}
+
+	if cr.Spec.PMM.Enabled {
+		pmmsec := corev1.Secret{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
+		if err != nil {
+			return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
+		}
+
+		pmmC, err := psmdb.AddPMMContainer(cr, api.UserSecretName(cr), pmmsec, cr.Spec.PMM.MongosParams)
 		if err != nil {
 			return errors.Wrap(err, "failed to create a pmm-client container")
 		}
@@ -873,8 +855,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 
 // TODO: reduce cyclomatic complexity
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB,
-	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string,
-	sfsTemplateAnnotations map[string]string) (*appsv1.StatefulSet, error) {
+	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
 
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
@@ -927,8 +908,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.Template.Annotations[k] = v
 	}
 
-	for k, v := range sfsTemplateAnnotations {
-		sfsSpec.Template.Annotations[k] = v
+	if cr.CompareVersion("1.8.0") < 0 {
+		sfs, err := r.getRsStatefulset(cr, replset.Name)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, errors.Wrapf(err, "failed to get rs %s statefulset", replset.Name)
+		}
+
+		for k, v := range sfs.Annotations {
+			if k == "last-applied-secret" || k == "last-applied-secret-ts" {
+				sfsSpec.Template.Annotations[k] = v
+			}
+		}
 	}
 
 	// add TLS/SSL Volume
@@ -961,7 +951,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 				Name: "users-secret-file",
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: "internal-" + cr.Name + "-users",
+						SecretName: api.InternalUserSecretName(cr),
 					},
 				},
 			})
@@ -1003,11 +993,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 
 		if cr.Spec.PMM.Enabled {
 			pmmsec := corev1.Secret{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Name: userSecretNameInternal(cr), Namespace: cr.Namespace}, &pmmsec)
+			err := r.client.Get(context.TODO(), types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
 			if err != nil {
 				return nil, errors.Wrap(err, "check pmm secrets")
 			}
-			pmmC, err := psmdb.AddPMMContainer(cr, userSecretNameInternal(cr), pmmsec, cr.Spec.PMM.MongodParams)
+			pmmC, err := psmdb.AddPMMContainer(cr, api.UserSecretName(cr), pmmsec, cr.Spec.PMM.MongodParams)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to create a pmm-client container")
 			}

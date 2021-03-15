@@ -36,17 +36,6 @@ const (
 	roleBackup         UserRole = "backup"
 )
 
-func userSecretNameInternal(cr *api.PerconaServerMongoDB) string {
-	internalPrefix := "internal-"
-
-	name := cr.Spec.Secrets.Users
-	if cr.CompareVersion("1.5.0") >= 0 {
-		name = internalPrefix + cr.Name + "-users"
-	}
-
-	return name
-}
-
 func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
 	secrets := corev1.Secret{}
 	err := r.client.Get(
@@ -59,7 +48,7 @@ func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongo
 }
 
 func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (Credentials, error) {
-	return r.getCredentials(cr, userSecretNameInternal(cr), role)
+	return r.getCredentials(cr, api.UserSecretName(cr), role)
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (Credentials, error) {
