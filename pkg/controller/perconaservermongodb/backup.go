@@ -4,7 +4,9 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"strconv"
 
+	"go.mongodb.org/mongo-driver/mongo"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -185,4 +187,41 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	}
 
 	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
+	// pitr is disabled right before restore so it must not be re-enabled during restore
+	isRestoring, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return errors.Wrap(err, "checking if restore running on pbm update")
+	}
+
+	if isRestoring {
+		return nil
+	}
+
+	pbm, err := backup.NewPBM(r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "create pbm object")
+	}
+	defer pbm.Close()
+
+	enabled, err := pbm.C.GetConfigVar("pitr.enabled")
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to get current pitr status")
+	}
+
+	if enabled == cr.Spec.Backup.PITR.Enabled {
+		return nil
+	}
+
+	err = pbm.C.SetConfigVar("pitr.enabled", strconv.FormatBool(cr.Spec.Backup.PITR.Enabled))
+	if err != nil {
+		return errors.Wrap(err, "failed to update pitr status")
+	}
+
+	return nil
 }

@@ -396,6 +396,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
+	if !cr.Spec.Backup.Enabled {
+		cr.Spec.Backup.PITR.Enabled = false
+	}
+
 	if cr.Status.Replsets == nil {
 		cr.Status.Replsets = make(map[string]*ReplsetStatus)
 	}
