@@ -32,6 +32,10 @@ var (
 	defaultImagePullPolicy                = corev1.PullAlways
 )
 
+const (
+	minSafeMongosSize = 2
+)
+
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
 func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
@@ -136,6 +140,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.Pause {
 			cr.Spec.Sharding.Mongos.Size = 0
+		} else {
+			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
+				log.Info(fmt.Sprintf("Mongos size will be changed from %d to %d due to safe config", cr.Spec.Sharding.Mongos.Size, minSafeMongosSize))
+				log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
+				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
+			}
 		}
 
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
