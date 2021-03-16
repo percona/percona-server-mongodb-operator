@@ -332,15 +332,21 @@ wait_for_running() {
     let last_pod="$(($2-1))" || :
     local check_cluster_readyness="${3:-true}"
 
+    local rs_name=${name/*-/}
+    local cluster_name=${name/-$rs_name/}
     for i in $(seq 0 $last_pod); do
+      if [[ $i -eq $last_pod && $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].arbiter.enabled}') == "true" ]]; then
+        wait_pod ${name}-arbiter-0
+      else
         wait_pod ${name}-${i}
+      fi
     done
     sleep 10
     if [[ ${check_cluster_readyness} == "true" ]]; then
         set +x
         echo -n "Waiting for cluster readyness"
         local timeout=0
-        until [[ $(kubectl_bin get psmdb ${name//-rs0/} -o jsonpath={.status.state}) == "ready" ]]; do
+        until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == "ready" ]]; do
             sleep 1
             timeout=$((${timeout}+1))
             echo -n '.'

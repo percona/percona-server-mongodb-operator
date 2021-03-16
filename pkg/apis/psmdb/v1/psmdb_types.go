@@ -461,6 +461,15 @@ type BackupStorageSpec struct {
 	S3   BackupStorageS3Spec `json:"s3,omitempty"`
 }
 
+type PITRSpec struct {
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+func (p PITRSpec) Disabled() PITRSpec {
+	p.Enabled = false
+	return p
+}
+
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
@@ -471,6 +480,7 @@ type BackupSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 	Resources                *ResourcesSpec               `json:"resources,omitempty"`
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
+	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 }
 
 type Arbiter struct {

@@ -86,6 +86,7 @@ func HasActiveJobs(cl client.Client, cluster *api.PerconaServerMongoDB, current 
 	if err != nil {
 		return false, errors.Wrap(err, "getting pbm object")
 	}
+	defer pbm.Close()
 
 	allowLock = append(allowLock, NotJobLock(current))
 

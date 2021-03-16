@@ -454,6 +454,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 	}
 
+	// DB cluster can be not ready yet so it's requeued after some time
+	if err = r.updatePITR(cr); err != nil {
+		return rr, err
+	}
+
 	return rr, nil
 }
 
