@@ -57,7 +57,12 @@ spec:
         resources:
           requests:
             storage: 1Gi
-    size: 3
+    size: 2
+    arbiter:
+      enabled: true
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
   secrets:
     key: some-key
     users: some-users
