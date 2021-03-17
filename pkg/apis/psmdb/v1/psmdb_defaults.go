@@ -400,12 +400,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Backup.PITR.Enabled = false
 	}
 
-	if cr.Spec.Backup.PITR.Enabled {
-		if len(cr.Spec.Backup.Storages) != 1 {
-			err = errors.New("invalid amount of storages for PITR")
-			log.Error(err, "Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
-			return err
-		}
+	if cr.Spec.Backup.PITR.Enabled && len(cr.Spec.Backup.Storages) != 1 {
+		cr.Spec.Backup.PITR.Enabled = false
+		log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
 	}
 
 	if cr.Status.Replsets == nil {
