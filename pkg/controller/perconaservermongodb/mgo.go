@@ -226,6 +226,10 @@ func mongoInitAdminUser(user, pwd string) string {
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
 	cli, err := r.mongosClientWithRole(cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Errorf("failed to get mongos connection: %v", err)
