@@ -235,13 +235,15 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		}
 	}
 
-	enabled, err := pbm.C.GetConfigVar("pitr.enabled")
+	v, err := pbm.C.GetConfigVar("pitr.enabled")
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return nil
 	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get current pitr status")
 	}
+
+	var enabled = v.(bool)
 
 	if enabled == cr.Spec.Backup.PITR.Enabled {
 		return nil
