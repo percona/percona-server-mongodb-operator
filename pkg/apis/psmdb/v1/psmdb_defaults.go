@@ -33,7 +33,8 @@ var (
 )
 
 const (
-	minSafeMongosSize = 2
+	minSafeMongosSize    = 2
+	minSafeConfigsvrSize = 3
 )
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
@@ -476,9 +477,16 @@ func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
 
 	// Replset size can't be 0 or 1.
 	// But 2 + the Arbiter is possible.
-	if rs.Size < 2 {
-		loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize))
-		rs.Size = defaultMongodSize
+	if rs.ClusterRole == ClusterRoleConfigSvr {
+		if rs.Size < minSafeConfigsvrSize {
+			loginfo(fmt.Sprintf("Configsvr size will be changed from %d to %d due to safe config", rs.Size, minSafeConfigsvrSize))
+			rs.Size = minSafeConfigsvrSize
+		}
+	} else {
+		if rs.Size < 2 {
+			loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize))
+			rs.Size = defaultMongodSize
+		}
 	}
 
 	if rs.Arbiter.Enabled {
