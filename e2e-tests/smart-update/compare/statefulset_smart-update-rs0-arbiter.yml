@@ -3,24 +3,24 @@ kind: StatefulSet
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: mongod
+    app.kubernetes.io/component: arbiter
     app.kubernetes.io/instance: smart-update
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: smart-update-rs0
+  name: smart-update-rs0-arbiter
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
       name: smart-update
 spec:
   podManagementPolicy: OrderedReady
-  replicas: 2
+  replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: mongod
+      app.kubernetes.io/component: arbiter
       app.kubernetes.io/instance: smart-update
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
@@ -31,7 +31,7 @@ spec:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: mongod
+        app.kubernetes.io/component: arbiter
         app.kubernetes.io/instance: smart-update
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
@@ -98,7 +98,7 @@ spec:
             periodSeconds: 30
             successThreshold: 1
             timeoutSeconds: 5
-          name: mongod
+          name: mongod-arbiter
           ports:
             - containerPort: 27017
               name: mongodb
@@ -163,8 +163,6 @@ spec:
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
-      serviceAccount: default
-      serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
         - name: smart-update-mongodb-keyfile
@@ -191,16 +189,7 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-smart-update-users
+        - emptyDir: {}
+          name: mongod-data
   updateStrategy:
     type: OnDelete
-  volumeClaimTemplates:
-    - metadata:
-        name: mongod-data
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
-      status:
-        phase: Pending
