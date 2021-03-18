@@ -123,8 +123,10 @@ func (us UpgradeStrategy) Lower() UpgradeStrategy {
 }
 
 const (
-	UpgradeStrategyDiasbled UpgradeStrategy = "disabled"
-	UpgradeStrategyNever    UpgradeStrategy = "never"
+	UpgradeStrategyDiasbled    UpgradeStrategy = "disabled"
+	UpgradeStrategyNever       UpgradeStrategy = "never"
+	UpgradeStrategyRecommended UpgradeStrategy = "recommended"
+	UpgradeStrategyLatest      UpgradeStrategy = "latest"
 )
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
