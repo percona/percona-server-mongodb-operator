@@ -118,6 +118,28 @@ func isUpdateValid(current, desired string) bool {
 	}
 }
 
+func validFCVUpgrade(current, new string) (bool, error) {
+	if current == "" {
+		return true, nil
+	}
+
+	if new == "" {
+		return false, errors.New("empty new FCV")
+	}
+
+	cursv, err := toGoSemver(current)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get current semver")
+	}
+
+	newsv, err := toGoSemver(new)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get new semver")
+	}
+
+	return semver.Compare(cursv, newsv) == 0, nil
+}
+
 func toGoSemver(v string) (string, error) {
 	// v prefix needed to make it valid semver for "golang.org/x/mod/semver"
 	if !strings.HasPrefix(v, "v") {

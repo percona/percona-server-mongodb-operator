@@ -88,7 +88,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 			return errors.Wrap(err, "failed to get FCV")
 		}
 
-		if len(fcv) == 0 {
+		valid, err := validFCVUpgrade(fcv, cr.Status.MongoVersion)
+		if err != nil {
+			return errors.Wrap(err, "failed to validate FCV upgrade")
+		}
+
+		if valid {
 			err := r.setFCV(cr, cr.Status.MongoVersion, *replset)
 			if err != nil {
 				return errors.Wrap(err, "failed to set FCV")

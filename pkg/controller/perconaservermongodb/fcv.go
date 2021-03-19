@@ -11,28 +11,6 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-func validFCVUpgrade(current, new string) (bool, error) {
-	if current == "" {
-		return true, nil
-	}
-
-	if new == "" {
-		return false, errors.New("empty new FCV")
-	}
-
-	cursv, err := toGoSemver(current)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get current semver")
-	}
-
-	newsv, err := toGoSemver(new)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get new semver")
-	}
-
-	return semver.Compare(cursv, newsv) == 0, nil
-}
-
 func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB, replset api.ReplsetSpec) (string, error) {
 	c, err := r.mongoClientWithRole(cr, replset, roleClusterAdmin)
 	if err != nil {
