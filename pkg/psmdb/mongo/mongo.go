@@ -245,6 +245,46 @@ func IsBalancerRunning(ctx context.Context, client *mongo.Client) (bool, error) 
 	return res.Mode == "full", nil
 }
 
+func GetFCV(ctx context.Context, client *mongo.Client) (string, error) {
+	res := FCV{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{
+		{Key: "getParameter", Value: 1},
+		{Key: "featureCompatibilityVersion", Value: 1},
+	})
+
+	if err := resp.Decode(&res); err != nil {
+		return "", errors.Wrap(err, "failed to decode balancer status responce")
+	}
+
+	if res.OK != 1 {
+		return "", errors.Errorf("mongo says: %s", res.Errmsg)
+	}
+
+	return res.FCV.Version, nil
+}
+
+func SetFCV(ctx context.Context, client *mongo.Client, version string) error {
+	res := OKResponse{}
+
+	command := "setFeatureCompatibilityVersion"
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: command, Value: version}})
+	if resp.Err() != nil {
+		return errors.Wrap(resp.Err(), command)
+	}
+
+	if err := resp.Decode(&res); err != nil {
+		return errors.Wrapf(err, "failed to decode %v responce", *resp)
+	}
+
+	if res.OK != 1 {
+		return errors.Errorf("mongo says: %s", res.Errmsg)
+	}
+
+	return nil
+}
+
 func ListDBs(ctx context.Context, client *mongo.Client) (DBList, error) {
 	dbList := DBList{}
 

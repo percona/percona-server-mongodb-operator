@@ -78,6 +78,24 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
+	ok, err := majorUpgradeRequested(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check if major upgrade was requested")
+	}
+	if ok {
+		fcv, err := r.getFCV(cr, *replset)
+		if err != nil {
+			return errors.Wrap(err, "failed to get FCV")
+		}
+
+		if len(fcv) == 0 {
+			err := r.setFCV(cr, cr.Status.MongoVersion, *replset)
+			if err != nil {
+				return errors.Wrap(err, "failed to set FCV")
+			}
+		}
+	}
+
 	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
 		err = r.disableBalancer(cr)
 		if err != nil {
@@ -102,7 +120,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, list.Items, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}

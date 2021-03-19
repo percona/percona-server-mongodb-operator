@@ -420,8 +420,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 
-		if err := r.fetchVersionFromMongo(cr, replset, pods); err != nil {
-			return rr, errors.Wrap(err, "update CR version")
+		if err := r.fetchVersionFromMongo(cr, replset); err != nil {
+			return rr, errors.Wrap(err, "update mongo version")
 		}
 	}
 
@@ -437,6 +437,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	if err := r.enableBalancerIfNeeded(cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
+	}
+
+	if err := r.setFCVIfNeeded(cr, *repls[0]); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
 
 	err = r.deleteMongosIfNeeded(cr)
@@ -533,12 +537,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 		"config": {},
 	}
 
-	pods, err := r.getRSPods(cr, rsName)
-	if err != nil {
-		return errors.Wrapf(err, "get pods list for replset %s", rsName)
-	}
-
-	client, err := r.mongoClientWithRole(cr, rsName, false, pods.Items, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(cr, api.ReplsetSpec{Name: rsName}, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -657,6 +656,19 @@ func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(cr *api.Percon
 	err = r.deleteMongos(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete mongos")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) setFCVIfNeeded(cr *api.PerconaServerMongoDB, repl api.ReplsetSpec) error {
+	if !cr.Spec.UpgradeOptions.SetFCV {
+		return nil
+	}
+
+	err := r.setFCV(cr, cr.Status.MongoVersion, repl)
+	if err != nil {
+		return errors.Wrap(err, "failed to set FCV")
 	}
 
 	return nil

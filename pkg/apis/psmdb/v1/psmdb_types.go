@@ -82,6 +82,7 @@ type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
 	Apply                  UpgradeStrategy `json:"apply,omitempty"`
 	Schedule               string          `json:"schedule,omitempty"`
+	SetFCV                 bool            `json:"setFCV,omitempty"`
 }
 
 type ReplsetMemberStatus struct {

@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/mod/semver"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -106,7 +105,7 @@ func jobName(cr *api.PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s/%s", jobName, nn.String())
 }
 
-func isUpdateValid(current, desired goSemver) bool {
+func isUpdateValid(current, desired string) bool {
 	switch current {
 	case "v3.6":
 		return desired == "v4.0"
@@ -119,9 +118,7 @@ func isUpdateValid(current, desired goSemver) bool {
 	}
 }
 
-type goSemver string
-
-func toSemver(v string) (goSemver, error) {
+func toGoSemver(v string) (string, error) {
 	// v prefix needed to make it valid semver for "golang.org/x/mod/semver"
 	if !strings.HasPrefix(v, "v") {
 		v = "v" + v
@@ -131,7 +128,39 @@ func toSemver(v string) (goSemver, error) {
 		return "", errors.Errorf("invalid version: %s", v)
 	}
 
-	return goSemver(v), nil
+	return v, nil
+}
+
+func majorUpgradeRequested(cr *api.PerconaServerMongoDB) (bool, error) {
+	if len(cr.Status.MongoVersion) == 0 || len(cr.Spec.UpgradeOptions.Apply) == 0 ||
+		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyLatest ||
+		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyRecommended {
+		return false, nil
+	}
+
+	current, err := toGoSemver(cr.Status.MongoVersion)
+	if err != nil {
+		return false, errors.Wrap(err, "faied to make semver")
+	}
+
+	desired, err := toGoSemver(strings.Split(string(cr.Spec.UpgradeOptions.Apply), "-")[0])
+	if err != nil {
+		return false, errors.Wrap(err, "faied to make semver")
+	}
+
+	currentMM := semver.MajorMinor(string(current))
+	desiredMM := semver.MajorMinor(string(desired))
+
+	if currentMM != desiredMM {
+
+		if !isUpdateValid(currentMM, desiredMM) {
+			return false, errors.Errorf("major upgrade from %s to %s is not valid", current, desired)
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
@@ -146,25 +175,8 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		return errors.New("cluster is not ready")
 	}
 
-	if len(cr.Status.MongoVersion) != 0 && len(cr.Spec.UpgradeOptions.Apply) != 0 &&
-		cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyLatest &&
-		cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyRecommended {
-
-		current, err := toSemver(cr.Status.MongoVersion)
-		if err != nil {
-			return errors.Wrap(err, "faied to make semver")
-		}
-
-		desired, err := toSemver(strings.Split(string(cr.Spec.UpgradeOptions.Apply), "-")[0])
-		if err != nil {
-			return errors.Wrap(err, "faied to make semver")
-		}
-
-		// means major upgrade was requested
-		if semver.MajorMinor(string(current)) != semver.MajorMinor(string(desired)) &&
-			!isUpdateValid(current, desired) {
-			return errors.Errorf("major upgrade from %s to %s is not valid", current, desired)
-		}
+	if _, err := majorUpgradeRequested(cr); err != nil {
+		return errors.Wrap(err, "failed to check id major update requested")
 	}
 
 	vm := VersionMeta{
@@ -244,8 +256,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB,
-	replset *api.ReplsetSpec, pods corev1.PodList) error {
+func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 
 	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
 		cr.Status.State != api.AppStateReady ||
@@ -253,7 +264,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaSer
 		return nil
 	}
 
-	session, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleClusterAdmin)
+	session, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
