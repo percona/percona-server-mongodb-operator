@@ -7,9 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -88,12 +87,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 			return errors.Wrap(err, "failed to get FCV")
 		}
 
-		valid, err := validFCVUpgrade(fcv, cr.Status.MongoVersion)
+		need, err := needUpgradeFCV(fcv, cr.Status.MongoVersion)
 		if err != nil {
-			return errors.Wrap(err, "failed to validate FCV upgrade")
+			return errors.Wrap(err, "can't upgrade FCV")
 		}
 
-		if valid {
+		if need {
 			err := r.setFCV(cr, cr.Status.MongoVersion, *replset)
 			if err != nil {
 				return errors.Wrap(err, "failed to set FCV")
