@@ -123,10 +123,6 @@ func needUpgradeFCV(current, new string) (bool, error) {
 		return false, errors.New("empty new FCV")
 	}
 
-	if current == "" {
-		return true, nil
-	}
-
 	cursv, err := toGoSemver(current)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get current semver")
@@ -139,7 +135,7 @@ func needUpgradeFCV(current, new string) (bool, error) {
 
 	if semver.Compare(cursv, newsv) == -1 {
 		if !isUpdateValid(cursv, newsv) {
-			return false, errors.Errorf("invalid upgrade of FCV from %s to %s", current, new)
+			return false, errors.Errorf("invalid upgrade of FCV: from %s to %s", current, new)
 		}
 
 		return true, nil

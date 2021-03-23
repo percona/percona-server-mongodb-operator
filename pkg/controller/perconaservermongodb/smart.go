@@ -77,34 +77,16 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	ok, err := majorUpgradeRequested(cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to check if major upgrade was requested")
-	}
-	if ok {
-		fcv, err := r.getFCV(cr, *replset)
-		if err != nil {
-			return errors.Wrap(err, "failed to get FCV")
-		}
-
-		need, err := needUpgradeFCV(fcv, cr.Status.MongoVersion)
-		if err != nil {
-			return errors.Wrap(err, "can't upgrade FCV")
-		}
-
-		if need {
-			err := r.setFCV(cr, cr.Status.MongoVersion, *replset)
-			if err != nil {
-				return errors.Wrap(err, "failed to set FCV")
-			}
-		}
-	}
-
 	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
 		err = r.disableBalancer(cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to stop balancer")
 		}
+	}
+
+	err = r.handleFCV(cr, replset)
+	if err != nil {
+		return errors.Wrap(err, "failed to handle FCV")
 	}
 
 	list := corev1.PodList{}
@@ -186,6 +168,41 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	}
 
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) handleFCV(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	if !cr.Spec.UpgradeOptions.SetFCV {
+		return nil
+	}
+
+	ok, err := majorUpgradeRequested(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check if major upgrade was requested")
+	}
+
+	if !ok {
+		return nil
+	}
+
+	fcv, err := r.getFCV(cr, *replset)
+	if err != nil {
+		return errors.Wrap(err, "failed to get FCV")
+	}
+
+	//TODO: desired version
+	need, err := needUpgradeFCV(fcv, cr.Status.MongoVersion)
+	if err != nil {
+		return errors.Wrap(err, "can't upgrade FCV")
+	}
+
+	if need {
+		err := r.setFCV(cr, cr.Status.MongoVersion, *replset)
+		if err != nil {
+			return errors.Wrap(err, "failed to set FCV")
+		}
+	}
 
 	return nil
 }
