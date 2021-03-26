@@ -158,6 +158,28 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		return nil
 	}
 
+	var (
+		backupName  = cr.Spec.BackupName
+		storageName = cr.Spec.StorageName
+	)
+
+	if cr.Spec.PITR != nil && cluster.Spec.Backup.IsEnabledPITR() {
+		// getting the first and only storage if PITR is enabled
+		for storageName = range cluster.Spec.Backup.Storages {
+		}
+	} else if backupName == "" || storageName == "" {
+		bcp, err := r.getBackup(cr)
+		if err != nil {
+			return errors.Wrap(err, "get backup")
+		}
+		if bcp.Status.State != psmdbv1.BackupStateReady {
+			return errors.New("backup is not ready")
+		}
+
+		backupName = bcp.Status.PBMname
+		storageName = bcp.Spec.StorageName
+	}
+
 	if cluster.Spec.Sharding.Enabled {
 		mongos := appsv1.Deployment{}
 		err = r.client.Get(context.Background(), cluster.MongosNamespacedName(), &mongos)
@@ -182,28 +204,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	defer pbmc.Close()
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		var (
-			backupName  = cr.Spec.BackupName
-			storageName = cr.Spec.StorageName
-		)
-
-		if cr.Spec.PITR != nil && cluster.Spec.Backup.IsEnabledPITR() {
-			// getting the first and only storage if PITR is enabled
-			for storageName = range cluster.Spec.Backup.Storages {
-			}
-		} else if backupName == "" || storageName == "" {
-			bcp, err := r.getBackup(cr)
-			if err != nil {
-				return errors.Wrap(err, "get backup")
-			}
-			if bcp.Status.State != psmdbv1.BackupStateReady {
-				return errors.New("backup is not ready")
-			}
-
-			backupName = bcp.Status.PBMname
-			storageName = bcp.Spec.StorageName
-		}
-
 		storage, ok := cluster.Spec.Backup.Storages[storageName]
 		if !ok {
 			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
