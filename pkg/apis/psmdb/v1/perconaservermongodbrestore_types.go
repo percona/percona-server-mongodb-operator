@@ -81,7 +81,7 @@ func (r *PerconaServerMongoDBRestore) CheckFields(cluster *PerconaServerMongoDB)
 		return nil
 	}
 
-	if r.Spec.PITR != nil && !cluster.Spec.Backup.IsEnabledPITR() && r.Spec.BackupName == "" && r.Spec.StorageName == "" {
+	if !cluster.Spec.Backup.IsEnabledPITR() && r.Spec.BackupName == "" && r.Spec.StorageName == "" {
 		return errors.New("backup/storage name must be specified for point in time restore with pitr disabled in cluster")
 	}
 
