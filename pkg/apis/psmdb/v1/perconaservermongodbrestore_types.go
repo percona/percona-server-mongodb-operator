@@ -68,7 +68,7 @@ type PerconaServerMongoDBRestoreList struct {
 	Items           []PerconaServerMongoDBRestore `json:"items"`
 }
 
-func (r *PerconaServerMongoDBRestore) CheckFields() error {
+func (r *PerconaServerMongoDBRestore) CheckFields(cluster *PerconaServerMongoDB) error {
 	if len(r.Spec.ClusterName) == 0 {
 		return fmt.Errorf("spec clusterName field is empty")
 	}
@@ -79,6 +79,10 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 		}
 
 		return nil
+	}
+
+	if r.Spec.PITR != nil && !cluster.Spec.Backup.IsEnabledPITR() && r.Spec.BackupName == "" && r.Spec.StorageName == "" {
+		return errors.New("backup/storage name must be specified for point in time restore with pitr disabled in cluster")
 	}
 
 	switch r.Spec.PITR.Type {
