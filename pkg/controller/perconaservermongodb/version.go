@@ -157,21 +157,37 @@ func toGoSemver(v string) (string, error) {
 	return v, nil
 }
 
-func majorUpgradeRequested(cr *api.PerconaServerMongoDB) (bool, error) {
-	if len(cr.Status.MongoVersion) == 0 || len(cr.Spec.UpgradeOptions.Apply) == 0 ||
+type UpgradeRequest struct {
+	Ok         bool
+	Apply      string
+	NewVersion string
+}
+
+func majorUpgradeRequested(cr *api.PerconaServerMongoDB) (UpgradeRequest, error) {
+	if len(cr.Spec.UpgradeOptions.Apply) == 0 ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyLatest ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyRecommended {
-		return false, nil
+		return UpgradeRequest{false, "", ""}, nil
+	}
+
+	apply := ""
+	applySp := strings.Split(string(cr.Spec.UpgradeOptions.Apply), "-")
+	if len(applySp) > 1 {
+		apply = applySp[1]
+	}
+
+	desired, err := toGoSemver(applySp[0])
+	if err != nil {
+		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
+	}
+
+	if len(cr.Status.MongoVersion) == 0 {
+		return UpgradeRequest{true, apply, desired[1:]}, nil
 	}
 
 	current, err := toGoSemver(cr.Status.MongoVersion)
 	if err != nil {
-		return false, errors.Wrap(err, "faied to make semver")
-	}
-
-	desired, err := toGoSemver(strings.Split(string(cr.Spec.UpgradeOptions.Apply), "-")[0])
-	if err != nil {
-		return false, errors.Wrap(err, "faied to make semver")
+		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
 	}
 
 	currentMM := semver.MajorMinor(string(current))
@@ -180,13 +196,14 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB) (bool, error) {
 	if currentMM != desiredMM {
 
 		if !isUpdateValid(currentMM, desiredMM) {
-			return false, errors.Errorf("major upgrade from %s to %s is not valid", current, desired)
+			return UpgradeRequest{false, "", ""},
+				errors.Errorf("major upgrade from %s to %s is not valid", current, desired)
 		}
 
-		return true, nil
+		return UpgradeRequest{true, apply, desiredMM[1:]}, nil
 	}
 
-	return false, nil
+	return UpgradeRequest{false, "", ""}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongoDB, vs VersionService) error {
@@ -194,16 +211,23 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		cr.Spec.UpgradeOptions.Schedule == "" ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyNever ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyDiasbled {
+		log.Info("DEBUG", "Starttegy", cr.Spec.UpdateStrategy, "Options", cr.Spec.UpgradeOptions)
+
 		return nil
 	}
+
+	log.Info("DEBUG", "HERE", "Yes2")
 
 	if cr.Status.State != v1.AppStateReady && cr.Status.MongoVersion != "" {
 		return errors.New("cluster is not ready")
 	}
 
-	if _, err := majorUpgradeRequested(cr); err != nil {
+	req, err := majorUpgradeRequested(cr)
+	if err != nil {
 		return errors.Wrap(err, "failed to check id major update requested")
 	}
+
+	log.Info("DEBUG: req", "value", req)
 
 	vm := VersionMeta{
 		Apply:         string(cr.Spec.UpgradeOptions.Apply),
@@ -218,10 +242,21 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		vm.Platform = string(*cr.Spec.Platform)
 	}
 
+	if req.Ok {
+		if len(req.Apply) != 0 {
+			vm.Apply = req.Apply
+			vm.MongoVersion = req.NewVersion
+		} else {
+			vm.Apply = req.NewVersion
+		}
+	}
+
 	newVersion, err := vs.GetExactVersion(cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
 	if err != nil {
-		return fmt.Errorf("failed to check version: %v", err)
+		return errors.Wrap(err, "failed to check version")
 	}
+
+	log.Info("DEBUG: New version", "value", newVersion.MongoVersion+" - "+newVersion.MongoImage)
 
 	if cr.Spec.Image != newVersion.MongoImage {
 		if cr.Status.MongoVersion == "" {

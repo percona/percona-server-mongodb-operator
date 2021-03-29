@@ -177,12 +177,12 @@ func (r *ReconcilePerconaServerMongoDB) handleFCV(cr *api.PerconaServerMongoDB, 
 		return nil
 	}
 
-	ok, err := majorUpgradeRequested(cr)
+	requested, err := majorUpgradeRequested(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check if major upgrade was requested")
 	}
 
-	if !ok {
+	if !requested.Ok {
 		return nil
 	}
 
@@ -191,8 +191,7 @@ func (r *ReconcilePerconaServerMongoDB) handleFCV(cr *api.PerconaServerMongoDB, 
 		return errors.Wrap(err, "failed to get FCV")
 	}
 
-	//TODO: desired version
-	need, err := needUpgradeFCV(fcv, cr.Status.MongoVersion)
+	need, err := needUpgradeFCV(fcv, requested.NewVersion)
 	if err != nil {
 		return errors.Wrap(err, "can't upgrade FCV")
 	}

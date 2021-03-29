@@ -270,6 +270,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
+		log.Info("DEBUG", "HERE", "YES")
 		err := r.ensureVersion(cr, VersionServiceClient{})
 		if err != nil {
 			reqLogger.Info("failed to ensure version, running with default", "error", err)
