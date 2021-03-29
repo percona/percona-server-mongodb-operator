@@ -164,8 +164,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	)
 
 	if cr.Spec.PITR != nil && cluster.Spec.Backup.IsEnabledPITR() {
-		// getting the first and only storage if PITR is enabled
-		for storageName = range cluster.Spec.Backup.Storages {
+		// there is only one storage (see validation for enabled PITR)
+		for k := range cluster.Spec.Backup.Storages {
+			storageName = k
 		}
 	} else if backupName == "" || storageName == "" {
 		bcp, err := r.getBackup(cr)
