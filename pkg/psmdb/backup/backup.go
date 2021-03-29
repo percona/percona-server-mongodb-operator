@@ -29,8 +29,8 @@ func NewBackupJob(name string) Job {
 	}
 }
 
-func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) (j Job) {
-	j = Job{
+func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) Job {
+	j := Job{
 		Name: cr.Name,
 		Type: TypeRestore,
 	}
@@ -39,7 +39,7 @@ func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) (j Job) {
 		j.Type = TypePITRestore
 	}
 
-	return
+	return j
 }
 
 // HasActiveJobs returns true if there are running backups or restores
