@@ -671,6 +671,11 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServer
 		return errors.Wrap(err, "failed to get FCV")
 	}
 
+	if fcv == "" {
+		// can be when cluster starting
+		return nil
+	}
+
 	can, err := canUpgradeVersion(fcv, newFCV)
 	if err != nil {
 		return errors.Wrap(err, "can't upgrade FCV")

@@ -201,12 +201,8 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		cr.Spec.UpgradeOptions.Schedule == "" ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyNever ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyDiasbled {
-		log.Info("DEBUG", "Starttegy", cr.Spec.UpdateStrategy, "Options", cr.Spec.UpgradeOptions)
-
 		return nil
 	}
-
-	log.Info("DEBUG", "HERE", "Yes2")
 
 	if cr.Status.State != v1.AppStateReady && cr.Status.MongoVersion != "" {
 		return errors.New("cluster is not ready")
@@ -216,8 +212,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	if err != nil {
 		return errors.Wrap(err, "failed to check id major update requested")
 	}
-
-	log.Info("DEBUG: req", "value", req)
 
 	vm := VersionMeta{
 		Apply:         string(cr.Spec.UpgradeOptions.Apply),
@@ -245,8 +239,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	if err != nil {
 		return errors.Wrap(err, "failed to check version")
 	}
-
-	log.Info("DEBUG: New version", "value", newVersion.MongoVersion+" - "+newVersion.MongoImage)
 
 	if cr.Spec.Image != newVersion.MongoImage {
 		if cr.Status.MongoVersion == "" {
