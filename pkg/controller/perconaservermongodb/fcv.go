@@ -21,7 +21,7 @@ func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB, rep
 
 }
 
-func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, version string, replset api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, replset api.ReplsetSpec, version string) error {
 	if len(version) == 0 {
 		return errors.New("empty version")
 	}

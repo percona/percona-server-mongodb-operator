@@ -169,7 +169,7 @@ const (
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	logger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	rr := reconcile.Result{
 		RequeueAfter: r.reconcileIn,
@@ -207,7 +207,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	defer func() {
 		err = r.updateStatus(cr, err, isClusterLive)
 		if err != nil {
-			reqLogger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
+			logger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
 		}
 	}()
 
@@ -224,7 +224,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	err = r.checkFinalizers(cr)
 	if err != nil {
-		reqLogger.Error(err, "failed to run finalizers")
+		logger.Error(err, "failed to run finalizers")
 		return rr, err
 	}
 
@@ -270,10 +270,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		log.Info("DEBUG", "HERE", "YES")
 		err := r.ensureVersion(cr, VersionServiceClient{})
 		if err != nil {
-			reqLogger.Info("failed to ensure version, running with default", "error", err)
+			logger.Info("failed to ensure version, running with default", "error", err)
 		}
 	}
 
@@ -293,7 +292,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if ikCreated {
-		reqLogger.Info("Created a new mongo key", "KeyName", internalKey)
+		logger.Info("Created a new mongo key", "KeyName", internalKey)
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption {
@@ -303,7 +302,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, err
 		}
 		if created {
-			reqLogger.Info("Created a new mongo key", "KeyName", cr.Spec.Mongod.Security.EncryptionKeySecret)
+			logger.Info("Created a new mongo key", "KeyName", cr.Spec.Mongod.Security.EncryptionKeySecret)
 		}
 	}
 
@@ -418,7 +417,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		isClusterLive, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
 		if err != nil {
-			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
+			logger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 
 		if err := r.fetchVersionFromMongo(cr, replset); err != nil {
@@ -440,7 +439,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
 
-	if err := r.setFCVIfNeeded(cr, *repls[0]); err != nil {
+	if err := r.upgradeFCVIfNeeded(cr, *repls[0], cr.Status.MongoVersion); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
 
@@ -662,14 +661,26 @@ func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(cr *api.Percon
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) setFCVIfNeeded(cr *api.PerconaServerMongoDB, repl api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServerMongoDB, repl api.ReplsetSpec, newFCV string) error {
 	if !cr.Spec.UpgradeOptions.SetFCV {
 		return nil
 	}
 
-	err := r.setFCV(cr, cr.Status.MongoVersion, repl)
+	fcv, err := r.getFCV(cr, repl)
 	if err != nil {
-		return errors.Wrap(err, "failed to set FCV")
+		return errors.Wrap(err, "failed to get FCV")
+	}
+
+	can, err := canUpgradeVersion(fcv, newFCV)
+	if err != nil {
+		return errors.Wrap(err, "can't upgrade FCV")
+	}
+
+	if can {
+		err := r.setFCV(cr, repl, newFCV)
+		if err != nil {
+			return errors.Wrap(err, "failed to set FCV")
+		}
 	}
 
 	return nil

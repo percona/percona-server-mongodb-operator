@@ -117,7 +117,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.0",
+						MongoVersion: "4.0.31",
 					},
 				},
 			},

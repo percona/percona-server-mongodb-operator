@@ -118,11 +118,7 @@ func isUpdateValid(current, desired string) bool {
 	}
 }
 
-func needUpgradeFCV(current, new string) (bool, error) {
-	if new == "" {
-		return false, errors.New("empty new FCV")
-	}
-
+func canUpgradeVersion(current, new string) (bool, error) {
 	cursv, err := toGoSemver(current)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get current semver")
@@ -133,15 +129,18 @@ func needUpgradeFCV(current, new string) (bool, error) {
 		return false, errors.Wrap(err, "failed to get new semver")
 	}
 
-	if semver.Compare(cursv, newsv) == -1 {
-		if !isUpdateValid(cursv, newsv) {
-			return false, errors.Errorf("invalid upgrade of FCV: from %s to %s", current, new)
-		}
+	currentMM := semver.MajorMinor(cursv)
+	newMM := semver.MajorMinor(newsv)
 
+	cmp := semver.Compare(currentMM, newMM)
+
+	if cmp == -1 && isUpdateValid(currentMM, newMM) {
 		return true, nil
+	} else if cmp == 0 {
+		return false, nil
 	}
 
-	return false, nil
+	return false, errors.Errorf("invalid upgrade: from %s to %s", current, new)
 }
 
 func toGoSemver(v string) (string, error) {
@@ -176,31 +175,22 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB) (UpgradeRequest, error)
 		apply = applySp[1]
 	}
 
-	desired, err := toGoSemver(applySp[0])
+	new, err := toGoSemver(applySp[0])
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
 	}
 
 	if len(cr.Status.MongoVersion) == 0 {
-		return UpgradeRequest{true, apply, desired[1:]}, nil
+		return UpgradeRequest{true, apply, new[1:]}, nil
 	}
 
-	current, err := toGoSemver(cr.Status.MongoVersion)
+	can, err := canUpgradeVersion(cr.Status.MongoVersion, new)
 	if err != nil {
-		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
+		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
 	}
 
-	currentMM := semver.MajorMinor(string(current))
-	desiredMM := semver.MajorMinor(string(desired))
-
-	if currentMM != desiredMM {
-
-		if !isUpdateValid(currentMM, desiredMM) {
-			return UpgradeRequest{false, "", ""},
-				errors.Errorf("major upgrade from %s to %s is not valid", current, desired)
-		}
-
-		return UpgradeRequest{true, apply, desiredMM[1:]}, nil
+	if can {
+		return UpgradeRequest{true, apply, semver.MajorMinor(new)[1:]}, nil
 	}
 
 	return UpgradeRequest{false, "", ""}, nil
