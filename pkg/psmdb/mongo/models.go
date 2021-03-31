@@ -100,8 +100,8 @@ type ShardList struct {
 
 type FCV struct {
 	FCV struct {
-		Version string `json:"version"`
-	} `json:"featureCompatibilityVersion"`
+		Version string `json:"version" bson:"version"`
+	} `json:"featureCompatibilityVersion" bson:"featureCompatibilityVersion"`
 	OKResponse `bson:",inline"`
 }
 

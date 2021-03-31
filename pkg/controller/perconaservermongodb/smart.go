@@ -72,9 +72,15 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
+
 	if hasActiveJobs {
 		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
+	}
+
+	_, err = majorUpgradeRequested(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to pass major upgrade validation")
 	}
 
 	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
@@ -82,11 +88,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrap(err, "failed to stop balancer")
 		}
-	}
-
-	err = r.handleFCV(cr, replset)
-	if err != nil {
-		return errors.Wrap(err, "failed to handle FCV")
 	}
 
 	list := corev1.PodList{}
@@ -168,28 +169,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	}
 
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
-
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) handleFCV(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
-	if !cr.Spec.UpgradeOptions.SetFCV {
-		return nil
-	}
-
-	requested, err := majorUpgradeRequested(cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to check if major upgrade was requested")
-	}
-
-	if !requested.Ok {
-		return nil
-	}
-
-	err = r.upgradeFCVIfNeeded(cr, *replset, requested.NewVersion)
-	if err != nil {
-		return errors.Wrap(err, "failed to set FCV")
-	}
 
 	return nil
 }
