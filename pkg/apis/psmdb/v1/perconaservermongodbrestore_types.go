@@ -68,31 +68,25 @@ type PerconaServerMongoDBRestoreList struct {
 	Items           []PerconaServerMongoDBRestore `json:"items"`
 }
 
-func (r *PerconaServerMongoDBRestore) CheckFields(cluster *PerconaServerMongoDB) error {
+func (r *PerconaServerMongoDBRestore) CheckFields() error {
 	if len(r.Spec.ClusterName) == 0 {
 		return fmt.Errorf("spec clusterName field is empty")
 	}
 
-	if r.Spec.PITR == nil {
-		if len(r.Spec.BackupName) == 0 && (len(r.Spec.StorageName) == 0 || len(r.Spec.Destination) == 0) {
-			return errors.New("fields backupName or storageName and destination is empty")
-		}
-
-		return nil
+	if len(r.Spec.BackupName) == 0 && (len(r.Spec.StorageName) == 0 || len(r.Spec.Destination) == 0) {
+		return errors.New("fields backupName or storageName and destination is empty")
 	}
 
-	if !cluster.Spec.Backup.IsEnabledPITR() && r.Spec.BackupName == "" && r.Spec.StorageName == "" {
-		return errors.New("backup/storage name must be specified for point in time restore with pitr disabled in cluster")
-	}
+	if r.Spec.PITR != nil {
+		switch r.Spec.PITR.Type {
+		case PITRestoreTypeDate:
+			if r.Spec.PITR.Date == nil {
+				return errors.New("date is required for pitr restore by date")
+			}
 
-	switch r.Spec.PITR.Type {
-	case PITRestoreTypeDate:
-		if r.Spec.PITR.Date == nil {
-			return errors.New("date is required for pitr restore by date")
+		default:
+			return errors.Errorf("undefined pitr restore type: %s", r.Spec.PITR.Type)
 		}
-
-	default:
-		return errors.Errorf("undefined pitr restore type: %s", r.Spec.PITR.Type)
 	}
 
 	return nil

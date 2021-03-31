@@ -100,16 +100,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		return rr, err
 	}
 
-	cluster := &psmdbv1.PerconaServerMongoDB{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      instance.Spec.ClusterName,
-		Namespace: instance.Namespace,
-	}, cluster)
-	if err != nil {
-		return rr, errors.Wrapf(err, "get cluster %s/%s", instance.Namespace, instance.Spec.ClusterName)
-	}
-
-	err = instance.CheckFields(cluster)
+	err = instance.CheckFields()
 	if err != nil {
 		return rr, fmt.Errorf("fields check: %v", err)
 	}
@@ -119,7 +110,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		return rr, nil
 	}
 
-	err = r.reconcileRestore(instance, cluster)
+	err = r.reconcileRestore(instance)
 	if err != nil {
 		return rr, fmt.Errorf("reconcile: %v", err)
 	}
@@ -127,8 +118,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.PerconaServerMongoDBRestore,
-	cluster *psmdbv1.PerconaServerMongoDB) (err error) {
+func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.PerconaServerMongoDBRestore) (err error) {
 	status := cr.Status
 
 	defer func() {
@@ -145,6 +135,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			}
 		}
 	}()
+
+	cluster := &psmdbv1.PerconaServerMongoDB{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
+	if err != nil {
+		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
+	}
 
 	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
 	if err != nil {
@@ -163,12 +159,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		storageName = cr.Spec.StorageName
 	)
 
-	if cr.Spec.PITR != nil && cluster.Spec.Backup.IsEnabledPITR() {
-		// there is only one storage (see validation for enabled PITR)
-		for k := range cluster.Spec.Backup.Storages {
-			storageName = k
-		}
-	} else if backupName == "" || storageName == "" {
+	if backupName == "" || storageName == "" {
 		bcp, err := r.getBackup(cr)
 		if err != nil {
 			return errors.Wrap(err, "get backup")
