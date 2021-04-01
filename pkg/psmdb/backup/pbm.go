@@ -167,6 +167,8 @@ func NotJobLock(j Job) LockHeaderPredicate {
 			jobCommand = pbm.CmdBackup
 		case TypeRestore:
 			jobCommand = pbm.CmdRestore
+		case TypePITRestore:
+			jobCommand = pbm.CmdPITRestore
 		default:
 			return true
 		}
