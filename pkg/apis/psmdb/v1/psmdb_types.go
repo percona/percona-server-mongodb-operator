@@ -119,14 +119,6 @@ const (
 
 type UpgradeStrategy string
 
-// func (us UpgradeStrategy) Startegy() UpgradeStrategy {
-// 	splitted := strings.Split(string(us), "-")
-
-// 	if len(splitted) > 1 {
-
-// 	}
-// }
-
 func (us UpgradeStrategy) Lower() UpgradeStrategy {
 	return UpgradeStrategy(strings.ToLower(string(us)))
 }
