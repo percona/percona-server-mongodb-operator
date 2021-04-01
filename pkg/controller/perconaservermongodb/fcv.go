@@ -11,8 +11,8 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB, replset api.ReplsetSpec) (string, error) {
-	c, err := r.mongoClientWithRole(cr, replset, roleClusterAdmin)
+func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (string, error) {
+	c, err := r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get connection")
 	}
@@ -21,7 +21,7 @@ func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB, rep
 
 }
 
-func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, replset api.ReplsetSpec, version string) error {
+func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, version string) error {
 	if len(version) == 0 {
 		return errors.New("empty version")
 	}
@@ -43,7 +43,7 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, rep
 
 		cli = c
 	} else {
-		c, err := r.mongoClientWithRole(cr, replset, roleClusterAdmin)
+		c, err := r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
 		if err != nil {
 			return errors.Wrap(err, "failed to get connection")
 		}

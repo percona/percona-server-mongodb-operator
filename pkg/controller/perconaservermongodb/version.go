@@ -162,7 +162,7 @@ type UpgradeRequest struct {
 	NewVersion string
 }
 
-func majorUpgradeRequested(cr *api.PerconaServerMongoDB) (UpgradeRequest, error) {
+func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeRequest, error) {
 	if len(cr.Spec.UpgradeOptions.Apply) == 0 ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyLatest ||
 		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyRecommended {
@@ -184,7 +184,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB) (UpgradeRequest, error)
 		return UpgradeRequest{true, apply, new[1:]}, nil
 	}
 
-	can, err := canUpgradeVersion(cr.Status.MongoVersion, new)
+	can, err := canUpgradeVersion(fcv, new)
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
 	}
@@ -208,7 +208,17 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		return errors.New("cluster is not ready")
 	}
 
-	req, err := majorUpgradeRequested(cr)
+	fcv := ""
+	if cr.Status.MongoVersion != "" {
+		f, err := r.getFCV(cr)
+		if err != nil {
+			return errors.Wrap(err, "failed to get FCV")
+		}
+
+		fcv = f
+	}
+
+	req, err := majorUpgradeRequested(cr, fcv)
 	if err != nil {
 		return errors.Wrap(err, "failed to check id major update requested")
 	}

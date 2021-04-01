@@ -9,7 +9,8 @@ import (
 
 func Test_majorUpgradeRequested(t *testing.T) {
 	type args struct {
-		cr *api.PerconaServerMongoDB
+		cr  *api.PerconaServerMongoDB
+		fcv string
 	}
 	tests := []struct {
 		name    string
@@ -35,7 +36,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 		},
 		{
-			name: "TestWithLowerMongoVersionInStatus",
+			name: "TestWithLowerMongoVersion",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
@@ -44,9 +45,10 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.0.1",
+						MongoVersion: "4.0.3",
 					},
 				},
+				fcv: "4.0",
 			},
 			want: UpgradeRequest{
 				Ok:         true,
@@ -55,7 +57,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 		},
 		{
-			name: "TestWithLowerMongoVersionInStatusAndOnlyVersionInApply",
+			name: "TestWithLowerMongoVersionAndOnlyVersionInApply",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
@@ -64,9 +66,10 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.0.1",
+						MongoVersion: "4.0.3",
 					},
 				},
+				fcv: "4.0",
 			},
 			want: UpgradeRequest{
 				Ok:         true,
@@ -74,7 +77,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 		},
 		{
-			name: "TestWithSameMongoVersionInStatus",
+			name: "TestWithSameMongoVersion",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
@@ -83,16 +86,17 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.2.7",
+						MongoVersion: "4.2.3",
 					},
 				},
+				fcv: "4.2",
 			},
 			want: UpgradeRequest{
 				Ok: false,
 			},
 		},
 		{
-			name: "TestWithTooLowMongoVersionInStatus",
+			name: "TestWithTooLowMongoVersion",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
@@ -101,14 +105,15 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "3.6.4",
+						MongoVersion: "3.6.3",
 					},
 				},
+				fcv: "3.6",
 			},
 			wantErr: true,
 		},
 		{
-			name: "TestWithTooHighMongoVersionInStatus",
+			name: "TestWithTooHighMongoVersion",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
@@ -117,9 +122,10 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.0.31",
+						MongoVersion: "4.0.3",
 					},
 				},
+				fcv: "4.0",
 			},
 			wantErr: true,
 		},
@@ -133,9 +139,10 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.0",
+						MongoVersion: "4.0.3",
 					},
 				},
+				fcv: "4.0",
 			},
 			wantErr: true,
 		},
@@ -149,9 +156,10 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "3.6.4",
+						MongoVersion: "3.6.3",
 					},
 				},
+				fcv: "3.6",
 			},
 			want: UpgradeRequest{
 				Ok: false,
@@ -167,9 +175,10 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "3.6.4",
+						MongoVersion: "3.6.3",
 					},
 				},
+				fcv: "3.6",
 			},
 			want: UpgradeRequest{
 				Ok: false,
@@ -178,7 +187,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := majorUpgradeRequested(tt.args.cr)
+			got, err := majorUpgradeRequested(tt.args.cr, tt.args.fcv)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("majorUpgradeRequested() error = %v, wantErr %v", err, tt.wantErr)
 				return

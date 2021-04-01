@@ -18,7 +18,7 @@ spec:
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: http://346db13f5a80.ngrok.io
-    apply: 3.6-latest
+    apply: 4.2-latest
     schedule: "* * * * *"
     setFCV: true
   secrets:

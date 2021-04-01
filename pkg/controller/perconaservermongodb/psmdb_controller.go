@@ -675,12 +675,10 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServer
 		return nil
 	}
 
-	fcv, err := r.getFCV(cr, repl)
+	fcv, err := r.getFCV(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to get FCV")
 	}
-
-	log.Info("DEBUG", "currentFCV", fcv)
 
 	can, err := canUpgradeVersion(fcv, newFCV)
 	if err != nil {
@@ -688,8 +686,7 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServer
 	}
 
 	if can {
-		log.Info("DEBUG", "currentFCV", fcv, "newFCV", newFCV)
-		err := r.setFCV(cr, repl, newFCV)
+		err := r.setFCV(cr, newFCV)
 		if err != nil {
 			return errors.Wrap(err, "failed to set FCV")
 		}

@@ -78,10 +78,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	_, err = majorUpgradeRequested(cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to pass major upgrade validation")
-	}
+	// r.getFCV(cr *api.PerconaServerMongoDB)
+
+	// _, err = majorUpgradeRequested(cr)
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to pass major upgrade validation")
+	// }
 
 	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
 		err = r.disableBalancer(cr)
