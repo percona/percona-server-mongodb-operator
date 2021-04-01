@@ -200,3 +200,12 @@ func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
 
 	return false, nil
 }
+
+func (b *PBM) GetLastPITRChunk() (*pbm.PITRChunk, error) {
+	masterNode, err := b.C.GetNodeInfo()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting master node")
+	}
+
+	return b.C.PITRLastChunkMeta(masterNode.SetName)
+}
