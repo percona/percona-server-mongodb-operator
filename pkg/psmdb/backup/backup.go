@@ -14,6 +14,7 @@ type JobType int
 const (
 	TypeBackup JobType = iota
 	TypeRestore
+	TypePITRestore
 )
 
 type Job struct {
@@ -28,11 +29,17 @@ func NewBackupJob(name string) Job {
 	}
 }
 
-func NewRestoreJob(name string) Job {
-	return Job{
-		Name: name,
+func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) Job {
+	j := Job{
+		Name: cr.Name,
 		Type: TypeRestore,
 	}
+
+	if cr.Spec.PITR != nil {
+		j.Type = TypePITRestore
+	}
+
+	return j
 }
 
 // HasActiveJobs returns true if there are running backups or restores
@@ -71,7 +78,7 @@ func HasActiveJobs(cl client.Client, cluster *api.PerconaServerMongoDB, current 
 		return false, errors.Wrap(err, "get restore list")
 	}
 	for _, r := range rstrs.Items {
-		if r.Name == current.Name && current.Type == TypeRestore {
+		if r.Name == current.Name && (current.Type == TypeRestore || current.Type == TypePITRestore) {
 			continue
 		}
 		if r.Spec.ClusterName == cluster.Name &&
