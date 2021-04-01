@@ -231,7 +231,8 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		}
 
 		if !hasFullBackup {
-			return errors.New("Point-in-time recovery will work only with full backup. Please create one manually or wait for scheduled backup to be created (if configured).")
+			log.Info("Point-in-time recovery will work only with full backup. Please create one manually or wait for scheduled backup to be created (if configured).")
+			return nil
 		}
 	}
 
