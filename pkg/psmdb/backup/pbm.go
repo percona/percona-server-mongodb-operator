@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
@@ -208,4 +209,13 @@ func (b *PBM) GetLastPITRChunk() (*pbm.PITRChunk, error) {
 	}
 
 	return b.C.PITRLastChunkMeta(nodeInfo.SetName)
+}
+
+func (b *PBM) GetPITRChunkContains(unixTS int64) (*pbm.PITRChunk, error) {
+	nodeInfo, err := b.C.GetNodeInfo()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting node information")
+	}
+
+	return b.C.PITRGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
 }
