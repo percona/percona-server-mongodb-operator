@@ -486,6 +486,16 @@ type BackupSpec struct {
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 }
 
+func (b BackupSpec) IsEnabledPITR() bool {
+	if !b.Enabled {
+		return false
+	}
+	if len(b.Storages) != 1 {
+		return false
+	}
+	return b.PITR.Enabled
+}
+
 type Arbiter struct {
 	Enabled bool  `json:"enabled"`
 	Size    int32 `json:"size"`

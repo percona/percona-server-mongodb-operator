@@ -142,7 +142,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
 
-	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr.Name), backup.NotPITRLock)
+	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "check for concurrent jobs")
 	}
@@ -154,10 +154,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		return nil
 	}
 
-	bcpName := cr.Spec.BackupName
-	storageName := cr.Spec.StorageName
+	var (
+		backupName  = cr.Spec.BackupName
+		storageName = cr.Spec.StorageName
+	)
 
-	if bcpName == "" || storageName == "" {
+	if backupName == "" || storageName == "" {
 		bcp, err := r.getBackup(cr)
 		if err != nil {
 			return errors.Wrap(err, "get backup")
@@ -166,7 +168,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			return errors.New("backup is not ready")
 		}
 
-		bcpName = bcp.Status.PBMname
+		backupName = bcp.Status.PBMname
 		storageName = bcp.Spec.StorageName
 	}
 
@@ -194,12 +196,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	defer pbmc.Close()
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		stg, ok := cluster.Spec.Backup.Storages[storageName]
+		storage, ok := cluster.Spec.Backup.Storages[storageName]
 		if !ok {
 			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 		}
 
-		err := pbmc.SetConfig(stg, cluster.Spec.Backup.PITR.Disabled())
+		err := pbmc.SetConfig(storage, cluster.Spec.Backup.PITR.Disabled())
 		if err != nil {
 			return errors.Wrap(err, "set pbm config")
 		}
@@ -215,7 +217,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			return nil
 		}
 
-		status.PBMname, err = runRestore(bcpName, pbmc)
+		status.PBMname, err = runRestore(backupName, pbmc, cr.Spec.PITR)
 		status.State = psmdbv1.RestoreStateRequested
 		return err
 	}
@@ -234,7 +236,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	case pbm.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Error
-		if err = reEnablePITR(pbmc, cluster.Spec.Backup.PITR); err != nil {
+		if err = reEnablePITR(pbmc, cluster.Spec.Backup); err != nil {
 			return
 		}
 	case pbm.StatusDone:
@@ -242,7 +244,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
-		if err = reEnablePITR(pbmc, cluster.Spec.Backup.PITR); err != nil {
+		if err = reEnablePITR(pbmc, cluster.Spec.Backup); err != nil {
 			return
 		}
 	case pbm.StatusStarting, pbm.StatusRunning:
@@ -252,8 +254,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	return nil
 }
 
-func reEnablePITR(pbm *backup.PBM, pitr psmdbv1.PITRSpec) (err error) {
-	if !pitr.Enabled {
+func reEnablePITR(pbm *backup.PBM, backup psmdbv1.BackupSpec) (err error) {
+	if !backup.IsEnabledPITR() {
 		return
 	}
 
@@ -265,22 +267,38 @@ func reEnablePITR(pbm *backup.PBM, pitr psmdbv1.PITRSpec) (err error) {
 	return
 }
 
-func runRestore(backup string, pbmc *backup.PBM) (string, error) {
+func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
 	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResyncBackupList), "", "", primitive.Timestamp{})
 	err := pbmc.C.ResyncStorage(e)
 	if err != nil {
 		return "", errors.Wrap(err, "set resync backup list from the store")
 	}
 
-	rName := time.Now().UTC().Format(time.RFC3339Nano)
-	err = pbmc.C.SendCmd(pbm.Cmd{
-		Cmd: pbm.CmdRestore,
-		Restore: pbm.RestoreCmd{
-			Name:       rName,
-			BackupName: backup,
-		},
-	})
-	if err != nil {
+	var (
+		cmd   pbm.Cmd
+		rName = time.Now().UTC().Format(time.RFC3339Nano)
+	)
+
+	switch {
+	case pitr == nil:
+		cmd = pbm.Cmd{
+			Cmd: pbm.CmdRestore,
+			Restore: pbm.RestoreCmd{
+				Name:       rName,
+				BackupName: backup,
+			},
+		}
+	case pitr.Type == psmdbv1.PITRestoreTypeDate:
+		cmd = pbm.Cmd{
+			Cmd: pbm.CmdPITRestore,
+			PITRestore: pbm.PITRestoreCmd{
+				Name: rName,
+				TS:   pitr.Date.Unix(),
+			},
+		}
+	}
+
+	if err = pbmc.C.SendCmd(cmd); err != nil {
 		return "", errors.Wrap(err, "send restore cmd")
 	}
 
