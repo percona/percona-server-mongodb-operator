@@ -84,6 +84,9 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 				return errors.New("date is required for pitr restore by date")
 			}
 
+		case PITRestoreTypeLatest:
+		// no additional fields required - no validation
+
 		default:
 			return errors.Errorf("undefined pitr restore type: %s", r.Spec.PITR.Type)
 		}
@@ -100,7 +103,8 @@ type PITRestoreSpec struct {
 type PITRestoreType string
 
 var (
-	PITRestoreTypeDate PITRestoreType = "date"
+	PITRestoreTypeDate   PITRestoreType = "date"
+	PITRestoreTypeLatest PITRestoreType = "latest"
 )
 
 type PITRestoreDate struct {
