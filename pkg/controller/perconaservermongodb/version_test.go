@@ -25,7 +25,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "4.2-recomended",
+							Apply: "4.2-recommended",
 						},
 					},
 				},
@@ -33,7 +33,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			want: UpgradeRequest{
 				Ok:         true,
 				NewVersion: "4.2",
-				Apply:      "recomended",
+				Apply:      "recommended",
 			},
 		},
 
@@ -43,7 +43,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "4.2-recomended",
+							Apply: "4.2-recommended",
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
@@ -55,7 +55,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			want: UpgradeRequest{
 				Ok:         true,
 				NewVersion: "4.2",
-				Apply:      "recomended",
+				Apply:      "recommended",
 			},
 		},
 
@@ -79,13 +79,14 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				NewVersion: "4.2",
 			},
 		},
+
 		{
 			name: "TestWithSameMongoVersion",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "4.2-recomended",
+							Apply: "4.2-recommended",
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
@@ -98,13 +99,14 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				Ok: false,
 			},
 		},
+
 		{
 			name: "TestWithTooLowMongoVersion",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "4.2-recomended",
+							Apply: "4.2-recommended",
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
@@ -115,13 +117,14 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 			wantErr: true,
 		},
+
 		{
 			name: "TestWithTooHighMongoVersion",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "3.6-recomended",
+							Apply: "3.6-recommended",
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
@@ -132,13 +135,14 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 			wantErr: true,
 		},
+
 		{
 			name: "TestWithInvalidVersionInApply",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "4.0.4.0-recomended",
+							Apply: "4.0.4.0-recommended",
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
@@ -149,6 +153,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 			wantErr: true,
 		},
+
 		{
 			name: "TestWithRecommendedVersionInApplyField",
 			args: args{
@@ -168,6 +173,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				Ok: false,
 			},
 		},
+
 		{
 			name: "TestWithLatestVersionInApplyField",
 			args: args{
@@ -188,6 +194,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := majorUpgradeRequested(tt.args.cr, tt.args.fcv)
