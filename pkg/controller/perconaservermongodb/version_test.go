@@ -18,6 +18,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 		want    UpgradeRequest
 		wantErr bool
 	}{
+
 		{
 			name: "TestWithEmptyMongoVersionInStatus",
 			args: args{
@@ -35,6 +36,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				Apply:      "recomended",
 			},
 		},
+
 		{
 			name: "TestWithLowerMongoVersion",
 			args: args{
@@ -56,6 +58,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				Apply:      "recomended",
 			},
 		},
+
 		{
 			name: "TestWithLowerMongoVersionAndOnlyVersionInApply",
 			args: args{

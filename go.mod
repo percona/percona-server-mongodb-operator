@@ -26,7 +26,6 @@ require (
 	github.com/timvaillancourt/go-mongodb-replset v0.0.0-20180529222116-173aaa3b66af
 	github.com/valyala/fasthttp v1.17.0
 	go.mongodb.org/mongo-driver v1.3.4
-	golang.org/x/mod v0.3.0
 	golang.org/x/tools v0.0.0-20201028153306-37f0764111ff // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect

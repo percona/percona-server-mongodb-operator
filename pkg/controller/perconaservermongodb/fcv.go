@@ -2,13 +2,12 @@ package perconaservermongodb
 
 import (
 	"context"
-	"strings"
 
+	v "github.com/hashicorp/go-version"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
-	"golang.org/x/mod/semver"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (string, error) {
@@ -26,12 +25,10 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 		return errors.New("empty version")
 	}
 
-	v, err := toGoSemver(version)
+	v, err := v.NewSemver(version)
 	if err != nil {
 		return errors.Wrap(err, "failed to get go semver")
 	}
-
-	v = strings.TrimPrefix(semver.MajorMinor(v), "v")
 
 	var cli *mgo.Client
 
@@ -51,5 +48,5 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 		cli = c
 	}
 
-	return mongo.SetFCV(context.TODO(), cli, v)
+	return mongo.SetFCV(context.TODO(), cli, MajorMinor(v))
 }

@@ -7,12 +7,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	v "github.com/hashicorp/go-version"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
-	"golang.org/x/mod/semver"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -107,32 +107,32 @@ func jobName(cr *api.PerconaServerMongoDB) string {
 
 func isUpdateValid(current, desired string) bool {
 	switch current {
-	case "v3.6":
-		return desired == "v4.0"
-	case "v4.0":
-		return desired == "v4.2"
-	case "v4.2":
-		return desired == "v4.4"
+	case "3.6":
+		return desired == "4.0"
+	case "4.0":
+		return desired == "4.2"
+	case "4.2":
+		return desired == "4.4"
 	default:
 		return false
 	}
 }
 
 func canUpgradeVersion(current, new string) (bool, error) {
-	cursv, err := toGoSemver(current)
+	cursv, err := v.NewSemver(current)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get current semver")
 	}
 
-	newsv, err := toGoSemver(new)
+	newsv, err := v.NewSemver(new)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get new semver")
 	}
 
-	currentMM := semver.MajorMinor(cursv)
-	newMM := semver.MajorMinor(newsv)
+	currentMM := MajorMinor(cursv)
+	newMM := MajorMinor(newsv)
 
-	cmp := semver.Compare(currentMM, newMM)
+	cmp := cursv.Compare(newsv)
 
 	if cmp == -1 && isUpdateValid(currentMM, newMM) {
 		return true, nil
@@ -143,23 +143,20 @@ func canUpgradeVersion(current, new string) (bool, error) {
 	return false, errors.Errorf("invalid upgrade: from %s to %s", current, new)
 }
 
-func toGoSemver(v string) (string, error) {
-	// v prefix needed to make it valid semver for "golang.org/x/mod/semver"
-	if !strings.HasPrefix(v, "v") {
-		v = "v" + v
-	}
-
-	if !semver.IsValid(v) {
-		return "", errors.Errorf("invalid version: %s", v)
-	}
-
-	return v, nil
-}
-
 type UpgradeRequest struct {
 	Ok         bool
 	Apply      string
 	NewVersion string
+}
+
+func MajorMinor(ver *v.Version) string {
+	s := ver.Segments()
+
+	if len(s) == 1 {
+		s = append(s, 0)
+	}
+
+	return fmt.Sprintf("%d.%d", s[0], s[1])
 }
 
 func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeRequest, error) {
@@ -175,22 +172,24 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 		apply = applySp[1]
 	}
 
-	new, err := toGoSemver(applySp[0])
+	ver := applySp[0]
+
+	new, err := v.NewSemver(ver)
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
 	}
 
 	if len(cr.Status.MongoVersion) == 0 {
-		return UpgradeRequest{true, apply, new[1:]}, nil
+		return UpgradeRequest{true, apply, MajorMinor(new)}, nil
 	}
 
-	can, err := canUpgradeVersion(fcv, new)
+	can, err := canUpgradeVersion(fcv, ver)
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
 	}
 
 	if can {
-		return UpgradeRequest{true, apply, semver.MajorMinor(new)[1:]}, nil
+		return UpgradeRequest{true, apply, MajorMinor(new)}, nil
 	}
 
 	return UpgradeRequest{false, "", ""}, nil
