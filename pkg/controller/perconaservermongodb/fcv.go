@@ -31,21 +31,16 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 	}
 
 	var cli *mgo.Client
+	var connErr error
 
 	if cr.Spec.Sharding.Enabled {
-		c, err := r.mongosClientWithRole(cr, roleClusterAdmin)
-		if err != nil {
-			return errors.Wrap(err, "failed to get connection")
-		}
-
-		cli = c
+		cli, connErr = r.mongosClientWithRole(cr, roleClusterAdmin)
 	} else {
-		c, err := r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
-		if err != nil {
-			return errors.Wrap(err, "failed to get connection")
-		}
+		cli, connErr = r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
+	}
 
-		cli = c
+	if connErr != nil {
+		return errors.Wrap(connErr, "failed to get connection")
 	}
 
 	return mongo.SetFCV(context.TODO(), cli, MajorMinor(v))
