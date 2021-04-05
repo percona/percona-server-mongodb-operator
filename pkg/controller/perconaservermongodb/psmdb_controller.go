@@ -685,14 +685,12 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServer
 		return errors.Wrap(err, "can't upgrade FCV")
 	}
 
-	if can {
-		err := r.setFCV(cr, newFCV)
-		if err != nil {
-			return errors.Wrap(err, "failed to set FCV")
-		}
+	if !can {
+		return nil
 	}
 
-	return nil
+	err = r.setFCV(cr, newFCV)
+	return errors.Wrap(err, "failed to set FCV")
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
