@@ -296,6 +296,19 @@ func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (
 				TS:   pitr.Date.Unix(),
 			},
 		}
+	case pitr.Type == psmdbv1.PITRestoreTypeLatest:
+		chunk, err := pbmc.GetLastPITRChunk()
+		if err != nil {
+			return "", errors.Wrap(err, "getting last PITR chunk")
+		}
+
+		cmd = pbm.Cmd{
+			Cmd: pbm.CmdPITRestore,
+			PITRestore: pbm.PITRestoreCmd{
+				Name: rName,
+				TS:   int64(chunk.EndTS.T),
+			},
+		}
 	}
 
 	if err = pbmc.C.SendCmd(cmd); err != nil {
