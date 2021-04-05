@@ -168,7 +168,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 
 	apply := ""
 	applySp := strings.Split(string(cr.Spec.UpgradeOptions.Apply), "-")
-	if len(applySp) > 1 {
+	if len(applySp) > 1 && api.OneOfUpgradeStrategy(applySp[1]) {
 		apply = applySp[1]
 	}
 
@@ -180,7 +180,11 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 	}
 
 	if len(cr.Status.MongoVersion) == 0 {
-		return UpgradeRequest{true, apply, MajorMinor(new)}, nil
+		ver := string(cr.Spec.UpgradeOptions.Apply)
+		if apply != "" {
+			ver = applySp[0]
+		}
+		return UpgradeRequest{true, apply, ver}, nil
 	}
 
 	can, err := canUpgradeVersion(fcv, ver)
