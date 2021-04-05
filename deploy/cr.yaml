@@ -1,4 +1,4 @@
-apiVersion: psmdb.percona.com/v1-7-0
+apiVersion: psmdb.percona.com/v1-8-0
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
@@ -8,7 +8,7 @@ spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
-  crVersion: 1.7.0
+  crVersion: 1.8.0
   image: percona/percona-server-mongodb:4.4.3-5
   imagePullPolicy: Always
 #  imagePullSecrets:
@@ -17,9 +17,9 @@ spec:
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   upgradeOptions:
-    versionServiceEndpoint: http://346db13f5a80.ngrok.io
-    apply: 4.2-latest
-    schedule: "* * * * *"
+    versionServiceEndpoint: https://check.percona.com
+    apply: recommended
+    schedule: "0 2 * * *"
     setFCV: true
   secrets:
     users: my-cluster-name-secrets
