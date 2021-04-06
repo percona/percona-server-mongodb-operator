@@ -167,23 +167,25 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 	}
 
 	apply := ""
+	ver := string(cr.Spec.UpgradeOptions.Apply)
+
 	applySp := strings.Split(string(cr.Spec.UpgradeOptions.Apply), "-")
 	if len(applySp) > 1 && api.OneOfUpgradeStrategy(applySp[1]) {
+		// if CR has "apply: 4.2-recommended"
+		// 4.2 will go to version
+		// recommended will go to apply
 		apply = applySp[1]
+		ver = applySp[0]
 	}
 
-	ver := applySp[0]
-
-	new, err := v.NewSemver(ver)
+	_, err := v.NewSemver(ver)
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
 	}
 
 	if len(cr.Status.MongoVersion) == 0 {
-		ver := string(cr.Spec.UpgradeOptions.Apply)
-		if apply != "" {
-			ver = applySp[0]
-		}
+		// means cluster is starting
+		// so we do not need to check is we can upgrade
 		return UpgradeRequest{true, apply, ver}, nil
 	}
 
@@ -193,7 +195,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 	}
 
 	if can {
-		return UpgradeRequest{true, apply, MajorMinor(new)}, nil
+		return UpgradeRequest{true, apply, ver}, nil
 	}
 
 	return UpgradeRequest{false, "", ""}, nil

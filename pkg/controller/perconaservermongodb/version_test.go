@@ -193,6 +193,44 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				Ok: false,
 			},
 		},
+
+		{
+			name: "TestWithExactVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "4.2.1-17",
+						},
+					},
+				},
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "4.2.1-17",
+			},
+		},
+
+		{
+			name: "TestWithExactVersionInApplyFieldAndNonEmptyVersionInMongoStatus",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "4.2.1-17",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "4.0.2.-13",
+					},
+				},
+				fcv: "4.0",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "4.2.1-17",
+			},
+		},
 	}
 
 	for _, tt := range tests {
