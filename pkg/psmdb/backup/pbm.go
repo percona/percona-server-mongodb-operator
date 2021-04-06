@@ -7,6 +7,7 @@ import (
 
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
@@ -202,13 +203,27 @@ func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
 	return false, nil
 }
 
+var errNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
+
 func (b *PBM) GetLastPITRChunk() (*pbm.PITRChunk, error) {
 	nodeInfo, err := b.C.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}
 
-	return b.C.PITRLastChunkMeta(nodeInfo.SetName)
+	c, err := b.C.PITRLastChunkMeta(nodeInfo.SetName)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errNoOplogsForPITR
+		}
+		return nil, errors.Wrap(err, "getting last PITR chunk")
+	}
+
+	if c == nil {
+		return nil, errNoOplogsForPITR
+	}
+
+	return c, nil
 }
 
 func (b *PBM) GetPITRChunkContains(unixTS int64) (*pbm.PITRChunk, error) {
@@ -217,5 +232,17 @@ func (b *PBM) GetPITRChunkContains(unixTS int64) (*pbm.PITRChunk, error) {
 		return nil, errors.Wrap(err, "getting node information")
 	}
 
-	return b.C.PITRGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
+	c, err := b.C.PITRGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errNoOplogsForPITR
+		}
+		return nil, errors.Wrap(err, "getting PITR chunk for ts")
+	}
+
+	if c == nil {
+		return nil, errNoOplogsForPITR
+	}
+
+	return c, nil
 }

@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -268,8 +266,6 @@ func reEnablePITR(pbm *backup.PBM, backup psmdbv1.BackupSpec) (err error) {
 	return
 }
 
-var ErrNoOplogsForPITR = errors.New("There is no oplogs that can cover the date/time or no oplogs at all")
-
 func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
 	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResyncBackupList), "", "", primitive.Timestamp{})
 	err := pbmc.C.ResyncStorage(e)
@@ -295,10 +291,7 @@ func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (
 		var ts = pitr.Date.Unix()
 
 		if _, err := pbmc.GetPITRChunkContains(ts); err != nil {
-			if errors.Is(err, mongo.ErrNoDocuments) {
-				return "", ErrNoOplogsForPITR
-			}
-			return "", errors.Wrap(err, "getting PITR chunk for ts")
+			return "", err
 		}
 
 		cmd = pbm.Cmd{
@@ -311,14 +304,7 @@ func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (
 	case pitr.Type == psmdbv1.PITRestoreTypeLatest:
 		chunk, err := pbmc.GetLastPITRChunk()
 		if err != nil {
-			if errors.Is(err, mongo.ErrNoDocuments) {
-				return "", ErrNoOplogsForPITR
-			}
-			return "", errors.Wrap(err, "getting last PITR chunk")
-		}
-
-		if chunk == nil {
-			return "", ErrNoOplogsForPITR
+			return "", err
 		}
 
 		cmd = pbm.Cmd{
