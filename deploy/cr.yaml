@@ -20,7 +20,7 @@ spec:
     versionServiceEndpoint: https://check.percona.com
     apply: recommended
     schedule: "0 2 * * *"
-    setFCV: true
+    setFCV: false
   secrets:
     users: my-cluster-name-secrets
   pmm:
