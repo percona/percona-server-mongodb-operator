@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -675,12 +676,17 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServer
 		return nil
 	}
 
+	fcvsv, err := v.NewSemver(newFCV)
+	if err != nil {
+		return errors.Wrap(err, "invalid version")
+	}
+
 	fcv, err := r.getFCV(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to get FCV")
 	}
 
-	can, err := canUpgradeVersion(fcv, newFCV)
+	can, err := canUpgradeVersion(fcv, MajorMinor(fcvsv))
 	if err != nil {
 		return errors.Wrap(err, "can't upgrade FCV")
 	}

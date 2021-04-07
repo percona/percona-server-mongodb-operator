@@ -225,7 +225,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 
 	req, err := majorUpgradeRequested(cr, fcv)
 	if err != nil {
-		return errors.Wrap(err, "failed to check id major update requested")
+		return errors.Wrap(err, "failed to check if major update requested")
 	}
 
 	vm := VersionMeta{
