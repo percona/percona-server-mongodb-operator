@@ -686,7 +686,7 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServer
 		return errors.Wrap(err, "failed to get FCV")
 	}
 
-	can, err := canUpgradeVersion(fcv, MajorMinor(fcvsv))
+	can, err := canUpgradeOrDowngradeVersion(fcv, MajorMinor(fcvsv))
 	if err != nil {
 		return errors.Wrap(err, "can't upgrade FCV")
 	}

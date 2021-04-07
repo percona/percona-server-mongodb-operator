@@ -118,13 +118,13 @@ func isUpdateValid(current, desired string) bool {
 	}
 }
 
-func canUpgradeVersion(current, new string) (bool, error) {
-	cursv, err := v.NewSemver(current)
+func canUpgradeOrDowngradeVersion(currentFCV, newFCV string) (bool, error) {
+	cursv, err := v.NewSemver(currentFCV)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get current semver")
 	}
 
-	newsv, err := v.NewSemver(new)
+	newsv, err := v.NewSemver(newFCV)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get new semver")
 	}
@@ -137,10 +137,10 @@ func canUpgradeVersion(current, new string) (bool, error) {
 	if cmp == -1 && isUpdateValid(currentMM, newMM) {
 		return true, nil
 	} else if cmp == 0 {
-		return false, nil
+		return true, nil
 	}
 
-	return false, errors.Errorf("invalid upgrade: from %s to %s", current, new)
+	return false, errors.Errorf("failed to change version from %s to %s", currentFCV, newFCV)
 }
 
 type UpgradeRequest struct {
@@ -189,7 +189,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 		return UpgradeRequest{true, apply, ver}, nil
 	}
 
-	can, err := canUpgradeVersion(fcv, ver)
+	can, err := canUpgradeOrDowngradeVersion(fcv, ver)
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
 	}

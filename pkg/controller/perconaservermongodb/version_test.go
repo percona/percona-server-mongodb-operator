@@ -96,7 +96,9 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				fcv: "4.2",
 			},
 			want: UpgradeRequest{
-				Ok: false,
+				Ok:         true,
+				Apply:      "recommended",
+				NewVersion: "4.2",
 			},
 		},
 
