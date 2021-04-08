@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -289,17 +288,23 @@ func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (
 			},
 		}
 	case pitr.Type == psmdbv1.PITRestoreTypeDate:
+		var ts = pitr.Date.Unix()
+
+		if _, err := pbmc.GetPITRChunkContains(ts); err != nil {
+			return "", err
+		}
+
 		cmd = pbm.Cmd{
 			Cmd: pbm.CmdPITRestore,
 			PITRestore: pbm.PITRestoreCmd{
 				Name: rName,
-				TS:   pitr.Date.Unix(),
+				TS:   ts,
 			},
 		}
 	case pitr.Type == psmdbv1.PITRestoreTypeLatest:
 		chunk, err := pbmc.GetLastPITRChunk()
 		if err != nil {
-			return "", errors.Wrap(err, "getting last PITR chunk")
+			return "", err
 		}
 
 		cmd = pbm.Cmd{
