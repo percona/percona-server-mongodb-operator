@@ -140,7 +140,7 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServer
 	)
 
 	for _, sts := range list.Items {
-		if !r.matchUID(cr, &sts) {
+		if r.matchUID(cr, &sts) {
 			filteredList.Items = append(filteredList.Items, sts)
 		}
 	}
