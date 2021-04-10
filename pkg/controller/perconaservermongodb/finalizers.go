@@ -5,7 +5,6 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) error {
@@ -45,15 +44,6 @@ func (r *ReconcilePerconaServerMongoDB) deletePvcFinalizer(cr *api.PerconaServer
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) matchUID(cr *api.PerconaServerMongoDB, obj metav1.Object) bool {
-	if ref := metav1.GetControllerOf(obj); ref != nil {
-		if string(cr.GetUID()) == string(ref.UID) {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *ReconcilePerconaServerMongoDB) deleteAllStatefulsets(cr *api.PerconaServerMongoDB) error {
 	stsList, err := r.getAllstatefulsets(cr)
 	if err != nil {
@@ -61,9 +51,6 @@ func (r *ReconcilePerconaServerMongoDB) deleteAllStatefulsets(cr *api.PerconaSer
 	}
 
 	for _, sts := range stsList.Items {
-		if !r.matchUID(cr, &sts) {
-			continue
-		}
 		log.Info("deleting StatefulSet", "name", sts.Name)
 		err := r.client.Delete(context.TODO(), &sts)
 		if err != nil {
