@@ -118,15 +118,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(cr *api.PerconaSer
 	return list, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) matchUID(cr *api.PerconaServerMongoDB, obj metav1.Object) bool {
-	if ref := metav1.GetControllerOf(obj); ref != nil {
-		if string(cr.GetUID()) == string(ref.UID) {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 	filteredList := appsv1.StatefulSetList{}
@@ -140,7 +131,7 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServer
 	)
 
 	for _, sts := range list.Items {
-		if r.matchUID(cr, &sts) {
+		if metav1.IsControlledBy(&sts, cr) {
 			filteredList.Items = append(filteredList.Items, sts)
 		}
 	}
