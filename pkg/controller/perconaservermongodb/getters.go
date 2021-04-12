@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -119,6 +120,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(cr *api.PerconaSer
 
 func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
+	filteredList := appsv1.StatefulSetList{}
 
 	err := r.client.List(context.TODO(),
 		&list,
@@ -128,7 +130,13 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServer
 		},
 	)
 
-	return list, err
+	for _, sts := range list.Items {
+		if metav1.IsControlledBy(&sts, cr) {
+			filteredList.Items = append(filteredList.Items, sts)
+		}
+	}
+
+	return filteredList, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCfgStatefulset(cr *api.PerconaServerMongoDB) (appsv1.StatefulSet, error) {
