@@ -124,10 +124,12 @@ func (us UpgradeStrategy) Lower() UpgradeStrategy {
 }
 
 func OneOfUpgradeStrategy(a string) bool {
-	return strings.ToLower(a) == string(UpgradeStrategyLatest) ||
-		strings.ToLower(a) == string(UpgradeStrategyRecommended) ||
-		strings.ToLower(a) == string(UpgradeStrategyDiasbled) ||
-		strings.ToLower(a) == string(UpgradeStrategyNever)
+	us := UpgradeStrategy(strings.ToLower(a))
+
+	return us == UpgradeStrategyLatest ||
+		us == UpgradeStrategyRecommended ||
+		us == UpgradeStrategyDiasbled ||
+		us == UpgradeStrategyNever
 }
 
 const (
