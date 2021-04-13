@@ -1,6 +1,8 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBBackup
 metadata:
+  finalizers:
+  - delete-backup
   name: backup1
 spec:
   psmdbCluster: my-cluster-name
