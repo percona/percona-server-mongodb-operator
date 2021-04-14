@@ -12,9 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -264,28 +262,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 
 func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, repls []*api.ReplsetSpec) error {
 	for _, replset := range repls {
-		matchLabels := map[string]string{
-			"app.kubernetes.io/name":       "percona-server-mongodb",
-			"app.kubernetes.io/instance":   cr.Name,
-			"app.kubernetes.io/replset":    replset.Name,
-			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-			"app.kubernetes.io/part-of":    "percona-server-mongodb",
-		}
-
-		pods := corev1.PodList{}
-		err := r.client.List(context.TODO(),
-			&pods,
-			&client.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(matchLabels),
-			},
-		)
-
-		if err != nil {
-			return errors.Wrap(err, "failed to get pods for RS")
-		}
-
-		client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleUserAdmin)
+		client, err := r.mongoClientWithRole(cr, *replset, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}

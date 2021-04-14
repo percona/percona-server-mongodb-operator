@@ -24,7 +24,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return clusterReady, nil
 	}
 
-	cli, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods.Items, roleClusterAdmin)
+	cli, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
 	if err != nil {
 		if !cr.Status.Replsets[replset.Name].Initialized {
 			err := r.handleReplsetInit(cr, replset, pods.Items)
@@ -32,7 +32,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 				return clusterInit, errors.Wrap(err, "handleReplsetInit")
 			}
 
-			err = r.createSystemUsers(cr, replset, pods.Items)
+			err = r.createSystemUsers(cr, replset)
 			if err != nil {
 				return clusterInit, errors.Wrap(err, "create system users")
 			}
@@ -360,8 +360,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 	return errNoRunningMongodContainers
 }
 
-func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
-	cli, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleUserAdmin)
+func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	cli, err := r.mongoClientWithRole(cr, *replset, roleUserAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
 	}

@@ -98,6 +98,13 @@ type ShardList struct {
 	OKResponse `bson:",inline"`
 }
 
+type FCV struct {
+	FCV struct {
+		Version string `json:"version" bson:"version"`
+	} `json:"featureCompatibilityVersion" bson:"featureCompatibilityVersion"`
+	OKResponse `bson:",inline"`
+}
+
 const ShardRemoveCompleted string = "completed"
 
 type ShardRemoveResp struct {

@@ -12,65 +12,65 @@ create_namespace $namespace
 
 desc 'install version service'
 kubectl_bin create configmap versions \
-    --from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json \
-    --from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json \
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
 kubectl_bin apply -f $test_dir/conf/vs.yml
 sleep 10
 
 deploy_operator
 
-cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-unreachable")
-expected_images=("percona/percona-server-mongodb:4.2.7-7" "percona/percona-server-mongodb:4.0.20-13" "percona/percona-server-mongodb:4.2.8-8" "$IMAGE_MONGOD")
+cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-major" "version-service-unreachable")
+expected_images=("percona/percona-server-mongodb:4.2.7-7" "percona/percona-server-mongodb:4.0.20-13" "percona/percona-server-mongodb:4.2.8-8" "percona/percona-server-mongodb:4.0.20-13" "$IMAGE_MONGOD")
 
 for i in "${!cases[@]}"; do
-    desc "test ${cases[$i]}"
+	desc "test ${cases[$i]}"
 
-    cluster="${cases[$i]}"
-    expected_image="${expected_images[$i]}"
+	cluster="${cases[$i]}"
+	expected_image="${expected_images[$i]}"
 
-    kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
 
-    desc 'create PSMDB cluster'
-    tmp_file=$(mktemp)
-    sed "s%#initImage%$IMAGE%g" "$test_dir/conf/${cluster}-rs0.yml" >"$tmp_file"
+	desc 'create PSMDB cluster'
+	tmp_file=$(mktemp)
+	sed "s%#initImage%$IMAGE%g" "$test_dir/conf/${cluster}-rs0.yml" >"$tmp_file"
 
-    desc 'create first PSMDB cluster'
-    cat "$tmp_file" \
-        | $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
-        | $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-        | $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-        | $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-        | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
-        | $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
-        | kubectl_bin apply -f -
-    desc 'check if Pod is started'
-    wait_for_running "${cluster}-rs0" 3
-    sleep 20
-    compare_kubectl "statefulset/${cluster}-rs0"
-    desc 'write data'
-    run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
-              "userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+	desc 'create first PSMDB cluster'
+	cat "$tmp_file" \
+		| $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
+		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
+		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
+		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
+		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
+		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
+		| kubectl_bin apply -f -
+	desc 'check if Pod is started'
+	wait_for_running "${cluster}-rs0" 3
+	sleep 20
+	compare_kubectl "statefulset/${cluster}-rs0"
+	desc 'write data'
+	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
 
-    run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
-    compare_kubectl "statefulset/${cluster}-rs0"
+	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
+	compare_kubectl "statefulset/${cluster}-rs0"
 
-    pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
-    if ${#pods[@]} == 0; then
-        echo "pods not found"
-        exit 1
-    fi
+	pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
+	if ${#pods[@]} == 0; then
+		echo "pods not found"
+		exit 1
+	fi
 
-    for pod in "${pods[@]}"; do
-        img=$(kubectl get $pod -o jsonpath='{.spec.containers[0].image}')
-        if [ "$img" != "$expected_image" ]; then
-            echo "image was not updated"
-            exit 1
-        fi
-    done
+	for pod in "${pods[@]}"; do
+		img=$(kubectl get $pod -o jsonpath='{.spec.containers[0].image}')
+		if [ "$img" != "$expected_image" ]; then
+			echo "image was not updated"
+			exit 1
+		fi
+	done
 
-    kubectl delete pod/$(kubectl get pods | grep operator | awk '{print $1}')
-    kubectl_bin delete psmdb --all
-    sleep 10
+	kubectl delete pod/$(kubectl get pods | grep operator | awk '{print $1}')
+	kubectl_bin delete psmdb --all
+	sleep 10
 done
 
 destroy $namespace

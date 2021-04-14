@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -169,7 +170,7 @@ const (
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	logger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	rr := reconcile.Result{
 		RequeueAfter: r.reconcileIn,
@@ -207,7 +208,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	defer func() {
 		err = r.updateStatus(cr, err, isClusterLive)
 		if err != nil {
-			reqLogger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
+			logger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
 		}
 	}()
 
@@ -224,7 +225,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	err = r.checkFinalizers(cr)
 	if err != nil {
-		reqLogger.Error(err, "failed to run finalizers")
+		logger.Error(err, "failed to run finalizers")
 		return rr, err
 	}
 
@@ -272,7 +273,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
 		err := r.ensureVersion(cr, VersionServiceClient{})
 		if err != nil {
-			reqLogger.Info("failed to ensure version, running with default", "error", err)
+			logger.Info("failed to ensure version, running with default", "error", err)
 		}
 	}
 
@@ -292,7 +293,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if ikCreated {
-		reqLogger.Info("Created a new mongo key", "KeyName", internalKey)
+		logger.Info("Created a new mongo key", "KeyName", internalKey)
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption {
@@ -302,7 +303,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, err
 		}
 		if created {
-			reqLogger.Info("Created a new mongo key", "KeyName", cr.Spec.Mongod.Security.EncryptionKeySecret)
+			logger.Info("Created a new mongo key", "KeyName", cr.Spec.Mongod.Security.EncryptionKeySecret)
 		}
 	}
 
@@ -417,11 +418,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		isClusterLive, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
 		if err != nil {
-			reqLogger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
+			logger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 
-		if err := r.fetchVersionFromMongo(cr, replset, pods); err != nil {
-			return rr, errors.Wrap(err, "update CR version")
+		if err := r.fetchVersionFromMongo(cr, replset); err != nil {
+			return rr, errors.Wrap(err, "update mongo version")
 		}
 	}
 
@@ -437,6 +438,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	if err := r.enableBalancerIfNeeded(cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
+	}
+
+	if err := r.upgradeFCVIfNeeded(cr, *repls[0], cr.Status.MongoVersion); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
 
 	err = r.deleteMongosIfNeeded(cr)
@@ -533,12 +538,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(cr *api.PerconaS
 		"config": {},
 	}
 
-	pods, err := r.getRSPods(cr, rsName)
-	if err != nil {
-		return errors.Wrapf(err, "get pods list for replset %s", rsName)
-	}
-
-	client, err := r.mongoClientWithRole(cr, rsName, false, pods.Items, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(cr, api.ReplsetSpec{Name: rsName}, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -660,6 +660,43 @@ func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(cr *api.Percon
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServerMongoDB, repl api.ReplsetSpec, newFCV string) error {
+	if !cr.Spec.UpgradeOptions.SetFCV {
+		return nil
+	}
+
+	up, err := r.isAllSfsUpToDate(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check is all sfs up to date")
+	}
+
+	if !up {
+		return nil
+	}
+
+	fcvsv, err := v.NewSemver(newFCV)
+	if err != nil {
+		return errors.Wrap(err, "invalid version")
+	}
+
+	fcv, err := r.getFCV(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get FCV")
+	}
+
+	can, err := canUpgradeVersion(fcv, MajorMinor(fcvsv))
+	if err != nil {
+		return errors.Wrap(err, "can't upgrade FCV")
+	}
+
+	if !can {
+		return nil
+	}
+
+	err = r.setFCV(cr, newFCV)
+	return errors.Wrap(err, "failed to set FCV")
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
