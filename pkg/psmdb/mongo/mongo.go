@@ -150,7 +150,7 @@ func AddShard(ctx context.Context, client *mongo.Client, rsName, host string) er
 	}
 
 	if err := res.Decode(&resp); err != nil {
-		return errors.Wrap(err, "failed to decode addShard responce")
+		return errors.Wrap(err, "failed to decode addShard response")
 	}
 
 	if resp.OK != 1 {
@@ -170,7 +170,7 @@ func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error 
 	}
 
 	if err := res.Decode(&resp); err != nil {
-		return errors.Wrap(err, "failed to decoge to replSetReconfigResponce")
+		return errors.Wrap(err, "failed to decoge to replSetReconfigResponse")
 	}
 
 	if resp.OK != 1 {
@@ -216,7 +216,7 @@ func switchBalancer(ctx context.Context, client *mongo.Client, command string) e
 	}
 
 	if err := resp.Decode(&res); err != nil {
-		return errors.Wrapf(err, "failed to decode %s responce", command)
+		return errors.Wrapf(err, "failed to decode %s response", command)
 	}
 
 	if res.OK != 1 {
@@ -235,7 +235,7 @@ func IsBalancerRunning(ctx context.Context, client *mongo.Client) (bool, error) 
 	}
 
 	if err := resp.Decode(&res); err != nil {
-		return false, errors.Wrap(err, "failed to decode balancer status responce")
+		return false, errors.Wrap(err, "failed to decode balancer status response")
 	}
 
 	if res.OK != 1 {
@@ -243,6 +243,46 @@ func IsBalancerRunning(ctx context.Context, client *mongo.Client) (bool, error) 
 	}
 
 	return res.Mode == "full", nil
+}
+
+func GetFCV(ctx context.Context, client *mongo.Client) (string, error) {
+	res := FCV{}
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{
+		{Key: "getParameter", Value: 1},
+		{Key: "featureCompatibilityVersion", Value: 1},
+	})
+
+	if err := resp.Decode(&res); err != nil {
+		return "", errors.Wrap(err, "failed to decode balancer status response")
+	}
+
+	if res.OK != 1 {
+		return "", errors.Errorf("mongo says: %s", res.Errmsg)
+	}
+
+	return res.FCV.Version, nil
+}
+
+func SetFCV(ctx context.Context, client *mongo.Client, version string) error {
+	res := OKResponse{}
+
+	command := "setFeatureCompatibilityVersion"
+
+	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: command, Value: version}})
+	if resp.Err() != nil {
+		return errors.Wrap(resp.Err(), command)
+	}
+
+	if err := resp.Decode(&res); err != nil {
+		return errors.Wrapf(err, "failed to decode %v response", *resp)
+	}
+
+	if res.OK != 1 {
+		return errors.Errorf("mongo says: %s", res.Errmsg)
+	}
+
+	return nil
 }
 
 func ListDBs(ctx context.Context, client *mongo.Client) (DBList, error) {
@@ -336,7 +376,7 @@ func StepDown(ctx context.Context, client *mongo.Client) error {
 	}
 
 	if err := res.Decode(&resp); err != nil {
-		return errors.Wrap(err, "failed to decode responce of replSetStepDown")
+		return errors.Wrap(err, "failed to decode response of replSetStepDown")
 	}
 
 	if resp.OK != 1 {

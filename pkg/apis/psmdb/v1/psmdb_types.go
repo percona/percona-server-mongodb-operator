@@ -82,6 +82,7 @@ type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
 	Apply                  UpgradeStrategy `json:"apply,omitempty"`
 	Schedule               string          `json:"schedule,omitempty"`
+	SetFCV                 bool            `json:"setFCV,omitempty"`
 }
 
 type ReplsetMemberStatus struct {
@@ -122,9 +123,20 @@ func (us UpgradeStrategy) Lower() UpgradeStrategy {
 	return UpgradeStrategy(strings.ToLower(string(us)))
 }
 
+func OneOfUpgradeStrategy(a string) bool {
+	us := UpgradeStrategy(strings.ToLower(a))
+
+	return us == UpgradeStrategyLatest ||
+		us == UpgradeStrategyRecommended ||
+		us == UpgradeStrategyDiasbled ||
+		us == UpgradeStrategyNever
+}
+
 const (
-	UpgradeStrategyDiasbled UpgradeStrategy = "disabled"
-	UpgradeStrategyNever    UpgradeStrategy = "never"
+	UpgradeStrategyDiasbled    UpgradeStrategy = "disabled"
+	UpgradeStrategyNever       UpgradeStrategy = "never"
+	UpgradeStrategyRecommended UpgradeStrategy = "recommended"
+	UpgradeStrategyLatest      UpgradeStrategy = "latest"
 )
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB

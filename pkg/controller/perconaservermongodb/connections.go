@@ -16,26 +16,32 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(cr *api.PerconaServerMongoDB, rsName string,
-	rsExposed bool, pods []corev1.Pod, role UserRole) (*mgo.Client, error) {
+func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(cr *api.PerconaServerMongoDB, rs api.ReplsetSpec,
+	role UserRole) (*mgo.Client, error) {
 
 	c, err := r.getInternalCredentials(cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return r.mongoClient(cr, rsName, rsExposed, pods, c)
+	return r.mongoClient(cr, rs, c)
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods []corev1.Pod,
+func (r *ReconcilePerconaServerMongoDB) mongoClient(cr *api.PerconaServerMongoDB, rs api.ReplsetSpec,
 	c Credentials) (*mgo.Client, error) {
-	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, rsName, rsExposed, pods)
+
+	pods, err := r.getRSPods(cr, rs.Name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
+	}
+
+	rsAddrs, err := psmdb.GetReplsetAddrs(r.client, cr, rs.Name, rs.Expose.Enabled, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
 	conf := &mongo.Config{
-		ReplSetName: rsName,
+		ReplSetName: rs.Name,
 		Hosts:       rsAddrs,
 		Username:    c.Username,
 		Password:    c.Password,
