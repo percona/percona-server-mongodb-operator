@@ -96,7 +96,7 @@ func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []core
 			image = operatorPod.Spec.Containers[0].Image
 		}
 	}
-	return []corev1.Container{EntrypointInitContainer(image)}
+	return []corev1.Container{EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)}
 }
 
 func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
