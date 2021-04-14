@@ -21,685 +21,685 @@ conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 
 if [ -f "$conf_dir/cloud-secret.yml" ]; then
-    SKIP_BACKUPS_TO_AWS_GCP=''
+	SKIP_BACKUPS_TO_AWS_GCP=''
 fi
 
-if oc get projects ; then
-    # Guessing Openshift version from master node API version
-    case "$(oc get nodes --no-headers=true | grep master | head -n1 | grep -Eo 'v[0-9]+\.[0-9]+')" in
-        "v1.11") OPENSHIFT=3.11 ;;
-              *) OPENSHIFT=4    ;;
-    esac
+if oc get projects; then
+	# Guessing Openshift version from master node API version
+	case "$(oc get nodes --no-headers=true | grep master | head -n1 | grep -Eo 'v[0-9]+\.[0-9]+')" in
+		"v1.11") OPENSHIFT=3.11 ;;
+		*) OPENSHIFT=4 ;;
+	esac
 fi
 
 apply_s3_storage_secrets() {
-    if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
-        kubectl_bin apply \
-            -f $conf_dir/minio-secret.yml \
-            -f $conf_dir/cloud-secret.yml
-    else
-        kubectl_bin apply \
-            -f $conf_dir/minio-secret.yml
-    fi
+	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+		kubectl_bin apply \
+			-f $conf_dir/minio-secret.yml \
+			-f $conf_dir/cloud-secret.yml
+	else
+		kubectl_bin apply \
+			-f $conf_dir/minio-secret.yml
+	fi
 }
 
 create_namespace() {
-    local namespace="$1"
-    local skip_clean_namespace="$2"
+	local namespace="$1"
+	local skip_clean_namespace="$2"
 
-    if [[ "${CLEAN_NAMESPACE}" == 1 ]] && [[ -z "${skip_clean_namespace}" ]]; then
-        kubectl_bin get ns \
-            | egrep -v "^kube-|^default|Terminating|pxc-operator|openshift|^NAME" \
-            | awk '{print$1}' \
-            | xargs kubectl delete ns &
-    fi
+	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
+		kubectl_bin get ns \
+			| egrep -v "^kube-|^default|Terminating|pxc-operator|openshift|^NAME" \
+			| awk '{print$1}' \
+			| xargs kubectl delete ns &
+	fi
 
-    if [ -n "${OPENSHIFT}" ]; then
-        oc delete project "$namespace" && sleep 40 || :
-        oc new-project "$namespace"
-        oc project "$namespace"
-        oc adm policy add-scc-to-user hostaccess -z default || :
-    else
-        kubectl_bin delete namespace "$namespace" || :
-        wait_for_delete "namespace/$namespace"
-        kubectl_bin create namespace "$namespace"
-        kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
-    fi
+	if [ -n "${OPENSHIFT}" ]; then
+		oc delete project "$namespace" && sleep 40 || :
+		oc new-project "$namespace"
+		oc project "$namespace"
+		oc adm policy add-scc-to-user hostaccess -z default || :
+	else
+		kubectl_bin delete namespace "$namespace" || :
+		wait_for_delete "namespace/$namespace"
+		kubectl_bin create namespace "$namespace"
+		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+	fi
 }
 
 get_operator_pod() {
-    kubectl_bin get pods \
-        --selector=name=percona-server-mongodb-operator \
-        -o 'jsonpath={.items[].metadata.name}'
+	kubectl_bin get pods \
+		--selector=name=percona-server-mongodb-operator \
+		-o 'jsonpath={.items[].metadata.name}'
 }
 
 wait_pod() {
-    local pod=$1
+	local pod=$1
 
-    set +o xtrace
-    retry=0
-    echo -n $pod
-    #until kubectl_bin get pod/$pod -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
-    until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep 'true'; do
-        sleep 1
-        echo -n .
-        let retry+=1
-        if [ $retry -ge 360 ]; then
-            kubectl_bin describe pod/$pod
-            kubectl_bin logs $pod
-            kubectl_bin logs $(get_operator_pod) \
-                | grep -v 'level=info' \
-                | grep -v 'level=debug' \
-                | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source' \
-                | tail -100
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-    done
-    set -o xtrace
+	set +o xtrace
+	retry=0
+	echo -n $pod
+	#until kubectl_bin get pod/$pod -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
+	until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep 'true'; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl_bin describe pod/$pod
+			kubectl_bin logs $pod
+			kubectl_bin logs $(get_operator_pod) \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| grep -v 'Getting tasks for pod' \
+				| grep -v 'Getting pods from source' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	set -o xtrace
 }
 
 wait_cron() {
-    local backup=$1
+	local backup=$1
 
-    set +o xtrace
-    retry=0
-    echo -n $backup
-    until kubectl_bin get cronjob/$backup -o jsonpath='{.status.lastScheduleTime}' 2>/dev/null | grep 'T'; do
-        sleep 1
-        echo -n .
-        let retry+=1
-        if [ $retry -ge 360 ]; then
-            kubectl_bin logs $(get_operator_pod) \
-                | grep -v 'level=info' \
-                | grep -v 'level=debug' \
-                | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source' \
-                | tail -100
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-    done
-    set -o xtrace
+	set +o xtrace
+	retry=0
+	echo -n $backup
+	until kubectl_bin get cronjob/$backup -o jsonpath='{.status.lastScheduleTime}' 2>/dev/null | grep 'T'; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl_bin logs $(get_operator_pod) \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| grep -v 'Getting tasks for pod' \
+				| grep -v 'Getting pods from source' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	set -o xtrace
 }
 
 wait_backup_agent() {
-    local agent_pod=$1
+	local agent_pod=$1
 
-    set +o xtrace
-    retry=0
-    echo -n $agent_pod
-    until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
-        sleep 5
-        echo -n .
-        let retry+=1
-        if [ $retry -ge 360 ]; then
-            kubectl_bin logs $agent_pod -c backup-agent \
-                | tail -100
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-    done
-    echo
-    set -o xtrace
+	set +o xtrace
+	retry=0
+	echo -n $agent_pod
+	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
+		sleep 5
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl_bin logs $agent_pod -c backup-agent \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	echo
+	set -o xtrace
 }
 
 wait_backup() {
-    local backup_name=$1
+	local backup_name=$1
 
-    set +o xtrace
-    retry=0
-    echo -n $backup_name
-    until [ "$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
-        sleep 1
-        echo -n .
-        let retry+=1
-        if [ $retry -ge 360 ]; then
-            kubectl_bin logs $(get_operator_pod) \
-                | grep -v 'level=info' \
-                | grep -v 'level=debug' \
-                | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source' \
-                | tail -100
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-    done
-    echo
-    set -o xtrace
+	set +o xtrace
+	retry=0
+	echo -n $backup_name
+	until [ "$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl_bin logs $(get_operator_pod) \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| grep -v 'Getting tasks for pod' \
+				| grep -v 'Getting pods from source' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	echo
+	set -o xtrace
 }
 
 run_restore() {
-    local backup_name=$1
-    let last_pod="$2-1" || :
-    local isSharded=${3:-0}
-    local cluster_pfx=$4
-    if [ $isSharded -eq 1 ]; then
-        run_mongos \
-            'use myApp\n db.test.insert({ x: 100501 })' \
-            "myApp:myPass@$cluster$cluster_pfx.$namespace"
-        compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace" "-2nd"
-    else
-        run_mongo \
-            'use myApp\n db.test.insert({ x: 100501 })' \
-            "myApp:myPass@$cluster.$namespace"
+	local backup_name=$1
+	let last_pod="$2-1" || :
+	local isSharded=${3:-0}
+	local cluster_pfx=$4
+	if [ $isSharded -eq 1 ]; then
+		run_mongos \
+			'use myApp\n db.test.insert({ x: 100501 })' \
+			"myApp:myPass@$cluster$cluster_pfx.$namespace"
+		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace" "-2nd"
+	else
+		run_mongo \
+			'use myApp\n db.test.insert({ x: 100501 })' \
+			"myApp:myPass@$cluster.$namespace"
 
-        for i in $(seq 0 $last_pod); do
-            compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
-        done
-    fi
-    cat $test_dir/conf/restore.yml \
-        | $sed -e "s/name:/name: restore-$backup_name/" \
-        | $sed -e "s/backupName:/backupName: $backup_name/" \
-        | kubectl_bin apply -f -
+		for i in $(seq 0 $last_pod); do
+			compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
+		done
+	fi
+	cat $test_dir/conf/restore.yml \
+		| $sed -e "s/name:/name: restore-$backup_name/" \
+		| $sed -e "s/backupName:/backupName: $backup_name/" \
+		| kubectl_bin apply -f -
 }
 
 wait_restore() {
-    local isSharded=${3:-0}
-    local cluster_pfx=$4
+	local isSharded=${3:-0}
+	local cluster_pfx=$4
 
-    wait_restore_object "${1}"
-    echo
-    set -o xtrace
+	wait_restore_object "${1}"
+	echo
+	set -o xtrace
 
-    simple_data_check "${cluster}" "${2}" "$isSharded" "$cluster_pfx"
+	simple_data_check "${cluster}" "${2}" "$isSharded" "$cluster_pfx"
 }
 
 wait_deployment() {
-    local name=$1
+	local name=$1
 
-    sleep 10
-    set +o xtrace
-    retry=0
-    echo -n $name
-    until [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')"  ]; do
-        sleep 1
-        echo -n .
-        let retry+=1
-        if [ $retry -ge 360 ]; then
-            kubectl_bin logs $(get_operator_pod) \
-                | grep -v 'level=info' \
-                | grep -v 'level=debug' \
-                | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source' \
-                | tail -100
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-    done
+	sleep 10
+	set +o xtrace
+	retry=0
+	echo -n $name
+	until [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl_bin logs $(get_operator_pod) \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| grep -v 'Getting tasks for pod' \
+				| grep -v 'Getting pods from source' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
 }
 
 simple_data_check() {
-    cluster_name=${1}
-    let last_pod="$2-1" || :
-    local isSharded=${3:-0}
-    local cluster_pfx=$4
+	cluster_name=${1}
+	let last_pod="$2-1" || :
+	local isSharded=${3:-0}
+	local cluster_pfx=$4
 
-    if [ $isSharded -eq 1 ]; then
-        wait_deployment "$cluster_name-mongos"
-        sleep 10
-        compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
-    else
-        for i in $(seq 0 $last_pod); do
-            compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
-        done
-    fi
+	if [ $isSharded -eq 1 ]; then
+		wait_deployment "$cluster_name-mongos"
+		sleep 10
+		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
+	else
+		for i in $(seq 0 $last_pod); do
+			compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
+		done
+	fi
 }
 
 wait_restore_object() {
-    local backup_name=$1
+	local backup_name=$1
 
-    set +o xtrace
-    retry=0
-    echo -n $backup_name
-    until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
-        sleep 1
-        echo -n .
-        let retry+=1
-        if [ $retry -ge 360 ]; then
-            kubectl_bin logs $(get_operator_pod) \
-                | grep -v 'level=info' \
-                | grep -v 'level=debug' \
-                | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source' \
-                | tail -100
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-    done
+	set +o xtrace
+	retry=0
+	echo -n $backup_name
+	until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl_bin logs $(get_operator_pod) \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| grep -v 'Getting tasks for pod' \
+				| grep -v 'Getting pods from source' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
 }
 
 deploy_operator() {
-    desc 'start operator'
+	desc 'start operator'
 
-    kubectl_bin apply -f ${test_dir}/conf/crd.yaml || kubectl_bin apply -f ${src_dir}/deploy/crd.yaml || :
-    kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
+	kubectl_bin apply -f ${test_dir}/conf/crd.yaml || kubectl_bin apply -f ${src_dir}/deploy/crd.yaml || :
+	kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
 
-    cat ${src_dir}/deploy/operator.yaml \
-        | sed -e "s^image: .*^image: ${IMAGE}^" \
-        | kubectl_bin apply -f -
+	cat ${src_dir}/deploy/operator.yaml \
+		| sed -e "s^image: .*^image: ${IMAGE}^" \
+		| kubectl_bin apply -f -
 
-    sleep 2
+	sleep 2
 
-    wait_pod $(get_operator_pod)
+	wait_pod $(get_operator_pod)
 }
 
 deploy_minio() {
-    desc 'install Minio'
-    helm del minio-service || :
-    helm repo remove minio || :
-    helm repo add minio https://helm.min.io/
-    # kubectl_bin delete pvc minio-service --force
-    retry 10 60 helm install minio-service \
-        --version 8.0.5 \
-        --set accessKey=some-access-key \
-        --set secretKey=some-secret-key \
-        --set service.type=ClusterIP \
-        --set configPathmc=/tmp/.minio/ \
-        --set persistence.size=2G \
-        --set environment.MINIO_REGION=us-east-1 \
-        --set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
-        --set securityContext.enabled=false \
-        minio/minio
-    MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
-    wait_pod $MINIO_POD
+	desc 'install Minio'
+	helm del minio-service || :
+	helm repo remove minio || :
+	helm repo add minio https://helm.min.io/
+	# kubectl_bin delete pvc minio-service --force
+	retry 10 60 helm install minio-service \
+		--version 8.0.5 \
+		--set accessKey=some-access-key \
+		--set secretKey=some-secret-key \
+		--set service.type=ClusterIP \
+		--set configPathmc=/tmp/.minio/ \
+		--set persistence.size=2G \
+		--set environment.MINIO_REGION=us-east-1 \
+		--set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
+		--set securityContext.enabled=false \
+		minio/minio
+	MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
+	wait_pod $MINIO_POD
 
-    # create bucket
-    kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-        bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+	# create bucket
+	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
 }
 
 retry() {
-    local max=$1
-    local delay=$2
-    shift 2 # cut delay and max args
-    local n=1
+	local max=$1
+	local delay=$2
+	shift 2 # cut delay and max args
+	local n=1
 
-    until "$@"; do
-        if [[ $n -ge $max ]]; then
-            echo "The command '$@' has failed after $n attempts."
-            exit 1
-        fi
-        ((n++))
-        sleep $delay
-    done
+	until "$@"; do
+		if [[ $n -ge $max ]]; then
+			echo "The command '$@' has failed after $n attempts."
+			exit 1
+		fi
+		((n++))
+		sleep $delay
+	done
 }
 
 wait_for_running() {
-    local name="$1"
-    let last_pod="$(($2-1))" || :
-    local check_cluster_readyness="${3:-true}"
+	local name="$1"
+	let last_pod="$(($2 - 1))" || :
+	local check_cluster_readyness="${3:-true}"
 
-    local rs_name=${name/*-/}
-    local cluster_name=${name/-$rs_name/}
-    for i in $(seq 0 $last_pod); do
-      if [[ $i -eq $last_pod && $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].arbiter.enabled}') == "true" ]]; then
-        wait_pod ${name}-arbiter-0
-      else
-        wait_pod ${name}-${i}
-      fi
-    done
-    sleep 10
-    if [[ ${check_cluster_readyness} == "true" ]]; then
-        set +x
-        echo -n "Waiting for cluster readyness"
-        local timeout=0
-        until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == "ready" ]]; do
-            sleep 1
-            timeout=$((${timeout}+1))
-            echo -n '.'
-            if [[ ${timeout} -gt 1500 ]]; then
-                echo
-                echo "Waiting timeout has been reached. Exiting..."
-                exit 1
-            fi
-        done
-        echo
-        set -x
-    fi
+	local rs_name=${name/*-/}
+	local cluster_name=${name/-$rs_name/}
+	for i in $(seq 0 $last_pod); do
+		if [[ $i -eq $last_pod && $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].arbiter.enabled}') == "true" ]]; then
+			wait_pod ${name}-arbiter-0
+		else
+			wait_pod ${name}-${i}
+		fi
+	done
+	sleep 10
+	if [[ ${check_cluster_readyness} == "true" ]]; then
+		set +x
+		echo -n "Waiting for cluster readyness"
+		local timeout=0
+		until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == "ready" ]]; do
+			sleep 1
+			timeout=$((timeout + 1))
+			echo -n '.'
+			if [[ ${timeout} -gt 1500 ]]; then
+				echo
+				echo "Waiting timeout has been reached. Exiting..."
+				exit 1
+			fi
+		done
+		echo
+		set -x
+	fi
 }
 
 wait_for_delete() {
-    local res="$1"
+	local res="$1"
 
-    set +o xtrace
-    echo -n "$res - "
-    retry=0
-    until (kubectl_bin get $res || :) 2>&1 | grep NotFound; do
-        sleep 1
-        echo -n .
-        let retry+=1
-        if [ $retry -ge 60 ]; then
-            kubectl_bin logs $(get_operator_pod) \
-                | grep -v 'level=info' \
-                | grep -v 'level=debug' \
-                | grep -v 'Getting tasks for pod' \
-                | grep -v 'Getting pods from source' \
-                | tail -100
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-    done
-    set -o xtrace
+	set +o xtrace
+	echo -n "$res - "
+	retry=0
+	until (kubectl_bin get $res || :) 2>&1 | grep NotFound; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 60 ]; then
+			kubectl_bin logs $(get_operator_pod) \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| grep -v 'Getting tasks for pod' \
+				| grep -v 'Getting pods from source' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	set -o xtrace
 }
 
 compare_kubectl() {
-    local resource="$1"
-    local postfix="$2"
-    local expected_result=${test_dir}/compare/${resource//\//_}${postfix}.yml
-    local new_result="${tmp_dir}/${resource//\//_}.yml"
+	local resource="$1"
+	local postfix="$2"
+	local expected_result=${test_dir}/compare/${resource//\//_}${postfix}.yml
+	local new_result="${tmp_dir}/${resource//\//_}.yml"
 
-    if [ -n "$OPENSHIFT" -a -f ${expected_result//.yml/-oc.yml} ]; then
-        expected_result=${expected_result//.yml/-oc.yml}
-        if [ "$OPENSHIFT" = 4 -a -f ${expected_result//-oc.yml/-4-oc.yml} ]; then
-            expected_result=${expected_result//-oc.yml/-4-oc.yml}
-        fi
-    fi
+	if [ -n "$OPENSHIFT" -a -f ${expected_result//.yml/-oc.yml} ]; then
+		expected_result=${expected_result//.yml/-oc.yml}
+		if [ "$OPENSHIFT" = 4 -a -f ${expected_result//-oc.yml/-4-oc.yml} ]; then
+			expected_result=${expected_result//-oc.yml/-4-oc.yml}
+		fi
+	fi
 
-    kubectl_bin get -o yaml ${resource} \
-        | yq d - 'metadata.ownerReferences.*.apiVersion' \
-        | yq d - 'metadata.managedFields' \
-        | yq d - '**.creationTimestamp' \
-        | yq d - '**.namespace' \
-        | yq d - '**.uid' \
-        | yq d - 'metadata.resourceVersion' \
-        | yq d - 'metadata.selfLink' \
-        | yq d - '**.creationTimestamp' \
-        | yq d - '**.image' \
-        | yq d - '**.clusterIP' \
-        | yq d - 'spec.clusterIPs' \
-        | yq d - '**.dataSource' \
-        | yq d - '**.procMount' \
-        | yq d - '**.storageClassName' \
-        | yq d - '**.finalizers' \
-        | yq d - '**."kubernetes.io/pvc-protection"' \
-        | yq d - '**.volumeName' \
-        | yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
-        | yq d - 'spec.volumeMode' \
-        | yq d - '**."volume.kubernetes.io/selected-node"' \
-        | yq d - '**."percona.com/ssl*"' \
-        | yq d - '**.(volumeMode==Filesystem).volumeMode' \
-        | yq d - '**.healthCheckNodePort' \
-        | yq d - '**.nodePort' \
-        | yq d - 'status' \
-        | yq d - '**.(name==NAMESPACE)' \
-        | yq d - '**.(name==PBM_AGENT_SERVER_ADDRESS)' \
-        | yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
-        | yq d - 'spec.volumeClaimTemplates.*.kind' \
-        | $sed "s/${namespace}/NAME_SPACE/g" \
-        | $sed "s#^apiVersion: extensions/v1beta1#apiVersion: apps/v1#" \
-        > ${new_result}
+	kubectl_bin get -o yaml ${resource} \
+		| yq d - 'metadata.ownerReferences.*.apiVersion' \
+		| yq d - 'metadata.managedFields' \
+		| yq d - '**.creationTimestamp' \
+		| yq d - '**.namespace' \
+		| yq d - '**.uid' \
+		| yq d - 'metadata.resourceVersion' \
+		| yq d - 'metadata.selfLink' \
+		| yq d - '**.creationTimestamp' \
+		| yq d - '**.image' \
+		| yq d - '**.clusterIP' \
+		| yq d - 'spec.clusterIPs' \
+		| yq d - '**.dataSource' \
+		| yq d - '**.procMount' \
+		| yq d - '**.storageClassName' \
+		| yq d - '**.finalizers' \
+		| yq d - '**."kubernetes.io/pvc-protection"' \
+		| yq d - '**.volumeName' \
+		| yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
+		| yq d - 'spec.volumeMode' \
+		| yq d - '**."volume.kubernetes.io/selected-node"' \
+		| yq d - '**."percona.com/ssl*"' \
+		| yq d - '**.(volumeMode==Filesystem).volumeMode' \
+		| yq d - '**.healthCheckNodePort' \
+		| yq d - '**.nodePort' \
+		| yq d - 'status' \
+		| yq d - '**.(name==NAMESPACE)' \
+		| yq d - '**.(name==PBM_AGENT_SERVER_ADDRESS)' \
+		| yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
+		| yq d - 'spec.volumeClaimTemplates.*.kind' \
+		| $sed "s/${namespace}/NAME_SPACE/g" \
+		| $sed "s#^apiVersion: extensions/v1beta1#apiVersion: apps/v1#" \
+			>${new_result}
 
-    diff -u "$expected_result" "$new_result"
+	diff -u "$expected_result" "$new_result"
 }
 
 run_mongo() {
-    local command="$1"
-    local uri="$2"
-    local driver=${3:-mongodb+srv}
-    local suffix=${4:-.svc.cluster.local}
-    local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
-    local mongo_flag="$5"
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb+srv}
+	local suffix=${4:-.svc.cluster.local}
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
 
-    kubectl_bin exec ${client_container} -- \
-        bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
 }
 
 run_mongos() {
-    local command="$1"
-    local uri="$2"
-    local driver=${3:-mongodb}
-    local suffix=${4:-.svc.cluster.local}
-    local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
-    local mongo_flag="$5"
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb}
+	local suffix=${4:-.svc.cluster.local}
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
 
-    kubectl_bin exec ${client_container} -- \
-        bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
 }
 
 run_script_mongos() {
-    local script="$1"
-    local uri="$2"
-    local driver=${3:-mongodb}
-    local suffix=${4:-.svc.cluster.local}
-    local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local script="$1"
+	local uri="$2"
+	local driver=${3:-mongodb}
+	local suffix=${4:-.svc.cluster.local}
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
-    name="$(basename $script)"
+	name="$(basename $script)"
 
-    kubectl_bin cp ${script} $namespace/${client_container}:/tmp
-    kubectl_bin exec ${client_container} -- \
-        bash -c "mongo $driver://$uri$suffix/admin /tmp/${name}"
+	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
+	kubectl_bin exec ${client_container} -- \
+		bash -c "mongo $driver://$uri$suffix/admin /tmp/${name}"
 }
 
 get_service_ip() {
-    local service=$1
-    if [ "$(kubectl_bin get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
-        echo -n $service.${service/-rs0*/}-rs0
-        return
-    fi
-    while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || : ) | grep -q NotFound; do
-        sleep 1
-    done
-    if [ "$(kubectl_bin get service/$service -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
-        kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
-        return
-    fi
-    until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
-        sleep 1
-    done
-    kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
-    kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
+	local service=$1
+	if [ "$(kubectl_bin get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
+		echo -n $service.${service/-rs0*/}-rs0
+		return
+	fi
+	while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
+		sleep 1
+	done
+	if [ "$(kubectl_bin get service/$service -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
+		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
+		return
+	fi
+	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+		sleep 1
+	done
+	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
 }
 
 compare_mongo_cmd() {
-    local command="$1"
-    local uri="$2"
-    local postfix="$3"
-    local suffix="$4"
+	local command="$1"
+	local uri="$2"
+	local postfix="$3"
+	local suffix="$4"
 
-    run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
-        | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
-        > $tmp_dir/${command}
-    diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+	run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
+			>$tmp_dir/${command}
+	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
 }
 
 compare_mongos_cmd() {
-    local command="$1"
-    local uri="$2"
-    local postfix="$3"
-    local suffix="$4"
+	local command="$1"
+	local uri="$2"
+	local postfix="$3"
+	local suffix="$4"
 
-    run_mongos "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
-        | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
-        > $tmp_dir/${command}
-    diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+	run_mongos "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
+			>$tmp_dir/${command}
+	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
 }
 
 get_mongo_primary_endpoint() {
-    local uri="$1"
+	local uri="$1"
 
-    run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
-        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
-        | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
-        | grep ":27017$"
+	run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
+		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
+		| grep ":27017$"
 }
 
 get_mongo_primary() {
-    local uri="$1"
-    local cluster="$2"
+	local uri="$1"
+	local cluster="$2"
 
-    endpoint=$(get_mongo_primary_endpoint $uri)
-    if [[ "$endpoint" =~ ".$cluster" ]]; then
-        echo $endpoint \
-            | cut -d . -f 1
-    else
-        kubectl_bin get service -o wide \
-            | grep " ${endpoint/:*/} " \
-            | awk '{print$1}'
-    fi
+	endpoint=$(get_mongo_primary_endpoint $uri)
+	if [[ $endpoint =~ ".$cluster" ]]; then
+		echo $endpoint \
+			| cut -d . -f 1
+	else
+		kubectl_bin get service -o wide \
+			| grep " ${endpoint/:*/} " \
+			| awk '{print$1}'
+	fi
 }
 
 compare_mongo_user() {
-    local uri="$1"
-    local user=$(echo $uri | cut -d : -f 1)
-    local expected_result=${test_dir}/compare/$user.json
+	local uri="$1"
+	local user=$(echo $uri | cut -d : -f 1)
+	local expected_result=${test_dir}/compare/$user.json
 
-    if [[ "$IMAGE_MONGOD" =~ 4\.0 ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
-        expected_result=${test_dir}/compare/$user-40.json
-    fi
-    if [[ "$IMAGE_MONGOD" =~ 4\.2 ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
-        expected_result=${test_dir}/compare/$user-42.json
-    fi
-    if [[ "$IMAGE_MONGOD" =~ 4\.4 ]] && [ -f ${test_dir}/compare/$user-44.json ]; then
-        expected_result=${test_dir}/compare/$user-44.json
-    fi
+	if [[ $IMAGE_MONGOD =~ 4\.0 ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
+		expected_result=${test_dir}/compare/$user-40.json
+	fi
+	if [[ $IMAGE_MONGOD =~ 4\.2 ]] && [ -f ${test_dir}/compare/$user-42.json ]; then
+		expected_result=${test_dir}/compare/$user-42.json
+	fi
+	if [[ $IMAGE_MONGOD =~ 4\.4 ]] && [ -f ${test_dir}/compare/$user-44.json ]; then
+		expected_result=${test_dir}/compare/$user-44.json
+	fi
 
-    run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
-        | egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
-        | sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
-        | $sed -e '/"ok" : 1/,+4d' \
-        | sed -e '$s/,$/}/' \
-        | jq '.authInfo.authenticatedUserPrivileges|=sort_by(.resource.anyResource, .resource.cluster, .resource.db, .resource.collection)|.authInfo.authenticatedUserRoles|=sort_by(.role)' \
-        > $tmp_dir/$user.json
-    diff -u $expected_result $tmp_dir/$user.json
+	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
+		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
+		| $sed -e '/"ok" : 1/,+4d' \
+		| sed -e '$s/,$/}/' \
+		| jq '.authInfo.authenticatedUserPrivileges|=sort_by(.resource.anyResource, .resource.cluster, .resource.db, .resource.collection)|.authInfo.authenticatedUserRoles|=sort_by(.role)' \
+			>$tmp_dir/$user.json
+	diff -u $expected_result $tmp_dir/$user.json
 }
 
 start_gke() {
-    gcloud container clusters create operator-testing-$RANDOM --zone europe-west3-c --project cloud-dev-112233 --preemptible --cluster-version 1.11
+	gcloud container clusters create operator-testing-$RANDOM --zone europe-west3-c --project cloud-dev-112233 --preemptible --cluster-version 1.11
 }
 
 get_pumba() {
-    kubectl_bin get pods \
-        --selector=name=pumba \
-        -o 'jsonpath={.items[].metadata.name}'
+	kubectl_bin get pods \
+		--selector=name=pumba \
+		-o 'jsonpath={.items[].metadata.name}'
 }
 
 run_pumba() {
-    local cmd="$*"
-    kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info ${cmd}
+	local cmd="$*"
+	kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info ${cmd}
 }
 
 deploy_cert_manager() {
-    kubectl_bin create namespace cert-manager || :
-    kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-    kubectl_bin apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false || : 2>/dev/null
-    sleep 30
+	kubectl_bin create namespace cert-manager || :
+	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
+	kubectl_bin apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false || : 2>/dev/null
+	sleep 30
 }
 
 destroy() {
-    local namespace="$1"
+	local namespace="$1"
 
-    kubectl_bin logs $(get_operator_pod) \
-        | grep -v 'level=info' \
-        | grep -v 'level=debug' \
-        | grep -v 'Getting tasks for pod' \
-        | grep -v 'Getting pods from source' \
-        | grep -v 'the object has been modified' \
-        | grep -v 'get backup status: Job.batch' \
-        | $sed -r 's/"ts":[0-9.]+//; s^limits-[0-9.]+/^^g' \
-        | sort -u \
-        | tee $tmp_dir/operator.log
+	kubectl_bin logs $(get_operator_pod) \
+		| grep -v 'level=info' \
+		| grep -v 'level=debug' \
+		| grep -v 'Getting tasks for pod' \
+		| grep -v 'Getting pods from source' \
+		| grep -v 'the object has been modified' \
+		| grep -v 'get backup status: Job.batch' \
+		| $sed -r 's/"ts":[0-9.]+//; s^limits-[0-9.]+/^^g' \
+		| sort -u \
+		| tee $tmp_dir/operator.log
 
-    #TODO: maybe will be enabled later
-    #diff $test_dir/compare/operator.log $tmp_dir/operator.log
+	#TODO: maybe will be enabled later
+	#diff $test_dir/compare/operator.log $tmp_dir/operator.log
 
-    kubectl_bin delete psmdb --all
-    kubectl_bin delete psmdb-backup --all || :
-    kubectl_bin delete psmdb-restore --all || :
+	kubectl_bin delete psmdb --all
+	kubectl_bin delete psmdb-backup --all || :
+	kubectl_bin delete psmdb-restore --all || :
 
-    kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml 2>/dev/null || :
-    if [ -n "$OPENSHIFT" ]; then
-        oc delete --grace-period=0 --force=true project "$namespace"
-    else
-        kubectl_bin delete --grace-period=0 --force=true namespace "$namespace"
-    fi
-    rm -rf ${tmp_dir}
+	kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml 2>/dev/null || :
+	if [ -n "$OPENSHIFT" ]; then
+		oc delete --grace-period=0 --force=true project "$namespace"
+	else
+		kubectl_bin delete --grace-period=0 --force=true namespace "$namespace"
+	fi
+	rm -rf ${tmp_dir}
 }
 
 desc() {
-    set +o xtrace
-    local msg="$@"
-    printf "\n\n-----------------------------------------------------------------------------------\n"
-    printf "$msg"
-    printf "\n-----------------------------------------------------------------------------------\n\n"
-    set -o xtrace
+	set +o xtrace
+	local msg="$@"
+	printf "\n\n-----------------------------------------------------------------------------------\n"
+	printf "$msg"
+	printf "\n-----------------------------------------------------------------------------------\n\n"
+	set -o xtrace
 }
 
 get_backup_dest() {
-    local backup_name=$1
+	local backup_name=$1
 
-    kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
-        | sed -e 's/.json$//'
+	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
+		| sed -e 's/.json$//'
 }
 
 get_service_endpoint() {
-    local service=$1
+	local service=$1
 
-    local hostname=$(
-        kubectl_bin get service/$service -o json \
-            | jq '.status.loadBalancer.ingress[].hostname' \
-            | sed -e 's/^"//; s/"$//;'
-    )
-    if [ -n "$hostname" -a "$hostname" != "null" ]; then
-        echo $hostname
-        return
-    fi
+	local hostname=$(
+		kubectl_bin get service/$service -o json \
+			| jq '.status.loadBalancer.ingress[].hostname' \
+			| sed -e 's/^"//; s/"$//;'
+	)
+	if [ -n "$hostname" -a "$hostname" != "null" ]; then
+		echo $hostname
+		return
+	fi
 
-    local ip=$(
-        kubectl_bin get service/$service -o json \
-            | jq '.status.loadBalancer.ingress[].ip' \
-            | sed -e 's/^"//; s/"$//;'
-    )
-    if [ -n "$ip" -a "$ip" != "null" ]; then
-        echo $ip
-        return
-    fi
+	local ip=$(
+		kubectl_bin get service/$service -o json \
+			| jq '.status.loadBalancer.ingress[].ip' \
+			| sed -e 's/^"//; s/"$//;'
+	)
+	if [ -n "$ip" -a "$ip" != "null" ]; then
+		echo $ip
+		return
+	fi
 
-    exit 1
+	exit 1
 }
 
 get_metric_values() {
-    local metric=$1
-    local instance=$2
-    local user_pass=$3
-    local start=$($date -u "+%s" -d "-1 minute")
-    local end=$($date -u "+%s")
-    local endpoint=$(get_service_endpoint monitoring-service)
+	local metric=$1
+	local instance=$2
+	local user_pass=$3
+	local start=$($date -u "+%s" -d "-1 minute")
+	local end=$($date -u "+%s")
+	local endpoint=$(get_service_endpoint monitoring-service)
 
-    curl -s -k "https://${user_pass}@$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
-        | jq '.data.result[0].values[][1]' \
-        | grep '^"[0-9]'
+	curl -s -k "https://${user_pass}@$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
+		| jq '.data.result[0].values[][1]' \
+		| grep '^"[0-9]'
 
 }
 
 get_qan_values() {
-    local instance=$1
-    local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
-    local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
-    local endpoint=$(get_service_endpoint monitoring-service)
+	local instance=$1
+	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
+	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
+	local endpoint=$(get_service_endpoint monitoring-service)
 
-    local uuid=$(
-        curl -s -k "https://$endpoint/qan-api/instances?deleted=no" \
-            | jq '.[] | select(.Subsystem == "mongo" and .Name == "'$instance'") | .UUID' \
-            | sed -e 's/^"//; s/"$//;'
-    )
+	local uuid=$(
+		curl -s -k "https://$endpoint/qan-api/instances?deleted=no" \
+			| jq '.[] | select(.Subsystem == "mongo" and .Name == "'$instance'") | .UUID' \
+			| sed -e 's/^"//; s/"$//;'
+	)
 
-    curl -s -k "https://$endpoint/qan-api/qan/profile/$uuid?begin=$start&end=$end&offset=0" \
-        | jq '.Query[].Fingerprint'
+	curl -s -k "https://$endpoint/qan-api/qan/profile/$uuid?begin=$start&end=$end&offset=0" \
+		| jq '.Query[].Fingerprint'
 }
 
 get_qan20_values() {
-    local instance=$1
-    local user_pass=$2
-    local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
-    local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
-    local endpoint=$(get_service_endpoint monitoring-service)
+	local instance=$1
+	local user_pass=$2
+	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
+	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
+	local endpoint=$(get_service_endpoint monitoring-service)
 
-    cat > payload.json << EOF
+	cat >payload.json <<EOF
 {
    "columns":[
       "load",
@@ -724,125 +724,124 @@ get_qan20_values() {
 }
 EOF
 
-    curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
-        | jq '.rows[].fingerprint'
-    rm -f payload.json
+	curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
+		| jq '.rows[].fingerprint'
+	rm -f payload.json
 }
 
 cat_config() {
-    cat "$1" \
-        | $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
-        | $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-        | $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-        | $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-        | $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
-        | $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
-        | $sed -e "s#apply:.*#apply: Never#"
+	cat "$1" \
+		| $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
+		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
+		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
+		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
+		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
+		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
+		| $sed -e "s#apply:.*#apply: Never#"
 }
 
 apply_cluster() {
-    if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
-        cat_config "$1" \
-            | kubectl_bin apply -f -
-    else
-        cat_config "$1" \
-            | yq d - 'spec.backup.tasks.[1]' \
-            | yq d - 'spec.backup.tasks.[1]' \
-            | yq d - 'spec.backup.tasks.[1]' \
-            | kubectl_bin apply -f -
-    fi
+	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+		cat_config "$1" \
+			| kubectl_bin apply -f -
+	else
+		cat_config "$1" \
+			| yq d - 'spec.backup.tasks.[1]' \
+			| yq d - 'spec.backup.tasks.[1]' \
+			| yq d - 'spec.backup.tasks.[1]' \
+			| kubectl_bin apply -f -
+	fi
 }
 
 spinup_psmdb() {
-    local cluster=$1
-    local config=$2
-    local size="${3:-3}"
+	local cluster=$1
+	local config=$2
+	local size="${3:-3}"
 
-    desc 'create first PSMDB cluster'
-    apply_cluster $config
+	desc 'create first PSMDB cluster'
+	apply_cluster $config
 
-    desc 'check if Pod is started'
-    wait_for_running "${cluster}" "$size"
-    sleep 20
+	desc 'check if Pod is started'
+	wait_for_running "${cluster}" "$size"
+	sleep 20
 
-    compare_kubectl "statefulset/${cluster}"
+	compare_kubectl "statefulset/${cluster}"
 
-    desc 'write data'
+	desc 'write data'
 
-    run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
-              "userAdmin:userAdmin123456@${cluster}.${namespace}"
+	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+		"userAdmin:userAdmin123456@${cluster}.${namespace}"
 
-    run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
+	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
 }
 
 kubectl_bin() {
-    local LAST_OUT="$(mktemp)"
-    local LAST_ERR="$(mktemp)"
-    local exit_status=0
-    local timeout=4
-    for i in $(seq 0 2); do
-        kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
-        exit_status=$?
-        [[ ${-/x} != $- ]] && echo "--- $i stdout" | cat - "$LAST_OUT" >&$BASH_XTRACEFD
-        [[ ${-/x} != $- ]] && echo "--- $i stderr" | cat - "$LAST_ERR" >&$BASH_XTRACEFD
-        if [[ ${exit_status} != 0 ]]; then
-            sleep "$((timeout * i))"
-        else
-            cat "$LAST_OUT"
-            cat "$LAST_ERR" >&2
-            rm "$LAST_OUT" "$LAST_ERR"
-            return ${exit_status}
-        fi
-    done
-    cat "$LAST_OUT"
-    cat "$LAST_ERR" >&2
-    rm "$LAST_OUT" "$LAST_ERR"
-    return ${exit_status}
+	local LAST_OUT="$(mktemp)"
+	local LAST_ERR="$(mktemp)"
+	local exit_status=0
+	local timeout=4
+	for i in $(seq 0 2); do
+		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
+		exit_status=$?
+		[[ ${-/x/} != $- ]] && echo "--- $i stdout" | cat - "$LAST_OUT" >&$BASH_XTRACEFD
+		[[ ${-/x/} != $- ]] && echo "--- $i stderr" | cat - "$LAST_ERR" >&$BASH_XTRACEFD
+		if [[ ${exit_status} != 0 ]]; then
+			sleep "$((timeout * i))"
+		else
+			cat "$LAST_OUT"
+			cat "$LAST_ERR" >&2
+			rm "$LAST_OUT" "$LAST_ERR"
+			return ${exit_status}
+		fi
+	done
+	cat "$LAST_OUT"
+	cat "$LAST_ERR" >&2
+	rm "$LAST_OUT" "$LAST_ERR"
+	return ${exit_status}
 }
 
 patch_secret() {
-    local secret=$1
-    local key=$2
-    local value=$3
+	local secret=$1
+	local key=$2
+	local value=$3
 
-    kubectl patch secret $secret -p="{\"data\":{\"$key\": \"$value\"}}"
+	kubectl patch secret $secret -p="{\"data\":{\"$key\": \"$value\"}}"
 }
 
 getSecretData() {
-    local secretName=$1
-    local dataKey=$2
-    local  data=`kubectl get secrets/${secretName} --template={{.data.${dataKey}}} | base64 -D`
-    echo "$data"
+	local secretName=$1
+	local dataKey=$2
+	local data=$(kubectl get secrets/${secretName} --template={{.data.${dataKey}}} | base64 -D)
+	echo "$data"
 }
 
 check_mongo_auth() {
-    local uri="$1"
+	local uri="$1"
 
-    ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
-    desc "ping return"
-    if [ "${ping}" != "1" ]; then
-        return 1
-    fi
+	ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
+	desc "ping return"
+	if [ "${ping}" != "1" ]; then
+		return 1
+	fi
 }
 
 wait_cluster_consistency() {
-    cluster_name=$1
-    retry=0
-    sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
-    until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
-        let retry+=1
-        if [ $retry -ge 16 ]; then
-            echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
-            exit 1
-        fi
-        echo 'waiting for cluster readyness'
-        sleep 10
-    done
+	cluster_name=$1
+	retry=0
+	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
+	until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
+		let retry+=1
+		if [ $retry -ge 16 ]; then
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+		echo 'waiting for cluster readyness'
+		sleep 10
+	done
 }
 
 run_backup() {
-    local storage=$1
+	local storage=$1
 
-    kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
+	kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
 }
-
