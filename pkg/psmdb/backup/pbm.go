@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -224,6 +225,42 @@ func (b *PBM) GetLastPITRChunk() (*pbm.PITRChunk, error) {
 	}
 
 	return c, nil
+}
+
+func (b *PBM) GetTimelinesPITR() ([]pbm.Timeline, error) {
+	var (
+		now       = time.Now().UTC().Unix()
+		timelines [][]pbm.Timeline
+	)
+
+	shards, err := b.C.ClusterMembers(nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting cluster members")
+	}
+
+	for _, s := range shards {
+		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, now, nil)
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting timelines for %s", s.RS)
+		}
+
+		timelines = append(timelines, rsTimelines)
+	}
+
+	return pbm.MergeTimelines(timelines...), nil
+}
+
+func (b *PBM) GetLatestTimelinePITR() (pbm.Timeline, error) {
+	timelines, err := b.GetTimelinesPITR()
+	if err != nil {
+		return pbm.Timeline{}, err
+	}
+
+	if len(timelines) == 0 {
+		return pbm.Timeline{}, errNoOplogsForPITR
+	}
+
+	return timelines[len(timelines)-1], nil
 }
 
 func (b *PBM) GetPITRChunkContains(unixTS int64) (*pbm.PITRChunk, error) {
