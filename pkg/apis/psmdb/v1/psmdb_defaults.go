@@ -218,7 +218,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 						"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
 			if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(60)
+				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
+				if cr.CompareVersion("1.8.0") >= 0 {
+					cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(60)
+				}
 			}
 			if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)

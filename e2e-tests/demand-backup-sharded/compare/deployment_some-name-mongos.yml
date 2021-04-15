@@ -109,7 +109,7 @@ spec:
                 - --sslPEMKeyFile
                 - /tmp/tls.pem
             failureThreshold: 3
-            initialDelaySeconds: 10
+            initialDelaySeconds: 60
             periodSeconds: 1
             successThreshold: 1
             timeoutSeconds: 2
