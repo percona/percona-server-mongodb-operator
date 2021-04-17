@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -358,14 +359,25 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				return reconcile.Result{}, err
 			}
 		} else {
-			err := r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
-				cr.Name+"-"+replset.Name+"-arbiter",
-				cr.Namespace,
-			))
-
+			sfs := appsv1.StatefulSet{}
+			err = r.client.Get(context.TODO(), types.NamespacedName{
+				Name: cr.Name+"-"+replset.Name+"-arbiter",
+				Namespace: cr.Namespace,
+			}, &sfs)
 			if err != nil && !k8serrors.IsNotFound(err) {
-				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
-				return reconcile.Result{}, err
+				return reconcile.Result{}, errors.Wrap(err, "failed to get arbiter statefulset")
+			}
+			if err == nil {
+				// ensure the current cr is fresh enough. Its rv should be larger than the one labeled to the sfs
+				if err := r.updatedResourceVersion(cr, &sfs); err != nil {
+					return reconcile.Result{}, err
+				}
+				err = r.client.Delete(context.TODO(), &sfs)
+
+				if err != nil && !k8serrors.IsNotFound(err) {
+					err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+					return reconcile.Result{}, err
+				}
 			}
 		}
 
@@ -465,6 +477,27 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) updatedResourceVersion(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) error {
+	labeledRV, ok := sfs.Labels["app.kubernetes.io/owner-rv"]
+	if !ok {
+		// Skip checking rv if the label gets removed, though it should not happen
+		log.Info("Cannot find app.kubernetes.io/owner-rv in statefulset's labels; skip checking")
+		return nil
+	}
+	largerRV, err := strconv.Atoi(cr.ResourceVersion)
+	if err != nil {
+		return errors.Errorf("Cannot convert %s to integer", cr.ResourceVersion)
+	}
+	smallerRV, err := strconv.Atoi(labeledRV)
+	if err != nil {
+		return errors.Errorf("Cannot convert %s to integer", labeledRV)
+	}
+	if largerRV <= smallerRV {
+		return errors.Errorf("Staleness: cr.ResourceVersion %s is no larger than labeledRV %s", cr.ResourceVersion, labeledRV)
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServerMongoDB) error {
@@ -609,10 +642,22 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 		return nil
 	}
 
-	sfsName := cr.Name + "-" + api.ConfigReplSetName
-	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
+	sfs := appsv1.StatefulSet{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &sfs)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to get config statefulse")
+	}
 
-	err := r.client.Delete(context.TODO(), sfs)
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+
+	// ensure the current cr is fresh enough. Its rv should be larger than the one labeled to the sts
+	if err := r.updatedResourceVersion(cr, &sfs); err != nil {
+		return err
+	}
+
+	err = r.client.Delete(context.TODO(), &sfs)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
 	}
@@ -1071,6 +1116,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	if k8serrors.IsNotFound(errGet) {
+		// only label the rv when creating the sts
+		if sfs.Labels == nil {
+			sfs.Labels = map[string]string{"app.kubernetes.io/owner-rv": cr.ResourceVersion}
+		} else {
+			sfs.Labels["app.kubernetes.io/owner-rv"] = cr.ResourceVersion
+		}
 		err = r.client.Create(context.TODO(), sfs)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return nil, errors.Wrapf(err, "create StatefulSet %s", sfs.Name)
