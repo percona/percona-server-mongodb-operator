@@ -361,7 +361,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		} else {
 			sfs := appsv1.StatefulSet{}
 			err = r.client.Get(context.TODO(), types.NamespacedName{
-				Name: cr.Name+"-"+replset.Name+"-arbiter",
+				Name:      cr.Name + "-" + replset.Name + "-arbiter",
 				Namespace: cr.Namespace,
 			}, &sfs)
 			if err != nil && !k8serrors.IsNotFound(err) {
