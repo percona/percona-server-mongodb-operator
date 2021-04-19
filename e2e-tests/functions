@@ -195,6 +195,28 @@ run_restore() {
 		| kubectl_bin apply -f -
 }
 
+run_restore_backupsource() {
+	local backupName=$1
+	local backupDest=$2
+	local storageName=$3
+
+	if [ -z "$storageName" ]; then
+		cat $test_dir/conf/restore-backupsource.yml \
+			| $sed -e "s/name:/name: restore-$backupName/" \
+			| $sed -e "s/BACKUP-NAME/$backupDest/" \
+			| $sed -e "/storageName/d" \
+			| kubectl_bin apply -f -
+
+		return
+	fi
+
+	cat $test_dir/conf/restore-backupsource.yml \
+		| $sed -e "s/name:/name: restore-$backupName/" \
+		| $sed -e "s/BACKUP-NAME/$backupDest/" \
+		| $sed -e "s/storageName:/storageName: $storageName/" \
+		| kubectl_bin apply -f -
+}
+
 wait_restore() {
 	local isSharded=${3:-0}
 	local cluster_pfx=$4

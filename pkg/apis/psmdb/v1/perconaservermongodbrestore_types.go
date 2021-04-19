@@ -16,12 +16,12 @@ import (
 type PerconaServerMongoDBRestoreSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	ClusterName string          `json:"clusterName,omitempty"`
-	Replset     string          `json:"replset,omitempty"`
-	BackupName  string          `json:"backupName,omitempty"`
-	Destination string          `json:"destination,omitempty"`
-	StorageName string          `json:"storageName,omitempty"`
-	PITR        *PITRestoreSpec `json:"pitr,omitempty"`
+	ClusterName  string                            `json:"clusterName,omitempty"`
+	Replset      string                            `json:"replset,omitempty"`
+	BackupName   string                            `json:"backupName,omitempty"`
+	BackupSource *PerconaServerMongoDBBackupStatus `json:"backupSource,omitempty"`
+	StorageName  string                            `json:"storageName,omitempty"`
+	PITR         *PITRestoreSpec                   `json:"pitr,omitempty"`
 }
 
 // RestoreState is for restore status states
@@ -73,8 +73,22 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 		return fmt.Errorf("spec clusterName field is empty")
 	}
 
-	if len(r.Spec.BackupName) == 0 && (len(r.Spec.StorageName) == 0 || len(r.Spec.Destination) == 0) {
-		return errors.New("fields backupName or storageName and destination is empty")
+	if len(r.Spec.BackupName) == 0 && r.Spec.BackupSource == nil {
+		return errors.New("one of backupName or backupSource is required")
+	}
+
+	if r.Spec.BackupSource != nil {
+		if len(r.Spec.BackupSource.Destination) == 0 {
+			return errors.New("backupSource destination is required")
+		}
+
+		if r.Spec.BackupSource.Destination[:5] != "s3://" {
+			return errors.New("backupSource destination should use s3 protocol format")
+		}
+
+		if len(r.Spec.StorageName) == 0 && r.Spec.BackupSource.S3 == nil {
+			return errors.New("one of storageName or backupSource.s3 is required")
+		}
 	}
 
 	if r.Spec.PITR != nil {
