@@ -1,0 +1,7 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBBackup
+metadata:
+  name:
+spec:
+  psmdbCluster: some-name
+  storageName: minio
