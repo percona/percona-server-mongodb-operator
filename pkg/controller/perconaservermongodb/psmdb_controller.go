@@ -333,7 +333,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			"app.kubernetes.io/owner-rv":   cr.ResourceVersion,
 		}
 
 		pods, err := r.getRSPods(cr, replset.Name)
@@ -472,9 +471,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 func (r *ReconcilePerconaServerMongoDB) updatedResourceVersion(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) error {
 	labeledRV, ok := sfs.Labels["app.kubernetes.io/owner-rv"]
 	if !ok {
-		// Skip checking rv if the label gets removed, though it should not happen
-		log.Info("Cannot find app.kubernetes.io/owner-rv in statefulset's labels; skip checking")
-		return nil
+		return errors.Errorf("Cannot find app.kubernetes.io/owner-rv in statefulset's labels")
 	}
 	largerRV, err := strconv.Atoi(cr.ResourceVersion)
 	if err != nil {
@@ -946,10 +943,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
 	if errGet != nil && !k8serrors.IsNotFound(errGet) {
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
-	} else if errGet == nil {
+	} else if k8serrors.IsNotFound(errGet) {
+		matchLabels["app.kubernetes.io/owner-rv"] = cr.ResourceVersion
+	} else {
 		if err := r.updatedResourceVersion(cr, sfs); err != nil {
 			return nil, err
 		}
+		matchLabels["app.kubernetes.io/owner-rv"] = sfs.Labels["app.kubernetes.io/owner-rv"]
 	}
 
 	inits := []corev1.Container{}
