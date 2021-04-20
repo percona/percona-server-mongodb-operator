@@ -333,6 +333,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
+			"app.kubernetes.io/owner-rv":	cr.ResourceVersion,
 		}
 
 		pods, err := r.getRSPods(cr, replset.Name)
@@ -359,25 +360,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 				return reconcile.Result{}, err
 			}
 		} else {
-			sfs := appsv1.StatefulSet{}
-			err = r.client.Get(context.TODO(), types.NamespacedName{
-				Name:      cr.Name + "-" + replset.Name + "-arbiter",
-				Namespace: cr.Namespace,
-			}, &sfs)
-			if err != nil && !k8serrors.IsNotFound(err) {
-				return reconcile.Result{}, errors.Wrap(err, "failed to get arbiter statefulset")
-			}
-			if err == nil {
-				// ensure the current cr is fresh enough. Its rv should be larger than the one labeled to the sfs
-				if err := r.updatedResourceVersion(cr, &sfs); err != nil {
-					return reconcile.Result{}, err
-				}
-				err = r.client.Delete(context.TODO(), &sfs)
+			err := r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
+				cr.Name+"-"+replset.Name+"-arbiter",
+				cr.Namespace,
+			))
 
-				if err != nil && !k8serrors.IsNotFound(err) {
-					err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
-					return reconcile.Result{}, err
-				}
+			if err != nil && !k8serrors.IsNotFound(err) {
+				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
 			}
 		}
 
@@ -494,8 +484,8 @@ func (r *ReconcilePerconaServerMongoDB) updatedResourceVersion(cr *api.PerconaSe
 	if err != nil {
 		return errors.Errorf("Cannot convert %s to integer", labeledRV)
 	}
-	if largerRV <= smallerRV {
-		return errors.Errorf("Staleness: cr.ResourceVersion %s is no larger than labeledRV %s", cr.ResourceVersion, labeledRV)
+	if largerRV < smallerRV {
+		return errors.Errorf("Staleness: cr.ResourceVersion %s is smaller than labeledRV %s", cr.ResourceVersion, labeledRV)
 	}
 	return nil
 }
@@ -642,22 +632,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 		return nil
 	}
 
-	sfs := appsv1.StatefulSet{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &sfs)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to get config statefulse")
-	}
+	sfsName := cr.Name + "-" + api.ConfigReplSetName
+	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
 
-	if k8serrors.IsNotFound(err) {
-		return nil
-	}
-
-	// ensure the current cr is fresh enough. Its rv should be larger than the one labeled to the sts
-	if err := r.updatedResourceVersion(cr, &sfs); err != nil {
-		return err
-	}
-
-	err = r.client.Delete(context.TODO(), &sfs)
+	err := r.client.Delete(context.TODO(), sfs)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
 	}
@@ -968,6 +946,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
 	if errGet != nil && !k8serrors.IsNotFound(errGet) {
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
+	} else if errGet == nil {
+		if err := r.updatedResourceVersion(cr, sfs); err != nil {
+			return nil, err
+		}
 	}
 
 	inits := []corev1.Container{}
@@ -1116,12 +1098,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	}
 
 	if k8serrors.IsNotFound(errGet) {
-		// only label the rv when creating the sts
-		if sfs.Labels == nil {
-			sfs.Labels = map[string]string{"app.kubernetes.io/owner-rv": cr.ResourceVersion}
-		} else {
-			sfs.Labels["app.kubernetes.io/owner-rv"] = cr.ResourceVersion
-		}
 		err = r.client.Create(context.TODO(), sfs)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return nil, errors.Wrapf(err, "create StatefulSet %s", sfs.Name)
