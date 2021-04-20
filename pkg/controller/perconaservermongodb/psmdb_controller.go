@@ -943,13 +943,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	errGet := r.client.Get(context.TODO(), types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
 	if errGet != nil && !k8serrors.IsNotFound(errGet) {
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
-	} else if k8serrors.IsNotFound(errGet) {
-		matchLabels["app.kubernetes.io/owner-rv"] = cr.ResourceVersion
-	} else {
-		if err := r.updatedResourceVersion(cr, sfs); err != nil {
-			return nil, err
+	}
+
+	if cr.CompareVersion("1.6.0") >= 0 { // For compatibility: sfs is only labeled when cr version >= 1.6.0
+		if k8serrors.IsNotFound(errGet) {
+			matchLabels["app.kubernetes.io/owner-rv"] = cr.ResourceVersion
+		} else {
+			if err := r.updatedResourceVersion(cr, sfs); err != nil {
+				return nil, err
+			}
+			matchLabels["app.kubernetes.io/owner-rv"] = sfs.Labels["app.kubernetes.io/owner-rv"]
 		}
-		matchLabels["app.kubernetes.io/owner-rv"] = sfs.Labels["app.kubernetes.io/owner-rv"]
 	}
 
 	inits := []corev1.Container{}
