@@ -333,7 +333,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			"app.kubernetes.io/owner-rv":	cr.ResourceVersion,
+			"app.kubernetes.io/owner-rv":   cr.ResourceVersion,
 		}
 
 		pods, err := r.getRSPods(cr, replset.Name)
