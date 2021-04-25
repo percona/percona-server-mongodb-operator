@@ -948,9 +948,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
-	if _, ok := matchLabels["app.kubernetes.io/owner-rv"]; ok {  // clear the rv label in matchLabels for each new sfs
-		delete(matchLabels, "app.kubernetes.io/owner-rv")
-	}
+	delete(matchLabels, "app.kubernetes.io/owner-rv")
 	if cr.CompareVersion("1.6.0") >= 0 { // For compatibility: sfs is only labeled when cr version >= 1.6.0
 		if k8serrors.IsNotFound(errGet) {
 			matchLabels["app.kubernetes.io/owner-rv"] = cr.ResourceVersion
