@@ -471,15 +471,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 func (r *ReconcilePerconaServerMongoDB) updatedResourceVersion(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) error {
 	labeledRV, ok := sfs.Labels["app.kubernetes.io/owner-rv"]
 	if !ok {
-		return errors.Errorf("Cannot find app.kubernetes.io/owner-rv in statefulset's labels")
+		log.Info("Fail to find app.kubernetes.io/owner-rv in statefulset's labels; skip checking resource version")
+		return nil
 	}
 	largerRV, err := strconv.Atoi(cr.ResourceVersion)
 	if err != nil {
-		return errors.Errorf("Cannot convert %s to integer", cr.ResourceVersion)
+		log.Info("Fail to convert %s to integer; skip checking resource version", cr.ResourceVersion)
+		return nil
 	}
 	smallerRV, err := strconv.Atoi(labeledRV)
 	if err != nil {
-		return errors.Errorf("Cannot convert %s to integer", labeledRV)
+		log.Info("Fail to convert %s to integer; skip checking resource version", labeledRV)
+		return nil
 	}
 	if largerRV < smallerRV {
 		return errors.Errorf("Staleness: cr.ResourceVersion %s is smaller than labeledRV %s", cr.ResourceVersion, labeledRV)
@@ -945,6 +948,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
+	if _, ok := matchLabels["app.kubernetes.io/owner-rv"]; ok {  // clear the rv label in matchLabels for each new sfs
+		delete(matchLabels, "app.kubernetes.io/owner-rv")
+	}
 	if cr.CompareVersion("1.6.0") >= 0 { // For compatibility: sfs is only labeled when cr version >= 1.6.0
 		if k8serrors.IsNotFound(errGet) {
 			matchLabels["app.kubernetes.io/owner-rv"] = cr.ResourceVersion
@@ -952,7 +958,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			if err := r.updatedResourceVersion(cr, sfs); err != nil {
 				return nil, err
 			}
-			matchLabels["app.kubernetes.io/owner-rv"] = sfs.Labels["app.kubernetes.io/owner-rv"]
+			if prevRV, ok := sfs.Labels["app.kubernetes.io/owner-rv"]; ok {
+				matchLabels["app.kubernetes.io/owner-rv"] = prevRV
+			}
 		}
 	}
 
