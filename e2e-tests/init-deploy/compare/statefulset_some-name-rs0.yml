@@ -84,13 +84,6 @@ spec:
               command:
                 - /data/db/mongodb-healthcheck
                 - k8s
-                - liveness
-                - --ssl
-                - --sslInsecure
-                - --sslCAFile
-                - /etc/mongodb-ssl/ca.crt
-                - --sslPEMKeyFile
-                - /tmp/tls.pem
                 - --startupDelaySeconds
                 - "7200"
             failureThreshold: 4
@@ -138,8 +131,6 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: some-name-mongodb-encryption-key
               readOnly: true
-            - mountPath: /etc/users-secret
-              name: users-secret-file
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -187,10 +178,6 @@ spec:
             defaultMode: 288
             optional: true
             secretName: some-name-ssl-internal
-        - name: users-secret-file
-          secret:
-            defaultMode: 420
-            secretName: internal-some-name-users
   updateStrategy:
     rollingUpdate:
       partition: 0
