@@ -108,11 +108,11 @@ func jobName(cr *api.PerconaServerMongoDB) string {
 func isUpdateValid(current, desired string) bool {
 	switch current {
 	case "3.6":
-		return desired == "4.0"
+		return desired == "3.6" || desired == "4.0"
 	case "4.0":
-		return desired == "4.2"
+		return desired == "4.0" || desired == "4.2"
 	case "4.2":
-		return desired == "4.4"
+		return desired == "4.2" || desired == "4.4"
 	default:
 		return false
 	}

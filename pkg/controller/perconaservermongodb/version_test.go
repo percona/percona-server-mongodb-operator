@@ -142,7 +142,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "4.0.4.0-recommended",
+							Apply: "3.7.4.0-recommended",
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
