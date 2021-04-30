@@ -6,19 +6,25 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
+write_document() {
+	local cmp_postfix=$1
+
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster.$namespace"
+	sleep 10 # for minikube
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "$cmp_postfix"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "$cmp_postfix"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "$cmp_postfix"
+}
+
 write_initial_data() {
 	desc 'write initial data, read from all'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$cluster.$namespace"
 	sleep 2
-	run_mongo \
-		'use myApp\n db.test.insert({ x: 100500 })' \
-		"myApp:myPass@$cluster.$namespace"
-	sleep 10 # for minikube
-	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+	write_document
 }
 
 run_backup() {
@@ -93,13 +99,16 @@ main() {
 
 	run_backup $backup_name_minio 0
 
+	write_document "-2nd"
+	sleep 2
+
 	time_now=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
 
-	check_recovery $backup_name_minio-0 date "$time_now"
+	check_recovery $backup_name_minio-0 date "$time_now" "-2nd"
 
 	run_backup $backup_name_minio 1
 
-	check_recovery $backup_name_minio-1 latest "" "-2nd"
+	check_recovery $backup_name_minio-1 latest "" "-3rd"
 
 	destroy $namespace
 }
