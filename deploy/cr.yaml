@@ -322,6 +322,8 @@ spec:
 #          region: us-east-1
 #          credentialsSecret: my-cluster-name-backup-minio
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
+    pitr:
+      enabled: false
     tasks:
 #      - name: daily-s3-us-west
 #        enabled: true
