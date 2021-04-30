@@ -152,8 +152,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}
 
-	log.Info("doing step down...")
-	err = mongo.StepDown(context.TODO(), client)
+	unsafe := cr.Spec.UnsafeConf && len(list.Items) == 1
+	log.Info(fmt.Sprintf("doing step down (force: %t)...", unsafe))
+	err = mongo.StepDown(context.TODO(), client, unsafe)
 	if err != nil {
 		return errors.Wrap(err, "failed to do step down")
 	}

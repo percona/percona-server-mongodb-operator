@@ -361,10 +361,10 @@ func RSBuildInfo(ctx context.Context, client *mongo.Client) (BuildInfo, error) {
 	return bi, nil
 }
 
-func StepDown(ctx context.Context, client *mongo.Client) error {
+func StepDown(ctx context.Context, client *mongo.Client, unsafe bool) error {
 	resp := OKResponse{}
 
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: 60}})
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: 60}, {Key: "force", Value: unsafe}})
 	err := res.Err()
 	if err != nil {
 		cErr, ok := err.(mongo.CommandError)
