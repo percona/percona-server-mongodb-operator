@@ -18,7 +18,7 @@ spec:
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
-    apply: recommended
+    apply: 4.4-recommended
     schedule: "0 2 * * *"
     setFCV: false
   secrets:
