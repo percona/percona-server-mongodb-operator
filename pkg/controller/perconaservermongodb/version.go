@@ -118,8 +118,8 @@ func isUpdateValid(current, desired string) bool {
 	}
 }
 
-func canUpgradeVersion(current, new string) (bool, error) {
-	cursv, err := v.NewSemver(current)
+func canUpgradeVersion(fcv, new string) (bool, error) {
+	fcvsv, err := v.NewSemver(fcv)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get current semver")
 	}
@@ -129,10 +129,10 @@ func canUpgradeVersion(current, new string) (bool, error) {
 		return false, errors.Wrap(err, "failed to get new semver")
 	}
 
-	currentMM := MajorMinor(cursv)
+	currentMM := MajorMinor(fcvsv)
 	newMM := MajorMinor(newsv)
 
-	cmp := cursv.Compare(newsv)
+	cmp := fcvsv.Compare(newsv)
 
 	if cmp == -1 && isUpdateValid(currentMM, newMM) {
 		return true, nil
@@ -140,7 +140,7 @@ func canUpgradeVersion(current, new string) (bool, error) {
 		return false, nil
 	}
 
-	return false, errors.Errorf("invalid upgrade: from %s to %s", current, new)
+	return false, errors.Errorf("invalid upgrade: from %s to %s", fcv, new)
 }
 
 type UpgradeRequest struct {
@@ -178,7 +178,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 		ver = applySp[0]
 	}
 
-	_, err := v.NewSemver(ver)
+	newVer, err := v.NewSemver(ver)
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
 	}
@@ -189,9 +189,27 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 		return UpgradeRequest{true, apply, ver}, nil
 	}
 
-	can, err := canUpgradeVersion(fcv, ver)
+	mongoVer, err := v.NewSemver(cr.Status.MongoVersion)
 	if err != nil {
-		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
+		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
+	}
+
+	newMM := MajorMinor(newVer)
+	mongoMM := MajorMinor(mongoVer)
+
+	can := false
+
+	if newMM > mongoMM {
+		can, err = canUpgradeVersion(fcv, ver)
+		if err != nil {
+			return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
+		}
+	} else if newMM < mongoMM {
+		if newMM != fcv {
+			return UpgradeRequest{false, "", ""}, errors.Errorf("can't upgrade to %s wits FCV set to %s", ver, fcv)
+		}
+
+		can = true
 	}
 
 	if can {
