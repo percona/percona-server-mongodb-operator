@@ -57,7 +57,7 @@ function main() {
 
     desc 'Get back from sharded cluster to replicaset'
     kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
-    sleep 10
+    sleep 20
     wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "true"
 
     simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
