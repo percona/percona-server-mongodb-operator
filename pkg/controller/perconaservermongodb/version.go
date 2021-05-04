@@ -191,7 +191,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 
 	mongoVer, err := v.NewSemver(cr.Status.MongoVersion)
 	if err != nil {
-		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
+		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "failed to make semver")
 	}
 
 	newMM := MajorMinor(newVer)
