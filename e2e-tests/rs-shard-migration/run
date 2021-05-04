@@ -74,7 +74,7 @@ function main() {
     desc 'cleanup'
     kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
     kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
-    kubectl_bin delete pvc --all
+#   kubectl_bin delete pvc --all
     destroy "${namespace}"
 }
 
