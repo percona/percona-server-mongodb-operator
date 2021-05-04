@@ -50,12 +50,11 @@ Bugs Fixed
 * :jirabug:`K8SPSMDB-434`: Fix a bug due to which nil pointer dereference error
   was occurring when switching the ``sharding.enabled`` option from false to
   true (Thanks to srteam2020 for contributing)
-* :jirabug:`K8SPSMDB-430`: Fix a bug due to which a stale API server could cause
-  undesired StatefulSet and PVC deletion in case of a recreated instance with
-  the same name (thanks to srteam2020 for contributing)
+* :jirabug:`K8SPSMDB-430`: Fix a bug due to which a stale apiserver could
+  trigger undesired StatefulSet and PVC deletion when recreating the cluster
+  with the same name (thanks to srteam2020 for contributing)
 * :jirabug:`K8SPSMDB-428`: Fix a bug which caused mongos to fail in case of the
-  empty name field in configsvrReplSet section of the Custom Resource (thanks to
-  Jan Prukner for reporting this issue)
+  empty name field in configsvrReplSet section of the Custom Resource
 * :jirabug:`K8SPSMDB-418`: Fix a bug due to which ``serviceAnnotations`` changes
   in the ``deploy/cr.yaml`` file were not applied to the running cluster
 * :jirabug:`K8SPSMDB-364`: Fix a bug where liveness probe of a mongo container
