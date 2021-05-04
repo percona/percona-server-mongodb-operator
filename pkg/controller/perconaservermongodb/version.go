@@ -105,42 +105,21 @@ func jobName(cr *api.PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s/%s", jobName, nn.String())
 }
 
-func isUpdateValid(current, desired string) bool {
-	switch current {
+func canUpgradeVersion(fcv, new string) bool {
+	if fcv >= new {
+		return false
+	}
+
+	switch fcv {
 	case "3.6":
-		return desired == "4.0"
+		return new == "4.0"
 	case "4.0":
-		return desired == "4.2"
+		return new == "4.2"
 	case "4.2":
-		return desired == "4.4"
+		return new == "4.4"
 	default:
 		return false
 	}
-}
-
-func canUpgradeVersion(fcv, new string) (bool, error) {
-	fcvsv, err := v.NewSemver(fcv)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get current semver")
-	}
-
-	newsv, err := v.NewSemver(new)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get new semver")
-	}
-
-	currentMM := MajorMinor(fcvsv)
-	newMM := MajorMinor(newsv)
-
-	cmp := fcvsv.Compare(newsv)
-
-	if cmp == -1 && isUpdateValid(currentMM, newMM) {
-		return true, nil
-	} else if cmp == 0 {
-		return false, nil
-	}
-
-	return false, errors.Errorf("invalid upgrade: from %s to %s", fcv, new)
 }
 
 type UpgradeRequest struct {
@@ -197,22 +176,19 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 	newMM := MajorMinor(newVer)
 	mongoMM := MajorMinor(mongoVer)
 
-	can := false
-
 	if newMM > mongoMM {
-		can, err = canUpgradeVersion(fcv, ver)
-		if err != nil {
-			return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
+		if !canUpgradeVersion(fcv, newMM) {
+			return UpgradeRequest{false, "", ""}, errors.Errorf("can't upgrade to %s with FCV set to %s", ver, fcv)
 		}
-	} else if newMM < mongoMM {
+
+		return UpgradeRequest{true, apply, ver}, nil
+	}
+
+	if newMM < mongoMM {
 		if newMM != fcv {
 			return UpgradeRequest{false, "", ""}, errors.Errorf("can't upgrade to %s wits FCV set to %s", ver, fcv)
 		}
 
-		can = true
-	}
-
-	if can {
 		return UpgradeRequest{true, apply, ver}, nil
 	}
 
