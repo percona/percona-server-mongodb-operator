@@ -245,7 +245,7 @@ key in the ``deploy/cr.yaml`` configuration file:
    MongoDB versions can be found in `upstream documentation <https://docs.mongodb.com/manual/release-notes/4.4-downgrade-standalone/#prerequisites>`_.
 
 By default the Operator uses `FeatureCompatibilityVersion (FCV) <https://docs.mongodb.com/manual/reference/command/setFeatureCompatibilityVersion/>`_
-to make sure backwards-incompatible features are not not automatically enabled 
+to make sure backwards-incompatible features are not automatically enabled 
 with the major version upgrade (which is recommended and safe behavior).
 You can turn this backward compatibility off at any moment (before the
 upgrade or after it) by setting the :ref:`upgradeoptions-setfcv` flag in the
@@ -253,4 +253,3 @@ upgrade or after it) by setting the :ref:`upgradeoptions-setfcv` flag in the
 
 .. note:: With setFeatureCompatibilityVersion set major version rollback is not
    currently supported by the Operator.
-
