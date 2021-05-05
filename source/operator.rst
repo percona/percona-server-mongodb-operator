@@ -163,6 +163,21 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 | **Description** | Scheduled time to check for updates, specified in the					|
 |                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _upgradeoptions-setfcv:									|
+|                 |												|
+| **Key**         | `upgradeOptions.setFCV <operator.html#upgradeoptions-setfcv>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value**       | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Turns off or on the 									|
+|                 | `FeatureCompatibilityVersion (FCV)								|
+|                 | <https://docs.mongodb.com/manual/reference/command/setFeatureCompatibilityVersion/>`_	|
+|                 | for major version upgrades									|
++-----------------+---------------------------------------------------------------------------------------------+
 
 .. _operator.secrets-section:
 
