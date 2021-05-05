@@ -155,6 +155,12 @@ To be used, it requires setting the :ref:`backup-pitr-enabled` key in the
      pitr:
        enabled: true
 
+.. note:: It is necessary to have at least one full backup to use point-in-time
+   recovery. Percona Backup for MongoDB will not upload operations logs if there
+   is no full backup. This is true for new clusters and also true for clusters
+   which have been just recovered from backup.
+
+
 Percona Backup for MongoDB uploads operations logs to the same bucket where
 full backup is stored. This makes point-in-time recovery functionality available
 only if there is a single bucket in :ref:`spec.backup.storages<backup-storages-type>`.
@@ -219,14 +225,18 @@ Following steps are needed to restore a previously saved backup:
 Restoring backup with point-in-time recovery
 ********************************************
 
-Following steps are needed to roll back the cluster to a
-specific date and time:
+Following steps are needed to roll back the cluster to a specific date and time:
 
 1. First of all make sure that the cluster is running.
 
-2. Now find out correct name for the **cluster** (backup name is not needed if
-   point-in-time recovery is enabled and will be ignored). Available
-   clusters can be listed with the following command:
+2. Now find out correct names for the **backup** and the **cluster**. Available
+   backups can be listed with the following command:
+
+   .. code:: bash
+
+      kubectl get psmdb-backup
+
+   And the following command will list available clusters:
 
    .. code:: bash
 
@@ -234,11 +244,13 @@ specific date and time:
 
 3. Edit the ``deploy/backup/restore.yaml`` file, adding the right cluster name
    and additional restoration parameters to the ``pitr`` section
-   
+
    .. code:: yaml
-   
-      spec:  
+
+      ...
+      spec:
         clusterName: my-cluster-name
+        backupName: backup1
         pitr:
           type: date
           date: YYYY-MM-DD hh:mm:ss
@@ -261,6 +273,7 @@ specific date and time:
               name: restore1
             spec:
               clusterName: my-cluster-name
+              backupName: backup1
               pitr:
                 type: date
                 date: YYYY-MM-DD hh:mm:ss
