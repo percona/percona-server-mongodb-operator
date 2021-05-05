@@ -145,6 +145,16 @@ specific date and time.
 Technically, this feature involves saving operations log updates to
 the S3-compatible backup storage.
 
+To be used, it requires setting the :ref:`backup-pitr-enabled` key in the
+``deploy/cr.yaml`` configuration file:
+
+.. code:: yaml
+
+   backup:
+     ...
+     pitr:
+       enabled: true
+
 Percona Backup for MongoDB uploads operations logs to the same bucket where
 full backup is stored. This makes point-in-time recovery functionality available
 only if there is a single bucket in :ref:`spec.backup.storages<backup-storages-type>`.
@@ -213,15 +223,6 @@ Following steps are needed to to roll back the cluster to a
 specific date and time:
 
 Details:
-
-We are going to rely on existing restore.yaml manifest and add PITR section:
-
-spec:  
-  clusterName: my-cluster-name  
-  backupName: backup1  
-  pitr:    
-    type: date    
-    date: YYYY-MM-DD hh:mm:ss
 
 1. First of all make sure that the cluster is running.
 
