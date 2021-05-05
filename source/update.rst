@@ -244,12 +244,16 @@ key in the ``deploy/cr.yaml`` configuration file:
    incompatible configuration settings. Compatibility issues between major
    MongoDB versions can be found in `upstream documentation <https://docs.mongodb.com/manual/release-notes/4.4-downgrade-standalone/#prerequisites>`_.
 
-By default the Operator uses `FeatureCompatibilityVersion (FCV) <https://docs.mongodb.com/manual/reference/command/setFeatureCompatibilityVersion/>`_
-to make sure backwards-incompatible features are not automatically enabled 
-with the major version upgrade (which is recommended and safe behavior).
-You can turn this backward compatibility off at any moment (before the
-upgrade or after it) by setting the :ref:`upgradeoptions-setfcv` flag in the
-``deploy/cr.yaml`` configuration file.
+By default the Operator doesn't set `FeatureCompatibilityVersion (FCV) <https://docs.mongodb.com/manual/reference/command/setFeatureCompatibilityVersion/>`_
+to match the new version, thus making sure that backwards-incompatible features
+are not automatically enabled with the major version upgrade (which is
+recommended and safe behavior). You can turn this backward compatibility off at
+any moment (after the upgrade or even before it) by setting the :ref:`upgradeoptions-setfcv` flag in the
+``deploy/cr.yaml`` configuration file to ``true``.
 
 .. note:: With setFeatureCompatibilityVersion set major version rollback is not
-   currently supported by the Operator.
+   currently supported by the Operator. Therefore it is recommended to stay
+   without enabling this flag for some time after the major upgrade to ensure
+   the likelihood of downgrade is minimal. Setting ``setFCV`` flag to ``true``
+   simultaneously with the ``apply`` flag should be done only if the whole
+   procedure is tested on staging and you are 100% sure about it.
