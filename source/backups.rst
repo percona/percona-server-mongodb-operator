@@ -168,7 +168,7 @@ message in the operator logs.
 Restore the cluster from a previously saved backup
 --------------------------------------------------
 
-The Operator supports the ability to perform a full restore on a PostgreSQL
+The Operator supports the ability to perform a full restore on a MongoDB
 cluster as well as a point-in-time-recovery.
 
 .. _backups-no-pitr-restore:
@@ -290,4 +290,3 @@ When the name is known, backup can be deleted as follows:
 .. code:: bash
 
    kubectl delete psmdb-backup/<backup-name>
-
