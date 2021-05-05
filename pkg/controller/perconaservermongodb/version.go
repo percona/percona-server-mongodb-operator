@@ -105,6 +105,7 @@ func jobName(cr *api.PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s/%s", jobName, nn.String())
 }
 
+// passed version should have format "Major.Minior"
 func canUpgradeVersion(fcv, new string) bool {
 	if fcv >= new {
 		return false
