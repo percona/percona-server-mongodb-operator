@@ -10,7 +10,7 @@
 Release Highlights
 ================================================================================
 
-* The support for :ref:`Point-in-time recovery<backups-pitr>` added in this
+* The support for :ref:`Point-in-time recovery<backups-pitr-oplog>` added in this
   release. Users can now recover to a specific date and time from operations
   logs stored on S3
 * It is now possible to perform a :ref:`major version upgrade<operator-update-smartupdates>`
@@ -20,7 +20,7 @@ New Features
 ================================================================================
 
 * :jirabug:`K8SPSMDB-387`: Add support for
-  :ref:`point-in-time recovery<backups-pitr>` to recover to a specific date and
+  :ref:`point-in-time recovery<backups-pitr-oplog>` to recover to a specific date and
   time
 * :jirabug:`K8SPSMDB-284`: Add support for automated major version MongoDB
   upgrades
