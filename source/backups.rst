@@ -219,7 +219,7 @@ Following steps are needed to restore a previously saved backup:
 Restoring backup with point-in-time recovery
 ********************************************
 
-Following steps are needed to to roll back the cluster to a
+Following steps are needed to roll back the cluster to a
 specific date and time:
 
 Details:
