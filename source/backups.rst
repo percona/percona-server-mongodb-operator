@@ -135,8 +135,36 @@ The example of such file is `deploy/backup/restore.yaml <https://github.com/perc
         storageName: s3-us-west
       EOF
 
+.. _backups-pitr-oplog:
+
+Storing operations logs for point-in-time recovery
+--------------------------------------------------
+
+Point-in-time recovery functionality allows users to roll back the cluster to a
+specific date and time.
+Technically, this feature involves saving operations log updates to
+the S3-compatible backup storage.
+
+Percona Backup for MongoDB uploads operations logs to the same bucket where
+full backup is stored. This makes point-in-time recovery functionality available
+only if there is a single bucket in :ref:`spec.backup.storages<backup-storages-type>`.
+Otherwise point-in-time recovery will not be enabled and there will be an error
+message in the operator logs.
+
+.. note:: Adding a new bucket when point-in-time recovery is enabled will not
+   break it, but put error message about the additional bucket in the operator
+   logs as well.
+
 Restore the cluster from a previously saved backup
 --------------------------------------------------
+
+The Operator supports the ability to perform a full restore on a PostgreSQL
+cluster as well as a point-in-time-recovery.
+
+.. _backups-no-pitr-restore:
+
+Restoring without point-in-time recovery
+****************************************
 
 Following steps are needed to restore a previously saved backup:
 
@@ -174,6 +202,69 @@ Following steps are needed to restore a previously saved backup:
             spec:
               clusterName: my-cluster-name
               backupName: backup1
+            EOF
+
+.. _backups-pitr-restore:
+
+Restoring backup with point-in-time recovery
+********************************************
+
+Following steps are needed to to roll back the cluster to a
+specific date and time:
+
+Details:
+
+We are going to rely on existing restore.yaml manifest and add PITR section:
+
+spec:  
+  clusterName: my-cluster-name  
+  backupName: backup1  
+  pitr:    
+    type: date    
+    date: YYYY-MM-DD hh:mm:ss
+
+1. First of all make sure that the cluster is running.
+
+2. Now find out correct name for the **cluster** (backup name is not needed if
+   point-in-time recovery is enabled and will be ignored). Available
+   clusters can be listed with the following command:
+
+   .. code:: bash
+
+      kubectl get psmdb
+
+3. Edit the ``deploy/backup/restore.yaml`` file, adding the right cluster name
+   and additional restoration parameters to the ``pitr`` section
+   
+   .. code:: yaml
+   
+      spec:  
+        clusterName: my-cluster-name
+        pitr:
+          type: date
+          date: YYYY-MM-DD hh:mm:ss
+
+3. Run the actual restoration process:
+
+   .. code:: bash
+
+      kubectl apply -f deploy/backup/restore.yaml
+
+   .. note:: Storing backup settings in a separate file can be replaced by
+      passing its content to the ``kubectl apply`` command as follows:
+
+      .. code:: bash
+
+            cat <<EOF | kubectl apply -f-
+            apiVersion: psmdb.percona.com/v1
+            kind: PerconaServerMongoDBRestore
+            metadata:
+              name: restore1
+            spec:
+              clusterName: my-cluster-name
+              pitr:
+                type: date
+                date: YYYY-MM-DD hh:mm:ss
             EOF
 
 Delete the unneeded backup
