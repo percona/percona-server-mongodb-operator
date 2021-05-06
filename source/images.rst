@@ -6,6 +6,7 @@ Percona certified images
 Following table presents Percona’s certified docker images to be used with the
 Percona Operator for Percona Server for MongoDB:
 
+      .. tabularcolumns:: |p{4cm}|p{11cm}|
       .. list-table::
          :widths: 15 50
          :header-rows: 1
