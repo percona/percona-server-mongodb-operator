@@ -105,42 +105,22 @@ func jobName(cr *api.PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s/%s", jobName, nn.String())
 }
 
-func isUpdateValid(current, desired string) bool {
-	switch current {
+// passed version should have format "Major.Minior"
+func canUpgradeVersion(fcv, new string) bool {
+	if fcv >= new {
+		return false
+	}
+
+	switch fcv {
 	case "3.6":
-		return desired == "4.0"
+		return new == "4.0"
 	case "4.0":
-		return desired == "4.2"
+		return new == "4.2"
 	case "4.2":
-		return desired == "4.4"
+		return new == "4.4"
 	default:
 		return false
 	}
-}
-
-func canUpgradeVersion(current, new string) (bool, error) {
-	cursv, err := v.NewSemver(current)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get current semver")
-	}
-
-	newsv, err := v.NewSemver(new)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get new semver")
-	}
-
-	currentMM := MajorMinor(cursv)
-	newMM := MajorMinor(newsv)
-
-	cmp := cursv.Compare(newsv)
-
-	if cmp == -1 && isUpdateValid(currentMM, newMM) {
-		return true, nil
-	} else if cmp == 0 {
-		return false, nil
-	}
-
-	return false, errors.Errorf("invalid upgrade: from %s to %s", current, new)
 }
 
 type UpgradeRequest struct {
@@ -178,7 +158,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 		ver = applySp[0]
 	}
 
-	_, err := v.NewSemver(ver)
+	newVer, err := v.NewSemver(ver)
 	if err != nil {
 		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "faied to make semver")
 	}
@@ -189,12 +169,27 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 		return UpgradeRequest{true, apply, ver}, nil
 	}
 
-	can, err := canUpgradeVersion(fcv, ver)
+	mongoVer, err := v.NewSemver(cr.Status.MongoVersion)
 	if err != nil {
-		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "can't upgrade")
+		return UpgradeRequest{false, "", ""}, errors.Wrap(err, "failed to make semver")
 	}
 
-	if can {
+	newMM := MajorMinor(newVer)
+	mongoMM := MajorMinor(mongoVer)
+
+	if newMM > mongoMM {
+		if !canUpgradeVersion(fcv, newMM) {
+			return UpgradeRequest{false, "", ""}, errors.Errorf("can't upgrade to %s with FCV set to %s", ver, fcv)
+		}
+
+		return UpgradeRequest{true, apply, ver}, nil
+	}
+
+	if newMM < mongoMM {
+		if newMM != fcv {
+			return UpgradeRequest{false, "", ""}, errors.Errorf("can't upgrade to %s wits FCV set to %s", ver, fcv)
+		}
+
 		return UpgradeRequest{true, apply, ver}, nil
 	}
 

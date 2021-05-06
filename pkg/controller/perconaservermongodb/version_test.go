@@ -119,30 +119,12 @@ func Test_majorUpgradeRequested(t *testing.T) {
 		},
 
 		{
-			name: "TestWithTooHighMongoVersion",
-			args: args{
-				cr: &api.PerconaServerMongoDB{
-					Spec: api.PerconaServerMongoDBSpec{
-						UpgradeOptions: api.UpgradeOptions{
-							Apply: "3.6-recommended",
-						},
-					},
-					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.0.3",
-					},
-				},
-				fcv: "4.0",
-			},
-			wantErr: true,
-		},
-
-		{
 			name: "TestWithInvalidVersionInApply",
 			args: args{
 				cr: &api.PerconaServerMongoDB{
 					Spec: api.PerconaServerMongoDBSpec{
 						UpgradeOptions: api.UpgradeOptions{
-							Apply: "4.0.4.0-recommended",
+							Apply: "4.0.-4.0-recommended",
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
@@ -221,7 +203,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 						},
 					},
 					Status: api.PerconaServerMongoDBStatus{
-						MongoVersion: "4.0.2.-13",
+						MongoVersion: "4.0.2-13",
 					},
 				},
 				fcv: "4.0",
@@ -229,6 +211,85 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			want: UpgradeRequest{
 				Ok:         true,
 				NewVersion: "4.2.1-17",
+			},
+		},
+
+		{
+			name: "TestInvalidDowngradeWithExactVersionInApply",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "3.6",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "4.0.3",
+					},
+				},
+				fcv: "4.0",
+			},
+			wantErr: true,
+		},
+
+		{
+			name: "TestInvalidDowngradeWithPostfixVersionInApply",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "3.6-recommended",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "4.0.3",
+					},
+				},
+				fcv: "4.0",
+			},
+			wantErr: true,
+		},
+
+		{
+			name: "TestValidDowngradeWithExactVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "4.2.13-14",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "4.4.1-17",
+					},
+				},
+				fcv: "4.2",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "4.2.13-14",
+			},
+		},
+
+		{
+			name: "TestValidDowngradeWithPostfixVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "4.2-latest",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "4.4.1-17",
+					},
+				},
+				fcv: "4.2",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "4.2",
+				Apply:      "latest",
 			},
 		},
 	}
