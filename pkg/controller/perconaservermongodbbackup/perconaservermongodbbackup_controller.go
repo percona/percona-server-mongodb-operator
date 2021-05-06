@@ -114,14 +114,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	}
 	defer bcp.Close()
 
+	err = r.checkFinalizers(cr, bcp)
+	if err != nil {
+		return rr, errors.Wrap(err, "failed to run finalizer")
+	}
+
 	switch cr.Status.State {
-	case psmdbv1.BackupStateError:
+	case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
 		return rr, nil
-	case psmdbv1.BackupStateReady:
-		err = r.checkFinalizers(cr, bcp)
-		if err != nil {
-			return rr, errors.Wrap(err, "failed to run finalizer")
-		}
 	default:
 		err = r.reconcile(cr, bcp)
 		if err != nil {
@@ -187,9 +187,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 
 func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *api.PerconaServerMongoDBBackup, b *Backup) error {
 	var err error = nil
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		finalizers := []string{}
+	if cr.ObjectMeta.DeletionTimestamp == nil {
+		return nil
+	}
 
+	finalizers := []string{}
+
+	if cr.Status.State == psmdbv1.BackupStateReady {
 		for _, f := range cr.GetFinalizers() {
 			switch f {
 			case "delete-backup":
@@ -205,10 +209,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *api.PerconaSer
 				}
 			}
 		}
-
-		cr.SetFinalizers(finalizers)
-		err = r.client.Update(context.TODO(), cr)
 	}
+
+	cr.SetFinalizers(finalizers)
+	err = r.client.Update(context.TODO(), cr)
 
 	return err
 }
