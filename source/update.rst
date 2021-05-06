@@ -210,3 +210,50 @@ Percona's Version Service:
        versionServiceEndpoint: https://check.percona.com
        schedule: "0 0 * * *"
    ...
+
+.. _operator-update-smartupdates-major:
+
+Percona Server for MongoDB major version upgrades
+*************************************************
+
+Normally automatic upgrade takes place within minor versions (for example,
+from ``4.2.11-12`` to ``4.2.12-13``) of MongoDB. Major versions upgrade (for
+example moving from ``4.2-recommended`` to ``4.4-recommended``) is more
+complicated task which might potentially affect how data is stored and how
+applications interacts with the database (in case of some API changes). 
+
+Such upgrade is supported by the Operator within one major version at a time:
+for example, to change Percona Server for MongoDB major version from 4.0 to 4.4,
+you should first upgrade it to 4.2, and later make a separate upgrade from 4.2
+to 4.4. The same is true for major version downgrades.
+
+.. note:: It is recommended to take a backup before upgrade, as well as to
+   perform upgrade on staging environment.
+
+Major version upgrade can be initiated using the :ref:`upgradeoptions-apply`
+key in the ``deploy/cr.yaml`` configuration file:
+
+.. code:: yaml
+
+   spec:
+     upgradeOptions:
+       apply: 4.4-recommended
+
+.. note:: When making downgrades (e.g. changing version from 4.4 to 4.2), make
+   sure to remove incompatible features that are persisted and/or update
+   incompatible configuration settings. Compatibility issues between major
+   MongoDB versions can be found in `upstream documentation <https://docs.mongodb.com/manual/release-notes/4.4-downgrade-standalone/#prerequisites>`_.
+
+By default the Operator doesn't set `FeatureCompatibilityVersion (FCV) <https://docs.mongodb.com/manual/reference/command/setFeatureCompatibilityVersion/>`_
+to match the new version, thus making sure that backwards-incompatible features
+are not automatically enabled with the major version upgrade (which is
+recommended and safe behavior). You can turn this backward compatibility off at
+any moment (after the upgrade or even before it) by setting the :ref:`upgradeoptions-setfcv` flag in the
+``deploy/cr.yaml`` configuration file to ``true``.
+
+.. note:: With setFeatureCompatibilityVersion set major version rollback is not
+   currently supported by the Operator. Therefore it is recommended to stay
+   without enabling this flag for some time after the major upgrade to ensure
+   the likelihood of downgrade is minimal. Setting ``setFCV`` flag to ``true``
+   simultaneously with the ``apply`` flag should be done only if the whole
+   procedure is tested on staging and you are 100% sure about it.

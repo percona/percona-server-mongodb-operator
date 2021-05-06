@@ -141,7 +141,7 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``Recommended``										|
+| **Example**     | ``4.4-recommended``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator.	|
 |                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be	|
@@ -162,6 +162,20 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Scheduled time to check for updates, specified in the					|
 |                 | `crontab format <https://en.wikipedia.org/wiki/Cron>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _upgradeoptions-setfcv:									|
+|                 |												|
+| **Key**         | `upgradeOptions.setFCV <operator.html#upgradeoptions-setfcv>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value**       | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | If enabled, `FeatureCompatibilityVersion (FCV)						|
+|                 | <https://docs.mongodb.com/manual/reference/command/setFeatureCompatibilityVersion/>`_	|
+|                 | will be set to match the version during major version upgrade				|
 +-----------------+---------------------------------------------------------------------------------------------+
 
 .. _operator.secrets-section:
