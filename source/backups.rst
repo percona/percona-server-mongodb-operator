@@ -145,8 +145,9 @@ specific date and time.
 Technically, this feature involves saving operations log updates to
 the S3-compatible backup storage.
 
-To be used, it requires setting the :ref:`backup-pitr-enabled` key in the
-``deploy/cr.yaml`` configuration file:
+To be used, it requires setting the
+:ref:`backup.pitr.enabled<backup-pitr-enabled>` key in the ``deploy/cr.yaml``
+configuration file:
 
 .. code:: yaml
 
