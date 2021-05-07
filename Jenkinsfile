@@ -319,6 +319,7 @@ pipeline {
                         runTest('upgrade', 'backups')
                         runTest('upgrade-sharded', 'backups')
                         runTest('pitr', 'backups')
+                        runTest('pitr-sharded', 'backups')
                         ShutdownCluster('backups')
                     }
                 }

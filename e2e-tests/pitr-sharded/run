@@ -1,0 +1,141 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+write_document() {
+	local cmp_postfix="$1"
+
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep 10 # for minikube
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" ${cmp_postfix}
+}
+
+write_initial_data() {
+	desc 'write initial data, read from all'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+	sleep 2
+	write_document
+}
+
+run_backup() {
+	local name=$1
+	local idx=$2
+
+	desc "run backup $name-$idx"
+
+	cat $test_dir/conf/$name.yml \
+		| $sed -e "s/name:/name: $name-$idx/" \
+		| kubectl_bin apply -f -
+
+	wait_backup "$name-$idx"
+
+	sleep 5
+}
+
+check_recovery() {
+	local backup_name=$1
+	local restore_type=$2
+	local restore_date=$3
+	local cmp_postfix=$4
+
+	desc "write more data before restore by $restore_type"
+	sleep 60
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+
+	desc 'waiting for chunks to be uploaded'
+	sleep 545
+
+	desc "check restore by $restore_type"
+	cat $test_dir/conf/restore.yml \
+		| $sed -e "s/name:/name: restore-$backup_name/" \
+		| $sed -e "s/backupName:/backupName: $backup_name/" \
+		| $sed -e "s/type:/type: $restore_type/" \
+		| $sed -e "s/date:/date: $restore_date/" \
+		| kubectl_bin apply -f -
+
+	wait_restore_object "$backup_name"
+	echo
+	set -o xtrace
+
+	wait_deployment "$cluster-mongos"
+	sleep 10
+
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "$cmp_postfix"
+}
+
+main() {
+	create_namespace $namespace
+	deploy_operator
+	deploy_minio
+
+	desc 'create PSMDB cluster'
+	cluster="some-name"
+	kubectl_bin apply \
+		-f "$conf_dir/secrets.yml" \
+		-f "$conf_dir/client.yml" \
+		-f $conf_dir/minio-secret.yml
+
+	if [[ ${OPENSHIFT} == 4 ]]; then
+		cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+	elif [[ -z ${OPENSHIFT} ]]; then
+		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
+	fi
+
+	apply_cluster $test_dir/conf/$cluster-rs0.yml
+
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	sleep 10
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl statefulset/$cluster-rs0
+	compare_kubectl statefulset/$cluster-rs1
+	compare_kubectl statefulset/$cluster-rs2
+	compare_kubectl statefulset/$cluster-cfg
+	compare_kubectl deployment/$cluster-mongos ""
+
+	write_initial_data
+
+	wait_backup_agent $cluster-rs0-0
+	wait_backup_agent $cluster-rs0-1
+	wait_backup_agent $cluster-rs0-2
+	wait_backup_agent $cluster-rs1-0
+	wait_backup_agent $cluster-rs1-1
+	wait_backup_agent $cluster-rs1-2
+	wait_backup_agent $cluster-rs2-0
+	wait_backup_agent $cluster-rs2-1
+	wait_backup_agent $cluster-rs2-2
+
+	backup_name_minio="backup-minio"
+
+	run_backup $backup_name_minio 0
+
+	write_document "-2nd"
+	sleep 2
+
+	time_now=$(run_mongos 'new Date().toISOString()' "myApp:myPass@$cluster-mongos.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
+
+	check_recovery $backup_name_minio-0 date "$time_now" "-2nd"
+
+	run_backup $backup_name_minio 1
+
+	check_recovery $backup_name_minio-1 latest "" "-3rd"
+
+	if [[ $OPENSHIFT != "3.11" ]]; then
+		kubectl_bin delete -f "$conf_dir/container-rc.yaml"
+	fi
+	destroy $namespace
+}
+
+main

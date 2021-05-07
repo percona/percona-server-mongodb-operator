@@ -36,3 +36,4 @@ fail() {
 "$dir/upgrade-sharded/run" || fail "upgrade-sharded"
 "$dir/upgrade-consistency/run" || fail "upgrade-consistency"
 "$dir/pitr/run" || fail "pitr"
+"$dir/pitr-sharded/run" || fail "pitr-sharded"
