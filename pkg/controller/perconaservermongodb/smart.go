@@ -152,8 +152,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}
 
-	log.Info("doing step down...")
-	err = mongo.StepDown(context.TODO(), client)
+	forceStepDown := replset.Size == 1
+	log.Info("doing step down...", "force", forceStepDown)
+	err = mongo.StepDown(context.TODO(), client, forceStepDown)
 	if err != nil {
 		return errors.Wrap(err, "failed to do step down")
 	}
