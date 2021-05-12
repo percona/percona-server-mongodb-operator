@@ -24,7 +24,7 @@ check_cr_config() {
         | sed -e 's/500M/1G/' \
         | sed -e 's/0.5G/1G/' \
         | kubectl_bin apply -f-
-    sleep 10
+    sleep 20
 
     # check if statefulset was updated with expected config
     compare_kubectl statefulset/$cluster "-increased"
