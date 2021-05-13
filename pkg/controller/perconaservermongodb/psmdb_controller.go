@@ -254,7 +254,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	for _, v := range removed {
 		rsName := v.Labels["app.kubernetes.io/replset"]
 
-		err := r.checkIfPossibleToRemove(cr, rsName)
+		err = r.checkIfPossibleToRemove(cr, rsName)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}

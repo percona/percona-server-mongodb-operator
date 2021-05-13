@@ -14,13 +14,13 @@ deploy_operator
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl_bin apply \
-    -f $conf_dir/secrets.yml \
-    -f $conf_dir/client.yml
+	-f $conf_dir/secrets.yml \
+	-f $conf_dir/client.yml
 
-if [[ "${OPENSHIFT}" == 4 ]]; then
-    cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-elif [[ -z "${OPENSHIFT}" ]]; then
-    kubectl_bin apply -f "$conf_dir/container-rc.yaml"
+if [[ ${OPENSHIFT} == 4 ]] || [[ $(echo "$KUBE_VERSION >= 1.20" | bc -l) -eq 1 ]]; then
+	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+elif [[ -z ${OPENSHIFT} ]]; then
+	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
 apply_cluster $conf_dir/$cluster.yml
