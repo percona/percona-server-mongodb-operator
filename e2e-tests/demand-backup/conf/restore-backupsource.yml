@@ -4,10 +4,11 @@ metadata:
   name:
 spec:
   clusterName: some-name
-  backupName:
-  storageName: minio
-  pitr:
-    type:
-    date:
+  storageName:
   backupSource:
     destination: s3://operator-testing/BACKUP-NAME
+    s3:
+      credentialsSecret: minio-secret
+      region: us-east-1
+      bucket: operator-testing
+      endpointUrl: http://minio-service:9000/

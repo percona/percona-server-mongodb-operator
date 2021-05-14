@@ -3,6 +3,7 @@ package perconaservermongodbrestore
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -195,12 +196,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	defer pbmc.Close()
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		storage, ok := cluster.Spec.Backup.Storages[storageName]
-		if !ok {
-			return errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
+		storage, err := r.getStorage(cr, cluster, storageName)
+		if err != nil {
+			return errors.Wrap(err, "get storage")
 		}
 
-		err := pbmc.SetConfig(storage, cluster.Spec.Backup.PITR.Disabled())
+		err = pbmc.SetConfig(storage, cluster.Spec.Backup.PITR.Disabled())
 		if err != nil {
 			return errors.Wrap(err, "set pbm config")
 		}
@@ -323,7 +324,46 @@ func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (
 	return rName, nil
 }
 
+func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, storageName string) (psmdbv1.BackupStorageSpec, error) {
+	if len(storageName) > 0 {
+		storage, ok := cluster.Spec.Backup.Storages[storageName]
+		if !ok {
+			return psmdbv1.BackupStorageSpec{}, errors.Errorf("unable to get storage '%s'", storageName)
+		}
+		return storage, nil
+	}
+
+	return psmdbv1.BackupStorageSpec{
+		Type: psmdbv1.BackupStorageS3,
+		S3:   *cr.Spec.BackupSource.S3,
+	}, nil
+}
+
 func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServerMongoDBRestore) (*psmdbv1.PerconaServerMongoDBBackup, error) {
+	if len(cr.Spec.BackupName) == 0 && cr.Spec.BackupSource != nil {
+		s := strings.Split(cr.Spec.BackupSource.Destination, "/")
+		backupName := s[len(s)-1]
+
+		return &psmdbv1.PerconaServerMongoDBBackup{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        cr.Name,
+				Namespace:   cr.Namespace,
+				ClusterName: cr.ClusterName,
+			},
+			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
+				PSMDBCluster: cr.Spec.ClusterName,
+				StorageName:  cr.Spec.StorageName,
+			},
+			Status: psmdbv1.PerconaServerMongoDBBackupStatus{
+				State:       psmdbv1.BackupStateReady,
+				Destination: cr.Spec.BackupSource.Destination,
+				StorageName: cr.Spec.StorageName,
+				S3:          cr.Spec.BackupSource.S3,
+				PBMname:     backupName,
+			},
+		}, nil
+	}
+
 	backup := &psmdbv1.PerconaServerMongoDBBackup{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Name:      cr.Spec.BackupName,

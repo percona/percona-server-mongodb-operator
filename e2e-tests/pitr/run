@@ -27,6 +27,15 @@ write_initial_data() {
 	write_document
 }
 
+reset_collection() {
+	desc 'reset data'
+	run_mongo \
+		'use myApp\n db.test.remove({})' \
+		"myApp:myPass@$cluster.$namespace"
+	sleep 2
+	write_document
+}
+
 run_backup() {
 	local name=$1
 	local idx=$2
@@ -43,23 +52,36 @@ check_recovery() {
 	local restore_type=$2
 	local restore_date=$3
 	local cmp_postfix=$4
+	local backupSource=$4
 
 	desc "write more data before restore by $restore_type"
 	sleep 60
 	run_mongo \
-		'use myApp\n db.test.insert({ x: 100501 })' \
+		"use myApp\n db.test.insert({ x: 100501 })" \
 		"myApp:myPass@$cluster.$namespace"
 
 	desc 'waiting for chunks to be uploaded'
-	sleep 545
+	sleep 600
 
 	desc "check restore by $restore_type"
-	cat $test_dir/conf/restore.yml \
-		| $sed -e "s/name:/name: restore-$backup_name/" \
-		| $sed -e "s/backupName:/backupName: $backup_name/" \
-		| $sed -e "s/type:/type: $restore_type/" \
-		| $sed -e "s/date:/date: $restore_date/" \
-		| kubectl_bin apply -f -
+	if [ -z "$backupSource" ]; then
+		cat $test_dir/conf/restore.yml \
+			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "s/backupName:/backupName: $backup_name/" \
+			| $sed -e "s/type:/type: $restore_type/" \
+			| $sed -e "s/date:/date: $restore_date/" \
+			| $sed -e "/backupSource/,+2d" \
+			| kubectl_bin apply -f -
+	else
+		backup_dest=$(get_backup_dest "$backup_name")
+		cat $test_dir/conf/restore.yml \
+			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "/backupName/d" \
+			| $sed -e "s/type:/type: $restore_type/" \
+			| $sed -e "s/date:/date: $restore_date/" \
+			| $sed -e "s/BACKUP-NAME/$backup_dest/" \
+			| kubectl_bin apply -f -
+	fi
 
 	wait_restore_object "$backup_name"
 	echo
@@ -109,6 +131,20 @@ main() {
 	run_backup $backup_name_minio 1
 
 	check_recovery $backup_name_minio-1 latest "" "-3rd"
+
+	desc 'restore pitr using backupSource'
+
+	reset_collection
+
+	run_backup $backup_name_minio 2
+
+	time_now=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
+
+	check_recovery "${backup_name_minio}-2" date "$time_now" "" backupSource
+
+	run_backup $backup_name_minio 3
+
+	check_recovery "${backup_name_minio}-3" latest "" "-4th" "" backupSource
 
 	destroy $namespace
 }
