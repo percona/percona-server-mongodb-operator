@@ -1,0 +1,120 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+cluster="some-name-rs0"
+
+setup_cluster() {
+	# create cluster
+	kubectl_bin apply \
+		-f $conf_dir/secrets.yml
+
+	apply_cluster $conf_dir/$cluster.yml
+
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
+}
+
+fail_pod() {
+	local init_pod=$(get_operator_pod)
+
+	cat $conf_dir/chaos-pod-failure.yml \
+		| yq w - "metadata.name" "chaos-operator-pod-failure-$RANDOM" \
+		| yq w - "metadata.namespace" "chaos-testing" \
+		| yq d - "spec.selector.pods.test-namespace" \
+		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
+		| kubectl_bin apply -f-
+	sleep 10
+
+	desc 'check if operator works fine: scale down from 5 to 3'
+	kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
+		| sed -e 's/size: 5/size: 3/' \
+		| kubectl_bin apply -f-
+	sleep 60
+
+	local pod=$(get_operator_pod)
+	if [ "$init_pod" == "$pod" ]; then
+		echo "operator pod was not killed! something went wrong."
+		return 1
+	fi
+
+	# check if Pod started
+	wait_pod $pod
+	sleep 10
+
+	# check scale down
+	wait_for_delete pod/$cluster-3
+}
+
+kill_pod() {
+	local init_pod=$(get_operator_pod)
+
+	cat $conf_dir/chaos-pod-kill.yml \
+		| yq w - "metadata.name" "chaos-operator-pod-kill-$RANDOM" \
+		| yq w - "metadata.namespace" "chaos-testing" \
+		| yq d - "spec.selector.pods.test-namespace" \
+		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
+		| kubectl_bin apply -f-
+	sleep 10
+
+	if [ "$init_pod" == "$(get_operator_pod)" ]; then
+		echo "operator pod was not killed! something went wrong."
+		return 1
+	fi
+
+	desc 'check if operator works fine: scale up from 3 to 5'
+	kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
+		| sed -e 's/size: 3/size: 5/' \
+		| kubectl_bin apply -f-
+	sleep 10
+
+	# check scale up
+	wait_for_running $cluster 5
+}
+
+network_loss() {
+	local init_pod=$(get_operator_pod)
+
+	cat $conf_dir/chaos-network-loss.yml \
+		| yq w - "metadata.name" "chaos-operator-network-$RANDOM" \
+		| yq w - "metadata.namespace" "chaos-testing" \
+		| yq d - "spec.selector.pods.test-namespace" \
+		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
+		| kubectl_bin apply -f-
+	sleep 10
+
+	desc 'check if operator works fine: scale up from 3 to 5'
+	kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
+		| sed -e 's/size: 3/size: 5/' \
+		| kubectl_bin apply -f-
+	sleep 10
+
+	# check scale up
+	wait_for_running $cluster 5
+}
+
+main() {
+	create_namespace $namespace
+	deploy_chaos_mesh
+	deploy_operator
+
+	desc 'create PSMDB cluster'
+	setup_cluster
+
+	desc 'kill operator'
+	kill_pod
+
+	desc 'fail operator pod for 60s'
+	fail_pod
+
+	desc 'emulate bad network for 60s'
+	network_loss
+
+	destroy_chaos_mesh
+	destroy $namespace
+}
+
+main
