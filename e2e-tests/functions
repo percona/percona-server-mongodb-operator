@@ -409,6 +409,7 @@ compare_kubectl() {
 		| yq d - 'metadata.resourceVersion' \
 		| yq d - 'metadata.selfLink' \
 		| yq d - '**.creationTimestamp' \
+		| yq d - '**."percona.com/*"' \
 		| yq d - '**.image' \
 		| yq d - '**.clusterIP' \
 		| yq d - 'spec.clusterIPs' \
