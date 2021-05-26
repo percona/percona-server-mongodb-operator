@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -726,13 +725,24 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 
 func (r *ReconcilePerconaServerMongoDB) reconcileConfigMap(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	for _, rs := range repls {
+		var configMapName = psmdb.MongodConfigCMName(cr.Name, rs.Name)
+
+		if rs.Configuration == "" {
+			err := deleteConfigmapIfExists(r.client, cr, cr.Namespace, configMapName)
+			if err != nil {
+				return errors.Wrap(err, "failed to delete mongod config map")
+			}
+
+			continue
+		}
+
 		configMap := &corev1.ConfigMap{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      psmdb.MongodConfigCMName(cr.Name, rs.Name),
+				Name:      configMapName,
 				Namespace: cr.Namespace,
 			},
 			Data: map[string]string{
@@ -745,16 +755,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileConfigMap(cr *api.PerconaServer
 			return errors.Wrap(err, "failed to set controller ref for config map")
 		}
 
-		if rs.Configuration != "" {
-			err = createOrUpdateConfigmap(r.client, configMap)
-			if err != nil {
-				return errors.Wrap(err, "failed to create/update mongod config map")
-			}
-		} else {
-			err = deleteConfigmapIfExists(r.client, cr, configMap.Namespace, configMap.Name)
-			if err != nil {
-				return errors.Wrap(err, "failed to delete mongod config map")
-			}
+		err = createOrUpdateConfigmap(r.client, configMap)
+		if err != nil {
+			return errors.Wrap(err, "failed to create/update mongod config map")
 		}
 	}
 
@@ -780,12 +783,25 @@ func deleteConfigmapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsN
 		return nil
 	}
 
-	err = cl.Delete(context.Background(), configMap)
-	if err != nil {
-		return errors.Wrap(err, "delete config map")
+	return cl.Delete(context.Background(), configMap)
+}
+
+func equalStringMaps(f, s map[string]string) bool {
+	if len(f) != len(s) {
+		return false
 	}
 
-	return nil
+	for k, fv := range f {
+		sv, ok := s[k]
+		if !ok {
+			return false
+		}
+		if sv != fv {
+			return false
+		}
+	}
+
+	return true
 }
 
 func createOrUpdateConfigmap(cl client.Client, configMap *corev1.ConfigMap) error {
@@ -802,7 +818,7 @@ func createOrUpdateConfigmap(cl client.Client, configMap *corev1.ConfigMap) erro
 		return cl.Create(context.TODO(), configMap)
 	}
 
-	if !reflect.DeepEqual(currMap.Data, configMap.Data) {
+	if !equalStringMaps(currMap.Data, configMap.Data) {
 		return cl.Update(context.TODO(), configMap)
 	}
 
