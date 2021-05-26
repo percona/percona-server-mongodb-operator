@@ -34,10 +34,13 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			MountPath: sslInternalDir,
 			ReadOnly:  true,
 		},
-		{
+	}
+
+	if useConfigFile {
+		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
 			MountPath: mongodConfigDir,
-		},
+		})
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption {

@@ -64,7 +64,10 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				},
 			},
 		},
-		{
+	}
+
+	if useConfigFile {
+		volumes = append(volumes, corev1.Volume{
 			Name: "config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -74,7 +77,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 					Optional: &tvar,
 				},
 			},
-		},
+		})
 	}
 
 	if *m.Spec.Mongod.Security.EnableEncryption {
