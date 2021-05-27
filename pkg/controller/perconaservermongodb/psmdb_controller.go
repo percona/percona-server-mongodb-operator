@@ -786,24 +786,6 @@ func deleteConfigmapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsN
 	return cl.Delete(context.Background(), configMap)
 }
 
-func equalStringMaps(f, s map[string]string) bool {
-	if len(f) != len(s) {
-		return false
-	}
-
-	for k, fv := range f {
-		sv, ok := s[k]
-		if !ok {
-			return false
-		}
-		if sv != fv {
-			return false
-		}
-	}
-
-	return true
-}
-
 func createOrUpdateConfigmap(cl client.Client, configMap *corev1.ConfigMap) error {
 	currMap := &corev1.ConfigMap{}
 	err := cl.Get(context.TODO(), types.NamespacedName{
@@ -818,7 +800,7 @@ func createOrUpdateConfigmap(cl client.Client, configMap *corev1.ConfigMap) erro
 		return cl.Create(context.TODO(), configMap)
 	}
 
-	if !equalStringMaps(currMap.Data, configMap.Data) {
+	if !mapsEqual(currMap.Data, configMap.Data) {
 		return cl.Update(context.TODO(), configMap)
 	}
 
