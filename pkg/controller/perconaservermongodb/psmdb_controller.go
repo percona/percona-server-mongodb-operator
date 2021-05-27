@@ -239,6 +239,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
 
+	err = r.reconcileConfigMap(cr, repls)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile configmap")
+	}
+
 	if cr.CompareVersion("1.5.0") >= 0 {
 		err := r.reconcileUsers(cr, repls)
 		if err != nil {
@@ -718,6 +723,90 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return r.deleteMongos(cr)
 }
 
+func (r *ReconcilePerconaServerMongoDB) reconcileConfigMap(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
+	for _, rs := range repls {
+		var configMapName = psmdb.MongodConfigCMName(cr.Name, rs.Name)
+
+		if rs.Configuration == "" {
+			err := deleteConfigmapIfExists(r.client, cr, cr.Namespace, configMapName)
+			if err != nil {
+				return errors.Wrap(err, "failed to delete mongod config map")
+			}
+
+			continue
+		}
+
+		configMap := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: cr.Namespace,
+			},
+			Data: map[string]string{
+				"mongod.conf": rs.Configuration,
+			},
+		}
+
+		err := setControllerReference(cr, configMap, r.scheme)
+		if err != nil {
+			return errors.Wrap(err, "failed to set controller ref for config map")
+		}
+
+		err = createOrUpdateConfigmap(r.client, configMap)
+		if err != nil {
+			return errors.Wrap(err, "failed to create/update mongod config map")
+		}
+	}
+
+	return nil
+}
+
+func deleteConfigmapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsName, cmName string) error {
+	var configMap = &corev1.ConfigMap{}
+
+	err := cl.Get(context.TODO(), types.NamespacedName{
+		Namespace: nsName,
+		Name:      cmName,
+	}, configMap)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get config map")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+
+	if !metav1.IsControlledBy(configMap, cr) {
+		return nil
+	}
+
+	return cl.Delete(context.Background(), configMap)
+}
+
+func createOrUpdateConfigmap(cl client.Client, configMap *corev1.ConfigMap) error {
+	currMap := &corev1.ConfigMap{}
+	err := cl.Get(context.TODO(), types.NamespacedName{
+		Namespace: configMap.Namespace,
+		Name:      configMap.Name,
+	}, currMap)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get current configmap")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		return cl.Create(context.TODO(), configMap)
+	}
+
+	if !mapsEqual(currMap.Data, configMap.Data) {
+		return cl.Update(context.TODO(), configMap)
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
@@ -929,7 +1018,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits, log)
+	hasCustomConfiguration, err := r.hasMongodCustomConfiguration(cr, replset)
+	if err != nil {
+		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
+	}
+
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits,
+		log, hasCustomConfiguration)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
@@ -1210,4 +1305,27 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 		UID:        ca.GetUID(),
 		Controller: &trueVar,
 	}, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) hasMongodCustomConfiguration(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (bool, error) {
+	if rs.Configuration != "" {
+		return true, nil
+	}
+
+	var name = psmdb.MongodConfigCMName(cr.Name, rs.Name)
+
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      name,
+	}, &corev1.ConfigMap{})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return false, errors.Wrap(err, "get config map")
+	}
+
+	// config map exists
+	if err == nil {
+		return true, nil
+	}
+
+	return false, nil
 }
