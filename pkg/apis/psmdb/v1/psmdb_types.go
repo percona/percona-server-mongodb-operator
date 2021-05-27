@@ -7,6 +7,7 @@ import (
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -605,4 +606,22 @@ func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.N
 
 func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
+}
+
+func (cr *PerconaServerMongoDB) CanBackup() error {
+	if cr.Status.State == AppStateReady {
+		return nil
+	}
+
+	if !cr.Spec.UnsafeConf {
+		return errors.Errorf("allowUnsafeConfigurations must be true to run backup on cluster with status %s", cr.Status.State)
+	}
+
+	for rsName, rs := range cr.Status.Replsets {
+		if rs.Ready < int32(1) {
+			return errors.New(rsName + " has no ready nodes")
+		}
+	}
+
+	return nil
 }

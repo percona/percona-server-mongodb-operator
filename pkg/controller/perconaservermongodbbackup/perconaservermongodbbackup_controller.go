@@ -2,10 +2,10 @@ package perconaservermongodbbackup
 
 import (
 	"context"
-	"fmt"
+	"time"
+
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -157,8 +157,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
 	}
 
-	if cluster.Status.State != api.AppStateReady {
-		return fmt.Errorf("failed to run backup on cluster with status %s", cluster.Status.State)
+	if err := cluster.CanBackup(); err != nil {
+		return errors.Wrap(err, "failed to run backup")
 	}
 
 	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
