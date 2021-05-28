@@ -732,7 +732,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 		var name = psmdb.MongodCustomConfigName(cr.Name, rs.Name)
 
 		if rs.Configuration == "" {
-			err := deleteConfigMapIfExists(r.client, cr, cr.Namespace, name)
+			err := deleteConfigMapIfExists(r.client, cr, name)
 			if err != nil {
 				return errors.Wrap(err, "failed to delete mongod config map")
 			}
@@ -765,7 +765,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.Percona
 	var name = psmdb.MongosCustomConfigName(cr.Name)
 
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
-		err := deleteConfigMapIfExists(r.client, cr, cr.Namespace, name)
+		err := deleteConfigMapIfExists(r.client, cr, name)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete mongos config map")
 		}
@@ -793,11 +793,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.Percona
 	return nil
 }
 
-func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsName, cmName string) error {
+func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, cmName string) error {
 	var configMap = &corev1.ConfigMap{}
 
 	err := cl.Get(context.TODO(), types.NamespacedName{
-		Namespace: nsName,
+		Namespace: cr.Namespace,
 		Name:      cmName,
 	}, configMap)
 	if err != nil && !k8serrors.IsNotFound(err) {
