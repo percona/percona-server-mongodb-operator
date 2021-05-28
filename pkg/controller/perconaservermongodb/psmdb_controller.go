@@ -239,9 +239,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
 
-	err = r.reconcileConfigMap(cr, repls)
+	err = r.reconcileMongodConfigMaps(cr, repls)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile configmap")
+		return reconcile.Result{}, errors.Wrap(err, "reconcile mongod configmaps")
+	}
+
+	if err := r.reconcileMongosConfigMap(cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos config map")
 	}
 
 	if cr.CompareVersion("1.5.0") >= 0 {
@@ -723,12 +727,12 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return r.deleteMongos(cr)
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileConfigMap(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	for _, rs := range repls {
-		var configMapName = psmdb.MongodConfigCMName(cr.Name, rs.Name)
+		var name = psmdb.MongodConfigCMName(cr.Name, rs.Name)
 
 		if rs.Configuration == "" {
-			err := deleteConfigmapIfExists(r.client, cr, cr.Namespace, configMapName)
+			err := deleteConfigMapIfExists(r.client, cr, cr.Namespace, name)
 			if err != nil {
 				return errors.Wrap(err, "failed to delete mongod config map")
 			}
@@ -736,35 +740,60 @@ func (r *ReconcilePerconaServerMongoDB) reconcileConfigMap(cr *api.PerconaServer
 			continue
 		}
 
-		configMap := &corev1.ConfigMap{
+		err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      configMapName,
+				Name:      name,
 				Namespace: cr.Namespace,
 			},
 			Data: map[string]string{
 				"mongod.conf": rs.Configuration,
 			},
-		}
-
-		err := setControllerReference(cr, configMap, r.scheme)
+		})
 		if err != nil {
-			return errors.Wrap(err, "failed to set controller ref for config map")
-		}
-
-		err = createOrUpdateConfigmap(r.client, configMap)
-		if err != nil {
-			return errors.Wrap(err, "failed to create/update mongod config map")
+			return err
 		}
 	}
 
 	return nil
 }
 
-func deleteConfigmapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsName, cmName string) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.PerconaServerMongoDB) error {
+	var name = psmdb.MongosConfigCMName(cr.Name)
+
+	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
+		err := deleteConfigMapIfExists(r.client, cr, cr.Namespace, name)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete mongos config map")
+		}
+
+		return nil
+	}
+
+	err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+		},
+		Data: map[string]string{
+			"mongos.conf": cr.Spec.Sharding.Mongos.Configuration,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsName, cmName string) error {
 	var configMap = &corev1.ConfigMap{}
 
 	err := cl.Get(context.TODO(), types.NamespacedName{
@@ -786,9 +815,14 @@ func deleteConfigmapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsN
 	return cl.Delete(context.Background(), configMap)
 }
 
-func createOrUpdateConfigmap(cl client.Client, configMap *corev1.ConfigMap) error {
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(cr *api.PerconaServerMongoDB, configMap *corev1.ConfigMap) error {
+	err := setControllerReference(cr, configMap, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "failed to set controller ref for config map %s", configMap.Name)
+	}
+
 	currMap := &corev1.ConfigMap{}
-	err := cl.Get(context.TODO(), types.NamespacedName{
+	err = r.client.Get(context.TODO(), types.NamespacedName{
 		Namespace: configMap.Namespace,
 		Name:      configMap.Name,
 	}, currMap)
@@ -797,11 +831,11 @@ func createOrUpdateConfigmap(cl client.Client, configMap *corev1.ConfigMap) erro
 	}
 
 	if k8serrors.IsNotFound(err) {
-		return cl.Create(context.TODO(), configMap)
+		return r.client.Create(context.TODO(), configMap)
 	}
 
 	if !mapsEqual(currMap.Data, configMap.Data) {
-		return cl.Update(context.TODO(), configMap)
+		return r.client.Update(context.TODO(), configMap)
 	}
 
 	return nil
@@ -847,7 +881,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "failed to get operator pod")
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log)
+	hasCustomConfiguration, err := r.hasMongosCustomConfiguration(cr)
+	if err != nil {
+		return errors.Wrap(err, "check if mongos custom configuration exists")
+	}
+
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, hasCustomConfiguration)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
@@ -1312,10 +1351,20 @@ func (r *ReconcilePerconaServerMongoDB) hasMongodCustomConfiguration(cr *api.Per
 		return true, nil
 	}
 
-	var name = psmdb.MongodConfigCMName(cr.Name, rs.Name)
+	return r.existsConfigMap(cr.Namespace, psmdb.MongodConfigCMName(cr.Name, rs.Name))
+}
 
+func (r *ReconcilePerconaServerMongoDB) hasMongosCustomConfiguration(cr *api.PerconaServerMongoDB) (bool, error) {
+	if cr.Spec.Sharding.Mongos.Configuration != "" {
+		return true, nil
+	}
+
+	return r.existsConfigMap(cr.Namespace, psmdb.MongosConfigCMName(cr.Name))
+}
+
+func (r *ReconcilePerconaServerMongoDB) existsConfigMap(namespace, name string) (bool, error) {
 	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Namespace: cr.Namespace,
+		Namespace: namespace,
 		Name:      name,
 	}, &corev1.ConfigMap{})
 	if err != nil && !k8serrors.IsNotFound(err) {
