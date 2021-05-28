@@ -32,7 +32,7 @@ var secretFileMode int32 = 288
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
-	initContainers []corev1.Container, log logr.Logger, useConfigFile bool) (appsv1.StatefulSetSpec, error) {
+	initContainers []corev1.Container, log logr.Logger, configSource VolumeSourceType) (appsv1.StatefulSetSpec, error) {
 
 	fvar, tvar := false, true
 
@@ -66,17 +66,31 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
-	if useConfigFile {
-		volumes = append(volumes, corev1.Volume{
-			Name: "config",
-			VolumeSource: corev1.VolumeSource{
+	if configSource.IsUsable() {
+		var vc corev1.VolumeSource
+
+		switch configSource {
+		case VolumeSourceConfigMap:
+			vc = corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: MongodConfigCMName(m.Name, replset.Name),
+						Name: MongodCustomConfigName(m.Name, replset.Name),
 					},
 					Optional: &tvar,
 				},
-			},
+			}
+		case VolumeSourceSecret:
+			vc = corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: MongodCustomConfigName(m.Name, replset.Name),
+					Optional:   &tvar,
+				},
+			}
+		}
+
+		volumes = append(volumes, corev1.Volume{
+			Name:         "config",
+			VolumeSource: vc,
 		})
 	}
 
@@ -95,7 +109,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		)
 	}
 
-	c, err := container(m, replset, containerName, resources, ikeyName, useConfigFile)
+	c, err := container(m, replset, containerName, resources, ikeyName, configSource.IsUsable())
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -140,11 +154,11 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	}, nil
 }
 
-func MongodConfigCMName(clusterName, replicaSetName string) string {
+func MongodCustomConfigName(clusterName, replicaSetName string) string {
 	return fmt.Sprintf("%s-%s-mongod", clusterName, replicaSetName)
 }
 
-func MongosConfigCMName(clusterName string) string {
+func MongosCustomConfigName(clusterName string) string {
 	return clusterName + "-mongos"
 }
 

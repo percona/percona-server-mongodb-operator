@@ -25,3 +25,15 @@ const (
 func InternalKey(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-mongodb-keyfile"
 }
+
+type VolumeSourceType int
+
+const (
+	VolumeSourceNone VolumeSourceType = iota
+	VolumeSourceConfigMap
+	VolumeSourceSecret
+)
+
+func (s VolumeSourceType) IsUsable() bool {
+	return s == VolumeSourceConfigMap || s == VolumeSourceSecret
+}
