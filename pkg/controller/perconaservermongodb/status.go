@@ -17,32 +17,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const maxStatusesQuantity = 20
-
-type mongoClusterState int
-
-const (
-	clusterReady mongoClusterState = iota
-	clusterInit
-	clusterError
-)
-
-func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState mongoClusterState) error {
+func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
 	clusterCondition := api.ClusterCondition{
 		Status:             api.ConditionTrue,
-		Type:               api.ClusterInit,
+		Type:               api.AppStateInit,
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	}
 	if reconcileErr != nil {
 		if cr.Status.State != api.AppStateError {
 			clusterCondition = api.ClusterCondition{
 				Status:             api.ConditionTrue,
-				Type:               api.ClusterError,
+				Type:               api.AppStateError,
 				Message:            reconcileErr.Error(),
 				Reason:             "ErrorReconcile",
 				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+			cr.Status.AddCondition(clusterCondition)
 		}
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
@@ -94,24 +84,27 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		if status.Status != currentRSstatus.Status {
-			if status.Status == api.AppStateReady && currentRSstatus.Initialized {
+			switch status.Status {
+			case api.AppStateReady:
+				if currentRSstatus.Initialized {
+					clusterCondition = api.ClusterCondition{
+						Status:             api.ConditionTrue,
+						Type:               api.AppStateReady,
+						Reason:             "RSReady",
+						LastTransitionTime: metav1.NewTime(time.Now()),
+					}
+				}
+			case api.AppStateError:
 				clusterCondition = api.ClusterCondition{
 					Status:             api.ConditionTrue,
-					Type:               api.ClusterRSReady,
+					Type:               api.AppStateError,
+					Message:            rs.Name + ": " + status.Message,
+					Reason:             "RSError",
 					LastTransitionTime: metav1.NewTime(time.Now()),
 				}
 			}
 
-			if status.Status == api.AppStateError {
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Message:            rs.Name + ": " + status.Message,
-					Reason:             "ErrorRS",
-					Type:               api.ClusterError,
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
-			}
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+			cr.Status.AddCondition(clusterCondition)
 		}
 		cr.Status.Replsets[rs.Name] = &status
 		if !inProgress {
@@ -122,6 +115,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
+	cr.Status.Mongos = nil
 	if cr.Spec.Sharding.Enabled {
 		mongosStatus, err := r.mongosStatus(cr)
 		if err != nil {
@@ -133,80 +127,33 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		if mongosStatus.Status != cr.Status.Mongos.Status {
-			if mongosStatus.Status == api.AppStateReady {
+			switch mongosStatus.Status {
+			case api.AppStateReady:
 				clusterCondition = api.ClusterCondition{
 					Status:             api.ConditionTrue,
-					Type:               api.ClusterMongosReady,
+					Type:               api.AppStateReady,
+					Reason:             "MongosReady",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				}
+			case api.AppStateError:
+				clusterCondition = api.ClusterCondition{
+					Status:             api.ConditionTrue,
+					Type:               api.AppStateError,
+					Message:            mongosStatus.Message,
+					Reason:             "MongosError",
 					LastTransitionTime: metav1.NewTime(time.Now()),
 				}
 			}
 
-			if mongosStatus.Status == api.AppStateError {
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Message:            mongosStatus.Message,
-					Reason:             "ErrorMongos",
-					Type:               api.ClusterError,
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
-			}
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+			cr.Status.AddCondition(clusterCondition)
 		}
 
 		cr.Status.Mongos = &mongosStatus
-	} else {
-		cr.Status.Mongos = nil
 	}
 
-	cr.Status.State = api.AppStateInit
-	if replsetsReady == len(repls) && clusterState == clusterReady {
-		clusterCondition = api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterReady,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-		cr.Status.State = api.AppStateReady
-	} else if cr.Status.Conditions[len(cr.Status.Conditions)-1].Type != api.ClusterReady &&
-		clusterState == clusterInit {
-		clusterCondition = api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterInit,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-		cr.Status.State = api.AppStateInit
-	} else {
-		clusterCondition = api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterError,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-		cr.Status.State = api.AppStateError
-	}
-
-	if cr.Status.State != api.AppStateError &&
-		cr.Status.Mongos != nil && cr.Status.Mongos.Status != api.AppStateReady {
-		cr.Status.State = cr.Status.Mongos.Status
-	}
-
-	if len(cr.Status.Conditions) == 0 {
-		cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
-	} else {
-		lastClusterCondition := cr.Status.Conditions[len(cr.Status.Conditions)-1]
-		switch {
-		case lastClusterCondition.Type != clusterCondition.Type:
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
-		default:
-			cr.Status.Conditions[len(cr.Status.Conditions)-1] = lastClusterCondition
-		}
-	}
-
-	if len(cr.Status.Conditions) > maxStatusesQuantity {
-		cr.Status.Conditions = cr.Status.Conditions[len(cr.Status.Conditions)-maxStatusesQuantity:]
-	}
-
-	if inProgress {
-		cr.Status.State = api.AppStateInit
-	}
+	cr.Status.State = cr.Status.ClusterStatus(clusterState)
+	clusterCondition.Type = cr.Status.State
+	cr.Status.AddCondition(clusterCondition)
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
@@ -259,17 +206,16 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, r
 	}
 
 	for _, pod := range list.Items {
+		for _, cntr := range pod.Status.ContainerStatuses {
+			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
+				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
+			}
+		}
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
 				if cond.Status == corev1.ConditionTrue {
 					status.Ready++
-				} else if cond.Status == corev1.ConditionFalse {
-					for _, cntr := range pod.Status.ContainerStatuses {
-						if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
-							status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
-						}
-					}
 				}
 			case corev1.PodScheduled:
 				if cond.Reason == corev1.PodReasonUnschedulable &&
@@ -300,17 +246,17 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 	}
 
 	for _, pod := range list.Items {
+		for _, cntr := range pod.Status.ContainerStatuses {
+			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
+				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
+			}
+		}
+
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
 				if cond.Status == corev1.ConditionTrue {
 					status.Ready++
-				} else if cond.Status == corev1.ConditionFalse {
-					for _, cntr := range pod.Status.ContainerStatuses {
-						if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
-							status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
-						}
-					}
 				}
 			case corev1.PodScheduled:
 				if cond.Reason == corev1.PodReasonUnschedulable &&

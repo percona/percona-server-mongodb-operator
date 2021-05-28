@@ -203,10 +203,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
-	isClusterLive := clusterInit
+	clusterStatus := api.AppStateInit
 
 	defer func() {
-		err = r.updateStatus(cr, err, isClusterLive)
+		err = r.updateStatus(cr, err, clusterStatus)
 		if err != nil {
 			logger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
 		}
@@ -425,7 +425,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
 		}
 
-		isClusterLive, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
+		clusterStatus, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
 		if err != nil {
 			logger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
