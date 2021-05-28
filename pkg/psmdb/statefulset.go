@@ -144,6 +144,10 @@ func MongodConfigCMName(clusterName, replicaSetName string) string {
 	return fmt.Sprintf("%s-%s-mongod", clusterName, replicaSetName)
 }
 
+func MongosConfigCMName(clusterName string) string {
+	return clusterName + "-mongos"
+}
+
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
 func PersistentVolumeClaim(name, namespace string, labels map[string]string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
