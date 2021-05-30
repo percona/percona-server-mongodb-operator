@@ -729,7 +729,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	for _, rs := range repls {
-		var name = psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
 
 		if rs.Configuration == "" {
 			err := deleteConfigMapIfExists(r.client, cr, name)
@@ -762,7 +762,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.PerconaServerMongoDB) error {
-	var name = psmdb.MongosCustomConfigName(cr.Name)
+	name := psmdb.MongosCustomConfigName(cr.Name)
 
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
 		err := deleteConfigMapIfExists(r.client, cr, name)
@@ -1347,7 +1347,7 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCustomConfigurationSource(namespace, name string) (psmdb.VolumeSourceType, error) {
-	var n = types.NamespacedName{
+	n := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
 	}
