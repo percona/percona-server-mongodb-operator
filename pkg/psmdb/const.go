@@ -1,6 +1,10 @@
 package psmdb
 
-import api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+import (
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+)
 
 const (
 	gigaByte                 int64   = 1 << 30
@@ -35,5 +39,27 @@ const (
 )
 
 func (s VolumeSourceType) IsUsable() bool {
-	return s == VolumeSourceConfigMap || s == VolumeSourceSecret
+	return s != VolumeSourceNone
+}
+
+func (s VolumeSourceType) String() string {
+	switch s {
+	case VolumeSourceConfigMap:
+		return "ConfigMap"
+	case VolumeSourceSecret:
+		return "Secret"
+	default:
+		return ""
+	}
+}
+
+func VolumeSourceTypeToObj(s VolumeSourceType) runtime.Object {
+	switch s {
+	case VolumeSourceConfigMap:
+		return &corev1.ConfigMap{}
+	case VolumeSourceSecret:
+		return &corev1.Secret{}
+	default:
+		return nil
+	}
 }

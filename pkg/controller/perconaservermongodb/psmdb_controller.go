@@ -1352,23 +1352,34 @@ func (r *ReconcilePerconaServerMongoDB) getCustomConfigurationSource(namespace, 
 		Name:      name,
 	}
 
-	err := r.client.Get(context.Background(), n, &corev1.Secret{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return 0, errors.Wrap(err, "get secret")
+	sources := []psmdb.VolumeSourceType{
+		psmdb.VolumeSourceSecret,
+		psmdb.VolumeSourceConfigMap,
 	}
 
-	if err == nil {
-		return psmdb.VolumeSourceSecret, nil
-	}
-
-	err = r.client.Get(context.Background(), n, &corev1.ConfigMap{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return 0, errors.Wrap(err, "get config map")
-	}
-
-	if err == nil {
-		return psmdb.VolumeSourceConfigMap, nil
+	for _, s := range sources {
+		ok, err := getObjectByName(r.client, n, psmdb.VolumeSourceTypeToObj(s))
+		if err != nil {
+			return 0, errors.Wrapf(err, "get %s", s)
+		}
+		if ok {
+			return s, nil
+		}
 	}
 
 	return psmdb.VolumeSourceNone, nil
+}
+
+func getObjectByName(c client.Client, n types.NamespacedName, obj runtime.Object) (bool, error) {
+	err := c.Get(context.Background(), n, obj)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return false, err
+	}
+
+	// object exists
+	if err == nil {
+		return true, nil
+	}
+
+	return false, nil
 }
