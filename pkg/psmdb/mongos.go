@@ -321,30 +321,9 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 	}
 
 	if configSource.IsUsable() {
-		var vc corev1.VolumeSource
-
-		switch configSource {
-		case VolumeSourceConfigMap:
-			vc = corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: MongosCustomConfigName(cr.Name),
-					},
-					Optional: &tvar,
-				},
-			}
-		case VolumeSourceSecret:
-			vc = corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: MongosCustomConfigName(cr.Name),
-					Optional:   &tvar,
-				},
-			}
-		}
-
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: vc,
+			VolumeSource: configSource.VolumeSource(MongosCustomConfigName(cr.Name)),
 		})
 	}
 

@@ -53,6 +53,30 @@ func (s VolumeSourceType) String() string {
 	}
 }
 
+func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
+	t := true
+	switch s {
+	case VolumeSourceConfigMap:
+		return corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: name,
+				},
+				Optional: &t,
+			},
+		}
+	case VolumeSourceSecret:
+		return corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: name,
+				Optional:   &t,
+			},
+		}
+	default:
+		return corev1.VolumeSource{}
+	}
+}
+
 func VolumeSourceTypeToObj(s VolumeSourceType) runtime.Object {
 	switch s {
 	case VolumeSourceConfigMap:

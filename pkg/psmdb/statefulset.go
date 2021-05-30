@@ -34,7 +34,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
 	initContainers []corev1.Container, log logr.Logger, configSource VolumeSourceType) (appsv1.StatefulSetSpec, error) {
 
-	fvar, tvar := false, true
+	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
 	resources, err := CreateResources(replset.Resources)
@@ -67,30 +67,9 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	}
 
 	if configSource.IsUsable() {
-		var vc corev1.VolumeSource
-
-		switch configSource {
-		case VolumeSourceConfigMap:
-			vc = corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: MongodCustomConfigName(m.Name, replset.Name),
-					},
-					Optional: &tvar,
-				},
-			}
-		case VolumeSourceSecret:
-			vc = corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: MongodCustomConfigName(m.Name, replset.Name),
-					Optional:   &tvar,
-				},
-			}
-		}
-
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: vc,
+			VolumeSource: configSource.VolumeSource(MongodCustomConfigName(m.Name, replset.Name)),
 		})
 	}
 
