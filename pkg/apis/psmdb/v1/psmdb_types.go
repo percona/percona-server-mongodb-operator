@@ -620,8 +620,8 @@ func (s *PerconaServerMongoDBStatus) ClusterStatus(reconcileStatus AppState) App
 	readyRepls := 0
 	for _, replStatus := range s.Replsets {
 		if replStatus.Status == AppStateReady {
-                    readyRepls++
-                }
+			readyRepls++
+		}
 	}
 
 	switch {
