@@ -1,6 +1,10 @@
 package psmdb
 
-import api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+import (
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+)
 
 const (
 	gigaByte                 int64   = 1 << 30
@@ -24,4 +28,62 @@ const (
 
 func InternalKey(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-mongodb-keyfile"
+}
+
+type VolumeSourceType int
+
+const (
+	VolumeSourceNone VolumeSourceType = iota
+	VolumeSourceConfigMap
+	VolumeSourceSecret
+)
+
+func (s VolumeSourceType) IsUsable() bool {
+	return s != VolumeSourceNone
+}
+
+func (s VolumeSourceType) String() string {
+	switch s {
+	case VolumeSourceConfigMap:
+		return "ConfigMap"
+	case VolumeSourceSecret:
+		return "Secret"
+	default:
+		return ""
+	}
+}
+
+func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
+	t := true
+	switch s {
+	case VolumeSourceConfigMap:
+		return corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: name,
+				},
+				Optional: &t,
+			},
+		}
+	case VolumeSourceSecret:
+		return corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: name,
+				Optional:   &t,
+			},
+		}
+	default:
+		return corev1.VolumeSource{}
+	}
+}
+
+func VolumeSourceTypeToObj(s VolumeSourceType) runtime.Object {
+	switch s {
+	case VolumeSourceConfigMap:
+		return &corev1.ConfigMap{}
+	case VolumeSourceSecret:
+		return &corev1.Secret{}
+	default:
+		return nil
+	}
 }

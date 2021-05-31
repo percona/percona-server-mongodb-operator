@@ -729,10 +729,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	for _, rs := range repls {
-		var name = psmdb.MongodConfigCMName(cr.Name, rs.Name)
+		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
 
 		if rs.Configuration == "" {
-			err := deleteConfigMapIfExists(r.client, cr, cr.Namespace, name)
+			err := deleteConfigMapIfExists(r.client, cr, name)
 			if err != nil {
 				return errors.Wrap(err, "failed to delete mongod config map")
 			}
@@ -762,10 +762,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.PerconaServerMongoDB) error {
-	var name = psmdb.MongosConfigCMName(cr.Name)
+	name := psmdb.MongosCustomConfigName(cr.Name)
 
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
-		err := deleteConfigMapIfExists(r.client, cr, cr.Namespace, name)
+		err := deleteConfigMapIfExists(r.client, cr, name)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete mongos config map")
 		}
@@ -793,11 +793,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.Percona
 	return nil
 }
 
-func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, nsName, cmName string) error {
+func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, cmName string) error {
 	var configMap = &corev1.ConfigMap{}
 
 	err := cl.Get(context.TODO(), types.NamespacedName{
-		Namespace: nsName,
+		Namespace: cr.Namespace,
 		Name:      cmName,
 	}, configMap)
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -881,12 +881,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "failed to get operator pod")
 	}
 
-	hasCustomConfiguration, err := r.hasMongosCustomConfiguration(cr)
+	configSource, err := r.getCustomConfigurationSource(cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
 	if err != nil {
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, hasCustomConfiguration)
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, configSource)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
@@ -1057,13 +1057,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
-	hasCustomConfiguration, err := r.hasMongodCustomConfiguration(cr, replset)
+	configSource, err := r.getCustomConfigurationSource(cr.Namespace, psmdb.MongodCustomConfigName(cr.Name, replset.Name))
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits,
-		log, hasCustomConfiguration)
+		log, configSource)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
@@ -1346,32 +1346,37 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 	}, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) hasMongodCustomConfiguration(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (bool, error) {
-	if rs.Configuration != "" {
-		return true, nil
-	}
-
-	return r.existsConfigMap(cr.Namespace, psmdb.MongodConfigCMName(cr.Name, rs.Name))
-}
-
-func (r *ReconcilePerconaServerMongoDB) hasMongosCustomConfiguration(cr *api.PerconaServerMongoDB) (bool, error) {
-	if cr.Spec.Sharding.Mongos.Configuration != "" {
-		return true, nil
-	}
-
-	return r.existsConfigMap(cr.Namespace, psmdb.MongosConfigCMName(cr.Name))
-}
-
-func (r *ReconcilePerconaServerMongoDB) existsConfigMap(namespace, name string) (bool, error) {
-	err := r.client.Get(context.TODO(), types.NamespacedName{
+func (r *ReconcilePerconaServerMongoDB) getCustomConfigurationSource(namespace, name string) (psmdb.VolumeSourceType, error) {
+	n := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
-	}, &corev1.ConfigMap{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return false, errors.Wrap(err, "get config map")
 	}
 
-	// config map exists
+	sources := []psmdb.VolumeSourceType{
+		psmdb.VolumeSourceSecret,
+		psmdb.VolumeSourceConfigMap,
+	}
+
+	for _, s := range sources {
+		ok, err := getObjectByName(r.client, n, psmdb.VolumeSourceTypeToObj(s))
+		if err != nil {
+			return 0, errors.Wrapf(err, "get %s", s)
+		}
+		if ok {
+			return s, nil
+		}
+	}
+
+	return psmdb.VolumeSourceNone, nil
+}
+
+func getObjectByName(c client.Client, n types.NamespacedName, obj runtime.Object) (bool, error) {
+	err := c.Get(context.Background(), n, obj)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return false, err
+	}
+
+	// object exists
 	if err == nil {
 		return true, nil
 	}

@@ -27,7 +27,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, useConfigFile bool) (appsv1.DeploymentSpec, error) {
+func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, configSource VolumeSourceType) (appsv1.DeploymentSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -36,7 +36,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
-	c, err := mongosContainer(cr, useConfigFile)
+	c, err := mongosContainer(cr, configSource.IsUsable())
 	if err != nil {
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -73,7 +73,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
 				Containers:        containers,
 				InitContainers:    initContainers,
-				Volumes:           volumes(cr, useConfigFile),
+				Volumes:           volumes(cr, configSource),
 				SchedulerName:     cr.Spec.SchedulerName,
 				RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 			},
@@ -267,7 +267,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 	return args
 }
 
-func volumes(cr *api.PerconaServerMongoDB, useConfigFile bool) []corev1.Volume {
+func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []corev1.Volume {
 	fvar, tvar := false, true
 
 	volumes := []corev1.Volume{
@@ -320,17 +320,10 @@ func volumes(cr *api.PerconaServerMongoDB, useConfigFile bool) []corev1.Volume {
 		})
 	}
 
-	if useConfigFile {
+	if configSource.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
-			Name: "config",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: MongosConfigCMName(cr.Name),
-					},
-					Optional: &tvar,
-				},
-			},
+			Name:         "config",
+			VolumeSource: configSource.VolumeSource(MongosCustomConfigName(cr.Name)),
 		})
 	}
 
