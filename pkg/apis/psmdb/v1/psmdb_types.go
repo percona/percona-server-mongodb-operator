@@ -634,17 +634,14 @@ func (s *PerconaServerMongoDBStatus) ClusterStatus(reconcileStatus AppState) App
 
 const maxStatusesQuantity = 20
 
-func (s *PerconaServerMongoDBStatus) AddCondition(condition ClusterCondition) {
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
 	if len(s.Conditions) == 0 {
-		s.Conditions = append(s.Conditions, condition)
-	} else {
-		lastClusterCondition := s.Conditions[len(s.Conditions)-1]
-		switch {
-		case lastClusterCondition.Type != condition.Type:
-			s.Conditions = append(s.Conditions, condition)
-		default:
-			s.Conditions[len(s.Conditions)-1] = lastClusterCondition
-		}
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
+		s.Conditions = append(s.Conditions, c)
 	}
 
 	if len(s.Conditions) > maxStatusesQuantity {
