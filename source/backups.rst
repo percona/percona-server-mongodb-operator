@@ -51,22 +51,21 @@ appropriate command to create the secret object,
 e.g. ``kubectl apply -f deploy/backup-s3.yaml`` (for Kubernetes).
 
 Backups schedule is defined in the ``backup`` section of the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
-file. This section contains three subsections:
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
+file. This section contains following subsections:
 
-* ``storages`` contains data needed to access the S3-compatible cloud to store
-  backups.
+* ``storages`` subsection contains data needed to access the S3-compatible cloud
+  to store backups.
 * ``tasks`` subsection allows to actually schedule backups (the schedule is
   specified in crontab format).
 
-Here is an example which uses Amazon S3 storage for backups:
+Here is an example of `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__ which uses Amazon S3 storage for backups:
 
 .. code:: yaml
 
    ...
    backup:
      enabled: true
-     version: 0.3.0
      ...
      storages:
        s3-us-west:
@@ -104,21 +103,30 @@ example).
 The schedule is specified in crontab format as explained in
 :ref:`Operator Custom Resource options<operator.backup-section>`.
 
+.. _backups-manual:
+
 Making on-demand backup
 -----------------------
 
-To make on-demand backup, user should use YAML file with correct names
-for the backup and the Percona Server for MongoDB Cluster, and correct PVC
-settings. The example of such file is
+To make an on-demand backup, the user should first configure the backup storage
+in the ``backup.storages`` subsection of the ``deploy/cr.yaml`` configuration
+file in a same way it was done for scheduled backups. When the
+``deploy/cr.yaml`` file contains correctly configured storage and is applied
+with ``kubectl`` command, use *a special backup configuration YAML file* with
+the following contents:
+
+* **backup name** in the ``metadata.name`` key,
+* **Percona Server for MongoDB Cluster name** in the ``spec.psmdbCluster`` key,
+* **storage name** from ``deploy/cr.yaml`` in the ``spec.storageName`` key.
+
+ The example of such file is
 `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/backup.yaml>`_.
 
-When the backup config file is ready, actual backup command is executed:
+When the backup destination is configured and applied with `kubectl apply -f deploy/cr.yaml` command, the actual backup command is executed:
 
 .. code:: bash
 
    kubectl apply -f deploy/backup/backup.yaml
-
-The example of such file is `deploy/backup/restore.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/restore.yaml>`_.
 
 .. note:: Storing backup settings in a separate file can be replaced by
    passing its content to the ``kubectl apply`` command as follows:
@@ -172,54 +180,91 @@ message in the operator logs.
    break it, but put error message about the additional bucket in the operator
    logs as well.
 
+.. _backups-restore:
+
 Restore the cluster from a previously saved backup
 --------------------------------------------------
 
-The Operator supports the ability to perform a full restore on a MongoDB
-cluster as well as a point-in-time-recovery.
+Backup can be restored not only on the Kubernetes cluster where it was made, but
+also on any Kubernetes-based environment with the installed Operator.
+
+.. note:: When restoring to a new Kubernetes-based environment, make sure it
+   has a Secrets object with the same user passwords as in the original cluster.
+   More details about secrets can be found in :ref:`users.system-users`.
+
+Following things are needed to restore a previously saved backup:
+
+* Make sure that the cluster is running.
+
+* Find out correct names for the **backup** and the **cluster**. Available
+  backups can be listed with the following command:
+
+  .. code:: bash
+
+     kubectl get psmdb-backup
+
+  .. note:: Obviously, you can make this check only on the same cluster on
+     which you have previously made the backup.
+
+  And the following command will list available clusters:
+
+  .. code:: bash
+
+     kubectl get psmdb
 
 .. _backups-no-pitr-restore:
 
 Restoring without point-in-time recovery
 ****************************************
 
-Following steps are needed to restore a previously saved backup:
+When the correct names for the backup and the cluster are known, backup
+restoration can be done in the following way.
 
-1. First of all make sure that the cluster is running.
+1. Set appropriate keys in the `deploy/backup/restore.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/restore.yaml>`_ file.
 
-2. Now find out correct names for the **backup** and the **cluster**. Available
-   backups can be listed with the following command:
+   * set ``spec.clusterName`` key to the name of the target cluster to restore
+     the backup on,
+   * if you are restoring backup on the *same* Kubernetes-based cluster you have
+      used to save this backup, set ``spec.backupName`` key to the name of your
+      backup,
+   * if you are restoring backup on the Kubernetes-based cluster *different*
+     from one you have used to save this backup, set ``spec.backupSource``
+     subsection instead of ``spec.backupName`` field to point on the appropriate
+     S3-compatible storage. This ``backupSource`` subsection should contain
+     a ``destination`` key equal to the s3 bucket with a special ``s3://``
+     prefix, followed by necessary S3 configuration keys, same as in
+     ``deploy/cr.yaml`` file:
 
-   .. code:: bash
+     .. code-block:: yaml
 
-      kubectl get psmdb-backup
+        ...
+        backupSource:
+          destination: s3://S3-BUCKET-NAME/BACKUP-NAME
+          s3:
+            credentialsSecret: my-cluster-name-backup-s3
+            region: us-west-2
+            endpointUrl: https://URL-OF-THE-S3-COMPATIBLE-STORAGE
 
-   And the following command will list available clusters:
-
-   .. code:: bash
-
-      kubectl get psmdb
-
-3. When both correct names are known, run the actual restoration process:
+2. After that, the actual restoration process can be started as follows:
 
    .. code:: bash
 
       kubectl apply -f deploy/backup/restore.yaml
 
-   .. note:: Storing backup settings in a separate file can be replaced by
-      passing its content to the ``kubectl apply`` command as follows:
+.. note:: Storing backup settings in a separate file can be replaced by
+   passing its content to the ``kubectl apply`` command as follows:
 
-      .. code:: bash
+   .. code:: bash
 
-            cat <<EOF | kubectl apply -f-
-            apiVersion: psmdb.percona.com/v1
-            kind: PerconaServerMongoDBRestore
-            metadata:
-              name: restore1
-            spec:
-              clusterName: my-cluster-name
-              backupName: backup1
-            EOF
+      cat <<EOF | kubectl apply -f-
+      apiVersion: psmdb.percona.com/v1
+      kind: PerconaServerMongoDBRestore
+      metadata:
+        name: restore1
+      spec:
+        clusterName: my-cluster-name
+        backupName: backup1
+      EOF
 
 .. _backups-pitr-restore:
 
