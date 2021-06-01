@@ -100,6 +100,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		return rr, err
 	}
 
+	defer func() {
+		if err != nil {
+			instance.Status.State = psmdbv1.RestoreStateError
+			instance.Status.Error = err.Error()
+		}
+
+		err = r.updateStatus(instance)
+		if err != nil {
+			log.Error(err, "failed to update restore status")
+		}
+	}()
+
 	err = instance.CheckFields()
 	if err != nil {
 		return rr, fmt.Errorf("fields check: %v", err)

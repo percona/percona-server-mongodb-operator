@@ -103,6 +103,18 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, err
 	}
 
+	defer func() {
+		if err != nil {
+			cr.Status.State = psmdbv1.BackupStateError
+			cr.Status.Error = err.Error()
+		}
+
+		err = r.updateStatus(cr)
+		if err != nil {
+			log.Error(err, "failed to update backup status")
+		}
+	}()
+
 	err = cr.CheckFields()
 	if err != nil {
 		return rr, errors.Wrap(err, "fields check")
