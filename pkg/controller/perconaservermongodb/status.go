@@ -44,6 +44,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.Message = ""
 
 	replsetsReady := 0
+	replsetsStopping := 0
+	replsetsPaused := 0
 	inProgress := false
 
 	repls := cr.Spec.Replsets
@@ -79,32 +81,38 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		status.Initialized = currentRSstatus.Initialized
 		status.AddedAsShard = currentRSstatus.AddedAsShard
 
-		if status.Status == api.AppStateReady {
+		switch status.Status {
+		case api.AppStateReady:
 			replsetsReady++
+		case api.AppStateStopping:
+			replsetsStopping++
+		case api.AppStatePaused:
+			replsetsPaused++
 		}
 
 		if status.Status != currentRSstatus.Status {
-			switch status.Status {
-			case api.AppStateReady:
-				if currentRSstatus.Initialized {
-					clusterCondition = api.ClusterCondition{
-						Status:             api.ConditionTrue,
-						Type:               api.AppStateReady,
-						Reason:             "RSReady",
-						LastTransitionTime: metav1.NewTime(time.Now()),
-					}
-				}
-			case api.AppStateError:
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Type:               api.AppStateError,
-					Message:            rs.Name + ": " + status.Message,
-					Reason:             "RSError",
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
+			rsCondition := api.ClusterCondition{
+				Type:               status.Status,
+				Status:             api.ConditionTrue,
+				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
 
-			cr.Status.AddCondition(clusterCondition)
+			switch status.Status {
+			case api.AppStateReady:
+				rsCondition.Reason = "RSReady"
+				rsCondition.Message = rs.Name + ": ready"
+			case api.AppStateStopping:
+				rsCondition.Reason = "RSStopping"
+				rsCondition.Message = rs.Name + ": stopping"
+			case api.AppStatePaused:
+				rsCondition.Reason = "RSPaused"
+				rsCondition.Message = rs.Name + ": paused"
+			case api.AppStateError:
+				rsCondition.Reason = "RSError"
+				rsCondition.Message = rs.Name + ": " + status.Message
+			}
+
+			cr.Status.AddCondition(rsCondition)
 		}
 		cr.Status.Replsets[rs.Name] = &status
 		if !inProgress {
@@ -127,31 +135,40 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		if mongosStatus.Status != cr.Status.Mongos.Status {
-			switch mongosStatus.Status {
-			case api.AppStateReady:
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Type:               api.AppStateReady,
-					Reason:             "MongosReady",
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
-			case api.AppStateError:
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Type:               api.AppStateError,
-					Message:            mongosStatus.Message,
-					Reason:             "MongosError",
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
+			mongosCondition := api.ClusterCondition{
+				Type:               mongosStatus.Status,
+				Status:             api.ConditionTrue,
+				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
 
-			cr.Status.AddCondition(clusterCondition)
+			switch mongosStatus.Status {
+			case api.AppStateReady:
+				mongosCondition.Reason = "MongosReady"
+			case api.AppStateStopping:
+				mongosCondition.Reason = "MongosStopping"
+			case api.AppStatePaused:
+				mongosCondition.Reason = "MongosPaused"
+			case api.AppStateError:
+				mongosCondition.Reason = "MongosError"
+				mongosCondition.Message = mongosStatus.Message
+			}
+
+			cr.Status.AddCondition(mongosCondition)
 		}
 
 		cr.Status.Mongos = &mongosStatus
 	}
 
-	cr.Status.State = cr.Status.ClusterStatus(clusterState)
+	switch {
+	case replsetsStopping > 0 || cr.ObjectMeta.DeletionTimestamp != nil:
+		cr.Status.State = api.AppStateStopping
+	case replsetsPaused == len(repls):
+		cr.Status.State = api.AppStatePaused
+	case replsetsReady == len(repls) && clusterState == api.AppStateReady:
+		cr.Status.State = api.AppStateReady
+	default:
+		cr.Status.State = api.AppStateInit
+	}
 	clusterCondition.Type = cr.Status.State
 	cr.Status.AddCondition(clusterCondition)
 
@@ -227,7 +244,12 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, r
 		}
 	}
 
-	if status.Size == status.Ready {
+	switch {
+	case cr.Spec.Pause && status.Ready > 0:
+		status.Status = api.AppStateStopping
+	case cr.Spec.Pause:
+		status.Status = api.AppStatePaused
+	case status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 
@@ -268,7 +290,12 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
-	if status.Size == status.Ready {
+	switch {
+	case cr.Spec.Pause && status.Ready > 0:
+		status.Status = api.AppStateStopping
+	case cr.Spec.Pause:
+		status.Status = api.AppStatePaused
+	case status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 

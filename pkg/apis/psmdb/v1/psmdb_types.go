@@ -113,9 +113,11 @@ type ReplsetStatus struct {
 type AppState string
 
 const (
-	AppStateInit  AppState = "initializing"
-	AppStateReady AppState = "ready"
-	AppStateError AppState = "error"
+	AppStateInit     AppState = "initializing"
+	AppStateStopping AppState = "stopping"
+	AppStatePaused   AppState = "paused"
+	AppStateReady    AppState = "ready"
+	AppStateError    AppState = "error"
 )
 
 type UpgradeStrategy string
@@ -614,22 +616,6 @@ func (cr *PerconaServerMongoDB) CanBackup() error {
 	}
 
 	return nil
-}
-
-func (s *PerconaServerMongoDBStatus) ClusterStatus(reconcileStatus AppState) AppState {
-	readyRepls := 0
-	for _, replStatus := range s.Replsets {
-		if replStatus.Status == AppStateReady {
-			readyRepls++
-		}
-	}
-
-	switch {
-	case readyRepls == len(s.Replsets) && reconcileStatus == AppStateReady && s.Mongos.Status == AppStateReady:
-		return AppStateReady
-	default:
-		return AppStateInit
-	}
 }
 
 const maxStatusesQuantity = 20
