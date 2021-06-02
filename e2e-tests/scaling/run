@@ -31,11 +31,9 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 desc 'scale up from 3 to 5'
-kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-    | yq d - 'metadata.managedFields' \
-    | sed -e 's/size: 3/size: 5/' \
-    | kubectl_bin apply -f-
-
+kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
 desc 'check if all 5 Pods started'
 wait_for_running $cluster 5
 
@@ -48,10 +46,9 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-3.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-4.$cluster.$namespace"
 
 desc 'scale down from 5 to 3'
-kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-    | yq d - 'metadata.managedFields' \
-    | sed -e 's/size: 5/size: 3/' \
-    | kubectl_bin apply -f-
+kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
 
 desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-3
