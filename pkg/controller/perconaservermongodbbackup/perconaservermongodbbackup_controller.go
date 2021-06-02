@@ -105,6 +105,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 
 	defer func() {
 		if err != nil {
+			if err.Error() == cr.Status.Error {
+				return
+			}
+
 			cr.Status.State = psmdbv1.BackupStateError
 			cr.Status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)

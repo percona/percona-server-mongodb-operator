@@ -102,6 +102,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 
 	defer func() {
 		if err != nil {
+			if err.Error() == instance.Status.Error {
+				return
+			}
+
 			instance.Status.State = psmdbv1.RestoreStateError
 			instance.Status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", instance.Name, "backup", instance.Spec.BackupName)
