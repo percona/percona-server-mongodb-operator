@@ -26,13 +26,13 @@ fail_pod() {
 		| yq w - "metadata.namespace" "chaos-testing" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
-		| kubectl_bin apply -f-
+		| kubectl_bin apply -f -
 	sleep 10
 
 	desc 'check if operator works fine: scale down from 5 to 3'
-	kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-		| sed -e 's/size: 5/size: 3/' \
-		| kubectl_bin apply -f-
+	kubectl_bin patch psmdb ${cluster%%-rs0} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
 	sleep 60
 
 	local pod=$(get_operator_pod)
@@ -57,7 +57,7 @@ kill_pod() {
 		| yq w - "metadata.namespace" "chaos-testing" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
-		| kubectl_bin apply -f-
+		| kubectl_bin apply -f -
 	sleep 10
 
 	if [ "$init_pod" == "$(get_operator_pod)" ]; then
@@ -66,9 +66,9 @@ kill_pod() {
 	fi
 
 	desc 'check if operator works fine: scale up from 3 to 5'
-	kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-		| sed -e 's/size: 3/size: 5/' \
-		| kubectl_bin apply -f-
+	kubectl_bin patch psmdb ${cluster%%-rs0} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
 	sleep 10
 
 	# check scale up
@@ -83,13 +83,13 @@ network_loss() {
 		| yq w - "metadata.namespace" "chaos-testing" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
-		| kubectl_bin apply -f-
+		| kubectl_bin apply -f -
 	sleep 10
 
 	desc 'check if operator works fine: scale up from 3 to 5'
-	kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-		| sed -e 's/size: 3/size: 5/' \
-		| kubectl_bin apply -f-
+	kubectl_bin patch psmdb ${cluster%%-rs0} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
 	sleep 10
 
 	# check scale up

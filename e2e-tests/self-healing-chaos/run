@@ -60,7 +60,7 @@ kill_pod() {
 		| yq w - "metadata.namespace" "chaos-testing" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
-		| kubectl_bin apply -f-
+		| kubectl_bin apply -f -
 	sleep 5
 
 	# check if all 3 Pods started
@@ -78,7 +78,7 @@ failure_pod() {
 		| yq w - "metadata.namespace" "chaos-testing" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
-		| kubectl_bin apply -f-
+		| kubectl_bin apply -f -
 	sleep 10
 
 	# write data
@@ -101,7 +101,7 @@ network_loss() {
 		| yq w - "metadata.namespace" "chaos-testing" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
-		| kubectl_bin apply -f-
+		| kubectl_bin apply -f -
 	sleep 10
 
 	# write data
