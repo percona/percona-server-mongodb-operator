@@ -23,6 +23,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.MongosNamespacedName().Name,
 			Namespace: cr.MongosNamespacedName().Namespace,
+			Labels:    cr.Spec.Sharding.Mongos.Labels,
 		},
 	}
 }
@@ -34,6 +35,10 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		"app.kubernetes.io/component":  "mongos",
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	for k, v := range cr.Spec.Sharding.Mongos.Labels {
+		ls[k] = v
 	}
 
 	c, err := mongosContainer(cr, configSource.IsUsable())
