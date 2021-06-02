@@ -10,7 +10,8 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements, ikeyName string) (corev1.Container, error) {
+func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
+	ikeyName string, useConfigFile bool) (corev1.Container, error) {
 	fvar := false
 
 	volumes := []corev1.VolumeMount{
@@ -35,6 +36,13 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		},
 	}
 
+	if useConfigFile {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      "config",
+			MountPath: mongodConfigDir,
+		})
+	}
+
 	if *cr.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.VolumeMount{
@@ -54,7 +62,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		Name:            name,
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args:            containerArgs(cr, replset, resources),
+		Args:            containerArgs(cr, replset, resources, useConfigFile),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
@@ -116,7 +124,8 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 }
 
 // containerArgs returns the args to pass to the mSpec container
-func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements) []string {
+func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements,
+	useConfigFile bool) []string {
 	mSpec := m.Spec.Mongod
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
@@ -275,6 +284,10 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		default:
 			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
 		}
+	}
+
+	if useConfigFile {
+		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", mongodConfigDir))
 	}
 
 	return args

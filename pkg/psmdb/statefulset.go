@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"fmt"
+
 	"github.com/go-logr/logr"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,7 +32,7 @@ var secretFileMode int32 = 288
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
-	initContainers []corev1.Container, log logr.Logger) (appsv1.StatefulSetSpec, error) {
+	initContainers []corev1.Container, log logr.Logger, configSource VolumeSourceType) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
 
@@ -65,6 +66,13 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
+	if configSource.IsUsable() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         "config",
+			VolumeSource: configSource.VolumeSource(MongodCustomConfigName(m.Name, replset.Name)),
+		})
+	}
+
 	if *m.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.Volume{
@@ -80,7 +88,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		)
 	}
 
-	c, err := container(m, replset, containerName, resources, ikeyName)
+	c, err := container(m, replset, containerName, resources, ikeyName, configSource.IsUsable())
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -123,6 +131,14 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 			},
 		},
 	}, nil
+}
+
+func MongodCustomConfigName(clusterName, replicaSetName string) string {
+	return fmt.Sprintf("%s-%s-mongod", clusterName, replicaSetName)
+}
+
+func MongosCustomConfigName(clusterName string) string {
+	return clusterName + "-mongos"
 }
 
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
