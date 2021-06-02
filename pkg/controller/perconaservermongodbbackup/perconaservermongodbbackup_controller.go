@@ -107,11 +107,12 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		if err != nil {
 			cr.Status.State = psmdbv1.BackupStateError
 			cr.Status.Error = err.Error()
+			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
 
 		err = r.updateStatus(cr)
 		if err != nil {
-			log.Error(err, "failed to update backup status")
+			log.Error(err, "failed to update backup status", "backup", cr.Name)
 		}
 	}()
 
@@ -152,13 +153,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 		if err != nil {
 			status.State = psmdbv1.BackupStateError
 			status.Error = err.Error()
-			log.Error(err, "failed to make restore", "backup", cr.Name)
+			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
 		if cr.Status.State != status.State {
 			cr.Status = status
 			uerr := r.updateStatus(cr)
 			if uerr != nil {
-				log.Error(uerr, "failed to updated restore status", "backup", cr.Name)
+				log.Error(uerr, "failed to update backup status", "backup", cr.Name)
 			}
 		}
 	}()
