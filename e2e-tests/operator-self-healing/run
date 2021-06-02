@@ -39,10 +39,10 @@ pause_pod() {
     pid=$!
     sleep 10
 
-    desc 'check if operator works fine: scale down from 4 to 3'
-    kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-        | sed -e 's/size: 5/size: 3/' \
-        | kubectl_bin apply -f-
+    desc 'check if operator works fine: scale down from 5 to 3'
+    kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
 
     # wait for unpause
     wait $pid
@@ -63,10 +63,10 @@ netem_pod() {
     pid=$!
     sleep 10
 
-    desc 'check if operator works fine: scale up from 3 to 4'
-    kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-        | sed -e 's/size: 3/size: 5/' \
-        | kubectl_bin apply -f-
+    desc 'check if operator works fine: scale up from 3 to 5'
+    kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
 
     # wait for unpause
     wait $pid || :
@@ -79,7 +79,6 @@ netem_pod() {
     wait_for_running $cluster 4
 }
 
-
 main() {
     create_namespace $namespace
     ## TODO: kubectl_bin apply -f $test_dir/conf/quota.yml
@@ -90,26 +89,26 @@ main() {
 
     desc 'kill operator'
     pumba_pod kill
-    desc 'check if operator works fine: scale up from 3 to 4'
-    kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-        | sed -e 's/size: 3/size: 5/' \
-        | kubectl_bin apply -f-
+    desc 'check if operator works fine: scale up from 3 to 5'
+    kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
     wait_for_running $cluster 4
 
     desc 'rm operator'
     pumba_pod rm
-    desc 'check if operator works fine: scale down from 4 to 3'
-    kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-        | sed -e 's/size: 5/size: 3/' \
-        | kubectl_bin apply -f-
+    desc 'check if operator works fine: scale down from 5 to 3'
+    kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
     wait_for_delete pod/$cluster-3
 
     desc 'stop operator'
     pumba_pod stop
-    desc 'check if operator works fine: scale up from 3 to 4'
-    kubectl_bin get psmdb -o yaml ${cluster%%-rs0} \
-        | sed -e 's/size: 3/size: 5/' \
-        | kubectl_bin apply -f-
+    desc 'check if operator works fine: scale up from 3 to 5'
+    kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
     wait_for_running $cluster 4
 
     desc 'pause operator'
