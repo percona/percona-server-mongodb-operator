@@ -378,9 +378,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			}
 		}
 
-		err = r.removeOudatedServices(cr, replset, &pods)
+		err = r.removeOutdatedServices(cr, replset)
 		if err != nil {
-			err = errors.Errorf("failed to remove old services of replset %s: %v", replset.Name, err)
+			err = errors.Wrapf(err, "failed to remove old services of replset %s", replset.Name)
 			return reconcile.Result{}, err
 		}
 
