@@ -39,13 +39,13 @@ pause_pod() {
     pid=$!
     sleep 10
 
-    desc 'check if operator works fine: scale down from 5 to 3'
-    kubectl_bin patch psmdb ${cluster%%-rs0} \
-	--type='json' \
-	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
+	desc 'check if operator works fine: scale down from 5 to 3'
+	kubectl_bin patch psmdb ${cluster%%-rs0} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
 
-    # wait for unpause
-    wait $pid
+	# wait for unpause
+	wait $pid
 
     # check if Pod started
     wait_pod $pod
@@ -63,13 +63,13 @@ netem_pod() {
     pid=$!
     sleep 10
 
-    desc 'check if operator works fine: scale up from 3 to 5'
-    kubectl_bin patch psmdb ${cluster%%-rs0} \
-	--type='json' \
-	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
+	desc 'check if operator works fine: scale up from 3 to 5'
+	kubectl_bin patch psmdb ${cluster%%-rs0} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
 
-    # wait for unpause
-    wait $pid || :
+	# wait for unpause
+	wait $pid || :
 
     # check if Pod started
     wait_pod $pod
