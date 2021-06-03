@@ -164,7 +164,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.State = api.AppStateStopping
 	case replsetsPaused == len(repls):
 		cr.Status.State = api.AppStatePaused
-	case replsetsReady == len(repls) && clusterState == api.AppStateReady:
+	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady:
 		cr.Status.State = api.AppStateReady
 	default:
 		cr.Status.State = api.AppStateInit
