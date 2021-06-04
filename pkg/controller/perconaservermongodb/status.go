@@ -123,7 +123,6 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 	}
 
-	cr.Status.Mongos = nil
 	if cr.Spec.Sharding.Enabled {
 		mongosStatus, err := r.mongosStatus(cr)
 		if err != nil {
@@ -157,6 +156,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Mongos = &mongosStatus
+	} else {
+		cr.Status.Mongos = nil
 	}
 
 	switch {
