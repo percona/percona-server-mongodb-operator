@@ -33,6 +33,12 @@ spec:
 
   - name: rs0
     size: 3
+#    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+#    configuration: |
+#      operationProfiling:
+#        mode: slowOp
+#      systemLog:
+#         verbosity: 1
 #    storage:
 #      engine: wiredTiger
 #      inMemory:
@@ -146,6 +152,12 @@ spec:
 
     configsvrReplSet:
       size: 3
+#      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+#      configuration: |
+#        operationProfiling:
+#          mode: slowOp
+#        systemLog:
+#           verbosity: 1
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
@@ -210,6 +222,12 @@ spec:
 
     mongos:
       size: 3
+#      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+#      configuration: |
+#        operationProfiling:
+#          mode: slowOp
+#        systemLog:
+#           verbosity: 1
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
