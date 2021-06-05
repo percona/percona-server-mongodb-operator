@@ -295,7 +295,7 @@ type MongosSpec struct {
 	HostPort                 int32                      `json:"hostPort,omitempty"`
 	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
 	AuditLog                 *MongoSpecAuditLog         `json:"auditLog,omitempty"`
-	Expose                   Expose                     `json:"expose,omitempty"`
+	Expose                   MongosExpose               `json:"expose,omitempty"`
 	Size                     int32                      `json:"size,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
@@ -504,6 +504,12 @@ type Arbiter struct {
 	Enabled bool  `json:"enabled"`
 	Size    int32 `json:"size"`
 	MultiAZ
+}
+
+type MongosExpose struct {
+	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
+	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
+	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 }
 
 type Expose struct {
