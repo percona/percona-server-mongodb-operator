@@ -331,8 +331,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.Enabled &&
-			mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 			return loadBalancerServiceEndpoint(r.client, cr.Name+"-mongos", cr.Namespace)
 		}
 		return cr.Name + "-mongos." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
