@@ -223,6 +223,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = r.checkFinalizers(cr)
+		return rr, err
+	}
+
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile users secret")
@@ -464,12 +469,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	// DB cluster can be not ready yet so it's requeued after some time
 	if err = r.updatePITR(cr); err != nil {
-		return rr, err
-	}
-
-	err = r.checkFinalizers(cr)
-	if err != nil {
-		logger.Error(err, "failed to run finalizers")
 		return rr, err
 	}
 

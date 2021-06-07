@@ -11,24 +11,21 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) error {
-	var err error = nil
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		finalizers := []string{}
+	finalizers := []string{}
 
-		for _, f := range cr.GetFinalizers() {
-			switch f {
-			case "delete-psmdb-pvc":
-				err = r.deletePvcFinalizer(cr)
-				if err != nil {
-					log.Error(err, "failed to run finalizer", "finalizer", f)
-					finalizers = append(finalizers, f)
-				}
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-psmdb-pvc":
+			err := r.deletePvcFinalizer(cr)
+			if err != nil {
+				log.Error(err, "failed to run finalizer", "finalizer", f)
+				finalizers = append(finalizers, f)
 			}
 		}
-
-		cr.SetFinalizers(finalizers)
-		err = r.client.Update(context.TODO(), cr)
 	}
+
+	cr.SetFinalizers(finalizers)
+	err := r.client.Update(context.TODO(), cr)
 
 	return err
 }
