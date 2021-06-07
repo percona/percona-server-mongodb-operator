@@ -345,23 +345,24 @@ deploy_minio() {
 }
 
 deploy_chaos_mesh() {
+	local chaos_mesh_ns=$1
+
 	desc 'install chaos-mesh'
-	helm del chaos-mesh --namespace chaos-testing || :
-	kubectl_bin delete ns chaos-testing || :
+	helm del chaos-mesh --namespace ${chaos_mesh_ns} || :
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	kubectl_bin create ns chaos-testing
 	if version_gt "1.19"; then
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=chaos-testing --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 0.5.1
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 0.5.1 --set clusterScoped=false --set controllerManager.targetNamespace=${chaos_mesh_ns}
 	else
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=chaos-testing --set dashboard.create=false --version 0.5.1
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set dashboard.create=false --version 0.5.1 --set clusterScoped=false --set controllerManager.targetNamespace=${chaos_mesh_ns}
 	fi
 	sleep 10
 }
 
 destroy_chaos_mesh() {
+	local chaos_mesh_ns=$1
+
 	desc 'destroy chaos-mesh'
-	helm del chaos-mesh --namespace chaos-testing || :
-	kubectl_bin delete ns chaos-testing || :
+	helm del chaos-mesh --namespace ${chaos_mesh_ns} || :
 }
 
 retry() {

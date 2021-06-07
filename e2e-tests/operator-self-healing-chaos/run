@@ -23,7 +23,7 @@ fail_pod() {
 
 	cat $conf_dir/chaos-pod-failure.yml \
 		| yq w - "metadata.name" "chaos-operator-pod-failure-$RANDOM" \
-		| yq w - "metadata.namespace" "chaos-testing" \
+		| yq w - "metadata.namespace" "$namespace" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
 		| kubectl_bin apply -f -
@@ -54,7 +54,7 @@ kill_pod() {
 
 	cat $conf_dir/chaos-pod-kill.yml \
 		| yq w - "metadata.name" "chaos-operator-pod-kill-$RANDOM" \
-		| yq w - "metadata.namespace" "chaos-testing" \
+		| yq w - "metadata.namespace" "$namespace" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
 		| kubectl_bin apply -f -
@@ -80,7 +80,7 @@ network_loss() {
 
 	cat $conf_dir/chaos-network-loss.yml \
 		| yq w - "metadata.name" "chaos-operator-network-$RANDOM" \
-		| yq w - "metadata.namespace" "chaos-testing" \
+		| yq w - "metadata.namespace" "$namespace" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
 		| kubectl_bin apply -f -
@@ -98,7 +98,7 @@ network_loss() {
 
 main() {
 	create_namespace $namespace
-	deploy_chaos_mesh
+	deploy_chaos_mesh $namespace
 	deploy_operator
 
 	desc 'create PSMDB cluster'
@@ -113,7 +113,7 @@ main() {
 	desc 'emulate bad network for 60s'
 	network_loss
 
-	destroy_chaos_mesh
+	destroy_chaos_mesh $namespace
 	destroy $namespace
 }
 
