@@ -5,27 +5,27 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) error {
-	var err error = nil
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		finalizers := []string{}
+	finalizers := []string{}
 
-		for _, f := range cr.GetFinalizers() {
-			switch f {
-			case "delete-psmdb-pvc":
-				err = r.deletePvcFinalizer(cr)
-				if err != nil {
-					log.Error(err, "failed to run finalizer", "finalizer", f)
-					finalizers = append(finalizers, f)
-				}
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-psmdb-pvc":
+			err := r.deletePvcFinalizer(cr)
+			if err != nil {
+				log.Error(err, "failed to run finalizer", "finalizer", f)
+				finalizers = append(finalizers, f)
 			}
 		}
-
-		cr.SetFinalizers(finalizers)
-		err = r.client.Update(context.TODO(), cr)
 	}
+
+	cr.SetFinalizers(finalizers)
+	err := r.client.Update(context.TODO(), cr)
 
 	return err
 }
@@ -39,6 +39,11 @@ func (r *ReconcilePerconaServerMongoDB) deletePvcFinalizer(cr *api.PerconaServer
 	err = r.deleteAllPVC(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete all PVCs")
+	}
+
+	err = r.deleteSecrets(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete secrets")
 	}
 
 	return nil
@@ -72,6 +77,39 @@ func (r *ReconcilePerconaServerMongoDB) deleteAllPVC(cr *api.PerconaServerMongoD
 		err := r.client.Delete(context.TODO(), &pvc)
 		if err != nil {
 			return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteSecrets(cr *api.PerconaServerMongoDB) error {
+	secrets := []string{
+		cr.Spec.Secrets.Users,
+		"internal-" + cr.Name,
+		"internal-" + cr.Name + "-users",
+		cr.Name + "-mongodb-encryption-key",
+	}
+
+	for _, secretName := range secrets {
+		secret := &corev1.Secret{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      secretName,
+		}, secret)
+
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "get secret")
+		}
+
+		if k8serrors.IsNotFound(err) {
+			continue
+		}
+
+		log.Info("deleting secret", "name", secret.Name)
+		err = r.client.Delete(context.TODO(), secret)
+		if err != nil {
+			return errors.Wrapf(err, "delete secret %s", secretName)
 		}
 	}
 
