@@ -244,6 +244,15 @@ restoration can be done in the following way.
             credentialsSecret: my-cluster-name-backup-s3
             region: us-west-2
             endpointUrl: https://URL-OF-THE-S3-COMPATIBLE-STORAGE
+   * you can also use a ``storageName`` key to specify the exact name of the
+     storage (the actual storage should be already defined in the
+     ``backup.storages`` subsection of the ``deploy/cr.yaml`` file):
+
+     .. code-block:: yaml
+
+        ...
+        backupSource:
+          storageName: s3-us-west
 
 2. After that, the actual restoration process can be started as follows:
 
