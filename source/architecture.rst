@@ -42,7 +42,7 @@ dynamically assigned nodes.
    which should be changed in the production environment, as stated in
    the  `installation instructions <openshift.html>`_.
 
-.. image:: operator.*
+.. image:: assets/images/operator.*
    :align: center
    :alt: Percona Server for MongoDB Operator
 
