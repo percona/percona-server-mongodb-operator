@@ -36,6 +36,12 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
+	if cr.Spec.Sharding.Mongos.Labels != nil {
+		for k, v := range cr.Spec.Sharding.Mongos.Labels {
+			ls[k] = v
+		}
+	}
+
 	c, err := mongosContainer(cr, configSource.IsUsable())
 	if err != nil {
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
