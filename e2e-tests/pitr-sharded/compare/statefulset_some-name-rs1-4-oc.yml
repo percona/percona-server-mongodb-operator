@@ -3,13 +3,13 @@ kind: StatefulSet
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: cfg
+    app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: cfg
-  name: some-name-cfg
+    app.kubernetes.io/replset: rs1
+  name: some-name-rs1
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -20,54 +20,43 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: cfg
+      app.kubernetes.io/component: mongod
       app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: cfg
-  serviceName: some-name-cfg
+      app.kubernetes.io/replset: rs1
+  serviceName: some-name-rs1
   template:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: cfg
+        app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: cfg
+        app.kubernetes.io/replset: rs1
     spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app.kubernetes.io/component: cfg
-                  app.kubernetes.io/instance: some-name
-                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
-                  app.kubernetes.io/name: percona-server-mongodb
-                  app.kubernetes.io/part-of: percona-server-mongodb
-                  app.kubernetes.io/replset: cfg
-              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=cfg
+            - --replSet=rs1
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
-            - --configsvr
+            - --shardsvr
             - --slowms=100
             - --profile=1
             - --rateLimit=1
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+            - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerCollectionBlockCompressor=snappy
             - --wiredTigerJournalCompressor=snappy
             - --wiredTigerIndexPrefixCompression=true
@@ -85,7 +74,7 @@ spec:
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: cfg
+              value: rs1
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -123,7 +112,13 @@ spec:
             tcpSocket:
               port: 27017
             timeoutSeconds: 2
-          resources: {}
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 100M
           securityContext:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
@@ -146,16 +141,6 @@ spec:
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
-        - args:
-            - -c
-            - while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done
-          command:
-            - /bin/sh
-          imagePullPolicy: Always
-          name: cfg-sidecar-1
-          resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
         - env:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
@@ -170,7 +155,7 @@ spec:
                   name: internal-some-name-users
                   optional: false
             - name: PBM_MONGODB_REPLSET
-              value: cfg
+              value: rs1
             - name: PBM_MONGODB_PORT
               value: "27017"
             - name: SHARDED
@@ -188,14 +173,19 @@ spec:
             - /init-entrypoint.sh
           imagePullPolicy: Always
           name: mongo-init
-          resources: {}
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 100M
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
-      runtimeClassName: container-rc
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: default
@@ -238,6 +228,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 3Gi
+            storage: 1Gi
       status:
         phase: Pending
