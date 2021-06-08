@@ -108,7 +108,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
 		}
-		if cr.Status.State != status.State {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error {
 			cr.Status = status
 			uerr := r.updateStatus(cr)
 			if uerr != nil {
