@@ -157,6 +157,8 @@ type PerconaServerMongoDBStatus struct {
 	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
 	PMMVersion         string                    `json:"pmmVersion,omitempty"`
 	Host               string                    `json:"host,omitempty"`
+	Size               int32                     `json:"size,omitempty"`
+	Ready              int32                     `json:"ready,omitempty"`
 }
 
 type ConditionStatus string
