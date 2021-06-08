@@ -113,9 +113,11 @@ type ReplsetStatus struct {
 type AppState string
 
 const (
-	AppStateInit  AppState = "initializing"
-	AppStateReady AppState = "ready"
-	AppStateError AppState = "error"
+	AppStateInit     AppState = "initializing"
+	AppStateStopping AppState = "stopping"
+	AppStatePaused   AppState = "paused"
+	AppStateReady    AppState = "ready"
+	AppStateError    AppState = "error"
 )
 
 type UpgradeStrategy string
@@ -165,23 +167,12 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-type ClusterConditionType string
-
-const (
-	ClusterReady       ClusterConditionType = "ClusterReady"
-	ClusterInit        ClusterConditionType = "ClusterInitializing"
-	ClusterRSInit      ClusterConditionType = "ReplsetInitialized"
-	ClusterRSReady     ClusterConditionType = "ReplsetReady"
-	ClusterMongosReady ClusterConditionType = "MongosReady"
-	ClusterError       ClusterConditionType = "Error"
-)
-
 type ClusterCondition struct {
-	Status             ConditionStatus      `json:"status"`
-	Type               ClusterConditionType `json:"type"`
-	LastTransitionTime metav1.Time          `json:"lastTransitionTime,omitempty"`
-	Reason             string               `json:"reason,omitempty"`
-	Message            string               `json:"message,omitempty"`
+	Status             ConditionStatus `json:"status"`
+	Type               AppState        `json:"type"`
+	LastTransitionTime metav1.Time     `json:"lastTransitionTime,omitempty"`
+	Reason             string          `json:"reason,omitempty"`
+	Message            string          `json:"message,omitempty"`
 }
 
 type PMMSpec struct {
@@ -625,4 +616,21 @@ func (cr *PerconaServerMongoDB) CanBackup() error {
 	}
 
 	return nil
+}
+
+const maxStatusesQuantity = 20
+
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+	if len(s.Conditions) == 0 {
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
+		s.Conditions = append(s.Conditions, c)
+	}
+
+	if len(s.Conditions) > maxStatusesQuantity {
+		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
+	}
 }
