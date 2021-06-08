@@ -9,7 +9,8 @@ The operator is configured via the spec section of the
 The metadata part of this file contains the following keys:
 
 * ``name`` (``my-cluster-name`` by default) sets the name of your Percona Server
-  for MongoDB Cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_ and should not exceed 22 characters;
+  for MongoDB Cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_, should not exceed 22 characters, and should not start
+  with a digit;
 * .. _finalizers:
 
   ``finalizers.delete-psmdb-pvc``, if present, activates the `Finalizer <https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#finalizers>`_ which deletes appropriate `Persistent Volume Claims <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ after the cluster deletion event (off by default).
