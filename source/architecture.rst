@@ -5,16 +5,19 @@ The design of the operator is tighly bound to the Percona Server for
 MongoDB replica set, which is briefly described in the following
 diagram.
 
-.. image:: replication.png
-   :width: 250px
+.. image:: assets/images/mongos_espose.*
    :align: center
-   :height: 250px
-   :alt: Percona Server for MongoDB Replication
+   :alt: Percona Server for MongoDB Replication with Sharding
 
 
 A replica set consists of one primary server and several secondary ones
 (two in the picture), and the client application accesses the servers
-via a driver.
+via a query router (in sharding-enabled database setups, the Operator's
+default choice), or via a database driver (if sharding is off):
+
+.. image:: assets/images/mongod_espose.*
+   :align: center
+   :alt: Percona Server for MongoDB Replication without Sharding
 
 To provide high availability the Operator uses `node
 affinity <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity>`__
@@ -39,10 +42,8 @@ dynamically assigned nodes.
    which should be changed in the production environment, as stated in
    the  `installation instructions <openshift.html>`_.
 
-.. image:: operator.png
-   :width: 250px
+.. image:: operator.*
    :align: center
-   :height: 250px
    :alt: Percona Server for MongoDB Operator
 
 To provide data storage for stateful applications, Kubernetes uses
