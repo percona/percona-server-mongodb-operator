@@ -5,7 +5,7 @@ The design of the operator is tighly bound to the Percona Server for
 MongoDB replica set, which is briefly described in the following
 diagram.
 
-.. image:: assets/images/mongos_espose.*
+.. image:: assets/images/mongos-expose.*
    :align: center
    :alt: Percona Server for MongoDB Replication with Sharding
 
@@ -15,7 +15,7 @@ A replica set consists of one primary server and several secondary ones
 via a query router (in sharding-enabled database setups, the Operator's
 default choice), or via a database driver (if sharding is off):
 
-.. image:: assets/images/mongod_espose.*
+.. image:: assets/images/mongod-expose.*
    :align: center
    :alt: Percona Server for MongoDB Replication without Sharding
 
