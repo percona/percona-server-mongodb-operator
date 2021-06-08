@@ -34,6 +34,15 @@ fi
 
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
+version_gt() {
+	# return true if kubernetes version equal or greater than desired
+	if [ $(echo "${KUBE_VERSION} >= $1" | bc -l) -eq 1 ]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
 apply_s3_storage_secrets() {
 	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
 		kubectl_bin apply \
@@ -333,6 +342,27 @@ deploy_minio() {
 	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+}
+
+deploy_chaos_mesh() {
+	local chaos_mesh_ns=$1
+
+	desc 'install chaos-mesh'
+	helm del chaos-mesh --namespace ${chaos_mesh_ns} || :
+	helm repo add chaos-mesh https://charts.chaos-mesh.org
+	if version_gt "1.19"; then
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 0.5.1 --set clusterScoped=false --set controllerManager.targetNamespace=${chaos_mesh_ns}
+	else
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set dashboard.create=false --version 0.5.1 --set clusterScoped=false --set controllerManager.targetNamespace=${chaos_mesh_ns}
+	fi
+	sleep 10
+}
+
+destroy_chaos_mesh() {
+	local chaos_mesh_ns=$1
+
+	desc 'destroy chaos-mesh'
+	helm del chaos-mesh --namespace ${chaos_mesh_ns} || :
 }
 
 retry() {
