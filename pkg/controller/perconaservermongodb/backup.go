@@ -214,7 +214,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		return errors.Wrap(err, "checking if restore running on pbm update")
 	}
 
-	if isRestoring {
+	if isRestoring || cr.Status.State != api.AppStateReady {
 		return nil
 	}
 

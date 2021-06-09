@@ -113,9 +113,11 @@ type ReplsetStatus struct {
 type AppState string
 
 const (
-	AppStateInit  AppState = "initializing"
-	AppStateReady AppState = "ready"
-	AppStateError AppState = "error"
+	AppStateInit     AppState = "initializing"
+	AppStateStopping AppState = "stopping"
+	AppStatePaused   AppState = "paused"
+	AppStateReady    AppState = "ready"
+	AppStateError    AppState = "error"
 )
 
 type UpgradeStrategy string
@@ -165,23 +167,12 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-type ClusterConditionType string
-
-const (
-	ClusterReady       ClusterConditionType = "ClusterReady"
-	ClusterInit        ClusterConditionType = "ClusterInitializing"
-	ClusterRSInit      ClusterConditionType = "ReplsetInitialized"
-	ClusterRSReady     ClusterConditionType = "ReplsetReady"
-	ClusterMongosReady ClusterConditionType = "MongosReady"
-	ClusterError       ClusterConditionType = "Error"
-)
-
 type ClusterCondition struct {
-	Status             ConditionStatus      `json:"status"`
-	Type               ClusterConditionType `json:"type"`
-	LastTransitionTime metav1.Time          `json:"lastTransitionTime,omitempty"`
-	Reason             string               `json:"reason,omitempty"`
-	Message            string               `json:"message,omitempty"`
+	Status             ConditionStatus `json:"status"`
+	Type               AppState        `json:"type"`
+	LastTransitionTime metav1.Time     `json:"lastTransitionTime,omitempty"`
+	Reason             string          `json:"reason,omitempty"`
+	Message            string          `json:"message,omitempty"`
 }
 
 type PMMSpec struct {
@@ -304,7 +295,7 @@ type MongosSpec struct {
 	HostPort                 int32                      `json:"hostPort,omitempty"`
 	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
 	AuditLog                 *MongoSpecAuditLog         `json:"auditLog,omitempty"`
-	Expose                   Expose                     `json:"expose,omitempty"`
+	Expose                   MongosExpose               `json:"expose,omitempty"`
 	Size                     int32                      `json:"size,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
@@ -516,6 +507,12 @@ type Arbiter struct {
 	MultiAZ
 }
 
+type MongosExpose struct {
+	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
+	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
+	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
+}
+
 type Expose struct {
 	Enabled                  bool               `json:"enabled"`
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
@@ -626,4 +623,21 @@ func (cr *PerconaServerMongoDB) CanBackup() error {
 	}
 
 	return nil
+}
+
+const maxStatusesQuantity = 20
+
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+	if len(s.Conditions) == 0 {
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
+		s.Conditions = append(s.Conditions, c)
+	}
+
+	if len(s.Conditions) > maxStatusesQuantity {
+		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
+	}
 }
