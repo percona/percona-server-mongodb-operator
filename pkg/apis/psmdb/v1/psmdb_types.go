@@ -503,8 +503,9 @@ func (b BackupSpec) IsEnabledPITR() bool {
 }
 
 type Arbiter struct {
-	Enabled bool  `json:"enabled"`
-	Size    int32 `json:"size"`
+	Enabled   bool           `json:"enabled"`
+	Size      int32          `json:"size"`
+	Resources *ResourcesSpec `json:"resources,omitempty"`
 	MultiAZ
 }
 
