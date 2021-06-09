@@ -223,9 +223,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
-	err = r.checkFinalizers(cr)
-	if err != nil {
-		logger.Error(err, "failed to run finalizers")
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = r.checkFinalizers(cr)
 		return rr, err
 	}
 
