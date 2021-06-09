@@ -66,7 +66,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	cr.Status.Replsets = leftRsStatuses
-
+	cr.Status.Size = 0
+	cr.Status.Ready = 0
 	for _, rs := range repls {
 		status, err := r.rsStatus(cr, rs)
 		if err != nil {
@@ -114,7 +115,11 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 
 			cr.Status.AddCondition(rsCondition)
 		}
+
 		cr.Status.Replsets[rs.Name] = &status
+		cr.Status.Size += status.Size
+		cr.Status.Ready += status.Ready
+
 		if !inProgress {
 			inProgress, err = r.upgradeInProgress(cr, rs.Name)
 			if err != nil {
@@ -156,6 +161,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		cr.Status.Mongos = &mongosStatus
+		cr.Status.Size += int32(mongosStatus.Size)
+		cr.Status.Ready += int32(mongosStatus.Ready)
 	} else {
 		cr.Status.Mongos = nil
 	}
