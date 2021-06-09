@@ -67,6 +67,10 @@ main() {
 
     spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
 
+    kubectl_bin apply -f "$test_dir/conf/mongod-secret.yml"
+    sleep 50
+    compare_kubectl "statefulset/$cluster" "-secret"
+
     run_backup         "$cluster" "backup-minio"
     sleep 20
     run_recovery_check "$cluster" "backup-minio"
