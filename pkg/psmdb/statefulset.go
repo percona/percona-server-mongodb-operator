@@ -32,12 +32,13 @@ var secretFileMode int32 = 288
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
-	initContainers []corev1.Container, log logr.Logger, configSource VolumeSourceType) (appsv1.StatefulSetSpec, error) {
+	initContainers []corev1.Container, log logr.Logger, configSource VolumeSourceType,
+	resourcesSpec *api.ResourcesSpec) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
-	resources, err := CreateResources(replset.Resources)
+	resources, err := CreateResources(resourcesSpec)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
 	}
