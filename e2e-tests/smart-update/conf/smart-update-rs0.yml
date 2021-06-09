@@ -61,6 +61,13 @@ spec:
     arbiter:
       enabled: true
       size: 1
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.3G
+        requests:
+          cpu: 100m
+          memory: 0.1G
       affinity:
         antiAffinityTopologyKey: none
   secrets:
