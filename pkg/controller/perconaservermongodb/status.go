@@ -108,9 +108,6 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			case api.AppStatePaused:
 				rsCondition.Reason = "RSPaused"
 				rsCondition.Message = rs.Name + ": paused"
-			case api.AppStateError:
-				rsCondition.Reason = "RSError"
-				rsCondition.Message = rs.Name + ": " + status.Message
 			}
 
 			cr.Status.AddCondition(rsCondition)
@@ -152,9 +149,6 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 				mongosCondition.Reason = "MongosStopping"
 			case api.AppStatePaused:
 				mongosCondition.Reason = "MongosPaused"
-			case api.AppStateError:
-				mongosCondition.Reason = "MongosError"
-				mongosCondition.Message = mongosStatus.Message
 			}
 
 			cr.Status.AddCondition(mongosCondition)
@@ -291,7 +285,6 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 			case corev1.PodScheduled:
 				if cond.Reason == corev1.PodReasonUnschedulable &&
 					cond.LastTransitionTime.Time.Before(time.Now().Add(-1*time.Minute)) {
-					status.Status = api.AppStateError
 					status.Message = cond.Message
 				}
 			}
