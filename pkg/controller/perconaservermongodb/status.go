@@ -167,12 +167,18 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Mongos = nil
 	}
 
+	host, err := r.connectionEndpoint(cr)
+	if err != nil {
+		log.Error(err, "get psmdb connection endpoint")
+	}
+	cr.Status.Host = host
+
 	switch {
 	case replsetsStopping > 0 || cr.ObjectMeta.DeletionTimestamp != nil:
 		cr.Status.State = api.AppStateStopping
 	case replsetsPaused == len(repls):
 		cr.Status.State = api.AppStatePaused
-	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady:
+	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
 		cr.Status.State = api.AppStateReady
 	default:
 		cr.Status.State = api.AppStateInit
@@ -181,12 +187,6 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.AddCondition(clusterCondition)
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
-
-	host, err := r.connectionEndpoint(cr)
-	if err != nil {
-		log.Error(err, "get psmdb connection endpoint")
-	}
-	cr.Status.Host = host
 
 	return r.writeStatus(cr)
 }
