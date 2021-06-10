@@ -71,7 +71,7 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 		return fmt.Errorf("spec storageName field is empty")
 	}
 	if len(p.Spec.PSMDBCluster) == 0 {
-		return fmt.Errorf("spec psmsdbCluster field is empty")
+		return fmt.Errorf("spec psmdbCluster field is empty")
 	}
 	if string(p.Spec.Comperssion) == "" {
 		p.Spec.Comperssion = pbm.CompressionTypeGZIP
