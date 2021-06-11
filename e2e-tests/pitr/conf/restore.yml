@@ -5,6 +5,9 @@ metadata:
 spec:
   clusterName: some-name
   backupName:
+  storageName: minio
   pitr:
     type:
     date:
+  backupSource:
+    destination: s3://operator-testing/BACKUP-NAME

@@ -1,0 +1,144 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+cluster="some-name-rs0"
+
+setup_cluster() {
+	# create cluster
+	kubectl_bin apply \
+		-f $conf_dir/secrets.yml \
+		-f $conf_dir/client.yml
+
+	apply_cluster $conf_dir/$cluster.yml
+
+	kubectl_bin patch psmdb some-name --type='merge' -p '{"spec":{"backup":{"enabled":true}}}'
+
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
+
+	desc 'check data consistency: write data, read from all'
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster.$namespace"
+	sleep 2
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+}
+
+recreate() {
+	# delete cluster
+	kubectl_bin delete \
+		-f $conf_dir/$cluster.yml
+	wait_for_delete pod/$cluster-2
+	wait_for_delete pod/$cluster-1
+	wait_for_delete pod/$cluster-0
+
+	# recreate cluster
+	apply_cluster $conf_dir/$cluster.yml
+
+	wait_for_running $cluster 3
+	sleep 240
+
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+}
+
+kill_pod() {
+	local pod=$1
+
+	cat $conf_dir/chaos-pod-kill.yml \
+		| yq w - "metadata.name" "chaos-cluster-pod-kill-$RANDOM" \
+		| yq w - "metadata.namespace" "$namespace" \
+		| yq d - "spec.selector.pods.test-namespace" \
+		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
+		| kubectl_bin apply -f -
+	sleep 5
+
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
+
+	desc 'check data consistency for chaosed Pod'
+	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
+}
+
+failure_pod() {
+	local pod=$1
+
+	cat $conf_dir/chaos-pod-failure.yml \
+		| yq w - "metadata.name" "chaos-cluster-pod-failure-$RANDOM" \
+		| yq w - "metadata.namespace" "$namespace" \
+		| yq d - "spec.selector.pods.test-namespace" \
+		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
+		| kubectl_bin apply -f -
+	sleep 10
+
+	# write data
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"myApp:myPass@$cluster.$namespace"
+
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
+
+	desc 'check data consistency for chaosed Pod'
+	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
+}
+
+network_loss() {
+	local pod=$1
+
+	cat $conf_dir/chaos-network-loss.yml \
+		| yq w - "metadata.name" "chaos-cluster-network-loss-$RANDOM" \
+		| yq w - "metadata.namespace" "$namespace" \
+		| yq d - "spec.selector.pods.test-namespace" \
+		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
+		| kubectl_bin apply -f -
+	sleep 10
+
+	# write data
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100502 })' \
+		"myApp:myPass@$cluster.$namespace"
+	sleep 60
+
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
+
+	desc 'check data consistency for chaosed Pod'
+	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-3rd"
+}
+
+main() {
+	create_namespace $namespace
+	deploy_chaos_mesh $namespace
+	deploy_operator
+
+	desc 'start cluster'
+	setup_cluster
+
+	desc 'recreate cluster'
+	recreate
+
+	desc 'kill node-0 pod'
+	kill_pod "$cluster-0"
+
+	desc 'fail node-0 pod for 60s'
+	failure_pod "$cluster-0"
+
+	desc 'emulate bad network node-0 pod'
+	network_loss "$cluster-0"
+
+	destroy_chaos_mesh $namespace
+	destroy $namespace
+}
+
+main

@@ -7,6 +7,7 @@ import (
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -112,9 +113,11 @@ type ReplsetStatus struct {
 type AppState string
 
 const (
-	AppStateInit  AppState = "initializing"
-	AppStateReady AppState = "ready"
-	AppStateError AppState = "error"
+	AppStateInit     AppState = "initializing"
+	AppStateStopping AppState = "stopping"
+	AppStatePaused   AppState = "paused"
+	AppStateReady    AppState = "ready"
+	AppStateError    AppState = "error"
 )
 
 type UpgradeStrategy string
@@ -154,6 +157,8 @@ type PerconaServerMongoDBStatus struct {
 	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
 	PMMVersion         string                    `json:"pmmVersion,omitempty"`
 	Host               string                    `json:"host,omitempty"`
+	Size               int32                     `json:"size,omitempty"`
+	Ready              int32                     `json:"ready,omitempty"`
 }
 
 type ConditionStatus string
@@ -164,23 +169,12 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-type ClusterConditionType string
-
-const (
-	ClusterReady       ClusterConditionType = "ClusterReady"
-	ClusterInit        ClusterConditionType = "ClusterInitializing"
-	ClusterRSInit      ClusterConditionType = "ReplsetInitialized"
-	ClusterRSReady     ClusterConditionType = "ReplsetReady"
-	ClusterMongosReady ClusterConditionType = "MongosReady"
-	ClusterError       ClusterConditionType = "Error"
-)
-
 type ClusterCondition struct {
-	Status             ConditionStatus      `json:"status"`
-	Type               ClusterConditionType `json:"type"`
-	LastTransitionTime metav1.Time          `json:"lastTransitionTime,omitempty"`
-	Reason             string               `json:"reason,omitempty"`
-	Message            string               `json:"message,omitempty"`
+	Status             ConditionStatus `json:"status"`
+	Type               AppState        `json:"type"`
+	LastTransitionTime metav1.Time     `json:"lastTransitionTime,omitempty"`
+	Reason             string          `json:"reason,omitempty"`
+	Message            string          `json:"message,omitempty"`
 }
 
 type PMMSpec struct {
@@ -243,6 +237,8 @@ type ReplsetSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
+	Configuration            string                     `json:"configuration,omitempty"`
+
 	MultiAZ
 }
 
@@ -301,12 +297,13 @@ type MongosSpec struct {
 	HostPort                 int32                      `json:"hostPort,omitempty"`
 	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
 	AuditLog                 *MongoSpecAuditLog         `json:"auditLog,omitempty"`
-	Expose                   Expose                     `json:"expose,omitempty"`
+	Expose                   MongosExpose               `json:"expose,omitempty"`
 	Size                     int32                      `json:"size,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Configuration            string                     `json:"configuration,omitempty"`
 	*ResourcesSpec           `json:"resources,omitempty"`
 }
 
@@ -506,9 +503,16 @@ func (b BackupSpec) IsEnabledPITR() bool {
 }
 
 type Arbiter struct {
-	Enabled bool  `json:"enabled"`
-	Size    int32 `json:"size"`
+	Enabled   bool           `json:"enabled"`
+	Size      int32          `json:"size"`
+	Resources *ResourcesSpec `json:"resources,omitempty"`
 	MultiAZ
+}
+
+type MongosExpose struct {
+	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
+	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
+	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 }
 
 type Expose struct {
@@ -603,4 +607,39 @@ func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.N
 
 func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
+}
+
+func (cr *PerconaServerMongoDB) CanBackup() error {
+	if cr.Status.State == AppStateReady {
+		return nil
+	}
+
+	if !cr.Spec.UnsafeConf {
+		return errors.Errorf("allowUnsafeConfigurations must be true to run backup on cluster with status %s", cr.Status.State)
+	}
+
+	for rsName, rs := range cr.Status.Replsets {
+		if rs.Ready < int32(1) {
+			return errors.New(rsName + " has no ready nodes")
+		}
+	}
+
+	return nil
+}
+
+const maxStatusesQuantity = 20
+
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+	if len(s.Conditions) == 0 {
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
+		s.Conditions = append(s.Conditions, c)
+	}
+
+	if len(s.Conditions) > maxStatusesQuantity {
+		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
+	}
 }

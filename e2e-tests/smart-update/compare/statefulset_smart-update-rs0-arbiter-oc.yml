@@ -114,8 +114,8 @@ spec:
             timeoutSeconds: 2
           resources:
             limits:
-              cpu: 500m
-              memory: 500M
+              cpu: 300m
+              memory: 300M
             requests:
               cpu: 100m
               memory: 100M
@@ -149,8 +149,8 @@ spec:
           name: mongo-init
           resources:
             limits:
-              cpu: 500m
-              memory: 500M
+              cpu: 300m
+              memory: 300M
             requests:
               cpu: 100m
               memory: 100M

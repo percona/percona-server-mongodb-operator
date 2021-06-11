@@ -2,7 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -34,20 +34,18 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 	return services, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	podList *corev1.PodList) error {
+func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 
-	if len(podList.Items) == 0 {
+	if cr.Spec.Pause {
 		return nil
 	}
 
-	podNames := make(map[string]struct{}, len(podList.Items))
-
 	// needed just for labels
-	service := psmdb.ExternalService(cr, replset, podList.Items[0].Name)
+	service := psmdb.ExternalService(cr, replset, cr.Name+"-"+replset.Name)
 
-	for _, pod := range podList.Items {
-		podNames[pod.Name] = struct{}{}
+	svcNames := make(map[string]struct{}, replset.Size)
+	for i := 0; i < int(replset.Size); i++ {
+		svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
 	}
 
 	// clear old services
@@ -60,14 +58,13 @@ func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaSer
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("get current services: %v", err)
+		return errors.Wrap(err, "get current services")
 	}
 
 	for _, svc := range svcList.Items {
-		if _, ok := podNames[svc.Name]; !ok {
-			err := r.client.Delete(context.TODO(), &svc)
-			if err != nil {
-				return fmt.Errorf("delete service %s: %v", svc.Name, err)
+		if _, ok := svcNames[svc.Name]; !ok {
+			if err := r.client.Delete(context.TODO(), &svc); err != nil {
+				return errors.Wrapf(err, "delete service %s", svc.Name)
 			}
 		}
 	}

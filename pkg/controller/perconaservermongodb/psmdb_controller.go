@@ -205,10 +205,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
-	isClusterLive := clusterInit
+	clusterStatus := api.AppStateInit
 
 	defer func() {
-		err = r.updateStatus(cr, err, isClusterLive)
+		err = r.updateStatus(cr, err, clusterStatus)
 		if err != nil {
 			logger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
 		}
@@ -225,9 +225,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
-	err = r.checkFinalizers(cr)
-	if err != nil {
-		logger.Error(err, "failed to run finalizers")
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = r.checkFinalizers(cr)
 		return rr, err
 	}
 
@@ -239,6 +238,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
+	}
+
+	err = r.reconcileMongodConfigMaps(cr, repls)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile mongod configmaps")
+	}
+
+	if err := r.reconcileMongosConfigMap(cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos config map")
 	}
 
 	if cr.CompareVersion("1.5.0") >= 0 {
@@ -256,7 +264,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	for _, v := range removed {
 		rsName := v.Labels["app.kubernetes.io/replset"]
 
-		err := r.checkIfPossibleToRemove(cr, rsName)
+		err = r.checkIfPossibleToRemove(cr, rsName)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
@@ -371,9 +379,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			}
 		}
 
-		err = r.removeOudatedServices(cr, replset, &pods)
+		err = r.removeOutdatedServices(cr, replset)
 		if err != nil {
-			err = errors.Errorf("failed to remove old services of replset %s: %v", replset.Name, err)
+			err = errors.Wrapf(err, "failed to remove old services of replset %s", replset.Name)
 			return reconcile.Result{}, err
 		}
 
@@ -412,7 +420,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
 		}
 
-		isClusterLive, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
+		clusterStatus, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
 		if err != nil {
 			logger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
@@ -714,6 +722,120 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 	return r.deleteMongos(cr)
 }
 
+func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
+	for _, rs := range repls {
+		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+
+		if rs.Configuration == "" {
+			err := deleteConfigMapIfExists(r.client, cr, name)
+			if err != nil {
+				return errors.Wrap(err, "failed to delete mongod config map")
+			}
+
+			continue
+		}
+
+		err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cr.Namespace,
+			},
+			Data: map[string]string{
+				"mongod.conf": rs.Configuration,
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.PerconaServerMongoDB) error {
+	name := psmdb.MongosCustomConfigName(cr.Name)
+
+	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
+		err := deleteConfigMapIfExists(r.client, cr, name)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete mongos config map")
+		}
+
+		return nil
+	}
+
+	err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+		},
+		Data: map[string]string{
+			"mongos.conf": cr.Spec.Sharding.Mongos.Configuration,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, cmName string) error {
+	var configMap = &corev1.ConfigMap{}
+
+	err := cl.Get(context.TODO(), types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      cmName,
+	}, configMap)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get config map")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+
+	if !metav1.IsControlledBy(configMap, cr) {
+		return nil
+	}
+
+	return cl.Delete(context.Background(), configMap)
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(cr *api.PerconaServerMongoDB, configMap *corev1.ConfigMap) error {
+	err := setControllerReference(cr, configMap, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "failed to set controller ref for config map %s", configMap.Name)
+	}
+
+	currMap := &corev1.ConfigMap{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{
+		Namespace: configMap.Namespace,
+		Name:      configMap.Name,
+	}, currMap)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get current configmap")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		return r.client.Create(context.TODO(), configMap)
+	}
+
+	if !mapsEqual(currMap.Data, configMap.Data) {
+		return r.client.Update(context.TODO(), configMap)
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
@@ -754,7 +876,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "failed to get operator pod")
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log)
+	configSource, err := r.getCustomConfigurationSource(cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
+	if err != nil {
+		return errors.Wrap(err, "check if mongos custom configuration exists")
+	}
+
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, configSource)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
@@ -881,6 +1008,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 	matchLabels["app.kubernetes.io/component"] = "mongod"
 	multiAZ := replset.MultiAZ
 	pdbspec := replset.PodDisruptionBudget
+	resources := replset.Resources
 
 	if arbiter {
 		sfsName += "-arbiter"
@@ -889,6 +1017,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		matchLabels["app.kubernetes.io/component"] = "arbiter"
 		multiAZ = replset.Arbiter.MultiAZ
 		pdbspec = replset.Arbiter.PodDisruptionBudget
+		resources = replset.Arbiter.Resources
 	}
 
 	if replset.ClusterRole == api.ClusterRoleConfigSvr {
@@ -915,7 +1044,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits, log)
+	configSource, err := r.getCustomConfigurationSource(cr.Namespace, psmdb.MongodCustomConfigName(cr.Name, replset.Name))
+	if err != nil {
+		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
+	}
+
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits,
+		log, configSource, resources)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
@@ -1297,4 +1432,42 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateDeploymentLegacy(currentOb
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getCustomConfigurationSource(namespace, name string) (psmdb.VolumeSourceType, error) {
+	n := types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}
+
+	sources := []psmdb.VolumeSourceType{
+		psmdb.VolumeSourceSecret,
+		psmdb.VolumeSourceConfigMap,
+	}
+
+	for _, s := range sources {
+		ok, err := getObjectByName(r.client, n, psmdb.VolumeSourceTypeToObj(s))
+		if err != nil {
+			return 0, errors.Wrapf(err, "get %s", s)
+		}
+		if ok {
+			return s, nil
+		}
+	}
+
+	return psmdb.VolumeSourceNone, nil
+}
+
+func getObjectByName(c client.Client, n types.NamespacedName, obj runtime.Object) (bool, error) {
+	err := c.Get(context.Background(), n, obj)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return false, err
+	}
+
+	// object exists
+	if err == nil {
+		return true, nil
+	}
+
+	return false, nil
 }

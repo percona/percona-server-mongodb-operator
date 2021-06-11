@@ -27,7 +27,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger) (appsv1.DeploymentSpec, error) {
+func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, configSource VolumeSourceType) (appsv1.DeploymentSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -36,7 +36,13 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
-	c, err := mongosContainer(cr)
+	if cr.Spec.Sharding.Mongos.Labels != nil {
+		for k, v := range cr.Spec.Sharding.Mongos.Labels {
+			ls[k] = v
+		}
+	}
+
+	c, err := mongosContainer(cr, configSource.IsUsable())
 	if err != nil {
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -73,7 +79,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
 				Containers:        containers,
 				InitContainers:    initContainers,
-				Volumes:           volumes(cr),
+				Volumes:           volumes(cr, configSource),
 				SchedulerName:     cr.Spec.SchedulerName,
 				RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 			},
@@ -99,7 +105,7 @@ func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []core
 	return []corev1.Container{EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)}
 }
 
-func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
+func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool) (corev1.Container, error) {
 	fvar := false
 
 	resources, err := CreateResources(cr.Spec.Sharding.Mongos.ResourcesSpec)
@@ -129,6 +135,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 		},
 	}
 
+	if useConfigFile {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      "config",
+			MountPath: mongosConfigDir,
+		})
+	}
+
 	if cr.CompareVersion("1.8.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "users-secret-file",
@@ -141,7 +154,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args:            mongosContainerArgs(cr, resources),
+		Args:            mongosContainerArgs(cr, resources, useConfigFile),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongosPortName,
@@ -185,7 +198,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB) (corev1.Container, error) {
 	return container, nil
 }
 
-func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements) []string {
+func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool) []string {
 	mdSpec := cr.Spec.Mongod
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
@@ -253,12 +266,16 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		}
 	}
 
+	if useConfigFile {
+		args = append(args, fmt.Sprintf("--config=%s/mongos.conf", mongosConfigDir))
+	}
+
 	return args
 }
 
-func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
-	fvar := false
-	t := true
+func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []corev1.Volume {
+	fvar, tvar := false, true
+
 	volumes := []corev1.Volume{
 		{
 			Name: InternalKey(cr),
@@ -285,7 +302,7 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  cr.Spec.Secrets.SSLInternal,
-					Optional:    &t,
+					Optional:    &tvar,
 					DefaultMode: &secretFileMode,
 				},
 			},
@@ -306,6 +323,13 @@ func volumes(cr *api.PerconaServerMongoDB) []corev1.Volume {
 					SecretName: api.InternalUserSecretName(cr),
 				},
 			},
+		})
+	}
+
+	if configSource.IsUsable() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         "config",
+			VolumeSource: configSource.VolumeSource(MongosCustomConfigName(cr.Name)),
 		})
 	}
 
