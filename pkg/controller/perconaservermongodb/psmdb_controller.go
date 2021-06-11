@@ -817,19 +817,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
 	}
 
-	if mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType ||
-		!mapsEqual(mongosSvc.Annotations, cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations) {
-		err = r.client.Delete(context.TODO(), &mongosSvc)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "delete service %s", mongosSvc.Name)
-		}
-	}
-
 	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
 
 	err = r.createOrUpdate(&mongosSvc)
 	if err != nil {
-		return errors.Wrap(err, "create or update mongos svc")
+		return errors.Wrap(err, "create or update mongos service")
 	}
 
 	return nil
