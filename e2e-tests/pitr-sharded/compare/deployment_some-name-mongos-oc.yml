@@ -1,7 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations: {}
   annotations:
     deployment.kubernetes.io/revision: "1"
   generation: 1

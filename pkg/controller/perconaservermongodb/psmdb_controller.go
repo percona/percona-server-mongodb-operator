@@ -802,10 +802,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	}
 
 	msDepl.Spec = deplSpec
-	err = r.createOrUpdate(msDepl)
-	if err != nil {
-		return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+	if cr.CompareVersion("1.8.0") >= 0 {
+		err = r.createOrUpdate(msDepl)
+		if err != nil {
+			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+		}
+	} else {
+		err = r.createOrUpdateDeploymentLegacy(msDepl, msDepl.Name, msDepl.Namespace)
+		if err != nil {
+			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+		}
 	}
+
 	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, msDepl.Spec.Template.Labels, cr.Namespace, msDepl)
 	if err != nil {
 		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos deployment")
@@ -1262,4 +1270,31 @@ func compareMaps(x, y map[string]string) bool {
 	}
 
 	return true
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateDeploymentLegacy(currentObj runtime.Object, name, namespace string) error {
+	ctx := context.TODO()
+
+	foundObj := currentObj.DeepCopyObject()
+	err := r.client.Get(ctx,
+		types.NamespacedName{Name: name, Namespace: namespace},
+		foundObj)
+
+	if err != nil && k8serrors.IsNotFound(err) {
+		err := r.client.Create(ctx, currentObj)
+		if err != nil {
+			return errors.Wrapf(err, "create object %s", name)
+		}
+		return nil
+	} else if err != nil {
+		return errors.Wrapf(err, "get object %s", name)
+	}
+
+	currentObj.GetObjectKind().SetGroupVersionKind(foundObj.GetObjectKind().GroupVersionKind())
+	err = r.client.Update(ctx, currentObj)
+	if err != nil {
+		return errors.Wrapf(err, "update object %s", name)
+	}
+
+	return nil
 }
