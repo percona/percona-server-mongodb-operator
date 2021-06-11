@@ -103,6 +103,23 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, err
 	}
 
+	status := cr.Status
+
+	defer func() {
+		if err != nil {
+			status.State = psmdbv1.BackupStateError
+			status.Error = err.Error()
+			log.Error(err, "failed to make backup", "backup", cr.Name)
+		}
+		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+			cr.Status = status
+			uerr := r.updateStatus(cr)
+			if uerr != nil {
+				log.Error(uerr, "failed to update backup status", "backup", cr.Name)
+			}
+		}
+	}()
+
 	err = cr.CheckFields()
 	if err != nil {
 		return rr, errors.Wrap(err, "fields check")
@@ -123,7 +140,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
 		return rr, nil
 	default:
-		err = r.reconcile(cr, bcp)
+		status, err = r.reconcile(cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile backup")
 		}
@@ -133,56 +150,39 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 }
 
 // reconcile backup. firstly we check if there are concurrent jobs running
-func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup, bcp *Backup) (err error) {
+func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup, bcp *Backup) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
-	defer func() {
-		if err != nil {
-			status.State = psmdbv1.BackupStateError
-			status.Error = err.Error()
-			log.Error(err, "failed to make restore", "backup", cr.Name)
-		}
-		if cr.Status.State != status.State {
-			cr.Status = status
-			uerr := r.updateStatus(cr)
-			if uerr != nil {
-				log.Error(uerr, "failed to updated restore status", "backup", cr.Name)
-			}
-		}
-	}()
-
 	cluster := &api.PerconaServerMongoDB{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
 	if err != nil {
-		return errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
+		return status, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
 	}
 
 	if err := cluster.CanBackup(); err != nil {
-		return errors.Wrap(err, "failed to run backup")
+		return status, errors.Wrap(err, "failed to run backup")
 	}
 
 	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
 	if err != nil {
-		return errors.Wrap(err, "check for concurrent jobs")
+		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
 
 	if cjobs {
-		if status.State != psmdbv1.BackupStateWaiting {
+		if cr.Status.State != psmdbv1.BackupStateWaiting {
 			log.Info("Waiting to finish another backup/restore.")
 		}
 		status.State = psmdbv1.BackupStateWaiting
-		return nil
+		return status, nil
 	}
 
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
 		time.Sleep(10 * time.Second)
-		status, err = bcp.Start(cr)
-		return err
+		return bcp.Start(cr)
 	}
 
 	time.Sleep(5 * time.Second)
-	status, err = bcp.Status(cr)
-	return err
+	return bcp.Status(cr)
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *api.PerconaServerMongoDBBackup, b *Backup) error {
