@@ -70,7 +70,7 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
    * - allowUnsafeConfigurations
      - boolean
      - ``false``
-     - Prevents users from configuring a cluster with unsafe parameters: starting it with less than 3 replica set nodes, with an :ref:`even number of replica set nodes without additional arbiter<arbiter>`, or without TLS/SSL certificates, or running a sharded cluster with less than 3 config server Pods or less than 2 mongos Pods (if ``false``, the Operator will automatically change unsafe parameters to safe defaults)
+     - Prevents users from configuring a cluster with unsafe parameters: starting it with less than 3 replica set instances, with an :ref:`even number of replica set instances without additional arbiter<arbiter>`, or without TLS/SSL certificates, or running a sharded cluster with less than 3 config server Pods or less than 2 mongos Pods (if ``false``, the Operator will automatically change unsafe parameters to safe defaults)
 
    * - updateStrategy
      - string
