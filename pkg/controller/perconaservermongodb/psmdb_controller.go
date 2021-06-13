@@ -929,7 +929,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	}
 
 	msDepl.Spec = deplSpec
-	if cr.CompareVersion("1.8.0") >= 0 {
+	if cr.CompareVersion("1.9.0") >= 0 {
 		err = r.createOrUpdate(msDepl)
 		if err != nil {
 			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
