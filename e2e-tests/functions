@@ -483,6 +483,8 @@ compare_kubectl() {
 		| yq d - '**.(name==PBM_AGENT_SERVER_ADDRESS)' \
 		| yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
 		| yq d - 'spec.volumeClaimTemplates.*.kind' \
+		| yq d - 'spec.ipFamilies' \
+		| yq d - 'spec.ipFamilyPolicy' \
 		| $sed "s/${namespace}/NAME_SPACE/g" \
 		| $sed "s#^apiVersion: extensions/v1beta1#apiVersion: apps/v1#" \
 			>${new_result}
