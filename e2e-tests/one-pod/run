@@ -7,75 +7,75 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
 spinup_psmdb() {
-    local cluster=$1
-    local config=$2
-    local size="${3:-3}"
+	local cluster=$1
+	local config=$2
+	local size="${3:-3}"
 
-    desc 'create first PSMDB cluster'
-    apply_cluster $config
+	desc 'create first PSMDB cluster'
+	apply_cluster $config
 
-    desc 'check if Pod is started'
-    wait_for_running "${cluster}" "$size"
-    sleep 20
+	desc 'check if Pod is started'
+	wait_for_running "${cluster}" "$size"
+	sleep 20
 
-    compare_kubectl "statefulset/${cluster}"
+	compare_kubectl "statefulset/${cluster}"
 
-    desc 'write data'
+	desc 'write data'
 
-    run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
-              "userAdmin:userAdmin123456@${cluster}.${namespace}"
+	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+		"userAdmin:userAdmin123456@${cluster}.${namespace}"
 
-    run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
+	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
 }
 
 run_backup() {
-    local cluster=$1
-    local backup1=$2
+	local cluster=$1
+	local backup1=$2
 
-    desc 'make backup'
-    kubectl_bin apply \
-        -f $test_dir/conf/$backup1.yml
-    wait_backup $backup1
+	desc 'make backup'
+	kubectl_bin apply \
+		-f $test_dir/conf/$backup1.yml
+	wait_backup $backup1
 }
 
 run_recovery_check() {
-    local cluster=$1
-    local backup1=$2
+	local cluster=$1
+	local backup1=$2
 
-    desc 'write data after backup'
+	desc 'write data after backup'
 
-    desc 'recover backup'
-    run_restore ${backup1} 1
+	desc 'recover backup'
+	run_restore ${backup1} 1
 
-    wait_restore ${backup1} 1
+	wait_restore ${backup1} 1
 
-    kubectl_bin delete -f "$test_dir/conf/${backup1}.yml"
-    wait_for_running "${cluster}" 1
+	kubectl_bin delete -f "$test_dir/conf/${backup1}.yml"
+	wait_for_running "${cluster}" 1
 }
 
 main() {
-    create_namespace $namespace
-    deploy_operator
+	create_namespace $namespace
+	deploy_operator
 
-    cluster="one-pod-rs0"
+	cluster="one-pod-rs0"
 
-    kubectl_bin apply -f "${conf_dir}/client.yml" \
-                  -f "${conf_dir}/secrets.yml" \
-                  -f "${conf_dir}/minio-secret.yml"
+	kubectl_bin apply -f "${conf_dir}/client.yml" \
+		-f "${conf_dir}/secrets.yml" \
+		-f "${conf_dir}/minio-secret.yml"
 
-    deploy_minio
+	deploy_minio
 
-    spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
+	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
 
-    kubectl_bin apply -f "$test_dir/conf/mongod-secret.yml"
-    sleep 50
-    compare_kubectl "statefulset/$cluster" "-secret"
+	kubectl_bin apply -f "$test_dir/conf/mongod-secret.yml"
+	sleep 50
+	compare_kubectl "statefulset/$cluster" "-secret"
 
-    run_backup         "$cluster" "backup-minio"
-    sleep 20
-    run_recovery_check "$cluster" "backup-minio"
+	run_backup "$cluster" "backup-minio"
+	sleep 20
+	run_recovery_check "$cluster" "backup-minio"
 
-    destroy $namespace
+	destroy $namespace
 }
 
 main
