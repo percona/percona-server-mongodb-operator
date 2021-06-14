@@ -29,17 +29,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 
 			err := setControllerReference(cr, cjob, r.scheme)
 			if err != nil {
-				return fmt.Errorf("set owner reference for backup task %s: %v", cjob.Name, err)
+				return errors.Wrap(err, "set owner reference for backup task "+cjob.Name)
 			}
 
-			err = r.client.Create(context.TODO(), cjob)
-			if err != nil && k8sErrors.IsAlreadyExists(err) {
-				err := r.client.Update(context.TODO(), cjob)
-				if err != nil {
-					return fmt.Errorf("update task %s: %v", task.Name, err)
-				}
-			} else if err != nil {
-				return fmt.Errorf("create task %s: %v", task.Name, err)
+			err = r.createOrUpdate(cjob)
+			if err != nil {
+				return errors.Wrap(err, "create or update backup job")
 			}
 		}
 	}
