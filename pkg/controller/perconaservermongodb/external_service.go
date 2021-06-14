@@ -2,13 +2,10 @@ package perconaservermongodb
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -20,22 +17,15 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 	services := make([]corev1.Service, 0)
 
 	for _, pod := range podList.Items {
-		service := &corev1.Service{}
-		if err := r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: cr.Namespace}, service); err != nil {
-			if k8serrors.IsNotFound(err) {
-				service = psmdb.ExternalService(cr, replset, pod.Name)
-				err = setControllerReference(cr, service, r.scheme)
-				if err != nil {
-					return nil, fmt.Errorf("set owner ref for Service %s: %v", service.Name, err)
-				}
+		service := psmdb.ExternalService(cr, replset, pod.Name)
+		err := setControllerReference(cr, service, r.scheme)
+		if err != nil {
+			return nil, errors.Wrap(err, "set owner ref for Service "+service.Name)
+		}
 
-				err = r.client.Create(context.TODO(), service)
-				if err != nil && !k8serrors.IsAlreadyExists(err) {
-					return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
-				}
-			} else {
-				return nil, fmt.Errorf("failed to fetch service for replset %s: %v", replset.Name, err)
-			}
+		err = r.createOrUpdate(service)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create external service for replset "+replset.Name)
 		}
 
 		services = append(services, *service)

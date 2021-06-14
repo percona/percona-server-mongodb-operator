@@ -1,6 +1,7 @@
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
+  annotations: {}
   labels:
     app.kubernetes.io/component: backup-schedule
     app.kubernetes.io/instance: some-name
