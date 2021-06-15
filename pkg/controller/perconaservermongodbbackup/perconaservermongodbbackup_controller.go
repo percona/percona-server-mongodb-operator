@@ -106,6 +106,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	status := cr.Status
 
 	defer func() {
+		if cr.Status.State == psmdbv1.BackupStateReady {
+			return
+		}
 		if err != nil {
 			status.State = psmdbv1.BackupStateError
 			status.Error = err.Error()
