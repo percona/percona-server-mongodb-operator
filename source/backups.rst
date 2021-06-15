@@ -251,8 +251,9 @@ restoration can be done in the following way.
      .. code-block:: yaml
 
         ...
+        storageName: s3-us-west
         backupSource:
-          storageName: s3-us-west
+          destination: s3://S3-BUCKET-NAME/BACKUP-NAME
 
 2. After that, the actual restoration process can be started as follows:
 
