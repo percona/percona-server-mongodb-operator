@@ -60,6 +60,9 @@ spec:
 
     mongos:
       size: 3
+      configuration: |
+        replication:
+          localPingThresholdMs: 100
       expose:
         enabled: false
         exposeType: ClusterIP

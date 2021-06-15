@@ -57,6 +57,7 @@ spec:
             - --relaxPermChecks
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
+            - --config=/etc/mongos-config/mongos.conf
           command:
             - /data/db/ps-entry.sh
           env:
@@ -128,6 +129,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongos-config
+              name: config
           workingDir: /data/db
         - args:
             - -c
@@ -173,3 +176,8 @@ spec:
             secretName: some-name-ssl-internal
         - emptyDir: {}
           name: mongod-data
+        - configMap:
+            defaultMode: 420
+            name: some-name-mongos
+            optional: true
+          name: config

@@ -37,6 +37,11 @@ compare_kubectl statefulset/$cluster-rs2
 compare_kubectl statefulset/$cluster-cfg
 compare_kubectl deployment/$cluster-mongos ""
 
+kubectl_bin apply -f "$test_dir/conf/mongos-secret.yml"
+sleep 50
+
+compare_kubectl deployment/$cluster-mongos "-secret"
+
 desc 'write data, read from all'
 run_mongos \
     'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
