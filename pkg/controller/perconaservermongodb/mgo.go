@@ -13,7 +13,6 @@ import (
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
@@ -115,23 +114,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 	}
 
 	members := mongo.ConfigMembers{}
-	for key := 0; key < int(replset.Size); key++ {
+	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
 			log.Error(errReplsetLimit, "rs", replset.Name)
 			break
-		}
-
-		pod := corev1.Pod{}
-		err := r.client.Get(context.TODO(),
-			types.NamespacedName{
-				Name:      fmt.Sprintf("%s-%s-%d", cr.Name, replset.Name, key),
-				Namespace: cr.Namespace,
-			},
-			&pod,
-		)
-		if err != nil {
-			log.Error(err, "failed to get replset pod", "rs", replset.Name)
-			continue
 		}
 
 		host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)

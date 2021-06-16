@@ -225,6 +225,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
+	err = r.safeDownscale(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "safe downscale")
+	}
+
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		err = r.checkFinalizers(cr)
 		return rr, err
@@ -492,6 +497,26 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServer
 		// means we want to run multiple replsets without sharding
 		if len(cr.Spec.Replsets) > 1 {
 			return errors.New("running multiple replsets without sharding is prohibited")
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongoDB) error {
+	for _, rs := range cr.Spec.Replsets {
+		sf, err := r.getRsStatefulset(cr, rs.Name)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "get rs statefulset")
+		}
+
+		if k8serrors.IsNotFound(err) {
+			continue
+		}
+
+		// downscale 1 pod on each reconciliation
+		if *sf.Spec.Replicas-rs.Size > 1 {
+			rs.Size = *sf.Spec.Replicas - 1
 		}
 	}
 
