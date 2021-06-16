@@ -174,6 +174,9 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.State = api.AppStatePaused
 	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
 		cr.Status.State = api.AppStateReady
+		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
+			cr.Status.State = cr.Status.Mongos.Status
+		}
 	default:
 		cr.Status.State = api.AppStateInit
 	}
