@@ -103,6 +103,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, err
 	}
 
+	if (cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError) &&
+		cr.ObjectMeta.DeletionTimestamp == nil {
+		return rr, nil
+	}
+
 	status := cr.Status
 
 	defer func() {
@@ -136,14 +141,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, errors.Wrap(err, "failed to run finalizer")
 	}
 
-	switch cr.Status.State {
-	case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
-		return rr, nil
-	default:
-		status, err = r.reconcile(cr, bcp)
-		if err != nil {
-			return rr, errors.Wrap(err, "reconcile backup")
-		}
+	status, err = r.reconcile(cr, bcp)
+	if err != nil {
+		return rr, errors.Wrap(err, "reconcile backup")
 	}
 
 	return rr, nil
