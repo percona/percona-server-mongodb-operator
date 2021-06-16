@@ -17,9 +17,9 @@ kubectl_bin apply \
 	-f $conf_dir/secrets.yml \
 	-f $conf_dir/client.yml
 
-if [[ ${OPENSHIFT} == 4 ]] || [[ $(echo "$KUBE_VERSION >= 1.19" | bc -l) -eq 1 ]]; then
+if [[ $(version_gt "1.19") && $EKS -ne 1 ]]; then
 	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-elif [[ -z ${OPENSHIFT} ]]; then
+else
 	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
@@ -37,25 +37,25 @@ compare_mongo_user "backup:backup123456@$cluster.$namespace"
 compare_mongo_user "clusterAdmin:clusterAdmin123456@$cluster.$namespace"
 compare_mongo_user "clusterMonitor:clusterMonitor123456@$cluster.$namespace"
 # check that test user don't have access
-( run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "test:test@$cluster.$namespace" || :) 2>&1 \
-    | grep 'Authentication failed'
+(run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "test:test@$cluster.$namespace" || :) 2>&1 \
+	| grep 'Authentication failed'
 
 desc 'write data, read from all'
 run_mongo \
-    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-    "userAdmin:userAdmin123456@$cluster.$namespace"
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
 sleep 2
 run_mongo \
-    'use myApp\n db.test.insert({ x: 100500 })' \
-    "myApp:myPass@$cluster.$namespace"
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 desc 'check number of connections'
 conn_count=$(run_mongo 'db.serverStatus().connections.current' "clusterAdmin:clusterAdmin123456@$cluster.$namespace" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
-if [ ${conn_count} -gt ${max_conn} ];then
-  exit 1
+if [ ${conn_count} -gt ${max_conn} ]; then
+	exit 1
 fi
 
 desc 'kill Primary Pod, check reelection, check data'
@@ -65,8 +65,8 @@ wait_for_running $cluster 3
 changed_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$cluster.$namespace" "$cluster")
 [ "$initial_primary" != "$changed_primary" ]
 run_mongo \
-    'use myApp\n db.test.insert({ x: 100501 })' \
-    "myApp:myPass@$cluster.$namespace"
+	'use myApp\n db.test.insert({ x: 100501 })' \
+	"myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
@@ -82,13 +82,14 @@ compare_kubectl service/$cluster2
 
 desc 'write data, read from all'
 run_mongo \
-    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-    "userAdmin:userAdmin123456@$cluster2.$namespace"
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster2.$namespace"
 run_mongo \
-    'use myApp\n db.test.insert({ x: 100502 })' \
-    "myApp:myPass@$cluster2.$namespace"
+	'use myApp\n db.test.insert({ x: 100502 })' \
+	"myApp:myPass@$cluster2.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
 
+kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 destroy $namespace
