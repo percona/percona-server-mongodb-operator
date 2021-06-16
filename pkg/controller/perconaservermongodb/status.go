@@ -161,6 +161,11 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Mongos = nil
 	}
 
+	// Ready count can be greater than total size in case of downscale
+	if cr.Status.Ready > cr.Status.Size {
+		cr.Status.Ready = cr.Status.Size
+	}
+
 	host, err := r.connectionEndpoint(cr)
 	if err != nil {
 		log.Error(err, "get psmdb connection endpoint")
