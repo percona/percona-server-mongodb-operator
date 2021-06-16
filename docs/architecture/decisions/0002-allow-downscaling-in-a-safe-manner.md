@@ -9,7 +9,7 @@
 ## Context
 
 Currently there are no mechanisms to stop users downscaling MongoDB replicaSets
-in a manner that causes cluster crash. For example, if an user has a 7 member
+in a manner that causes cluster failure. For example, if an user has a 7 member
 replicaSet and downscales it to 3 members, the cluster is going to lose
 majority (4 members) and the operator won't be able to run `replSetReconfig`
 because of that.
