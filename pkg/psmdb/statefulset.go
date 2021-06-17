@@ -1,6 +1,7 @@
 package psmdb
 
 import (
+	"crypto/md5"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -104,6 +105,15 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
 	}
 
+	annotations := multiAZ.Annotations
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	if c := replset.Configuration; c != "" && configSource == VolumeSourceConfigMap {
+		annotations["percona.com/configuration-hash"] = fmt.Sprintf("%x", md5.Sum([]byte(c)))
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
@@ -113,7 +123,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      customLabels,
-				Annotations: multiAZ.Annotations,
+				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
 				SecurityContext:    replset.PodSecurityContext,

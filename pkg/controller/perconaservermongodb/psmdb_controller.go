@@ -1058,7 +1058,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
 	for k, v := range sfs.Spec.Template.Annotations {
-		sfsSpec.Template.Annotations[k] = v
+		if _, ok := sfsSpec.Template.Annotations[k]; !ok {
+			sfsSpec.Template.Annotations[k] = v
+		}
 	}
 
 	if cr.CompareVersion("1.8.0") < 0 {
