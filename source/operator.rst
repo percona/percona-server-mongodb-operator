@@ -268,7 +268,13 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Custom configuration options for mongod. Please refer to the `official manual		|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/>`_ for the full list of 	|
-|                 | options											|
+|                 | options, and `specific									|
+|                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html>`_		|
+|                 | `Percona <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html>`_	|
+|                 | `Server <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/			|
+|                 | data_at_rest_encryption.html>`_ `for MongoDB <https://www.percona.com/doc/			|
+|                 | percona-server-for-mongodb/LATEST/log-redaction.html>`_ `docs <https://www.percona.com/doc/	|
+|                 | percona-server-for-mongodb/LATEST/audit-logging.html>`_.					|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1652,7 +1658,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | Sets the `auditLog.destination option							|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>` **instead**	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1668,7 +1674,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | Sets the `auditLog.format option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>` **instead**	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1684,7 +1690,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | Sets the `auditLog.filter option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>` **instead**	|
 +-----------------+---------------------------------------------------------------------------------------------+
 
@@ -1708,7 +1714,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the MongoDB `net.port option 					 			|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/#net.port>`_.		|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1737,7 +1743,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Enables/disables `Percona Server for MongoDB Log Redaction					|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html>`_.	|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1753,7 +1759,7 @@ This section contains the Mongod configuration options.
 | **Description** | Enables/disables `Percona Server for MongoDB data at rest encryption			|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/				|
 |                 | data_at_rest_encryption.html>`_.								|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1783,7 +1789,7 @@ This section contains the Mongod configuration options.
 |                 | `Percona Server for MongoDB encryption cipher mode						|
 |                 | <https://docs.mongodb.com/manual/reference/program/mongod/					|
 |                 | #cmdoption-mongod-encryptionciphermode>`_.							|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1798,7 +1804,7 @@ This section contains the Mongod configuration options.
 | **Example**     | ``60``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the Percona Server for MongoDB ``ttlMonitorSleepSecs`` option.				|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1815,7 +1821,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `wiredTigerConcurrentReadTransactions option					|
 |                 | <https://docs.mongodb.com/manual/reference/parameters/					|
 |                 | #param.wiredTigerConcurrentReadTransactions>`_.						|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1832,7 +1838,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `wiredTigerConcurrentWriteTransactions option					|
 |                 | <https://docs.mongodb.com/manual/reference/parameters/					|
 |                 | #param.wiredTigerConcurrentWriteTransactions>`_.						|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1847,7 +1853,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `storage.engine option								|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine>`_.	|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1864,7 +1870,7 @@ This section contains the Mongod configuration options.
 | **Description** | The ratio used to compute the `storage.engine.inMemory.inMemorySizeGb option		|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/inmemory.html		|
 |                 | #--inMemorySizeGB>`_.									|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1879,7 +1885,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `storage.mmapv1.nsSize option							|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/#storage.mmapv1.nsSize>`_.	|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1895,7 +1901,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `storage.mmapv1.smallfiles option							|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
 |                 | #storage.mmapv1.smallFiles>`_.								|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1912,7 +1918,7 @@ This section contains the Mongod configuration options.
 | **Description** | The ratio used to compute the `storage.wiredTiger.engineConfig.cacheSizeGB option		|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
 |                 | #storage.wiredTiger.engineConfig.cacheSizeGB>`_.						|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1929,7 +1935,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `storage.wiredTiger.engineConfig.directoryForIndexes option			|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
 |                 | #storage.wiredTiger.engineConfig.directoryForIndexes>`_.					|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1946,7 +1952,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `storage.wiredTiger.engineConfig.journalCompressor option				|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
 |                 | #storage.wiredTiger.engineConfig.journalCompressor>`_.					|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1963,7 +1969,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `storage.wiredTiger.collectionConfig.blockCompressor option			|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
 |                 | #storage.wiredTiger.collectionConfig.blockCompressor>`_.					|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1980,7 +1986,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `storage.wiredTiger.indexConfig.prefixCompression option				|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
 |                 | #storage.wiredTiger.indexConfig.prefixCompression>`_.					|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1996,7 +2002,7 @@ This section contains the Mongod configuration options.
 | **Description** | Sets the `operationProfiling.mode option 							|
 |                 | <https://docs.mongodb.com/manual/reference/configuration-options/				|
 |                 | #operationProfiling.mode>`_.								|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2005,7 +2011,7 @@ This section contains the Mongod configuration options.
 |                 |												|
 | **Key**         | `mongod.operationProfiling.slowOpThresholdMs						|
 |                 | <operator.html#mongod-operationprofiling-slowopthresholdms>`_.				|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2029,7 +2035,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `operationProfiling.rateLimit option						|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/rate-limit.html>`_.		|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2044,7 +2050,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `auditLog.destination option							|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_.	|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2059,7 +2065,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `auditLog.format option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_.	|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2074,7 +2080,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets the `auditLog.filter option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_.	|
-|                 | **Deprecated since Percona Server for MongoDB Operator 1.9.0.**				|
+|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in v1.12.0+**|
 |                 | **use** :ref:`replsets.configuration<replsets-configuration>` **instead**			|
 +-----------------+---------------------------------------------------------------------------------------------+
 
