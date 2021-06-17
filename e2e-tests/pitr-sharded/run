@@ -85,7 +85,7 @@ main() {
 		-f "$conf_dir/client.yml" \
 		-f $conf_dir/minio-secret.yml
 
-	if [[ $(version_gt "1.19") && $EKS -ne 1 ]]; then
+	if version_gt "1.19" && [ $EKS -ne 1 ]; then
 		cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
 	else
 		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
