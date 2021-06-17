@@ -1,6 +1,7 @@
 package psmdb
 
 import (
+	"crypto/md5"
 	"fmt"
 	"strconv"
 	"strings"
@@ -58,6 +59,15 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
 	}
 
+	annotations := cr.Spec.Sharding.Mongos.MultiAZ.Annotations
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	if c := cr.Spec.Sharding.Mongos.Configuration; c != "" && configSource == VolumeSourceConfigMap {
+		annotations["percona.com/configuration-hash"] = fmt.Sprintf("%x", md5.Sum([]byte(c)))
+	}
+
 	zero := intstr.FromInt(0)
 	return appsv1.DeploymentSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
@@ -67,7 +77,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      ls,
-				Annotations: cr.Spec.Sharding.Mongos.MultiAZ.Annotations,
+				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
 				SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
