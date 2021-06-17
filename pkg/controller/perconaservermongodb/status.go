@@ -113,6 +113,11 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			cr.Status.AddCondition(rsCondition)
 		}
 
+		// Ready count can be greater than total size in case of downscale
+		if status.Ready > status.Size {
+			status.Ready = status.Size
+		}
+
 		cr.Status.Replsets[rs.Name] = &status
 		cr.Status.Size += status.Size
 		cr.Status.Ready += status.Ready
@@ -154,16 +159,16 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			cr.Status.AddCondition(mongosCondition)
 		}
 
+		// Ready count can be greater than total size in case of downscale
+		if mongosStatus.Ready > mongosStatus.Size {
+			mongosStatus.Ready = mongosStatus.Size
+		}
+
 		cr.Status.Mongos = &mongosStatus
 		cr.Status.Size += int32(mongosStatus.Size)
 		cr.Status.Ready += int32(mongosStatus.Ready)
 	} else {
 		cr.Status.Mongos = nil
-	}
-
-	// Ready count can be greater than total size in case of downscale
-	if cr.Status.Ready > cr.Status.Size {
-		cr.Status.Ready = cr.Status.Size
 	}
 
 	host, err := r.connectionEndpoint(cr)
