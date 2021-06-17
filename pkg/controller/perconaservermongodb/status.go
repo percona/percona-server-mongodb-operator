@@ -108,12 +108,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			case api.AppStatePaused:
 				rsCondition.Reason = "RSPaused"
 				rsCondition.Message = rs.Name + ": paused"
-			case api.AppStateError:
-				rsCondition.Reason = "RSError"
-				rsCondition.Message = rs.Name + ": " + status.Message
 			}
 
 			cr.Status.AddCondition(rsCondition)
+		}
+
+		// Ready count can be greater than total size in case of downscale
+		if status.Ready > status.Size {
+			status.Ready = status.Size
 		}
 
 		cr.Status.Replsets[rs.Name] = &status
@@ -152,12 +154,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 				mongosCondition.Reason = "MongosStopping"
 			case api.AppStatePaused:
 				mongosCondition.Reason = "MongosPaused"
-			case api.AppStateError:
-				mongosCondition.Reason = "MongosError"
-				mongosCondition.Message = mongosStatus.Message
 			}
 
 			cr.Status.AddCondition(mongosCondition)
+		}
+
+		// Ready count can be greater than total size in case of downscale
+		if mongosStatus.Ready > mongosStatus.Size {
+			mongosStatus.Ready = mongosStatus.Size
 		}
 
 		cr.Status.Mongos = &mongosStatus
@@ -180,6 +184,9 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.State = api.AppStatePaused
 	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
 		cr.Status.State = api.AppStateReady
+		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
+			cr.Status.State = cr.Status.Mongos.Status
+		}
 	default:
 		cr.Status.State = api.AppStateInit
 	}
@@ -291,7 +298,6 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 			case corev1.PodScheduled:
 				if cond.Reason == corev1.PodReasonUnschedulable &&
 					cond.LastTransitionTime.Time.Before(time.Now().Add(-1*time.Minute)) {
-					status.Status = api.AppStateError
 					status.Message = cond.Message
 				}
 			}

@@ -1,6 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
+  annotations: {}
   name: some-name-rs0
   ownerReferences:
     - controller: true

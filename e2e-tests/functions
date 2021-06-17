@@ -32,6 +32,12 @@ if oc get projects; then
 	esac
 fi
 
+if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
+	EKS=1
+else
+	EKS=0
+fi
+
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 version_gt() {
@@ -461,6 +467,7 @@ compare_kubectl() {
 		| yq d - 'metadata.resourceVersion' \
 		| yq d - 'metadata.selfLink' \
 		| yq d - '**.creationTimestamp' \
+		| yq d - '**."percona.com/*"' \
 		| yq d - '**.image' \
 		| yq d - '**.clusterIP' \
 		| yq d - 'spec.clusterIPs' \
@@ -482,6 +489,8 @@ compare_kubectl() {
 		| yq d - '**.(name==PBM_AGENT_SERVER_ADDRESS)' \
 		| yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
 		| yq d - 'spec.volumeClaimTemplates.*.kind' \
+		| yq d - 'spec.ipFamilies' \
+		| yq d - 'spec.ipFamilyPolicy' \
 		| $sed "s/${namespace}/NAME_SPACE/g" \
 		| $sed "s#^apiVersion: extensions/v1beta1#apiVersion: apps/v1#" \
 			>${new_result}
@@ -667,9 +676,9 @@ destroy() {
 
 	kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml 2>/dev/null || :
 	if [ -n "$OPENSHIFT" ]; then
-		oc delete --grace-period=0 --force=true project "$namespace"
+		oc delete --grace-period=0 --force=true project "$namespace" &
 	else
-		kubectl_bin delete --grace-period=0 --force=true namespace "$namespace"
+		kubectl_bin delete --grace-period=0 --force=true namespace "$namespace" &
 	fi
 	rm -rf ${tmp_dir}
 }

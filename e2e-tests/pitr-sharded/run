@@ -85,9 +85,9 @@ main() {
 		-f "$conf_dir/client.yml" \
 		-f $conf_dir/minio-secret.yml
 
-	if [[ ${OPENSHIFT} == 4 ]]; then
+	if version_gt "1.19" && [ $EKS -ne 1 ]; then
 		cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-	elif [[ -z ${OPENSHIFT} ]]; then
+	else
 		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 	fi
 
@@ -132,9 +132,7 @@ main() {
 
 	check_recovery $backup_name_minio-1 latest "" "-3rd"
 
-	if [[ $OPENSHIFT != "3.11" ]]; then
-		kubectl_bin delete -f "$conf_dir/container-rc.yaml"
-	fi
+	kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 	destroy $namespace
 }
 

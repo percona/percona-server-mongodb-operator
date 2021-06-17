@@ -3,9 +3,12 @@ package perconaservermongodb
 import (
 	"context"
 	"crypto/md5"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,7 +26,6 @@ import (
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -404,18 +406,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 			err = setControllerReference(cr, service, r.scheme)
 			if err != nil {
-				err = errors.Errorf("set owner ref for Service %s: %v", service.Name, err)
-				return reconcile.Result{}, err
+				return reconcile.Result{}, errors.Wrap(err, "set owner ref for service "+service.Name)
 			}
 
-			err = r.client.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, &corev1.Service{})
-			if err != nil && k8serrors.IsNotFound(err) {
-				err := r.client.Create(context.TODO(), service)
-				if err != nil {
-					return reconcile.Result{}, errors.Errorf("failed to create service for replset %s: %v", replset.Name, err)
-				}
-			} else if err != nil {
-				return reconcile.Result{}, errors.Errorf("failed to check service for replset %s: %v", replset.Name, err)
+			err = r.createOrUpdate(service)
+			if err != nil {
+				return reconcile.Result{}, errors.Wrap(err, "create or update service for replset "+replset.Name)
 			}
 		}
 
@@ -933,10 +929,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	}
 
 	msDepl.Spec = deplSpec
-	err = r.createOrUpdate(msDepl, msDepl.Name, msDepl.Namespace)
-	if err != nil {
-		return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+	if cr.CompareVersion("1.9.0") >= 0 {
+		err = r.createOrUpdate(msDepl)
+		if err != nil {
+			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+		}
+	} else {
+		err = r.createOrUpdateDeploymentLegacy(msDepl, msDepl.Name, msDepl.Namespace)
+		if err != nil {
+			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+		}
 	}
+
 	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, msDepl.Spec.Template.Labels, cr.Namespace, msDepl)
 	if err != nil {
 		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos deployment")
@@ -948,29 +952,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
 	}
 
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: mongosSvc.Name, Namespace: mongosSvc.Namespace}, &mongosSvc)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get monogs service %s", mongosSvc.Name)
-	}
-
-	if !k8serrors.IsNotFound(err) &&
-		(mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType ||
-			!mapsEqual(mongosSvc.Annotations, cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations)) {
-		err = r.client.Delete(context.TODO(), &mongosSvc)
-		if err != nil {
-			return errors.Wrapf(err, "delete service %s", mongosSvc.Name)
-		}
-
-		mongosSvc = psmdb.MongosService(cr)
-	}
-
 	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
 
-	if k8serrors.IsNotFound(err) || mongosSvc.Spec.Type != cr.Spec.Sharding.Mongos.Expose.ExposeType {
-		err = r.client.Create(context.TODO(), &mongosSvc)
-		if err != nil && !k8serrors.IsAlreadyExists(err) {
-			return errors.Wrapf(err, "create service %s", mongosSvc.Name)
-		}
+	err = r.createOrUpdate(&mongosSvc)
+	if err != nil {
+		return errors.Wrap(err, "create or update mongos service")
 	}
 
 	return nil
@@ -1072,7 +1058,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfsSpec.Template.Annotations = make(map[string]string)
 	}
 	for k, v := range sfs.Spec.Template.Annotations {
-		sfsSpec.Template.Annotations[k] = v
+		if _, ok := sfsSpec.Template.Annotations[k]; !ok {
+			sfsSpec.Template.Annotations[k] = v
+		}
 	}
 
 	if cr.CompareVersion("1.8.0") < 0 {
@@ -1200,21 +1188,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		sfs.Labels = matchLabels
 	}
 
-	if k8serrors.IsNotFound(errGet) {
-		err = r.client.Create(context.TODO(), sfs)
-		if err != nil && !k8serrors.IsAlreadyExists(err) {
-			return nil, errors.Wrapf(err, "create StatefulSet %s", sfs.Name)
-		}
-	} else {
-		err := r.reconcilePDB(pdbspec, matchLabels, cr.Namespace, sfs)
-		if err != nil {
-			return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
-		}
-		sfs.Spec.Replicas = &size
-		err = r.client.Update(context.TODO(), sfs)
-		if err != nil {
-			return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
-		}
+	err = r.createOrUpdate(sfs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
+	}
+
+	err = r.reconcilePDB(pdbspec, matchLabels, cr.Namespace, sfs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
 
 	if err := r.smartUpdate(cr, sfs, replset); err != nil {
@@ -1270,49 +1251,110 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudg
 		return nil
 	}
 
+	metaAccessor, ok := owner.(metav1.ObjectMetaAccessor)
+	if !ok {
+		return errors.New("can't convert object to ObjectMetaAccessor")
+	}
+
+	ownerMeta := metaAccessor.GetObjectMeta()
+
+	if ownerMeta.GetUID() == "" {
+		err := r.client.Get(context.TODO(), types.NamespacedName{
+			Name:      ownerMeta.GetName(),
+			Namespace: ownerMeta.GetNamespace(),
+		}, owner)
+		if err != nil {
+			return errors.Wrap(err, "failed to get owner uid for pdb")
+		}
+	}
+
 	pdb := psmdb.PodDisruptionBudget(spec, labels, namespace)
 	err := setControllerReference(owner, pdb, r.scheme)
 	if err != nil {
 		return errors.Wrap(err, "set owner reference")
 	}
 
-	cpdb := &policyv1beta1.PodDisruptionBudget{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pdb.Name, Namespace: namespace}, cpdb)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return r.client.Create(context.TODO(), pdb)
-	} else if err != nil {
-		return errors.Wrap(err, "get pod disruption budget")
-	}
-
-	cpdb.Spec = pdb.Spec
-	return r.client.Update(context.TODO(), cpdb)
+	return r.createOrUpdate(pdb)
 }
 
-func (r *ReconcilePerconaServerMongoDB) createOrUpdate(currentObj runtime.Object, name, namespace string) error {
-	ctx := context.TODO()
-
-	foundObj := currentObj.DeepCopyObject()
-	err := r.client.Get(ctx,
-		types.NamespacedName{Name: name, Namespace: namespace},
-		foundObj)
-
-	if err != nil && k8serrors.IsNotFound(err) {
-		err := r.client.Create(ctx, currentObj)
-		if err != nil {
-			return errors.Wrapf(err, "create object %s", name)
-		}
-		return nil
-	} else if err != nil {
-		return errors.Wrapf(err, "get object %s", name)
+func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error {
+	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
+	if !ok {
+		return errors.New("can't convert object to ObjectMetaAccessor")
 	}
 
-	currentObj.GetObjectKind().SetGroupVersionKind(foundObj.GetObjectKind().GroupVersionKind())
-	err = r.client.Update(ctx, currentObj)
+	objectMeta := metaAccessor.GetObjectMeta()
+
+	if objectMeta.GetAnnotations() == nil {
+		objectMeta.SetAnnotations(make(map[string]string))
+	}
+
+	objAnnotations := objectMeta.GetAnnotations()
+	delete(objAnnotations, "percona.com/last-config-hash")
+	objectMeta.SetAnnotations(objAnnotations)
+
+	hash, err := getObjectHash(obj)
 	if err != nil {
-		return errors.Wrapf(err, "update object %s", name)
+		return errors.Wrap(err, "calculate object hash")
+	}
+
+	objAnnotations = objectMeta.GetAnnotations()
+	objAnnotations["percona.com/last-config-hash"] = hash
+	objectMeta.SetAnnotations(objAnnotations)
+
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		val = reflect.Indirect(val)
+	}
+	oldObject := reflect.New(val.Type()).Interface().(runtime.Object)
+
+	err = r.client.Get(context.Background(), types.NamespacedName{
+		Name:      objectMeta.GetName(),
+		Namespace: objectMeta.GetNamespace(),
+	}, oldObject)
+
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get object")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		return r.client.Create(context.TODO(), obj)
+	}
+
+	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
+
+	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+		!isObjectMetaEqual(objectMeta, oldObjectMeta) {
+
+		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
+		switch object := obj.(type) {
+		case *corev1.Service:
+			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
+		}
+
+		return r.client.Update(context.TODO(), obj)
 	}
 
 	return nil
+}
+
+func getObjectHash(obj runtime.Object) (string, error) {
+	var dataToMarshall interface{}
+	switch object := obj.(type) {
+	case *appsv1.StatefulSet:
+		dataToMarshall = object.Spec
+	case *appsv1.Deployment:
+		dataToMarshall = object.Spec
+	case *corev1.Service:
+		dataToMarshall = object.Spec
+	default:
+		dataToMarshall = obj
+	}
+	data, err := json.Marshal(dataToMarshall)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
 }
 
 func setControllerReference(owner runtime.Object, obj metav1.Object, scheme *runtime.Scheme) error {
@@ -1345,6 +1387,53 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 		UID:        ca.GetUID(),
 		Controller: &trueVar,
 	}, nil
+}
+
+func isObjectMetaEqual(old, new metav1.Object) bool {
+	return compareMaps(old.GetAnnotations(), new.GetAnnotations()) &&
+		compareMaps(old.GetLabels(), new.GetLabels())
+}
+
+func compareMaps(x, y map[string]string) bool {
+	if len(x) != len(y) {
+		return false
+	}
+
+	for k, v := range x {
+		yVal, ok := y[k]
+		if !ok || yVal != v {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateDeploymentLegacy(currentObj runtime.Object, name, namespace string) error {
+	ctx := context.TODO()
+
+	foundObj := currentObj.DeepCopyObject()
+	err := r.client.Get(ctx,
+		types.NamespacedName{Name: name, Namespace: namespace},
+		foundObj)
+
+	if err != nil && k8serrors.IsNotFound(err) {
+		err := r.client.Create(ctx, currentObj)
+		if err != nil {
+			return errors.Wrapf(err, "create object %s", name)
+		}
+		return nil
+	} else if err != nil {
+		return errors.Wrapf(err, "get object %s", name)
+	}
+
+	currentObj.GetObjectKind().SetGroupVersionKind(foundObj.GetObjectKind().GroupVersionKind())
+	err = r.client.Update(ctx, currentObj)
+	if err != nil {
+		return errors.Wrapf(err, "update object %s", name)
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCustomConfigurationSource(namespace, name string) (psmdb.VolumeSourceType, error) {
