@@ -77,7 +77,7 @@ The set of commands generate certificates with the following attributes:
 *  ``Server-key.pem`` - the private key
 *  ``ca.pem`` - Certificate Authority
 
-You should generate certificates twice: one set is for external communications, and another set is for internal ones. A secret created for the external use must be added to ``cr.yaml/spec/secretsName``. A certificate generated for internal communications must be added to the ``cr.yaml/spec/sslInternalSecretName``.
+You should generate certificates twice: one set is for external communications, and another set is for internal ones. A secret created for the external use must be added to the ``spec.secrets.ssl`` key of the ``deploy/cr.yaml`` file. A certificate generated for internal communications must be added to the ``spec.secrets.sslInternal`` key of the ``deploy/cr.yaml`` file.
 
 Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to generate certificates manually are as follows::
 
@@ -166,4 +166,4 @@ Run Percona Server for MongoDB without TLS
 
 Omitting TLS is also possible, but we recommend that you run your cluster with the TLS protocol enabled.
 
-To disable TLS protocol (e.g. for demonstration purposes) edit the ``cr.yaml/spec/allowUnsafeConfigurations`` setting to ``true`` and make sure that there are no certificate secrets available.
+To disable TLS protocol (e.g. for demonstration purposes) set the ``spec.allowUnsafeConfigurations`` key to ``true`` in the ``deploy/cr.yaml`` file and and make sure that there are no certificate secrets available.
