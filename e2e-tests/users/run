@@ -96,7 +96,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'Remove users secret'
 kubectl_bin delete secret some-users
-sleep 25
+sleep 35
 wait_cluster_consistency $psmdb
 sleep 15
 user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
@@ -107,7 +107,7 @@ check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 desc 'Update all users'
 kubectl_bin apply -f "${conf_dir}/secrets.yml"
-sleep 25
+sleep 35
 wait_cluster_consistency $psmdb
 sleep 15
 user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
