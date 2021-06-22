@@ -2,6 +2,8 @@ apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
   name: version-service-latest
+  finalizers:
+    - delete-psmdb-pvc
 spec:
   image:
   initImage: #initImage
