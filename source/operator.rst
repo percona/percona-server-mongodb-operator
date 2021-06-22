@@ -8,8 +8,8 @@ The operator is configured via the spec section of the
 
 The metadata part of this file contains the following keys:
 
-* ``name`` (``my-cluster-name`` by default) sets the name of your Percona Server
-  for MongoDB Cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_, not exceed 22 characters, start with an alphabetic character, and end with an alphanumeric character;
+* ``name`` (``my-cluster-name`` by default) sets the name of your Percona Distribution
+  for MongoDB cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_, not exceed 22 characters, start with an alphabetic character, and end with an alphanumeric character;
 * .. _finalizers:
 
   ``finalizers.delete-psmdb-pvc``, if present, activates the `Finalizer <https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#finalizers>`_ which deletes appropriate `Persistent Volume Claims <https://kubernetes.io/docs/concepts/storage/persistent-volumes/>`_ after the cluster deletion event (off by default).
@@ -44,7 +44,7 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
    * - image
      - string
      - ``percona/percona``-``server``-``mongodb:{{{mongodb44recommended}}}``
-     - The Docker image of `Percona Server for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html>`_ to deploy (actual image names can be found :ref:`in the list of certified images<custom-registry-images>`) 
+     - The Docker image of `Percona Distribution for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/index.html>`_ to deploy (actual image names can be found :ref:`in the list of certified images<custom-registry-images>`) 
 
    * - imagePullPolicy
      - string
@@ -110,14 +110,14 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
    * - backup
      - :ref:`subdoc<operator.backup-section>`
      - 
-     - Percona Server for MongoDB backups section
+     - Percona Distribution for MongoDB backups section
 
 .. _operator.upgradeoptions-section:
 
 `Upgrade Options Section <operator.html#operator-upgradeoptions-section>`_
 --------------------------------------------------------------------------------
 
-The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_ file contains various configuration options to control Percona Server for MongoDB upgrades.
+The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_ file contains various configuration options to control Percona Distribution for MongoDB upgrades.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -145,8 +145,8 @@ The ``upgradeOptions`` section in the `deploy/cr.yaml <https://github.com/percon
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Specifies how :ref:`updates are processed<operator-update-smartupdates>` by the Operator.	|
 |                 | ``Never`` or ``Disabled`` will completely disable automatic upgrades, otherwise it can be	|
-|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of Percona Server for	|
-|                 | MongoDB (e.g. ``4.4.2-4``)									|
+|                 | set to ``Latest`` or ``Recommended`` or to a specific version string of Percona Distribution|
+|                 | for MongoDB (e.g. ``4.4.2-4``)								|
 |                 | that is wished to be version-locked (so that the user can control				|
 |                 | the version running, but use automatic upgrades to move between them).			|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -989,7 +989,7 @@ options for Percona Monitoring and Management.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``false``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables or disables monitoring Percona Server for MongoDB with 				|
+| **Description** | Enables or disables monitoring Percona Distribution for MongoDB with 			|
 |                 | `PMM <https://www.percona.com/doc/percona-monitoring-and-management 			|
 |                 | index.metrics-monitor.dashboard.html>`_							|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1052,7 +1052,7 @@ options for Percona Monitoring and Management.
 --------------------------------------------------------------
 
 The ``sharding`` section in the deploy/cr.yaml file contains configuration
-options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
+options for Percona Distribution for MondoDB :ref:`sharding<operator.sharding>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -1065,7 +1065,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``true``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables or disables `Percona Server for MondoDB 	 					|
+| **Description** | Enables or disables `Percona Distribution for MondoDB 	 				|
 |                 | sharding <https://docs.mongodb.com/manual/sharding/>`_ 					|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1685,7 +1685,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``false``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables/disables `Percona Server for MongoDB Log Redaction					|
+| **Description** | Enables/disables `Percona Distribution for MongoDB Log Redaction				|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/log-redaction.html>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -1698,7 +1698,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``true``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables/disables `Percona Server for MongoDB data at rest encryption			|
+| **Description** | Enables/disables `Percona Distribution for MongoDB data at rest encryption			|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/				|
 |                 | data_at_rest_encryption.html>`_								|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1726,7 +1726,7 @@ This section contains the Mongod configuration options.
 | **Example**     | ``AES256-CBC``										|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Sets											|
-|                 | `Percona Server for MongoDB encryption cipher mode						|
+|                 | `Percona Distribution for MongoDB encryption cipher mode					|
 |                 | <https://docs.mongodb.com/manual/reference/program/mongod/					|
 |                 | #cmdoption-mongod-encryptionciphermode>`_							|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1741,7 +1741,7 @@ This section contains the Mongod configuration options.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``60``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Sets the Percona Server for MongoDB ``ttlMonitorSleepSecs`` option				|
+| **Description** | Sets the Percona Distribution for MongoDB ``ttlMonitorSleepSecs`` option			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1993,7 +1993,7 @@ This section contains the Mongod configuration options.
 The ``backup`` section in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file contains the following configuration options for the regular
-Percona Server for MongoDB backups.
+Percona Distribution for MongoDB backups.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -2042,7 +2042,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``percona/percona-server-mongodb-operator:{{{release}}}-backup``					|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The Percona Server for MongoDB Docker image to use for the backup				|
+| **Description** | The Percona Distribution for MongoDB Docker image to use for the backup			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+

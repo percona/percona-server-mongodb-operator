@@ -1,5 +1,5 @@
-Install Percona server for MongoDB on Kubernetes
-================================================
+Install Percona Distribution for MongoDB on Kubernetes
+======================================================
 
 #. Clone the percona-server-mongodb-operator repository:
 
@@ -11,7 +11,7 @@ Install Percona server for MongoDB on Kubernetes
    .. note:: It is crucial to specify the right branch with ``-b``
       option while cloning the code on this step. Please be careful.
 
-#. The Custom Resource Definition for Percona Server for MongoDB should be
+#. The Custom Resource Definition for Percona Distribution for MongoDB should be
    created from the ``deploy/crd.yaml`` file. The Custom Resource Definition
    extends the standard set of resources which Kubernetes “knows” about with the
    new items, in our case these items are the core of the operator.
@@ -39,7 +39,7 @@ Install Percona server for MongoDB on Kubernetes
    At success, you will see the message that namespace/<namespace name> was
    created, and the context was modified.
 
-#. The role-based access control (RBAC) for Percona Server for MongoDB is
+#. The role-based access control (RBAC) for Percona Distribution for MongoDB is
    configured with the ``deploy/rbac.yaml`` file. Role-based access is based on
    defined roles and the available actions which correspond to each role. The
    role and actions are defined for Kubernetes resources in the yaml file.
@@ -82,7 +82,7 @@ Install Percona server for MongoDB on Kubernetes
    you can generate and apply your own certificates as secrets according
    to the :ref:`TLS instructions <tls>`.
 
-#. After the operator is started, Percona Server for MongoDB cluster can
+#. After the operator is started, Percona Distribution for MongoDB cluster can
    be created with the following command:
 
    .. code:: bash

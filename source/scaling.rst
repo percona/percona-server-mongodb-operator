@@ -1,5 +1,5 @@
-Scale Percona Server for MongoDB on Kubernetes and OpenShift
-============================================================
+Scale Percona Distribution for MongoDB on Kubernetes and OpenShift
+==================================================================
 
 One of the great advantages brought by Kubernetes and the OpenShift
 platform is the ease of an application scaling. Scaling a Deployment up
@@ -9,8 +9,8 @@ nodes.
 The size of the cluster is controlled by the ``size`` key in the
 :ref:`operator.custom-resource-options` configuration.
 
-.. note:: The Operator will not allow to scale Percona Server for MongoDB with
-   the ``kubectl scale statefulset <StatefulSet name>`` command as it puts
+.. note:: The Operator will not allow to scale Percona Distribution for MongoDB
+   with the ``kubectl scale statefulset <StatefulSet name>`` command as it puts
    ``size`` configuration options out of sync.
 
 You can change size separately for different components of your cluster by

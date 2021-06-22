@@ -1,7 +1,7 @@
-Deploy Percona server for MongoDB with Service Broker
-=====================================================
+Deploy Percona Distribution for MongoDB with Service Broker
+===========================================================
 
-Percona Service Broker provides the `Open Service Broker <https://www.openservicebrokerapi.org/>`_ object to facilitate the operator deployment within high-level visual tools. Following steps are needed to use it while installing the Percona Server for MongoDB on the OpenShift platform:
+Percona Service Broker provides the `Open Service Broker <https://www.openservicebrokerapi.org/>`_ object to facilitate the operator deployment within high-level visual tools. Following steps are needed to use it while installing the Percona Distribution for MongoDB on the OpenShift platform:
 
 1. The Percona Service Broker is to be deployed based on the ``percona-broker.yaml`` file. To use it you should first enable the `Service Catalog <https://docs.openshift.com/container-platform/4.1/applications/service_brokers/installing-service-catalog.html>`_, which can be done as follows:
 

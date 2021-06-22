@@ -4,7 +4,7 @@ Use Docker images from a custom registry
 ========================================
 
 Using images from a private Docker registry may required for
-privacy, security or other reasons. In these cases, Percona Server for
+privacy, security or other reasons. In these cases, Percona Distribution for
 MongoDB Operator allows the use of a custom registry This following example of the
 Operator deployed in the OpenShift environment demonstrates the process:
 
@@ -90,5 +90,5 @@ Operator deployed in the OpenShift environment demonstrates the process:
 8. Repeat steps 3-5 for other images, and update corresponding options
    in the ``deploy/cr.yaml`` file.
 
-9. Now follow the standard `Percona Server for MongoDB Operator installation instruction <./openshift.html>`_
+9. Now follow the standard `Percona Distribution for MongoDB Operator installation instruction <./openshift.html>`_
 

@@ -7,7 +7,7 @@ any cloud storage which implements the S3 API can be used for backups. The one w
 `Minio <https://www.minio.io/>`__ - the S3-compatible object storage
 server deployed via Docker on your own infrastructure.
 
-Setting up Minio to be used with Percona Server for MongoDB Operator
+Setting up Minio to be used with Percona Distribution for MongoDB Operator
 backups involves following steps:
 
 1. Install Minio in your Kubernetes or OpenShift

@@ -1,11 +1,11 @@
 .. _operator-updates:
 
-Update Percona Server for MongoDB Operator
-===========================================
+Update Percona Distribution for MongoDB Operator
+================================================
 
-Starting from the version 1.1.0 the Percona Kubernetes Operator for MongoDB allows
-upgrades to newer versions. This includes upgrades of the
-Operator itself, and upgrades of the Percona Server for MongoDB.
+Starting from the version 1.1.0 the Percona Distribution for MongoDB Operator
+allows upgrades to newer versions. This includes upgrades of the
+Operator itself, and upgrades of the Percona Distribution for MongoDB.
 
 .. _operator-update:
 

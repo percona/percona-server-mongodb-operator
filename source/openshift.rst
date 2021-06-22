@@ -1,26 +1,26 @@
-Install Percona Server for MongoDB on OpenShift
-===============================================
+Install Percona Distribution for MongoDB on OpenShift
+=====================================================
 
-Installing Percona Server for MongoDB on OpenShift includes two steps:
+Installing Percona Distribution for MongoDB on OpenShift includes two steps:
 
-* Installing the Percona Operator for Percona Server for MongoDB,
-* Install Percona Server for MongoDB using the Operator.
+* Installing the Percona Distribution for MongoDB Operator,
+* Install Percona Distribution for MongoDB using the Operator.
 
 Install the Operator
 --------------------
 
-You can install Percona Operator for Percona Server for MongoDB on OpenShift using the `Red Hat Marketplace <https://marketplace.redhat.com>`_ web interface or using the command line interface.
+You can install Percona Distribution for MongoDB Operator on OpenShift using the `Red Hat Marketplace <https://marketplace.redhat.com>`_ web interface or using the command line interface.
 
 Install the Operator via the Red Hat Marketplace
 ************************************************
 
 1. login to the Red Hat Marketplace and register your cluster `following the official instructions <https://marketplace.redhat.com/en-us/workspace/clusters/add/register>`_.
 
-2. Go to the `Kubernetes Operator for Percona Server for MongoDB <https://marketplace.redhat.com/en-us/products/percona-server-for-mongodb>`_ page and click the `Free trial` button:
+2. Go to the `Percona Distribution for MongoDB Operator <https://marketplace.redhat.com/en-us/products/percona-server-for-mongodb>`_ page and click the `Free trial` button:
 
    .. image:: img/marketplace-operator-page.png
       :align: center
-      :alt: Percona Operator for Percona Server for MongoDB on Red Hat Marketplace
+      :alt: Percona Operator for Percona Distribution for MongoDB on Red Hat Marketplace
 
    Here you can "purchase" the Operator for 0.0 USD.
 
@@ -47,7 +47,7 @@ Install the Operator via the command-line interface
       It is crucial to specify the right branch with ``-b``
       option while cloning the code on this step. Please be careful.
 
-2. The Custom Resource Definition for Percona Server for MongoDB should be
+2. The Custom Resource Definition for Percona Distribution for MongoDB should be
    created from the ``deploy/crd.yaml`` file. The Custom Resource Definition
    extends the standard set of resources which Kubernetes “knows” about with the
    new items, in our case these items are the core of the operator.
@@ -63,7 +63,7 @@ Install the Operator via the command-line interface
       Setting Custom Resource Definition requires your user to
       have cluster-admin role privileges.
 
-   If you want to manage Percona Server for MongoDB cluster with a
+   If you want to manage Percona Distribution for MongoDB cluster with a
    non-privileged user, the necessary permissions can be granted by applying the
    next clusterrole:
 
@@ -85,7 +85,7 @@ Install the Operator via the command-line interface
 
       $ oc new-project psmdb
 
-4. Add role-based access control (RBAC) for Percona Server for MongoDB is
+4. Add role-based access control (RBAC) for Percona Distribution for MongoDB is
    configured with the ``deploy/rbac.yaml`` file. RBAC is
    based on clearly defined roles and corresponding allowed actions. These
    actions are allowed on specific Kubernetes resources. The details about users
@@ -101,8 +101,8 @@ Install the Operator via the command-line interface
 
       $ oc apply -f deploy/operator.yaml
 
-Install Percona Server for MongoDB
-----------------------------------
+Install Percona Distribution for MongoDB
+----------------------------------------
 
 1. Add the MongoDB Users secrets to OpenShift. These secrets
    should be placed as plain text in the stringData section of the
@@ -125,7 +125,7 @@ Install Percona Server for MongoDB
    you can generate and apply your own certificates as secrets according
    to the :ref:`TLS instructions <tls>`.
 
-3. Percona Server for MongoDB cluster can
+3. Percona Distribution for MongoDB cluster can
    be created at any time with the following two steps:
 
    a. Uncomment the ``deploy/cr.yaml`` field ``#platform:`` and edit the field
