@@ -1,7 +1,7 @@
 System Requirements
 +++++++++++++++++++
 
-The Operator was developed and tested with Percona Server for MongoDB 3.6, 4.0,
+The Operator was developed and tested with Percona Server for MongoDB 4.0,
 4.2, and 4.4. Other options may also work but have not been tested.
 
 .. note:: The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
