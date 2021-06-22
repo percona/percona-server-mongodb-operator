@@ -196,24 +196,29 @@ func (r *ReconcilePerconaServerMongoDB) applyNWait(cr *api.PerconaServerMongoDB,
 		log.Info(fmt.Sprintf("pod %s is already updated", pod.Name))
 	} else {
 		if err := r.client.Delete(context.TODO(), pod); err != nil {
-			return fmt.Errorf("failed to delete pod: %v", err)
+			return errors.Wrap(err, "delete pod")
 		}
 	}
 
-	if err := r.waitPodRestart(updateRevision, pod, waitLimit); err != nil {
-		return fmt.Errorf("failed to wait pod: %v", err)
+	if err := r.waitPodRestart(cr, updateRevision, pod, waitLimit); err != nil {
+		return errors.Wrap(err, "wait pod restart")
 	}
 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, pod *corev1.Pod, waitLimit int) error {
+func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
 	for i := 0; i < waitLimit; i++ {
 		time.Sleep(time.Second * 1)
 
 		err := r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
 		if err != nil && !k8sErrors.IsNotFound(err) {
-			return err
+			return errors.Wrap(err, "get pod")
+		}
+
+		// We update status in every loop to not wait until the end of smart update
+		if err := r.updateStatus(cr, nil, api.AppStateInit); err != nil {
+			return errors.Wrap(err, "update status")
 		}
 
 		ready := false
@@ -229,7 +234,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, po
 		}
 	}
 
-	return fmt.Errorf("reach pod wait limit")
+	return errors.New("reach pod wait limit")
 }
 
 func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(client *mgo.Client) (string, error) {
