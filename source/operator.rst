@@ -1297,8 +1297,6 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Example**     | .. code:: yaml										|
 |                 |												|
 |                 |     |											|
-|                 |     operationProfiling:									|
-|                 |       mode: slowOp										|
 |                 |     systemLog:										|
 |                 |       verbosity: 1										|
 +-----------------+---------------------------------------------------------------------------------------------+
