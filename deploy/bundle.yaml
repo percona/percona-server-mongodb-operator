@@ -22,6 +22,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1
       storage: false
       served: true
@@ -31,6 +32,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-1-0
       storage: false
       served: true
@@ -40,6 +42,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-2-0
       storage: false
       served: true
@@ -49,6 +52,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-3-0
       storage: false
       served: true
@@ -58,6 +62,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-4-0
       storage: false
       served: true
@@ -67,6 +72,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-5-0
       storage: false
       served: true
@@ -76,6 +82,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-6-0
       storage: false
       served: true
@@ -85,6 +92,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-7-0
       storage: false
       served: true
@@ -94,6 +102,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-8-0
       storage: false
       served: true
@@ -103,6 +112,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
     - name: v1-9-0
       storage: true
       served: true
@@ -112,6 +122,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
         - name: ENDPOINT
           type: string
@@ -149,6 +160,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
         - name: Cluster
           type: string
@@ -200,6 +212,7 @@ spec:
           properties:
             spec:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
         - name: Cluster
           type: string
