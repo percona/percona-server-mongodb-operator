@@ -23,6 +23,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1
       storage: false
       served: true
@@ -33,6 +48,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-1-0
       storage: false
       served: true
@@ -43,6 +73,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-2-0
       storage: false
       served: true
@@ -53,6 +98,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-3-0
       storage: false
       served: true
@@ -63,6 +123,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-4-0
       storage: false
       served: true
@@ -73,6 +148,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-5-0
       storage: false
       served: true
@@ -83,6 +173,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-6-0
       storage: false
       served: true
@@ -93,6 +198,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-7-0
       storage: false
       served: true
@@ -103,6 +223,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-8-0
       storage: false
       served: true
@@ -113,6 +248,21 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
     - name: v1-9-0
       storage: true
       served: true
@@ -123,16 +273,19 @@ spec:
             spec:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
-        - name: ENDPOINT
-          type: string
-          jsonPath: .status.host
-        - name: Status
-          type: string
-          jsonPath: .status.state
-        - name: Age
-          type: date
-          jsonPath: .metadata.creationTimestamp
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
       subresources:
         status: {}
 ---
@@ -159,6 +312,9 @@ spec:
           type: object
           properties:
             spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+            status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
@@ -211,6 +367,9 @@ spec:
           type: object
           properties:
             spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+            status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
