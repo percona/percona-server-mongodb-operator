@@ -7,6 +7,9 @@ test_dir=$(realpath $(dirname $0))
 deploy_dir=$(realpath $(dirname $0)/../../deploy)
 . ${test_dir}/../functions
 
+# Since we've switched to 4 mongo pods as a safe configuration for arbiter
+# such a test requires more than 3 kubernetes nodes due to anti-affinity settings
+
 function stop_cluster() {
 	local cluster_name=$1
 	local max_wait_time=${2:-120}
@@ -57,6 +60,11 @@ function main() {
 	compare_kubectl statefulset/$cluster-rs0
 	compare_kubectl statefulset/$cluster-cfg
 
+	compare_generation "1" "statefulset" "${cluster}-rs0"
+	compare_generation "1" "statefulset" "${cluster}-cfg"
+	compare_generation "1" "deployment" "${cluster}-mongos"
+	compare_generation "2" "psmdb" "${cluster}"
+
 	desc 'starting PMM up'
 	retry 10 60 helm install monitoring --set platform=kubernetes https://percona-charts.storage.googleapis.com/pmm-server-2.12.4.tgz
 	sleep 20
@@ -67,25 +75,32 @@ function main() {
 	# since psmdb cluster won't work without pmm server running consistency check would be enough
 	wait_cluster_consistency $cluster
 
+	kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+			"spec": {"pmm":{"enabled":false}}
+		}'
+	sleep 120
+	helm delete monitoring
+	wait_cluster_consistency $cluster
+
 	desc 'enabling arbiter'
 	kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/replsets/0/arbiter/enabled","value":true}]'
-	kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/replsets/0/size","value":2}]'
 	wait_cluster_consistency $cluster
 	wait_pod $cluster-rs0-arbiter-0
 
 	desc 'checking write/read'
-	run_mongo \
+	run_mongos \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-		"userAdmin:userAdmin123456@$cluster-rs0.$namespace"
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 	sleep 2
-	run_mongo \
+	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
-		"myApp:myPass@$cluster-rs0.$namespace"
-	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0.$namespace"
+		"myApp:myPass@$cluster-mongos.$namespace"
+	simple_data_check "${cluster}" 4 1 "-mongos"
 
 	desc 'checking dev version service'
 	stop_cluster ${cluster}
 	start_cluster ${cluster}
+	simple_data_check "${cluster}" 4 1 "-mongos"
 
 	destroy $namespace
 }

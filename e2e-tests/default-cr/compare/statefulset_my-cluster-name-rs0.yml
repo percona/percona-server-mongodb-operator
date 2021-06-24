@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  annotations: {}
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
@@ -152,6 +153,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: my-cluster-name-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
         - env:
             - name: PBM_AGENT_MONGODB_USERNAME
@@ -226,6 +229,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: my-cluster-name-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-my-cluster-name-users
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
