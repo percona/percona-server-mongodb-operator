@@ -2,7 +2,6 @@ package psmdb
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -124,7 +123,7 @@ func GetServiceAddr(svc corev1.Service, pod corev1.Pod, cl client.Client) (*Serv
 	case corev1.ServiceTypeLoadBalancer:
 		host, err := getIngressPoint(pod, cl)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "get ingress endpoint")
 		}
 		addr.Host = host
 		for _, p := range svc.Spec.Ports {
@@ -159,13 +158,13 @@ func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 		retries++
 
 		if retries >= 1000 {
-			return "", fmt.Errorf("failed to fetch service. Retries limit reached")
+			return "", errors.New("retries limit reached")
 		}
 
 		svc := &corev1.Service{}
 		err := cl.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, svc)
 		if err != nil {
-			return "", fmt.Errorf("failed to fetch service: %v", err)
+			return "", errors.Wrap(err, "failed to fetch service")
 		}
 
 		if len(svc.Status.LoadBalancer.Ingress) != 0 {
@@ -182,7 +181,8 @@ func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 		}
 
 	}
-	return "", fmt.Errorf("can't get service %s ingress, retry limit reached", pod.Name)
+
+	return "", errors.Errorf("can't get service %s ingress", pod.Name)
 }
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
@@ -212,14 +212,13 @@ func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsE
 func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
 	svc, err := getExtServices(cl, namespace, pod.Name)
 	if err != nil {
-		return "", fmt.Errorf("fetch service address: %v", err)
+		return "", errors.Wrap(err, "fetch service address")
 	}
 
 	hostname, err := GetServiceAddr(*svc, pod, cl)
 	if err != nil {
-		return "", fmt.Errorf("get service hostname: %v", err)
+		return "", errors.Wrap(err, "get service hostname")
 	}
-
 
 	return hostname.String(), nil
 }
@@ -240,9 +239,9 @@ func getExtServices(cl client.Client, namespace, podName string) (*corev1.Servic
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
-			return nil, fmt.Errorf("failed to fetch service: %v", err)
+			return nil, errors.Wrap(err, "failed to fetch service")
 		}
 		return svcMeta, nil
 	}
-	return nil, fmt.Errorf("failed to fetch service. Retries limit reached")
+	return nil, errors.New("failed to fetch service: retries limit reached")
 }

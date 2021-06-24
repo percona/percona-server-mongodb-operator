@@ -24,9 +24,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return api.AppStateReady, nil
 	}
 
+	// all pods needs to be scheduled to reconcile
+	if int(replset.Size) > len(pods.Items) {
+		return api.AppStateInit, nil
+	}
+
 	cli, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
-	switch {
-	case err != nil:
+	if err != nil {
 		if cr.Status.Replsets[replset.Name].Initialized {
 			return api.AppStateError, errors.Wrap(err, "dial:")
 		}
@@ -40,12 +44,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		if err != nil {
 			return api.AppStateInit, errors.Wrap(err, "create system users")
 		}
-		fallthrough
-		// this can happen if cluster is initialized but status update failed
-	case !cr.Status.Replsets[replset.Name].Initialized:
-		cr.Status.Replsets[replset.Name].Initialized = true
 
-		cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+		cr.Status.Replsets[replset.Name].Initialized = true
+		cr.Status.AddCondition(api.ClusterCondition{
+			Status:             api.ConditionTrue,
+			Type:               api.AppStateInit,
+			Message:            replset.Name,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		})
+
+		return api.AppStateInit, nil
+	}
+
+	// this can happen if cluster is initialized but status update failed
+	if !cr.Status.Replsets[replset.Name].Initialized {
+		cr.Status.Replsets[replset.Name].Initialized = true
+		cr.Status.AddCondition(api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.AppStateInit,
 			Message:            replset.Name,
