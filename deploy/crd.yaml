@@ -1,4 +1,4 @@
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: perconaservermongodbs.psmdb.percona.com
@@ -13,53 +13,86 @@ spec:
     - psmdb
   scope: Namespaced
   versions:
-    - name: v1
-      storage: false
-      served: true
-    - name: v1-1-0
-      storage: false
-      served: true
-    - name: v1-2-0
-      storage: false
-      served: true
-    - name: v1-3-0
-      storage: false
-      served: true
-    - name: v1-4-0
-      storage: false
-      served: true
-    - name: v1-5-0
-      storage: false
-      served: true
-    - name: v1-6-0
-      storage: false
-      served: true
-    - name: v1-7-0
-      storage: false
-      served: true
-    - name: v1-8-0
-      storage: false
-      served: true
-    - name: v1-9-0
-      storage: true
-      served: true
     - name: v1alpha1
       storage: false
       served: true
-  additionalPrinterColumns:
-    - name: ENDPOINT
-      type: string
-      JSONPath: .status.host
-    - name: Status
-      type: string
-      JSONPath: .status.state
-    - name: Age
-      type: date
-      JSONPath: .metadata.creationTimestamp
-  subresources:
-    status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-1-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-2-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-3-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-4-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-5-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-6-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-7-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-8-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+    - name: v1-9-0
+      storage: true
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+      additionalPrinterColumns:
+        - name: ENDPOINT
+          type: string
+          jsonPath: .status.host
+        - name: Status
+          type: string
+          jsonPath: .status.state
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: perconaservermongodbbackups.psmdb.percona.com
@@ -77,34 +110,37 @@ spec:
     - name: v1
       storage: true
       served: true
-  additionalPrinterColumns:
-    - name: Cluster
-      type: string
-      description: Cluster name
-      JSONPath: .spec.psmdbCluster
-    - name: Storage
-      type: string
-      description: Storage name from pxc spec
-      JSONPath: .spec.storageName
-    - name: Destination
-      type: string
-      description: Backup destination
-      JSONPath: .status.destination
-    - name: Status
-      type: string
-      description: Job status
-      JSONPath: .status.state
-    - name: Completed
-      description: Completed time
-      type: date
-      JSONPath: .status.completed
-    - name: Age
-      type: date
-      JSONPath: .metadata.creationTimestamp
-  subresources:
-    status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+      additionalPrinterColumns:
+        - name: Cluster
+          type: string
+          description: Cluster name
+          jsonPath: .spec.psmdbCluster
+        - name: Storage
+          type: string
+          description: Storage name from pxc spec
+          jsonPath: .spec.storageName
+        - name: Destination
+          type: string
+          description: Backup destination
+          jsonPath: .status.destination
+        - name: Status
+          type: string
+          description: Job status
+          jsonPath: .status.state
+        - name: Completed
+          description: Completed time
+          type: date
+          jsonPath: .status.completed
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: perconaservermongodbrestores.psmdb.percona.com
@@ -122,17 +158,20 @@ spec:
     - name: v1
       storage: true
       served: true
-  additionalPrinterColumns:
-    - name: Cluster
-      type: string
-      description: Cluster name
-      JSONPath: .spec.clusterName
-    - name: Status
-      type: string
-      description: Job status
-      JSONPath: .status.state
-    - name: Age
-      type: date
-      JSONPath: .metadata.creationTimestamp
-  subresources:
-    status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+      additionalPrinterColumns:
+        - name: Cluster
+          type: string
+          description: Cluster name
+          jsonPath: .spec.clusterName
+        - name: Status
+          type: string
+          description: Job status
+          jsonPath: .status.state
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
