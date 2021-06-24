@@ -178,9 +178,9 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.Host = host
 
 	switch {
-	case replsetsStopping > 0 || cr.ObjectMeta.DeletionTimestamp != nil:
+	case replsetsStopping > 0 || cr.Status.Mongos.Status == api.AppStateStopping || cr.ObjectMeta.DeletionTimestamp != nil:
 		cr.Status.State = api.AppStateStopping
-	case replsetsPaused == len(repls):
+	case replsetsPaused == len(repls) && cr.Status.Mongos.Status == api.AppStatePaused:
 		cr.Status.State = api.AppStatePaused
 	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
 		cr.Status.State = api.AppStateReady
