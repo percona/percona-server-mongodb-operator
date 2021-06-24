@@ -180,8 +180,11 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	switch {
 	case replsetsStopping > 0 || (cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status == api.AppStateStopping) || cr.ObjectMeta.DeletionTimestamp != nil:
 		cr.Status.State = api.AppStateStopping
-	case replsetsPaused == len(repls) && (cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status == api.AppStatePaused):
+	case replsetsPaused == len(repls):
 		cr.Status.State = api.AppStatePaused
+		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStatePaused {
+			cr.Status.State = api.AppStateStopping
+		}
 	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
 		cr.Status.State = api.AppStateReady
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
