@@ -365,6 +365,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if cr.Spec.Pause {
 			replset.Size = 0
 			replset.Arbiter.Enabled = false
+			replset.NonVoting.Enabled = false
 		}
 	}
 
@@ -438,6 +439,13 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
 	}
 
+	if rs.NonVoting.Enabled && rs.NonVoting.VolumeSpec != nil {
+		err := rs.NonVoting.VolumeSpec.reconcileOpts()
+		if err != nil {
+			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
+		}
+	}
+
 	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
@@ -446,6 +454,10 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 
 	if rs.Arbiter.Enabled {
 		rs.Arbiter.MultiAZ.reconcileOpts()
+	}
+
+	if rs.NonVoting.Enabled {
+		rs.NonVoting.MultiAZ.reconcileOpts()
 	}
 
 	if !unsafe {

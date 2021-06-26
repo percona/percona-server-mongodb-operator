@@ -360,14 +360,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, errors.Wrap(err, "get pods list for mongos")
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey)
+		_, err = r.reconcileStatefulSet(false, false, cr, replset, matchLabels, internalKey)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey)
+			_, err := r.reconcileStatefulSet(true, false, cr, replset, matchLabels, internalKey)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -380,6 +380,24 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 			if err != nil && !k8serrors.IsNotFound(err) {
 				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
+			}
+		}
+
+		if replset.NonVoting.Enabled {
+			_, err := r.reconcileStatefulSet(false, true, cr, replset, matchLabels, internalKey)
+			if err != nil {
+				err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
+			}
+		} else {
+			err := r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
+				cr.Name+"-"+replset.Name+"-nv",
+				cr.Namespace,
+			))
+
+			if err != nil && !k8serrors.IsNotFound(err) {
+				err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
 			}
 		}
@@ -548,7 +566,8 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 			continue
 		}
 
-		if v.Labels["app.kubernetes.io/component"] == "arbiter" {
+		component := v.Labels["app.kubernetes.io/component"]
+		if component == "arbiter" || component == "nonVoting" {
 			continue
 		}
 
@@ -1024,7 +1043,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 }
 
 // TODO: reduce cyclomatic complexity
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB,
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter, nonVoting bool, cr *api.PerconaServerMongoDB,
 	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
 
 	sfsName := cr.Name + "-" + replset.Name
@@ -1043,6 +1062,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		multiAZ = replset.Arbiter.MultiAZ
 		pdbspec = replset.Arbiter.PodDisruptionBudget
 		resources = replset.Arbiter.Resources
+	}
+
+	if nonVoting {
+		sfsName += "-nv"
+		containerName += "-nv"
+		size = replset.NonVoting.Size
+		matchLabels["app.kubernetes.io/component"] = "nonVoting"
+		multiAZ = replset.NonVoting.MultiAZ
+		pdbspec = replset.NonVoting.PodDisruptionBudget
+		resources = replset.NonVoting.Resources
 	}
 
 	if replset.ClusterRole == api.ClusterRoleConfigSvr {

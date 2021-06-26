@@ -477,6 +477,17 @@ func (m *ConfigMembers) SetVotes() {
 		if member.Hidden {
 			continue
 		}
+
+		if _, ok := member.Tags["nonVoting"]; ok {
+			// Non voting member is a regular ReplSet member with
+			// votes and priority equals to 0.
+
+			[]ConfigMember(*m)[i].Votes = 0
+			[]ConfigMember(*m)[i].Priority = 0
+
+			continue
+		}
+
 		if votes < MaxVotingMembers {
 			[]ConfigMember(*m)[i].Votes = 1
 			votes++

@@ -85,18 +85,24 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}
 
+	matchLabels := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/replset":    replset.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	if sfs.Labels["app.kubernetes.io/component"] == "nonVoting" {
+		matchLabels["app.kubernetes.io/component"] = "nonVoting"
+	}
+
 	list := corev1.PodList{}
 	if err := r.client.List(context.TODO(),
 		&list,
 		&client.ListOptions{
-			Namespace: cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   cr.Name,
-				"app.kubernetes.io/replset":    replset.Name,
-				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-				"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			}),
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(matchLabels),
 		},
 	); err != nil {
 		return fmt.Errorf("get pod list: %v", err)
@@ -140,7 +146,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 			if pod.Labels["app.kubernetes.io/component"] == "arbiter" {
 				arbiterSfs, err := r.getArbiterStatefulset(cr, pod.Labels["app.kubernetes.io/replset"])
 				if err != nil {
-					return errors.Wrap(err, "failed to get arbiter statefilset")
+					return errors.Wrap(err, "failed to get arbiter statefulset")
 				}
 
 				updateRevision = arbiterSfs.Status.UpdateRevision
@@ -152,16 +158,18 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}
 
-	forceStepDown := replset.Size == 1
-	log.Info("doing step down...", "force", forceStepDown)
-	err = mongo.StepDown(context.TODO(), client, forceStepDown)
-	if err != nil {
-		return errors.Wrap(err, "failed to do step down")
-	}
+	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" {
+		forceStepDown := replset.Size == 1
+		log.Info("doing step down...", "force", forceStepDown)
+		err = mongo.StepDown(context.TODO(), client, forceStepDown)
+		if err != nil {
+			return errors.Wrap(err, "failed to do step down")
+		}
 
-	log.Info(fmt.Sprintf("apply changes to primary pod %s", primaryPod.Name))
-	if err := r.applyNWait(cr, sfs.Status.UpdateRevision, &primaryPod, waitLimit); err != nil {
-		return fmt.Errorf("failed to apply changes: %v", err)
+		log.Info(fmt.Sprintf("apply changes to primary pod %s", primaryPod.Name))
+		if err := r.applyNWait(cr, sfs.Status.UpdateRevision, &primaryPod, waitLimit); err != nil {
+			return fmt.Errorf("failed to apply changes: %v", err)
+		}
 	}
 
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
@@ -223,7 +231,8 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMong
 
 		ready := false
 		for _, container := range pod.Status.ContainerStatuses {
-			if container.Name == "mongod" || container.Name == "mongod-arbiter" {
+			switch container.Name {
+			case "mongod", "mongod-arbiter", "mongod-nv":
 				ready = container.Ready
 			}
 		}
