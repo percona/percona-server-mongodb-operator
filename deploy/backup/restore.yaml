@@ -8,3 +8,10 @@ spec:
 #  pitr:
 #    type: date
 #    date: YYYY-MM-DD HH:MM:SS
+#  backupSource:
+#    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/BACKUP-DESTINATION
+#    s3:
+#      credentialsSecret: my-cluster-name-backup-s3
+#      region: us-west-2
+#      bucket: S3-BACKUP-BUCKET-NAME-HERE
+#      endpointUrl: https://s3.us-west-2.amazonaws.com/
