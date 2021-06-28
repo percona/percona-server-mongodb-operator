@@ -95,12 +95,9 @@ To view the created ConfigMap, use the following command:
 
    $ kubectl describe configmaps my-cluster-name-rs0-mongod
 
-Make changed options visible to the Percona Server for MongoDB
-**************************************************************
-
-Do not forget to restart Percona Server for MongoDB to ensure the cluster
-has updated the configuration (see details on how to connect in the
-`Install Percona Server for MongoDB on Kubernetes <kubernetes.html>`_ page).
+.. note:: Do not forget to restart Percona Server for MongoDB to ensure the
+   cluster has updated the configuration (see details on how to connect in the
+   `Install Percona Server for MongoDB on Kubernetes <kubernetes.html>`_ page).
 
 Use a Secret Object
 -------------------
@@ -169,3 +166,8 @@ When ready, apply it with the following command:
 .. code:: bash
 
    $ kubectl create -f deploy/my-mongod-secret.yaml
+
+.. note:: Do not forget to restart Percona Server for MongoDB to ensure the
+   cluster has updated the configuration (see details on how to connect in the
+   `Install Percona Server for MongoDB on Kubernetes <kubernetes.html>`_ page).
+
