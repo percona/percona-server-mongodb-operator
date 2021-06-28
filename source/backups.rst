@@ -1,7 +1,7 @@
 Providing Backups
 =================
 
-The Operator usually stores Distribution for MongoDB backups on `Amazon S3 or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_ outside the Kubernetes cluster:
+The Operator usually stores Server for MongoDB backups on `Amazon S3 or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_ outside the Kubernetes cluster:
 
 .. figure:: assets/images/backup-s3.png
    :align: center
@@ -108,7 +108,7 @@ Making on-demand backup
 -----------------------
 
 To make on-demand backup, user should use YAML file with correct names
-for the backup and the Percona Distribution for MongoDB сluster, and correct PVC
+for the backup and the Percona Server for MongoDB Cluster, and correct PVC
 settings. The example of such file is
 `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/backup.yaml>`_.
 

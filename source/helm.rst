@@ -1,7 +1,7 @@
 .. _install-helm:
 
-Install Percona Distribution for MongoDB using Helm
-===================================================
+Install Percona Server for MongoDB using Helm
+==============================================
 
 `Helm <https://github.com/helm/helm>`_ is the package manager for Kubernetes.
 
@@ -38,26 +38,26 @@ Installation
       with ``default`` namespace. To use different namespace, provide it with
       the following additional parameter: ``--namespace my-namespace``.
 
-#. Install Percona Distribution for MongoDB:
+#. Install Percona Server for MongoDB:
 
    .. code:: bash
 
       helm install my-db percona/psmdb-db
 
    The ``my-db`` parameter in the above example is the name of `a new release object <https://helm.sh/docs/intro/using_helm/#three-big-concepts>`_ 
-   which is created for the Percona Distribution for MongoDB when you install
-   its Helm chart (use any name you like).
+   which is created for the Percona Server for MongoDB when you install its Helm
+   chart (use any name you like).
 
-Installing Percona Distribution for MongoDB with customized parameters
-----------------------------------------------------------------------
+Installing Percona Server for MongoDB with customized parameters
+----------------------------------------------------------------
 
-The command above installs Percona Distribution for MongoDB with :ref:`default parameters<operator.custom-resource-options>`.
+The command above installs Percona Server for MongoDB with :ref:`default parameters<operator.custom-resource-options>`.
 Custom options can be passed to a ``helm install`` command as a
 ``--set key=value[,key=value]`` argument. The options passed with a chart can be
 any of the Operator's :ref:`operator.custom-resource-options`.
 
-The following example will deploy a Percona Distribution for MongoDB cluster in
-the ``psmdb`` namespace, with disabled backups and 20 Gi storage:
+The following example will deploy a Percona Server for MongoDB Cluster in the
+``psmdb`` namespace, with disabled backups and 20 Gi storage:
 
 .. code:: bash
 

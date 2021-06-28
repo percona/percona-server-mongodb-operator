@@ -1,4 +1,4 @@
-Binding Percona Distribution for MongoDB components to Specific Kubernetes/OpenShift Nodes
+Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes
 ==========================================================================================
 
 The operator does a good job of automatically assigning new pods to nodes to achieve balanced distribution across the cluster.
@@ -55,7 +55,7 @@ values:
    residing within the same region,
 -  ``none`` - no constraints are applied.
 
-The following example forces Percona Distribution for MongoDB Pods to avoid
+The following example forces Percona Server for MongoDB Pods to avoid
 occupying the same node:
 
 ::

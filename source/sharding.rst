@@ -1,7 +1,7 @@
 .. _operator.sharding:
 
-Percona Distribution for MongoDB Sharding
-=========================================
+Percona Server for MongoDB Sharding
+===================================
 
 About sharding
 --------------

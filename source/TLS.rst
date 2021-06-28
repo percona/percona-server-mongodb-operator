@@ -5,7 +5,7 @@ Transport Layer Security (TLS)
 
 The Percona Distribution for MongoDB Operator uses Transport Layer Security (TLS) cryptographic protocol for the following types of communication:
 
-* Internal - communication between Percona Distribution for MongoDB instances in the cluster
+* Internal - communication between Percona Server for MongoDB instances in the cluster
 * External - communication between the client application and the cluster
 
 The internal certificate is also used as an authorization method.
@@ -35,7 +35,7 @@ About the *cert-manager*
 
 A *cert-manager* is a Kubernetes certificate management controller which widely used to automate the management and issuance of TLS certificates. It is community-driven, and open source. 
 
-When you have already installed *cert-manager* and deploy the operator, the operator requests a certificate from the *cert-manager*. The *cert-manager* acts as a self-signed issuer and generates certificates. The Percona Operator self-signed issuer is local to the operator namespace. This self-signed issuer is created because Percona Distribution for MongoDB requires all certificates are issued by the same CA.
+When you have already installed *cert-manager* and deploy the operator, the operator requests a certificate from the *cert-manager*. The *cert-manager* acts as a self-signed issuer and generates certificates. The Percona Operator self-signed issuer is local to the operator namespace. This self-signed issuer is created because Percona Server for MongoDB requires all certificates are issued by the same CA.
 
 The creation of the self-signed issuer allows you to deploy and use the Percona Operator without creating a clusterissuer separately.
 
@@ -161,8 +161,8 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 
 	kubectl create secret generic my-cluster-name-ssl --from-file=tls.crt=client.pem --from-file=tls.key=client-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
 
-Run Percona Distribution for MongoDB without TLS
-================================================
+Run Percona Server for MongoDB without TLS
+==========================================
 
 Omitting TLS is also possible, but we recommend that you run your cluster with the TLS protocol enabled.
 

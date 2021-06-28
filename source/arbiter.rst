@@ -3,7 +3,7 @@
 Enabling Replica Set Arbiter nodes
 ==================================
 
-Percona Distribution for MongoDB `replication
+Percona Server for MongoDB `replication
 model <https://www.percona.com/blog/2018/05/17/mongodb-replica-set-transport-encryption-part-1/>`_
 is based on elections, when nodes of the Replica Set `choose which
 node <https://docs.mongodb.com/manual/core/replica-set-elections/#replica-set-elections>`_

@@ -1,7 +1,7 @@
 .. _install-minikube:
 
-Install Percona Distribution for MongoDB on Minikube
-====================================================
+Install Percona Server for MongoDB on Minikube
+==============================================
 
 Installing the Percona Distribution for MongoDB Operator on `Minikube <https://github.com/kubernetes/minikube>`_
 is the easiest way to try it locally without a cloud provider. Minikube runs
@@ -49,7 +49,7 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
 
    Also, switch ``allowUnsafeConfigurations`` key to ``true`` (this option turns
    off the Operator’s control over the cluster configuration, making it possible to
-   deploy Percona Distribution for MongoDB as a one-node cluster).
+   deploy Percona Server for MongoDB as a one-node cluster).
 
 4. Now apply the ``deploy/cr.yaml`` file with the following command::
 

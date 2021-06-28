@@ -63,14 +63,14 @@ Prerequisites
       KUBE_TOKEN=$(kubectl get secret $(kubectl get serviceaccount percona-server-mongodb-operator -o jsonpath='{.secrets[0].name}' -n default) -o jsonpath='{.data.token}' -n default | base64 --decode )
 
 
-Create new Percona Distribution for MongoDB cluster
----------------------------------------------------
+Create new Percona Server for MongoDB cluster
+---------------------------------------------
 
 **Description:**
 
 .. code-block:: bash
 
-   The command to create a new Percona Distribution for MongoDB cluster
+   The command to create a new Percona Server for MongoDB cluster
 
 **Kubectl Command:**
 
@@ -121,7 +121,7 @@ Create new Percona Distribution for MongoDB cluster
 
   1. secrets[users] (String, min-length: 1) : ``contains name of secret for the users``
   2. allowUnsafeConfigurations (Boolean, Default: false) : ``allow unsafe configurations to run``
-  3. image (String, min-length: 1) : ``name of the Percona Distribution for MongoDB cluster image``
+  3. image (String, min-length: 1) : ``name of the Percona Server for MongoDB cluster image``
 
   replsets:
   
@@ -171,14 +171,14 @@ Create new Percona Distribution for MongoDB cluster
 
    .. include:: ./assets/code/api-create-cluster-response-json.txt
 
-List Percona Distribution for MongoDB clusters
-----------------------------------------------
+List Percona Server for MongoDB clusters
+----------------------------------------
 
 **Description:**
 
 .. code-block:: bash
 
-   Lists all Percona Distribution for MongoDB clusters that exist in your kubernetes cluster
+   Lists all Percona Server for MongoDB clusters that exist in your kubernetes cluster
 
 **Kubectl Command:**
 
@@ -222,14 +222,14 @@ List Percona Distribution for MongoDB clusters
 
    .. include:: ./assets/code/api-list-cluster-response-json.txt
 
-Get status of Percona Distribution for MongoDB cluster
-------------------------------------------------------
+Get status of Percona Server for MongoDB cluster
+------------------------------------------------
 
 **Description:**
 
 .. code-block:: bash
 
-   Gets all information about specified Percona Distribution for MongoDB cluster
+   Gets all information about specified Percona Server for MongoDB cluster
 
 **Kubectl Command:**
 
@@ -273,14 +273,14 @@ Get status of Percona Distribution for MongoDB cluster
 
    .. include:: ./assets/code/api-get-status-of-cluster-response-json.txt
 
-Scale out/in Percona Distribution for MongoDB cluster
------------------------------------------------------
+Scale up/down Percona Server for MongoDB cluster
+------------------------------------------------
 
 **Description:**
 
 .. code-block:: bash
 
-   Increase or decrease the size of the Percona Distribution for MongoDB cluster nodes to fit the current high availability needs
+   Increase or decrease the size of the Percona Server for MongoDB cluster nodes to fit the current high availability needs
 
 **Kubectl Command:**
 
@@ -342,14 +342,14 @@ Scale out/in Percona Distribution for MongoDB cluster
 
    .. include:: ./assets/code/api-scale-cluster-response-json.txt
 
-Update Percona Distribution for MongoDB cluster image
------------------------------------------------------
+Update Percona Server for MongoDB cluster image
+-----------------------------------------------
 
 **Description:**
 
 .. code-block:: bash
 
-   Change the image of Percona Distribution for MongoDB containers inside the cluster
+   Change the image of Percona Server for MongoDB containers inside the cluster
 
 **Kubectl Command:**
 
@@ -400,7 +400,7 @@ Update Percona Distribution for MongoDB cluster image
   
   psmdb:
   
-  1. image (String, min-length: 1) : ``name of the Percona Distribution for MongoDB image to update``
+  1. image (String, min-length: 1) : ``name of the image to update for Percona Server for MongoDB``
 
 **Response:**
 
@@ -412,14 +412,14 @@ Update Percona Distribution for MongoDB cluster image
 
    .. include:: ./assets/code/api-update-cluster-image-response-json.txt
 
-Backup Percona Distribution for MongoDB cluster
------------------------------------------------
+Backup Percona Server for MongoDB cluster
+-----------------------------------------
 
 **Description:**
 
 .. code-block:: bash
 
-   Takes a backup of the Percona Distribution for MongoDB cluster containers data to be able to recover from disasters or make a roll-back later
+   Takes a backup of the Percona Server for MongoDB cluster containers data to be able to recover from disasters or make a roll-back later
 
 
 **Kubectl Command:**
@@ -470,7 +470,7 @@ Backup Percona Distribution for MongoDB cluster
 
 2. **spec**:
   
-     1. psmdbCluster(String, min-length:1) : ``name of Percona Distribution for MongoDB cluster``
+     1. psmdbCluster(String, min-length:1) : ``name of Percona Server for MongoDB cluster``
      2. storageName(String, min-length:1) : ``name of storage claim to use``
 
 **Response:**
@@ -483,14 +483,14 @@ Backup Percona Distribution for MongoDB cluster
 
    .. include:: ./assets/code/api-backup-cluster-response-json.txt
 
-Restore Percona Distribution for MongoDB cluster
-------------------------------------------------
+Restore Percona Server for MongoDB cluster
+------------------------------------------
 
 **Description:**
 
 .. code-block:: bash
 
-   Restores Percona Distribution for MongoDB cluster data to an earlier version to recover from a problem or to make a roll-back
+   Restores Percona Server for MongoDB cluster data to an earlier version to recover from a problem or to make a roll-back
 
 
 **Kubectl Command:**
@@ -541,7 +541,7 @@ Restore Percona Distribution for MongoDB cluster
 
 2. **spec**:
 
-     1. clusterName(String, min-length:1) : ``name of Percona Distribution for MongoDB cluster``
+     1. clusterName(String, min-length:1) : ``name of Percona Server for MongoDB cluster``
      2. backupName(String, min-length:1) : ``name of backup to restore from``
 
 **Response:**

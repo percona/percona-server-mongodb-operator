@@ -1,5 +1,5 @@
 ==========================================================================================
-Install Percona Distribution for MongoDB on Amazon Elastic Kubernetes Service (EKS)
+Install Percona Server for MongoDB on Amazon Elastic Kubernetes Service (EKS)
 ==========================================================================================
 
 This quickstart shows you how to deploy Percona Distribution for MongoDB Operator on Amazon Elastic Kubernetes Service (EKS). The document assumes some experience with Amazon EKS. For more information on the EKS, see the `Amazon EKS official documentation <https://aws.amazon.com/eks/>`_.
@@ -124,7 +124,7 @@ Install the Operator
       rolebinding.rbac.authorization.k8s.io/service-account-percona-server-mongodb-operator created
       deployment.apps/percona-server-mongodb-operator created
 
-4. The Operator has been started, and you can create the Percona Distribution for MongoDB:
+4. The Operator has been started, and you can create the Percona Server for MongoDB:
 
    .. code:: bash
 

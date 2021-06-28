@@ -4,7 +4,7 @@ Exposing cluster nodes with dedicated IP addresses
 Using single entry point vs. accessing MongoDB Instances
 --------------------------------------------------------
 
-Percona Operator for Percona Distribution for MongoDB provides two scenarios for
+Percona Distribution for MongoDB Operator provides two scenarios for
 accessing the database.
 
 #. If :ref:`operator.sharding` mode is turned **on** (default bahaviour), then
@@ -29,7 +29,7 @@ internal virtual network of the cluster. Creating and destroying
 Pods is a dynamic process, therefore binding communication between Pods to
 specific IP addresses would cause problems as things change over
 time as a result of the cluster scaling, maintenance, etc. Due to
-this changing environment, you should connect to Percona Distribution for
+this changing environment, you should connect to Percona Server for
 MongoDB via Kubernetes internal DNS names in URI
 (e.g. using ``mongodb+srv://userAdmin:userAdmin123456@<cluster-name>-rs0.<namespace>.svc.cluster.local/admin?replicaSet=rs0&ssl=false`` to access one of the Replica Set Pods).
 URI-based access is strictly recommended.
