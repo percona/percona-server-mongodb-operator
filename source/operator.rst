@@ -1609,20 +1609,6 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _sharding-mongos-expose-enabled:								|
-|                 |												|
-| **Key**         | `sharding.mongos.expose.enabled <operator.html#sharding-mongos-expose-enabled>`_		|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | boolean											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``false``											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enable or disable exposing `MongoDB mongos daemons						|
-|                 | <https://docs.mongodb.com/manual/core/sharded-cluster-query-router/>`_ with dedicated IP	|
-|                 | addresses											|
-+-----------------+---------------------------------------------------------------------------------------------+
-|														|
-+-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _sharding-mongos-expose-exposetype:							|
 |                 |												|
 | **Key**         | `sharding.mongos.expose.exposeType <operator.html#sharding-mongos-expose-exposetype>`_	|
