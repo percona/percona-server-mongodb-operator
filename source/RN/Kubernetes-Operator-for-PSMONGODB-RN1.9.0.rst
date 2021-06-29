@@ -38,7 +38,7 @@ Improvements
 ================================================================================
 
 * :jirabug:`K8SPSMDB-365`: Unblock backups even if just a single Replica Set
-  node is available by setting ``allowUnsageConfigurations`` flag to true
+  node is available by setting ``allowUnsafeConfigurations`` flag to true
 * :jirabug:`K8SPSMDB-453`: It is now possible to see the overall progress of the
   provisioning of MongoDB cluster resources and dependent components in Custom
   Resource status
