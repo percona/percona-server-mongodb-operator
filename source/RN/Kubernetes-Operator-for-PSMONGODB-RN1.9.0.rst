@@ -15,7 +15,7 @@ Release Highlights
 * Starting from this release, the Operator changes its official name to
   **Percona Distribution for MongoDB Operator**. This new name emphasizes
   graduate changes which incorporated a collection of Percona’s solutions to run
-  and operate MongoDB Server, and which is available separately as
+  and operate MongoDB Server, available separately as
   `Percona Distribution for MongoDB <https://www.percona.com/doc/percona-distribution-for-mongodb/4.2/index.html>`_.
 
 * It is now possible to restore backups from S3-compatible storage
