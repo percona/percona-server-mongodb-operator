@@ -45,6 +45,7 @@ Configuration
    users
    storage
    constraints
+   options
    expose
    arbiter
    sharding
