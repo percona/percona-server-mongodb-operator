@@ -27,7 +27,7 @@ the failed node was running the Operator, Kubernetes will restart the Operator o
 another node, so normal operation will not be interrupted.
 
 Client applications should use a mongo+srv URI for the connection. This
-allows the drivers (3.6 and up) to retrieve the list of replica set
+allows the drivers (4.0 and up) to retrieve the list of replica set
 members from DNS SRV entries without having to list hostnames for the
 dynamically assigned nodes.
 
