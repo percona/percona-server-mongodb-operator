@@ -62,7 +62,7 @@ spec:
       size: 3
       configuration: |
         replication:
-          localPingThresholdMs: 100
+          localPingThresholdMs: 15
       expose:
         enabled: false
         exposeType: ClusterIP
