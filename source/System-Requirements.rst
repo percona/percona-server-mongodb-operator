@@ -17,7 +17,7 @@ The following platforms were tested and are officially supported by the Operator
 {{{release}}}: 
 
 * OpenShift 4.7
-* Google Kubernetes Engine (GKE) 1.17 - {{{gkerecommended}}}
+* Google Kubernetes Engine (GKE) 1.17 - 1.21
 * Amazon Elastic Container Service for Kubernetes (EKS) 1.16-1.20
 * Minikube 1.20
 * VMWare Tanzu
