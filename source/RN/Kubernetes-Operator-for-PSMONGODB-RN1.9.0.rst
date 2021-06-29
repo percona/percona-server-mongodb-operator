@@ -87,6 +87,7 @@ Deprecation and Removal
   to set custom configuration through ConfigMaps and Secrets Kubernetes
   resources. The following options will be deprecated in Percona Distribution
   for MongoDB Operator v1.9.0+, and completely removed in v1.12.0+:
+
   * ``sharding.mongos.auditLog.*``
   * ``mongod.security.redactClientLogData``
   * ``mongod.security.*``
