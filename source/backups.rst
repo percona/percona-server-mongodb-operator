@@ -283,35 +283,53 @@ Restoring backup with point-in-time recovery
 
 Following steps are needed to roll back the cluster to a specific date and time:
 
-1. First of all make sure that the cluster is running.
+1. Set appropriate keys in the `deploy/backup/restore.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/restore.yaml>`_ file.
 
-2. Now find out correct names for the **backup** and the **cluster**. Available
-   backups can be listed with the following command:
-
-   .. code:: bash
-
-      kubectl get psmdb-backup
-
-   And the following command will list available clusters:
-
-   .. code:: bash
-
-      kubectl get psmdb
-
-3. Edit the ``deploy/backup/restore.yaml`` file, adding the right cluster name
-   and additional restoration parameters to the ``pitr`` section
+   * set ``spec.clusterName`` key to the name of the target cluster to restore
+     the backup on,
+   * put additional restoration parameters to the ``pitr`` section:
 
    .. code:: yaml
 
       ...
       spec:
         clusterName: my-cluster-name
-        backupName: backup1
         pitr:
           type: date
           date: YYYY-MM-DD hh:mm:ss
 
-3. Run the actual restoration process:
+   * if you are restoring backup on the *same* Kubernetes-based cluster you have
+      used to save this backup, set ``spec.backupName`` key to the name of your
+      backup,
+   * if you are restoring backup on the Kubernetes-based cluster *different*
+     from one you have used to save this backup, set ``spec.backupSource``
+     subsection instead of ``spec.backupName`` field to point on the appropriate
+     S3-compatible storage. This ``backupSource`` subsection should contain
+     a ``destination`` key equal to the s3 bucket with a special ``s3://``
+     prefix, followed by necessary S3 configuration keys, same as in
+     ``deploy/cr.yaml`` file:
+
+     .. code-block:: yaml
+
+        ...
+        backupSource:
+          destination: s3://S3-BUCKET-NAME/BACKUP-NAME
+          s3:
+            credentialsSecret: my-cluster-name-backup-s3
+            region: us-west-2
+            endpointUrl: https://URL-OF-THE-S3-COMPATIBLE-STORAGE
+   * you can also use a ``storageName`` key to specify the exact name of the
+     storage (the actual storage should be already defined in the
+     ``backup.storages`` subsection of the ``deploy/cr.yaml`` file):
+
+     .. code-block:: yaml
+
+        ...
+        storageName: s3-us-west
+        backupSource:
+          destination: s3://S3-BUCKET-NAME/BACKUP-NAME
+
+2. Run the actual restoration process:
 
    .. code:: bash
 
