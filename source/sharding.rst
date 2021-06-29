@@ -21,7 +21,7 @@ A MongoDB Sharding involves the following components:
 * ``config servers`` - a replica set to store metadata and configuration
   settings for the sharded database cluster.
 
-.. note:: Percona Server for MongoDB Operator 1.6.0 supported only one shard of
+.. note:: Percona Distribution for MongoDB Operator 1.6.0 supported only one shard of
    a MongoDB cluster; still, this limited sharding support allowed using
    ``mongos`` as an entry point instead of provisioning a load-balancer per
    replica set node. Multiple shards are supported starting from the Operator

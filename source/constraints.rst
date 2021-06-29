@@ -1,5 +1,5 @@
 Binding Percona Server for MongoDB components to Specific Kubernetes/OpenShift Nodes
-====================================================================================
+==========================================================================================
 
 The operator does a good job of automatically assigning new pods to nodes to achieve balanced distribution across the cluster.
 There are situations when you must ensure that pods land
@@ -33,17 +33,17 @@ same availability zone or even the same node or, on the contrary, to
 spread the pods on different nodes or even different availability zones
 for high availability and balancing purposes.
 
-Percona Server for MongoDB Operator provides two approaches for doing
+Percona Distribution for MongoDB Operator provides two approaches for doing
 this:
 
 -  simple way to set anti-affinity for Pods, built-in into the Operator,
 -  more advanced approach based on using standard Kubernetes
    constraints.
 
-Simple approach - use antiAffinityTopologyKey of the Percona Server for MongoDB Operator
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Simple approach - use antiAffinityTopologyKey of the Percona Distribution for MongoDB Operator
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Percona Server for MongoDB Operator provides an
+Percona Distribution for MongoDB Operator provides an
 ``antiAffinityTopologyKey`` option, which may have one of the following
 values:
 

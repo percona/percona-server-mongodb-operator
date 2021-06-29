@@ -1,5 +1,5 @@
-Local Storage support for the Percona Server for MongoDB Operator
-=================================================================
+Local Storage support for the Percona Distribution for MongoDB Operator
+=======================================================================
 
 Among the wide rage of volume types, supported by Kubernetes, there are
 two volume types which allow Pod containers to access part of the local filesystem on

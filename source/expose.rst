@@ -4,7 +4,7 @@ Exposing cluster nodes with dedicated IP addresses
 Using single entry point vs. accessing MongoDB Instances
 --------------------------------------------------------
 
-Percona Operator for Percona Server for MongoDB provides two scenarios for
+Percona Distribution for MongoDB Operator provides two scenarios for
 accessing the database.
 
 #. If :ref:`operator.sharding` mode is turned **on** (default bahaviour), then
@@ -12,12 +12,12 @@ accessing the database.
    an entry point for client applications,
    
    .. image:: ./assets/images/mongos_espose.png
-      :alt: Percona Server for MongoDB Operator, sharding on
+      :alt: Percona Distribution for MongoDB Operator, sharding on
 #. If :ref:`operator.sharding` mode is turned **off**, the application needs
    access to all MongoDB Pods of the replica set:
 
    .. image:: assets/images/mongod_espose.png
-      :alt: Percona Server for MongoDB Operator, sharding off
+      :alt: Percona Distribution for MongoDB Operator, sharding off
 
 You can find more on sharding in the `official MongoDB documentation <https://docs.mongodb.com/manual/reference/glossary/#term-sharding>`_.
 
@@ -29,13 +29,13 @@ internal virtual network of the cluster. Creating and destroying
 Pods is a dynamic process, therefore binding communication between Pods to
 specific IP addresses would cause problems as things change over
 time as a result of the cluster scaling, maintenance, etc. Due to
-this changing environment, you should connect to Percona Server for MongoDB via Kubernetes
-internal DNS names in URI
+this changing environment, you should connect to Percona Server for
+MongoDB via Kubernetes internal DNS names in URI
 (e.g. using ``mongodb+srv://userAdmin:userAdmin123456@<cluster-name>-rs0.<namespace>.svc.cluster.local/admin?replicaSet=rs0&ssl=false`` to access one of the Replica Set Pods).
 URI-based access is strictly recommended.
 
 Sometimes you cannot communicate with the Pods using the Kubernetes internal DNS
-names. To make Pods of the Replica Set accessible, Percona Server for
+names. To make Pods of the Replica Set accessible, Percona Distribution for
 MongoDB Operator can assign a `Kubernetes
 Service <https://kubernetes.io/docs/concepts/services-networking/service/>`_
 to each Pod.

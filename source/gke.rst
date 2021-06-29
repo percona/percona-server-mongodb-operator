@@ -1,8 +1,8 @@
 ==========================================================================================
-Install Percona server for MongoDB on Google Kubernetes Engine (GKE)
+Install Percona Server for MongoDB on Google Kubernetes Engine (GKE)
 ==========================================================================================
 
-This quickstart shows you how to configure a Percona server for MongoDB operator with the Google Kubernetes Engine. The document assumes some experience with Google Kubernetes Engine (GKE). For more information on the GKE, see the `Kubernetes Engine Quickstart <https://cloud.google.com/kubernetes-engine/docs/quickstart>`_.
+This quickstart shows you how to configure a Percona Distribution for MongoDB Operator with the Google Kubernetes Engine. The document assumes some experience with Google Kubernetes Engine (GKE). For more information on the GKE, see the `Kubernetes Engine Quickstart <https://cloud.google.com/kubernetes-engine/docs/quickstart>`_.
 
 Prerequisites
 =============

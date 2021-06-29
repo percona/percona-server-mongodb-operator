@@ -1,7 +1,7 @@
 Design overview
 ===============
 
-The design of the operator is tighly bound to the Percona Server for
+The design of the Operator is tighly bound to the Percona Server for
 MongoDB replica set, which is briefly described in the following
 diagram.
 
