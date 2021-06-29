@@ -1,7 +1,7 @@
 System Requirements
 +++++++++++++++++++
 
-The Operator was developed and tested with Percona Server for MongoDB 3.6, 4.0,
+The Operator was developed and tested with Percona Server for MongoDB 4.0,
 4.2, and 4.4. Other options may also work but have not been tested.
 
 .. note:: The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
@@ -16,11 +16,10 @@ Officially supported platforms
 The following platforms were tested and are officially supported by the Operator
 {{{release}}}: 
 
-* OpenShift 3.11
 * OpenShift 4.7
-* Google Kubernetes Engine (GKE) 1.16 - {{{gkerecommended}}}
-* Amazon Elastic Container Service for Kubernetes (EKS) 1.19
-* Minikube 1.19
+* Google Kubernetes Engine (GKE) 1.17 - {{{gkerecommended}}}
+* Amazon Elastic Container Service for Kubernetes (EKS) 1.20
+* Minikube 1.20
 * VMWare Tanzu
 
 Other Kubernetes platforms may also work but have not been tested.
