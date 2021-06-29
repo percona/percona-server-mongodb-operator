@@ -1,19 +1,21 @@
+.. _operator-configmaps:
+
 Changing MongoDB Options
-======================
+========================
 
 You may require a configuration change for your application. MongoDB allows
 configuring the database with a configuration file, as many other database
 management systems do. You can pass options to MongoDB instances in the cluster
 in one of the following ways:
 
-* edit the ``/deploy/cr.yaml`` file,
+* edit the ``deploy/cr.yaml`` file,
 * use a ConfigMap,
 * use a Secret object.
 
 You can pass configuration settings separately for **mongod** Pods,
 **mongos** Pods, and **Config Server** Pods.
 
-Edit the ``/deploy/cr.yaml`` file
+Edit the ``deploy/cr.yaml`` file
 ---------------------------------
 
 You can add MongoDB configuration options to the 
@@ -97,7 +99,8 @@ To view the created ConfigMap, use the following command:
 
 .. note:: Do not forget to restart Percona Server for MongoDB to ensure the
    cluster has updated the configuration (see details on how to connect in the
-   `Install Percona Server for MongoDB on Kubernetes <kubernetes.html>`_ page).
+   :ref:`Install Percona Server for MongoDB on Kubernetes<operator.kubernetes>`
+   page).
 
 Use a Secret Object
 -------------------
@@ -147,7 +150,8 @@ follows:
 
    .. code:: bash
 
-      $ echo "ICAgICAgb3BlcmF0aW9uUHJvZmlsaW5nOgogICAgICAgIG1vZGU6IHNsb3dPcAogICAgICBzeXN0ZW1Mb2c6CiAgICAgICAgdmVyYm9zaXR5OiAxCg==" | base64 --decode
+      $ echo "ICAgICAgb3BlcmF0aW9uUHJvZmlsaW5nOgogICAgICAgIG1vZGU6IHNsb3dPc\
+      AogICAgICBzeXN0ZW1Mb2c6CiAgICAgICAgdmVyYm9zaXR5OiAxCg==" | base64 --decode
 
 Finally, use a yaml file to create the Secret object. For example, you can
 create a ``deploy/my-mongod-secret.yaml`` file with the following contents:
@@ -159,7 +163,8 @@ create a ``deploy/my-mongod-secret.yaml`` file with the following contents:
    metadata:
      name: my-cluster-name-rs0-mongod
    data:
-     mongod.conf: ICAgICAgb3BlcmF0aW9uUHJvZmlsaW5nOgogICAgICAgIG1vZGU6IHNsb3dPcAogICAgICBzeXN0ZW1Mb2c6CiAgICAgICAgdmVyYm9zaXR5OiAxCg==
+     mongod.conf: "ICAgICAgb3BlcmF0aW9uUHJvZmlsaW5nOgogICAgICAgIG1vZGU6IHNsb3dPc\
+      AogICAgICBzeXN0ZW1Mb2c6CiAgICAgICAgdmVyYm9zaXR5OiAxCg=="
 
 When ready, apply it with the following command:
 
@@ -169,5 +174,5 @@ When ready, apply it with the following command:
 
 .. note:: Do not forget to restart Percona Server for MongoDB to ensure the
    cluster has updated the configuration (see details on how to connect in the
-   `Install Percona Server for MongoDB on Kubernetes <kubernetes.html>`_ page).
-
+   :ref:`Install Percona Server for MongoDB on Kubernetes<operator.kubernetes>`
+   page).

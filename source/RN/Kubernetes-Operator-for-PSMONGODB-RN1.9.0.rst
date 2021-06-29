@@ -5,9 +5,8 @@
 ================================================================================
 
 :Date: June 29, 2021
-Installation
 
-For installation please refer to `the documentation page <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
+:Installation: For installation please refer to `the documentation page <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
 Release Highlights
 ================================================================================
@@ -84,7 +83,7 @@ Deprecation and Removal
 ================================================================================
 
 * We are simplifying the way the user can customize MongoDB components such as
-  mongod and mongos. `It is now possible <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html>`_
+  mongod and mongos. :ref:`It is now possible<operator-configmaps>`
   to set custom configuration through ConfigMaps and Secrets Kubernetes
   resources. The following options will be deprecated in Percona Distribution
   for MongoDB Operator v1.9.0+, and completely removed in v1.12.0+:
