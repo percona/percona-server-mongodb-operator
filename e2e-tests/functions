@@ -401,6 +401,12 @@ wait_for_running() {
 			wait_pod ${name}-${i}
 		fi
 	done
+	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.enabled}') == "true" ]]; then
+		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.size}') - 1))
+		for i in $(seq 0 $last_pod); do
+			wait_pod ${name}-nv-${i}
+		done
+	fi
 	sleep 10
 	if [[ ${check_cluster_readyness} == "true" ]]; then
 		set +x
