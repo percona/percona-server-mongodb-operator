@@ -158,6 +158,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		members = append(members, member)
 	}
 
+	memberC := len(members)
+	for i, extNode := range replset.ExternalNodes {
+		member := mongo.ConfigMember{
+			ID:           i + memberC,
+			Host:         extNode.Host,
+			Votes:        extNode.Votes,
+			Priority:     extNode.Priority,
+			BuildIndexes: true,
+		}
+
+		members = append(members, member)
+	}
+
 	if cnf.Members.RemoveOld(members) {
 		cnf.Members.SetVotes()
 
