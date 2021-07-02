@@ -49,6 +49,7 @@ const (
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
 	Pause                   bool                                 `json:"pause,omitempty"`
+	Unmanaged               bool                                 `json:"unmanaged,omitempty"`
 	CRVersion               string                               `json:"crVersion,omitempty"`
 	Platform                *version.Platform                    `json:"platform,omitempty"`
 	Image                   string                               `json:"image,omitempty"`
@@ -224,6 +225,13 @@ type PodAffinity struct {
 	Advanced    *corev1.Affinity `json:"advanced,omitempty"`
 }
 
+type ExternalNode struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port,omitempty"`
+	Priority int    `json:"priority,omitempty"`
+	Votes    int    `json:"votes,omitempty"`
+}
+
 type ReplsetSpec struct {
 	Resources                *ResourcesSpec             `json:"resources,omitempty"`
 	Name                     string                     `json:"name"`
@@ -238,6 +246,7 @@ type ReplsetSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
 	Configuration            string                     `json:"configuration,omitempty"`
+	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 
 	MultiAZ
 }
