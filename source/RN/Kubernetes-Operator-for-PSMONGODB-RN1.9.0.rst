@@ -5,9 +5,8 @@
 ================================================================================
 
 :Date: June 29, 2021
-Installation
 
-For installation please refer to `the documentation page <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
+:Installation: For installation please refer to `the documentation page <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
 Release Highlights
 ================================================================================
@@ -39,7 +38,7 @@ Improvements
 ================================================================================
 
 * :jirabug:`K8SPSMDB-365`: Unblock backups even if just a single Replica Set
-  node is available by setting ``allowUnsageConfigurations`` flag to true
+  node is available by setting ``allowUnsafeConfigurations`` flag to true
 * :jirabug:`K8SPSMDB-453`: It is now possible to see the overall progress of the
   provisioning of MongoDB cluster resources and dependent components in Custom
   Resource status
@@ -84,10 +83,11 @@ Deprecation and Removal
 ================================================================================
 
 * We are simplifying the way the user can customize MongoDB components such as
-  mongod and mongos. `It is now possible <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html>`_
+  mongod and mongos. :ref:`It is now possible<operator-configmaps>`
   to set custom configuration through ConfigMaps and Secrets Kubernetes
   resources. The following options will be deprecated in Percona Distribution
   for MongoDB Operator v1.9.0+, and completely removed in v1.12.0+:
+
   * ``sharding.mongos.auditLog.*``
   * ``mongod.security.redactClientLogData``
   * ``mongod.security.*``

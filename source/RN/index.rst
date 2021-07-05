@@ -1,7 +1,7 @@
 .. _rel_notes:
 
 ================================================================
-Kubernetes Operator for Percona Server for MongoDB Release Notes
+Percona Distribution for MongoDB Operator Release Notes
 ================================================================
 
 .. toctree::

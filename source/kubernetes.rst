@@ -1,3 +1,5 @@
+.. _operator.kubernetes:
+
 Install Percona server for MongoDB on Kubernetes
 ================================================
 
