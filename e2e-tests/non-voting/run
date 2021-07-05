@@ -6,23 +6,6 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-check_cr_config() {
-	local cluster="$1"
-
-	# apply cr config
-	apply_cluster $test_dir/conf/$cluster.yml
-
-	# wait for readiness
-	wait_for_running $cluster 2 "true"
-
-	# check if statefulset created with expected config
-	compare_kubectl statefulset/$cluster-nv
-
-	# delete cluster
-	kubectl_bin delete \
-		-f $test_dir/conf/$cluster.yml
-}
-
 main() {
 	deploy_cert_manager
 	create_namespace $namespace
@@ -31,8 +14,8 @@ main() {
 		-f $conf_dir/client.yml \
 		-f $conf_dir/secrets.yml
 
-	desc 'check non-voting members'
-	check_cr_config "nonvoting-rs0"
+	desc "check non-voting members"
+	spinup_psmdb "nonvoting-rs0" "$test_dir/conf/$cluster.yml"
 
 	destroy $namespace
 }
