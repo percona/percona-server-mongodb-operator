@@ -38,7 +38,8 @@ compare_kubectl statefulset/$cluster-cfg
 compare_kubectl deployment/$cluster-mongos ""
 
 kubectl_bin apply -f "$test_dir/conf/mongos-secret.yml"
-sleep 50
+sleep 10
+wait_deployment "$cluster-mongos"
 
 compare_kubectl deployment/$cluster-mongos "-secret"
 
