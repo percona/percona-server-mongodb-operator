@@ -29,6 +29,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return api.AppStateInit, nil
 	}
 
+	if cr.Spec.Unmanaged {
+		return api.AppStateReady, nil
+	}
+
 	cli, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
 	if err != nil {
 		if cr.Status.Replsets[replset.Name].Initialized {
