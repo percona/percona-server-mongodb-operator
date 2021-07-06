@@ -314,6 +314,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					"liveness",
 				},
 			}
+			if cr.Spec.Unmanaged {
+				replset.LivenessProbe.Probe.Handler.Exec.Command = append(replset.LivenessProbe.Probe.Handler.Exec.Command, "--component", "mongod-standalone")
+			}
 			if cr.CompareVersion("1.6.0") >= 0 {
 				replset.LivenessProbe.Probe.Handler.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 				if cr.CompareVersion("1.7.0") >= 0 {

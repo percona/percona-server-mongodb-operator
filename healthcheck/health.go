@@ -15,9 +15,9 @@
 package healthcheck
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/timvaillancourt/go-mongodb-replset/status"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -136,6 +136,19 @@ func HealthCheckMongodLiveness(session *mgo.Session, startupDelaySeconds int64) 
 	}
 
 	return &replSetGetStatusResp.MyState, nil
+}
+
+func HealthCheckMongodStandaloneLiveness(session *mgo.Session) error {
+	isMasterResp := IsMasterResp{}
+	if err := session.Run(bson.D{{Name: "isMaster", Value: 1}}, &isMasterResp); err != nil {
+		return errors.Wrap(err, "run isMaster")
+	}
+
+	if isMasterResp.Ok == 0 {
+		return errors.New(isMasterResp.Errmsg)
+	}
+
+	return nil
 }
 
 type ServerStatus struct {
