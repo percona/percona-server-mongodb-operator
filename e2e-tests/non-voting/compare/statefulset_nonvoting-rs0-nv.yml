@@ -67,6 +67,7 @@ spec:
             - --profile=1
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+            - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
           command:
             - /data/db/ps-entry.sh
@@ -114,7 +115,13 @@ spec:
             tcpSocket:
               port: 27017
             timeoutSeconds: 2
-          resources: {}
+          resources:
+            limits:
+              cpu: 300m
+              memory: 500M
+            requests:
+              cpu: 200m
+              memory: 300M
           securityContext:
             runAsNonRoot: true
             runAsUser: 1001
@@ -144,7 +151,13 @@ spec:
             - /init-entrypoint.sh
           imagePullPolicy: Always
           name: mongo-init
-          resources: {}
+          resources:
+            limits:
+              cpu: 300m
+              memory: 500M
+            requests:
+              cpu: 200m
+              memory: 300M
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -192,6 +205,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 2Gi
       status:
         phase: Pending
