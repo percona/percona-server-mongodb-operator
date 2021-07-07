@@ -15,6 +15,9 @@ const (
 // Replica Set tags: https://docs.mongodb.com/manual/tutorial/configure-replica-set-tag-sets/#add-tag-sets-to-a-replica-set
 type ReplsetTags map[string]string
 
+// Custom Write Concern: https://docs.mongodb.com/manual/tutorial/configure-replica-set-tag-sets/#custom-multi-datacenter-write-concerns
+type CustomWriteConcern map[string]int
+
 // RSMember document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
 type ConfigMember struct {
 	ID           int         `bson:"_id" json:"_id"`
@@ -42,14 +45,14 @@ type RSConfig struct {
 
 // Settings document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
 type Settings struct {
-	ChainingAllowed         bool                   `bson:"chainingAllowed,omitempty" json:"chainingAllowed,omitempty"`
-	HeartbeatIntervalMillis int64                  `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis,omitempty"`
-	HeartbeatTimeoutSecs    int                    `bson:"heartbeatTimeoutSecs,omitempty" json:"heartbeatTimeoutSecs,omitempty"`
-	ElectionTimeoutMillis   int64                  `bson:"electionTimeoutMillis,omitempty" json:"electionTimeoutMillis,omitempty"`
-	CatchUpTimeoutMillis    int64                  `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis,omitempty"`
-	GetLastErrorModes       map[string]ReplsetTags `bson:"getLastErrorModes,omitempty" json:"getLastErrorModes,omitempty"`
-	GetLastErrorDefaults    WriteConcern           `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults,omitempty"`
-	ReplicaSetID            primitive.ObjectID     `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
+	ChainingAllowed         bool                          `bson:"chainingAllowed,omitempty" json:"chainingAllowed,omitempty"`
+	HeartbeatIntervalMillis int64                         `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis,omitempty"`
+	HeartbeatTimeoutSecs    int                           `bson:"heartbeatTimeoutSecs,omitempty" json:"heartbeatTimeoutSecs,omitempty"`
+	ElectionTimeoutMillis   int64                         `bson:"electionTimeoutMillis,omitempty" json:"electionTimeoutMillis,omitempty"`
+	CatchUpTimeoutMillis    int64                         `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis,omitempty"`
+	GetLastErrorModes       map[string]CustomWriteConcern `bson:"getLastErrorModes,omitempty" json:"getLastErrorModes,omitempty"`
+	GetLastErrorDefaults    WriteConcern                  `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults,omitempty"`
+	ReplicaSetID            primitive.ObjectID            `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
 }
 
 // Response document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
