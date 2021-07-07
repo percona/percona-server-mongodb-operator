@@ -472,7 +472,6 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) (changes bool) {
 // SetVotes sets voting parameters for members list
 func (m *ConfigMembers) SetVotes() {
 	votes := 0
-	lastVoteIdx := -1
 	for i, member := range *m {
 		if member.Hidden {
 			continue
@@ -492,23 +491,13 @@ func (m *ConfigMembers) SetVotes() {
 			[]ConfigMember(*m)[i].Votes = 1
 			votes++
 			if !member.ArbiterOnly {
-				lastVoteIdx = i
 				[]ConfigMember(*m)[i].Priority = 1
 			}
 		} else if member.ArbiterOnly {
 			// Arbiter should always have a vote
 			[]ConfigMember(*m)[i].Votes = 1
-			[]ConfigMember(*m)[lastVoteIdx].Votes = 0
-			[]ConfigMember(*m)[lastVoteIdx].Priority = 0
+			votes++
 		}
-	}
-	if votes == 0 {
-		return
-	}
-
-	if votes%2 == 0 {
-		[]ConfigMember(*m)[lastVoteIdx].Votes = 0
-		[]ConfigMember(*m)[lastVoteIdx].Priority = 0
 	}
 }
 
