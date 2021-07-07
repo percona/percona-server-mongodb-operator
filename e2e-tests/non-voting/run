@@ -29,7 +29,7 @@ spinup_psmdb() {
 }
 
 main() {
-        local cluster="nonvoting-rs0"
+	local cluster="nonvoting-rs0"
 	deploy_cert_manager
 	create_namespace $namespace
 	deploy_operator
