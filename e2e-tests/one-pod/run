@@ -66,10 +66,27 @@ main() {
 	deploy_minio
 
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
+  run_mongo \
+    'db.serverCmdLineOpts()' \
+    "clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
+    | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye' \
+    | $sed -re 's/((Timestamp|BinData|NumberLong)\((.+?\)))/{}/g' \
+    | jq '.parsed.systemLog' \
+    >$tmp_dir/parsed_systemLog.json
+  diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog.json $tmp_dir/parsed_systemLog.json
 
 	kubectl_bin apply -f "$test_dir/conf/mongod-secret.yml"
 	sleep 50
 	compare_kubectl "statefulset/$cluster" "-secret"
+
+  run_mongo \
+    'db.serverCmdLineOpts()' \
+    "clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
+    | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye' \
+    | $sed -re 's/((Timestamp|BinData|NumberLong)\((.+?\)))/{}/g' \
+    | jq '.parsed.systemLog' \
+    >$tmp_dir/parsed_systemLog_secret.json
+  diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog_secret.json $tmp_dir/parsed_systemLog_secret.json
 
 	run_backup "$cluster" "backup-minio"
 	sleep 20
