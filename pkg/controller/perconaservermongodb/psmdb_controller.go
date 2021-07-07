@@ -1055,6 +1055,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 	multiAZ := replset.MultiAZ
 	pdbspec := replset.PodDisruptionBudget
 	resources := replset.Resources
+	volumeSpec := replset.VolumeSpec
 
 	if replset.ClusterRole == api.ClusterRoleConfigSvr {
 		matchLabels["app.kubernetes.io/component"] = api.ConfigReplSetName
@@ -1075,6 +1076,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 		multiAZ = replset.NonVoting.MultiAZ
 		pdbspec = replset.NonVoting.PodDisruptionBudget
 		resources = replset.NonVoting.Resources
+		volumeSpec = replset.NonVoting.VolumeSpec
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -1175,17 +1177,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 			},
 		)
 	} else {
-		if replset.VolumeSpec.PersistentVolumeClaim != nil {
+		if volumeSpec.PersistentVolumeClaim != nil {
 			sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
-				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset.Labels, replset.VolumeSpec.PersistentVolumeClaim),
+				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset.Labels, volumeSpec.PersistentVolumeClaim),
 			}
 		} else {
 			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 				corev1.Volume{
 					Name: psmdb.MongodDataVolClaimName,
 					VolumeSource: corev1.VolumeSource{
-						HostPath: replset.VolumeSpec.HostPath,
-						EmptyDir: replset.VolumeSpec.EmptyDir,
+						HostPath: volumeSpec.HostPath,
+						EmptyDir: volumeSpec.EmptyDir,
 					},
 				},
 			)
