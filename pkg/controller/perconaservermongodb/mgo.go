@@ -213,7 +213,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 	}
 
-	if membersLive == len(pods.Items) {
+	if membersLive == len(pods.Items)+len(replset.ExternalNodes) {
 		return api.AppStateReady, nil
 	}
 
