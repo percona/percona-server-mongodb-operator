@@ -22,17 +22,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	ls := backup.NewBackupCronJobLabels(cr.Name)
 
 	for _, task := range cr.Spec.Backup.Tasks {
-		cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
+		cjob, err := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
+		if err != nil {
+			return errors.Wrap(err, "can't createjob")
+		}
 		ls = cjob.ObjectMeta.Labels
 		if task.Enabled {
 			ctasks[cjob.Name] = task
 
-			err := setControllerReference(cr, cjob, r.scheme)
+			err := setControllerReference(cr, &cjob, r.scheme)
 			if err != nil {
 				return errors.Wrap(err, "set owner reference for backup task "+cjob.Name)
 			}
 
-			err = r.createOrUpdate(cjob)
+			err = r.createOrUpdate(&cjob)
 			if err != nil {
 				return errors.Wrap(err, "create or update backup job")
 			}
