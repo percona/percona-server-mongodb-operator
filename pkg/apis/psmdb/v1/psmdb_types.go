@@ -253,7 +253,7 @@ type ReplsetSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
 	Configuration            string                     `json:"configuration,omitempty"`
-	NonVoting                NonVotingSpec              `json:"non_voting,omitempty"`
+	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
 	MultiAZ
 }
