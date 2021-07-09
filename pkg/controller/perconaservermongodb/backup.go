@@ -24,7 +24,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	for _, task := range cr.Spec.Backup.Tasks {
 		cjob, err := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
 		if err != nil {
-			return errors.Wrap(err, "can't createjob")
+			return errors.Wrap(err, "can't create job")
 		}
 		ls = cjob.ObjectMeta.Labels
 		if task.Enabled {

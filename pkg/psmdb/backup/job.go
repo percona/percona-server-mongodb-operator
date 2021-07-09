@@ -1,8 +1,6 @@
 package backup
 
 import (
-	"fmt"
-
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -10,13 +8,14 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/pkg/errors"
 )
 
 func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) (batchv1b.CronJob, error) {
 	jobName := crName + "-backup-" + backup.Name
 	resources, err := psmdb.CreateResources(backupSpec.Resources)
 	if err != nil {
-		return batchv1b.CronJob{}, fmt.Errorf("cannot parse Backup resources: %w", err)
+		return batchv1b.CronJob{}, errors.Wrap(err, "cannot parse Backup resources")
 	}
 	backupPod := corev1.PodSpec{
 		RestartPolicy:      corev1.RestartPolicyNever,
