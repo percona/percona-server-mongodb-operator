@@ -1076,7 +1076,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 		multiAZ = replset.NonVoting.MultiAZ
 		pdbspec = replset.NonVoting.PodDisruptionBudget
 		resources = replset.NonVoting.Resources
-		volumeSpec = replset.NonVoting.VolumeSpec
+		if replset.NonVoting.VolumeSpec != nil {
+			volumeSpec = replset.NonVoting.VolumeSpec
+		}
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
