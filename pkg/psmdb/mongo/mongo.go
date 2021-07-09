@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/pkg/errors"
@@ -472,6 +473,10 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) (changes bool) {
 // SetVotes sets voting parameters for members list
 func (m *ConfigMembers) SetVotes() {
 	votes := 0
+
+	// Arbiter should always have a vote, process them first
+	sort.Slice(*m, func(i, j int) bool { return []ConfigMember(*m)[i].ArbiterOnly })
+
 	for i, member := range *m {
 		if member.Hidden {
 			continue
@@ -487,15 +492,19 @@ func (m *ConfigMembers) SetVotes() {
 			continue
 		}
 
+		// At least one member with data have a vote
+		if member.ArbiterOnly && votes < MaxVotingMembers-1 {
+			// Arbiter should always have a vote and priority=0
+			[]ConfigMember(*m)[i].Votes = 1
+			[]ConfigMember(*m)[i].Priority = 0
+			votes++
+
+			continue
+		}
+
 		if votes < MaxVotingMembers {
 			[]ConfigMember(*m)[i].Votes = 1
-			votes++
-			if !member.ArbiterOnly {
-				[]ConfigMember(*m)[i].Priority = 1
-			}
-		} else if member.ArbiterOnly {
-			// Arbiter should always have a vote
-			[]ConfigMember(*m)[i].Votes = 1
+			[]ConfigMember(*m)[i].Priority = 1
 			votes++
 		}
 	}
