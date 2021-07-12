@@ -12,7 +12,7 @@ spec:
   - name: rs0
     affinity:
       antiAffinityTopologyKey: none
-    non_voting:
+    nonvoting:
       enabled: true
       size: 3
       affinity:
