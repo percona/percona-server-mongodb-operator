@@ -91,8 +91,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	)
 	if err == nil {
 		return nil
+	} else if k8serrors.IsNotFound(err) && cr.Spec.Unmanaged {
+		return errors.Errorf("users secret '%s' is required for unmanaged clusters", cr.Spec.Secrets.Users)
 	} else if !k8serrors.IsNotFound(err) {
-		return fmt.Errorf("get users secret: %v", err)
+		return errors.Wrap(err, "get users secret")
 	}
 
 	data := make(map[string][]byte)
