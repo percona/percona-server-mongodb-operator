@@ -275,7 +275,10 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 		return errors.New("mongos pod is not ready")
 	}
 
-	host := psmdb.GetAddr(m, rspod.Name, replset.Name)
+	host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, rspod)
+	if err != nil {
+		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
+	}
 
 	cli, err := r.mongosClientWithRole(m, roleClusterAdmin)
 	if err != nil {
