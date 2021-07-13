@@ -487,17 +487,21 @@ func (m *ConfigMembers) SetVotes() {
 			continue
 		}
 
-		if votes < MaxVotingMembers {
-			[]ConfigMember(*m)[i].Votes = 1
-			votes++
-			if !member.ArbiterOnly {
-				[]ConfigMember(*m)[i].Priority = 1
-			}
-		} else if member.ArbiterOnly {
+		if votes >= MaxVotingMembers {
+			continue
+		}
+
+		if member.ArbiterOnly {
 			// Arbiter should always have a vote
 			[]ConfigMember(*m)[i].Votes = 1
-			votes++
+			[]ConfigMember(*m)[i].Priority = 0
+		} else {
+			// Regular replset member
+			[]ConfigMember(*m)[i].Votes = 1
+			[]ConfigMember(*m)[i].Priority = 1
 		}
+
+		votes++
 	}
 }
 
