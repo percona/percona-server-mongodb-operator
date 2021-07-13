@@ -228,8 +228,8 @@ type PodAffinity struct {
 type ExternalNode struct {
 	Host     string `json:"host"`
 	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority,omitempty"`
-	Votes    int    `json:"votes,omitempty"`
+	Priority int    `json:"priority"`
+	Votes    int    `json:"votes"`
 }
 
 type ReplsetSpec struct {

@@ -474,6 +474,12 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		}
 	}
 
+	for _, extNode := range rs.ExternalNodes {
+		if extNode.Port == 0 {
+			extNode.Port = 27017
+		}
+	}
+
 	return nil
 }
 
