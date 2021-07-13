@@ -906,7 +906,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, configSource)
+	cfgPods, err := r.getRSPods(cr, api.ConfigReplSetName)
+	if err != nil {
+		return errors.Wrap(err, "get configsvr pods")
+	}
+
+	cfgInstances := make([]string, 0, len(cfgPods.Items))
+	for _, pod := range cfgPods.Items {
+		host, err := psmdb.MongoHost(r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
+		if err != nil {
+			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
+		}
+		cfgInstances = append(cfgInstances, host)
+	}
+
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, configSource, cfgInstances)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
