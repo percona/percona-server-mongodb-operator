@@ -318,11 +318,16 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
 
+		mongoCmd := "mongo"
+		if !m.Spec.UnsafeConf {
+			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+		}
+
 		cmd := []string{
 			"sh", "-c",
 			fmt.Sprintf(
 				`
-				cat <<-EOF | mongo 
+				cat <<-EOF | %s
 				rs.initiate(
 					{
 						_id: '%s',
@@ -333,7 +338,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 					}
 				)
 				EOF
-			`, replset.Name, host),
+			`, mongoCmd, replset.Name, host),
 		}
 
 		var errb, outb bytes.Buffer
@@ -350,9 +355,9 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 		}
 
 		cmd[2] = fmt.Sprintf(`
-			cat <<-EOF | mongo 
+			cat <<-EOF | %s
 			%s
-			EOF`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
+			EOF`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
