@@ -1,6 +1,8 @@
 Install Percona Server for MongoDB on OpenShift
 =====================================================
 
+Percona Operator for Percona Server for MongoDB is a `Red Hat Certified Operator <https://connect.redhat.com/en/partner-with-us/red-hat-openshift-certification>`_. This means that Percona Operator is portable across hybrid clouds and fully supports the Red Hat OpenShift lifecycle.
+
 Installing Percona Server for MongoDB on OpenShift includes two steps:
 
 * Installing the Percona Distribution for MongoDB Operator,
