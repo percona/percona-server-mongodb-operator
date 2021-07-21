@@ -160,7 +160,10 @@ spec:
               value: "27017"
           imagePullPolicy: Always
           name: backup-agent
-          resources: {}
+          resources:
+            requests:
+              cpu: 300m
+              memory: 500M
           securityContext:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log

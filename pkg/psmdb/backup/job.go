@@ -7,11 +7,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/pkg/errors"
 )
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) *batchv1b.CronJob {
+func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) (batchv1b.CronJob, error) {
 	jobName := crName + "-backup-" + backup.Name
-
+	resources, err := psmdb.CreateResources(backupSpec.Resources)
+	if err != nil {
+		return batchv1b.CronJob{}, errors.Wrap(err, "cannot parse Backup resources")
+	}
 	backupPod := corev1.PodSpec{
 		RestartPolicy:      corev1.RestartPolicyNever,
 		ImagePullSecrets:   imagePullSecrets,
@@ -37,13 +42,14 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				},
 				Args:            newBackupCronJobContainerArgs(backup, jobName),
 				SecurityContext: backupSpec.ContainerSecurityContext,
+				Resources:       resources,
 			},
 		},
 		SecurityContext:  backupSpec.PodSecurityContext,
 		RuntimeClassName: backupSpec.RuntimeClassName,
 	}
 
-	return &batchv1b.CronJob{
+	return batchv1b.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1beta1",
 			Kind:       "CronJob",
@@ -67,7 +73,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				},
 			},
 		},
-	}
+	}, nil
 }
 
 func NewBackupCronJobLabels(crName string) map[string]string {
