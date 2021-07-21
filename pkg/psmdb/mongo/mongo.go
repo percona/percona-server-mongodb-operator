@@ -472,7 +472,7 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) (changes bool) {
 // SetVotes sets voting parameters for members list
 func (m *ConfigMembers) SetVotes() {
 	votes := 0
-	lastVoterIdx := -1
+	lastVoteIdx := -1
 	for i, member := range *m {
 		if member.Hidden {
 			continue
@@ -488,22 +488,21 @@ func (m *ConfigMembers) SetVotes() {
 			continue
 		}
 
-		if votes >= MaxVotingMembers {
-			continue
-		}
-
-		if member.ArbiterOnly {
+		if votes < MaxVotingMembers {
+			[]ConfigMember(*m)[i].Votes = 1
+			votes++
+			if !member.ArbiterOnly {
+				lastVoteIdx = i
+				[]ConfigMember(*m)[i].Priority = 1
+			}
+		} else if member.ArbiterOnly {
 			// Arbiter should always have a vote
 			[]ConfigMember(*m)[i].Votes = 1
-			[]ConfigMember(*m)[i].Priority = 0
-		} else {
-			// Regular replset member
-			[]ConfigMember(*m)[i].Votes = 1
-			[]ConfigMember(*m)[i].Priority = 1
-			lastVoterIdx = i
-		}
 
-		votes++
+			// We're over the max voters limit. Make room for the arbiter
+			[]ConfigMember(*m)[lastVoteIdx].Votes = 0
+			[]ConfigMember(*m)[lastVoteIdx].Priority = 0
+		}
 	}
 
 	if votes == 0 {
@@ -511,8 +510,8 @@ func (m *ConfigMembers) SetVotes() {
 	}
 
 	if votes%2 == 0 {
-		[]ConfigMember(*m)[lastVoterIdx].Votes = 0
-		[]ConfigMember(*m)[lastVoterIdx].Priority = 0
+		[]ConfigMember(*m)[lastVoteIdx].Votes = 0
+		[]ConfigMember(*m)[lastVoteIdx].Priority = 0
 	}
 }
 
