@@ -88,6 +88,18 @@ main() {
 			>$tmp_dir/parsed_systemLog_secret.json
 	diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog_secret.json $tmp_dir/parsed_systemLog_secret.json
 
+	kubectl_bin apply -f "$test_dir/conf/mongod-secret-2.yml"
+	sleep 50
+
+	run_mongo \
+		'db.serverCmdLineOpts()' \
+		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye' \
+		| $sed -re 's/((Timestamp|BinData|NumberLong)\((.+?\)))/{}/g' \
+		| jq '.parsed.systemLog' \
+			>$tmp_dir/parsed_systemLog_secret-2.json
+	diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog_secret-2.json $tmp_dir/parsed_systemLog_secret-2.json
+
 	run_backup "$cluster" "backup-minio"
 	sleep 20
 	run_recovery_check "$cluster" "backup-minio"
