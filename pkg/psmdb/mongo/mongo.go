@@ -71,7 +71,7 @@ func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 		return RSConfig{}, errors.Wrap(res.Err(), "replSetGetConfig")
 	}
 	if err := res.Decode(&resp); err != nil {
-		return RSConfig{}, errors.Wrap(err, "failed to decoge to replSetGetConfig")
+		return RSConfig{}, errors.Wrap(err, "failed to decode to replSetGetConfig")
 	}
 
 	if resp.Config == nil {
@@ -170,7 +170,7 @@ func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error 
 	}
 
 	if err := res.Decode(&resp); err != nil {
-		return errors.Wrap(err, "failed to decoge to replSetReconfigResponse")
+		return errors.Wrap(err, "failed to decode to replSetReconfigResponse")
 	}
 
 	if resp.OK != 1 {
