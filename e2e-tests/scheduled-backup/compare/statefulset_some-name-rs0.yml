@@ -161,7 +161,10 @@ spec:
               value: "27017"
           imagePullPolicy: Always
           name: backup-agent
-          resources: {}
+          resources:
+            requests:
+              cpu: 300m
+              memory: 500M
           securityContext:
             runAsNonRoot: true
             runAsUser: 1001
