@@ -315,7 +315,7 @@ spec:
   backup:
     enabled: true
     restartOnFailure: true
-    image: percona/percona-server-mongodb-operator:1.9.0-backup
+    image: perconalab/percona-server-mongodb-operator:main-backup
     serviceAccountName: percona-server-mongodb-operator
 #    resources:
 #      limits:
