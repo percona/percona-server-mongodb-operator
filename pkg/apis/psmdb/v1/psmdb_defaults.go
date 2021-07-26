@@ -361,6 +361,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ServiceAccountName = WorkloadSA
 		}
 
+		if cr.Spec.Unmanaged && !replset.Expose.Enabled {
+			return errors.New("replset needs to be exposed for unmanaged clusters")
+		}
+
 		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
 		if err != nil {
 			return err
