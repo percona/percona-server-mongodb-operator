@@ -477,9 +477,22 @@ func (m *ConfigMembers) SetVotes() {
 		if member.Hidden {
 			continue
 		}
+
+		if _, ok := member.Tags["external"]; ok {
+			[]ConfigMember(*m)[i].Votes = member.Votes
+			[]ConfigMember(*m)[i].Priority = member.Priority
+
+			if member.Votes > 0 {
+				votes++
+			}
+
+			continue
+		}
+
 		if votes < MaxVotingMembers {
 			[]ConfigMember(*m)[i].Votes = 1
 			votes++
+
 			if !member.ArbiterOnly {
 				lastVoteIdx = i
 				[]ConfigMember(*m)[i].Priority = 1
