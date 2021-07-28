@@ -1,0 +1,40 @@
+apiVersion: psmdb.percona.com/v1-9-0
+kind: PerconaServerMongoDB
+metadata:
+  name: minimal-cluster
+#  finalizers:
+#    - delete-psmdb-pvc
+spec:
+  crVersion: 1.9.0
+  image: percona/percona-server-mongodb:4.4.6-8
+  allowUnsafeConfigurations: true
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com
+    apply: 4.4-recommended
+    schedule: "0 2 * * *"
+  secrets:
+    users: minimal-cluster-secrets
+  replsets:
+
+  - name: rs0
+    size: 1
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 1
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 1
+
