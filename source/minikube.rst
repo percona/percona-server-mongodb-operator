@@ -36,27 +36,16 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
 
      kubectl apply -f deploy/bundle.yaml
 
-3. Because minikube runs locally, the default ``deploy/cr.yaml`` file should
-   be edited to adapt the Operator for the the local installation with limited
-   resources. Change the following keys in the ``replsets`` section:
+3. Now apply the ``deploy/cr-minimal.yaml`` file with the following command::
 
-   #. comment **all occurrences** of the ``resources.requests.memory`` and
-      ``resources.requests.cpu`` keys (this will fit the Operator in minikube
-      default limitations)
-   #. set **all occurrences** of the ``affinity.antiAffinityTopologyKey`` key to
-      ``"none"`` (the Operator will be unable to spread the cluster on several
-      nodes)
+     kubectl apply -f deploy/cr-minimal.yaml
 
-   Also, switch ``allowUnsafeConfigurations`` key to ``true`` (this option turns
-   off the Operator’s control over the cluster configuration, making it possible to
-   deploy Percona Server for MongoDB as a one-node cluster).
-
-4. Now apply the ``deploy/cr.yaml`` file with the following command::
-
-     kubectl apply -f deploy/cr.yaml
-
-   The creation process may take some time. The process is over when all Pods
-   have reached their Running status. You can check it with the following command:
+   This deploys a one shard MongoDB cluster with one replica set with one node,
+   one mongos node and one config server node. ``deploy/cr-minimal.yaml`` is for minimal 
+   non-production deployment. For more configuration options please see ``deploy/cr.yaml`` 
+   and :ref:`Custom Resource Options<operator.custom-resource-options>`. The creation 
+   process may take some time. The process is over when all Pods have reached their 
+   Running status. You can check it with the following command:
 
    .. code:: bash
 
@@ -64,14 +53,14 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
 
    The result should look as follows:
 
-   .. include:: ./assets/code/kubectl-get-pods-response.txt
+   .. include:: ./assets/code/kubectl-get-minimal-response.txt
 
 
-5. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
+4. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
    including the password for the admin user, which you will need to access the
    cluster. Use ``kubectl get secrets`` to see the list of Secrets objects (by
-   default Secrets object you are interested in has ``my-cluster-name-secrets``
-   name). Then ``kubectl get secret my-cluster-name-secrets -o yaml`` will return
+   default Secrets object you are interested in has ``minimal-cluster-name-secrets``
+   name). Then ``kubectl get secret minimal-cluster-name-secrets -o yaml`` will return
    the YAML file with generated secrets, including the ``MONGODB_USER_ADMIN``
    and ``MONGODB_USER_ADMIN_PASSWORD`` strings, which should look as follows::
 
@@ -85,7 +74,7 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    ``echo 'aDAzQ0pCY3NSWEZ2ZUIzS1I=' | base64 --decode`` will bring it back to a
    human-readable form.
 
-6. Check connectivity to a newly created cluster.
+5. Check connectivity to a newly created cluster.
 
    First of all, run a container with a MongoDB client and connect its console
    output to your terminal. The following command will do this, naming the new
@@ -101,4 +90,4 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    
    .. code:: bash
 
-      mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"
+      mongo "mongodb://userAdmin:userAdminPassword@minimal-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"
