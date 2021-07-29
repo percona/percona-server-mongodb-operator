@@ -145,10 +145,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)
 	} else {
-		args = append(args,
-			"--sslMode=preferSSL",
-			"--clusterAuthMode=x509",
-		)
+		args = append(args, "--clusterAuthMode=x509")
 	}
 
 	// sharding

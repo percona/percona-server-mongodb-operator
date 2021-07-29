@@ -190,7 +190,7 @@ _parse_config() {
 		# if --config is specified, parse it into a JSON file so we can remove a few problematic keys (especially SSL-related keys)
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
 		mongo --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" > "$jsonConfigFile"
-		jq 'del(.systemLog, .processManagement, .net, .security)' "$jsonConfigFile" > "$tempConfigFile"
+		jq 'del(.systemLog, .processManagement, .security)' "$jsonConfigFile" > "$tempConfigFile"
 		return 0
 	fi
 
@@ -401,6 +401,11 @@ if [[ "$originalArgOne" == mongo* ]]; then
 	if [ "$MONGODB_VERSION" == 'v4.2' ] || [ "$MONGODB_VERSION" == 'v4.4' ]; then
 		_mongod_hack_rename_arg_save_val --sslMode --tlsMode "${mongodHackedArgs[@]}"
 
+                if _parse_config "$@"; then
+                    tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "$jsonConfigFile")
+                    _mongod_hack_ensure_arg_val --tlsMode "$tlsMode" "${mongodHackedArgs[@]}"
+                fi
+
 		if _mongod_hack_have_arg '--tlsMode' "${mongodHackedArgs[@]}"; then
 			tlsMode="none"
 			if _mongod_hack_have_arg 'allowSSL' "${mongodHackedArgs[@]}"; then
@@ -410,7 +415,7 @@ if [[ "$originalArgOne" == mongo* ]]; then
 			elif _mongod_hack_have_arg 'requireSSL' "${mongodHackedArgs[@]}"; then
 				tlsMode='requireTLS'
 			fi
-          
+
 			if [ "$tlsMode" != "none" ]; then
 				_mongod_hack_ensure_no_arg_val --tlsMode "${mongodHackedArgs[@]}"
 				_mongod_hack_ensure_arg_val --tlsMode "$tlsMode" "${mongodHackedArgs[@]}"
