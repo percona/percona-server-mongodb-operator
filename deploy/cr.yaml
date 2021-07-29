@@ -5,11 +5,12 @@ metadata:
 #  finalizers:
 #    - delete-psmdb-pvc
 spec:
+  initImage: perconalab/percona-server-mongodb-operator:k8spsmdb-515
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
   crVersion: 1.9.0
-  image: percona/percona-server-mongodb:4.4.6-8
+  image: perconalab/percona-server-mongodb-operator:k8spsmdb-515-mongod4.4
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
