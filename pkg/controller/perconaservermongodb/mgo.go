@@ -192,7 +192,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 	}
 
-	if cnf.Members.AddNew(members) {
+	if cnf.Members.AddNew(members) || cnf.Members.ExternalNodesChanged(members) {
 		cnf.Members.RemoveOld(members)
 		cnf.Members.SetVotes()
 
