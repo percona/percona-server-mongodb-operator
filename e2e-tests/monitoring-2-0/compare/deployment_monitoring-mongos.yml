@@ -55,7 +55,6 @@ spec:
             - --configdb
             - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017
             - --relaxPermChecks
-            - --sslMode=preferSSL
             - --clusterAuthMode=x509
           command:
             - /data/db/ps-entry.sh
