@@ -15,7 +15,7 @@
 package db
 
 import (
-	"github.com/pkg/errors"
+	"errors"
 	"net/url"
 	"time"
 
@@ -66,7 +66,7 @@ func GetSession(cnf *Config) (*mgo.Session, error) {
 		session, err = mgo.DialWithInfo(cnf.DialInfo)
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "dial")
+		return nil, err
 	}
 
 	session.SetMode(mgo.Monotonic, true)

@@ -113,14 +113,6 @@ func main() {
 			}
 			log.Infof("Member passed Kubernetes liveness check with replication state: %s", memberState)
 
-		case "mongod-standalone":
-			err := healthcheck.HealthCheckMongodStandaloneLiveness(session)
-			if err != nil {
-				log.Error(err.Error())
-				session.Close()
-				os.Exit(1)
-			}
-
 		case "mongos":
 			err := healthcheck.HealthCheckMongosLiveness(session)
 			if err != nil {

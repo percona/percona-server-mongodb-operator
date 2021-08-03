@@ -83,6 +83,10 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 				Name:  "MONGODB_PORT",
 				Value: strconv.Itoa(int(cr.Spec.Mongod.Net.Port)),
 			},
+			{
+				Name:  "MONGODB_REPLSET",
+				Value: replset.Name,
+			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
 			{
@@ -114,10 +118,6 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			},
 		}
 		container.Command = []string{"/data/db/ps-entry.sh"}
-	}
-
-	if !cr.Spec.Unmanaged {
-		container.Env = append(container.Env, corev1.EnvVar{Name: "MONGODB_REPLSET", Value: replset.Name})
 	}
 
 	return container, nil
