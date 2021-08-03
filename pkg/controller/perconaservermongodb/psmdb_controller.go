@@ -796,7 +796,37 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 			},
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create or update config map")
+		}
+
+		if !rs.NonVoting.Enabled {
+			continue
+		}
+
+		name = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
+		if rs.NonVoting.Configuration == "" {
+			if err := deleteConfigMapIfExists(r.client, cr, name); err != nil {
+				return errors.Wrap(err, "failed to delete nonvoting mongod config map")
+			}
+
+			continue
+		}
+
+		err = r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cr.Namespace,
+			},
+			Data: map[string]string{
+				"mongod.conf": rs.NonVoting.Configuration,
+			},
+		})
+		if err != nil {
+			return errors.Wrap(err, "create or update nonvoting config map")
 		}
 	}
 
@@ -1056,6 +1086,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 	pdbspec := replset.PodDisruptionBudget
 	resources := replset.Resources
 	volumeSpec := replset.VolumeSpec
+	podSecurityContext := replset.PodSecurityContext
+	containerSecurityContext := replset.ContainerSecurityContext
+	livenessProbe := replset.LivenessProbe
+	readinessProbe := replset.ReadinessProbe
+	configuration := replset.Configuration
+	configName := psmdb.MongodCustomConfigName(cr.Name, replset.Name)
 
 	if replset.ClusterRole == api.ClusterRoleConfigSvr {
 		matchLabels["app.kubernetes.io/component"] = api.ConfigReplSetName
@@ -1076,6 +1112,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 		multiAZ = replset.NonVoting.MultiAZ
 		pdbspec = replset.NonVoting.PodDisruptionBudget
 		resources = replset.NonVoting.Resources
+		podSecurityContext = replset.NonVoting.PodSecurityContext
+		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
+		configuration = replset.NonVoting.Configuration
+		configName = psmdb.MongodCustomConfigName(cr.Name, replset.Name+"-nv")
+		if replset.NonVoting.LivenessProbe != nil {
+			livenessProbe = replset.NonVoting.LivenessProbe
+		}
+		if replset.NonVoting.ReadinessProbe != nil {
+			readinessProbe = replset.NonVoting.ReadinessProbe
+		}
 		if replset.NonVoting.VolumeSpec != nil {
 			volumeSpec = replset.NonVoting.VolumeSpec
 		}
@@ -1106,8 +1152,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits,
-		log, configSource, resources)
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels,
+		multiAZ, size, internalKeyName, inits, log, configSource, resources,
+		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
+		configuration, configName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}

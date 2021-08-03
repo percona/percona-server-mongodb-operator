@@ -36,6 +36,13 @@ spec:
         requests:
           cpu: "200m"
           memory: "0.3G"
+      livenessProbe:
+        failureThreshold: 3
+        initialDelaySeconds: 70
+        periodSeconds: 31
+        successThreshold: 1
+        timeoutSeconds: 5
+        startupDelaySeconds: 7201
       volumeSpec:
         persistentVolumeClaim:
           resources:
