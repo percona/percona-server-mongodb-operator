@@ -911,6 +911,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "get configsvr pods")
 	}
 
+	// wait all configsvr pods to prevent unnecessary updates to mongos deployment
+	if int(cr.Spec.Sharding.ConfigsvrReplSet.Size) > len(cfgPods.Items) {
+		return nil
+	}
+
 	cfgInstances := make([]string, 0, len(cfgPods.Items))
 	for _, pod := range cfgPods.Items {
 		host, err := psmdb.MongoHost(r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
