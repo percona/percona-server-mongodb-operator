@@ -15,9 +15,9 @@
 package healthcheck
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/timvaillancourt/go-mongodb-replset/status"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -32,6 +32,8 @@ var OkMemberStates = []status.MemberState{
 	status.MemberStateStartup2,
 	status.MemberStateRollback,
 }
+
+var ErrNoReplsetConfigStr string = "no replset config has been received"
 
 // getSelfMemberState returns the replication state of the local MongoDB member
 func getSelfMemberState(rsStatus *status.Status) *status.MemberState {
@@ -110,7 +112,13 @@ func HealthCheckMongodLiveness(session *mgo.Session, startupDelaySeconds int64) 
 
 	replSetGetStatusResp := ReplSetStatus{}
 	if err := session.Run(replSetStatusCommand, &replSetGetStatusResp); err != nil {
-		return nil, fmt.Errorf("replSetGetStatus returned error %v", err)
+		// if we come this far, it means db connection was successful
+		// standalone mongod nodes in an unmanaged cluster doesn't need
+		// to die before they added to a replset
+		if err.Error() == ErrNoReplsetConfigStr {
+			return nil, nil
+		}
+		return nil, errors.Wrap(err, "replSetGetStatus")
 	}
 
 	oplogRs := OplogRs{}
