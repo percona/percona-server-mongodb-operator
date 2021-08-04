@@ -494,6 +494,8 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if err := nv.VolumeSpec.reconcileOpts(); err != nil {
 			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
 		}
+	} else {
+		nv.VolumeSpec = rs.VolumeSpec
 	}
 
 	startupDelaySecondsFlag := "--startupDelaySeconds"

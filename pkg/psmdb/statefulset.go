@@ -73,7 +73,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	if configSource.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: configSource.VolumeSource(MongodCustomConfigName(m.Name, configName)),
+			VolumeSource: configSource.VolumeSource(configName),
 		})
 	}
 

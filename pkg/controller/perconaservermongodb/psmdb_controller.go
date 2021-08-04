@@ -1116,15 +1116,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
 		configuration = replset.NonVoting.Configuration
 		configName = psmdb.MongodCustomConfigName(cr.Name, replset.Name+"-nv")
-		if replset.NonVoting.LivenessProbe != nil {
-			livenessProbe = replset.NonVoting.LivenessProbe
-		}
-		if replset.NonVoting.ReadinessProbe != nil {
-			readinessProbe = replset.NonVoting.ReadinessProbe
-		}
-		if replset.NonVoting.VolumeSpec != nil {
-			volumeSpec = replset.NonVoting.VolumeSpec
-		}
+		livenessProbe = replset.NonVoting.LivenessProbe
+		readinessProbe = replset.NonVoting.ReadinessProbe
+		volumeSpec = replset.NonVoting.VolumeSpec
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -1147,7 +1141,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
-	configSource, err := r.getCustomConfigurationSource(cr.Namespace, psmdb.MongodCustomConfigName(cr.Name, replset.Name))
+	configSource, err := r.getCustomConfigurationSource(cr.Namespace, configName)
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
