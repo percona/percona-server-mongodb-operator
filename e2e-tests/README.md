@@ -5,7 +5,7 @@
 You need to install a number of software packages on your system to satisfy the build dependencies for building the Operator and/or to run its automated tests:
 
 * [kubectl](https://kubernetes.io/docs/tasks/tools/) - Kubernetes command-line tool
-* [docker](https://www.docker.com/) - cgroup wrapper 
+* [docker](https://www.docker.com/) - platform for developing, shipping, and running applications in containers
 * [sed](https://www.gnu.org/software/sed/manual/sed.html) - CLI stream editor
 * [helm](https://helm.sh/) - the package manager for Kubernetes
 * [jq](https://stedolan.github.io/jq/) - command-line JSON processor
@@ -152,4 +152,3 @@ SKIP_BACKUPS_TO_AWS_GCP=1
 
 The backups tests will use only [MinIO](https://min.io/) if this variable is declared,
 which is enough for local testing.
-
