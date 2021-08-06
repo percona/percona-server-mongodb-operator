@@ -12,7 +12,7 @@ cloud.
 
 The following steps are needed to run Percona Distribution for MongoDB Operator on minikube:
 
-0. `Install minikube <https://kubernetes.io/docs/tasks/tools/install-minikube/>`_, using a way recommended for your system. This includes the installation of the following three components:
+#. `Install minikube <https://kubernetes.io/docs/tasks/tools/install-minikube/>`_, using a way recommended for your system. This includes the installation of the following three components:
 
    #. kubectl tool,
    #. a hypervisor, if it is not already installed,
@@ -27,36 +27,32 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    Executing ``minikube dashboard`` will start the dashboard and open it in your
    default web browser.
 
-1. Clone the percona-server-mongodb-operator repository::
+#. Deploy the operator with the following command::
 
-     git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
-     cd percona-server-mongodb-operator
+     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/bundle.yaml
 
-2. Deploy the operator with the following command::
+#. Deploy MongoDB cluster with::
 
-     kubectl apply -f deploy/bundle.yaml
-
-3. Now apply the ``deploy/cr-minimal.yaml`` file with the following command::
-
-     kubectl apply -f deploy/cr-minimal.yaml
-
+     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/cr-minimal.yaml
+     
    This deploys a one shard MongoDB cluster with one replica set with one node,
    one mongos node and one config server node. ``deploy/cr-minimal.yaml`` is for minimal 
    non-production deployment. For more configuration options please see ``deploy/cr.yaml`` 
    and :ref:`Custom Resource Options<operator.custom-resource-options>`. The creation 
    process may take some time. The process is over when all Pods have reached their 
-   Running status. You can check it with the following command:
+   Running status. You can check it with the following command::
 
-   .. code:: bash
-
-      kubectl get pods
+     kubectl get pods
 
    The result should look as follows:
 
    .. include:: ./assets/code/kubectl-get-minimal-response.txt
+   
+   You can clone the repository with all manifests and source code by executing the following command::
+   
+      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
 
-
-4. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
+#. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
    including the password for the admin user, which you will need to access the
    cluster. Use ``kubectl get secrets`` to see the list of Secrets objects (by
    default Secrets object you are interested in has ``minimal-cluster-name-secrets``
@@ -74,7 +70,7 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    ``echo 'aDAzQ0pCY3NSWEZ2ZUIzS1I=' | base64 --decode`` will bring it back to a
    human-readable form.
 
-5. Check connectivity to a newly created cluster.
+#. Check connectivity to a newly created cluster.
 
    First of all, run a container with a MongoDB client and connect its console
    output to your terminal. The following command will do this, naming the new
