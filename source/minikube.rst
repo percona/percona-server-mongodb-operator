@@ -39,12 +39,8 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    one mongos node and one config server node. ``deploy/cr-minimal.yaml`` is for minimal 
    non-production deployment. For more configuration options please see ``deploy/cr.yaml`` 
    and :ref:`Custom Resource Options<operator.custom-resource-options>`. The creation 
-   process may take some time. The process is over when all Pods have reached their 
-   Running status. You can check it with the following command::
-
-     kubectl get pods
-
-   The result should look as follows:
+   process may take some time. The process is over when both operator and replica set pod 
+   have reached their Running status. ``kubectl get pods`` output should look like this:
 
    .. include:: ./assets/code/kubectl-get-minimal-response.txt
    
