@@ -16,6 +16,7 @@ You need to install a number of software packages on your system to satisfy the 
 ### CentOS
 
 ```
+sudo yum -y install epel-release
 sudo yum -y install coreutils sed jq curl docker
 sudo curl -s -L https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64 -o /usr/bin/yq
 sudo chmod a+x /usr/bin/yq
