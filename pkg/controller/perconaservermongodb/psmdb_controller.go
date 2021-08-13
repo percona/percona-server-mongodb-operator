@@ -813,10 +813,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 		}
 
 		err = r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: cr.Namespace,
