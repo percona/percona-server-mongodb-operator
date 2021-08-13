@@ -925,6 +925,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		cfgInstances = append(cfgInstances, host)
 	}
 
+	for _, ext := range cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes {
+		cfgInstances = append(cfgInstances, ext.Host)
+	}
+
 	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig, cfgInstances)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
