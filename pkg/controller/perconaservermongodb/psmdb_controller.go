@@ -901,7 +901,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "failed to get operator pod")
 	}
 
-	configSource, err := r.getCustomConfigurationSource(cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
+	customConfig, err := r.getCustomConfig(cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
 	if err != nil {
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
@@ -925,7 +925,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		cfgInstances = append(cfgInstances, host)
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, configSource, cfgInstances)
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig, cfgInstances)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
@@ -1088,13 +1088,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
-	configSource, err := r.getCustomConfigurationSource(cr.Namespace, psmdb.MongodCustomConfigName(cr.Name, replset.Name))
+	customConfig, err := r.getCustomConfig(cr.Namespace, psmdb.MongodCustomConfigName(cr.Name, replset.Name))
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits,
-		log, configSource, resources)
+		log, customConfig, resources)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
@@ -1480,7 +1480,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateDeploymentLegacy(currentOb
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCustomConfigurationSource(namespace, name string) (psmdb.VolumeSourceType, error) {
+func (r *ReconcilePerconaServerMongoDB) getCustomConfig(namespace, name string) (psmdb.CustomConfig, error) {
 	n := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
@@ -1492,16 +1492,30 @@ func (r *ReconcilePerconaServerMongoDB) getCustomConfigurationSource(namespace, 
 	}
 
 	for _, s := range sources {
-		ok, err := getObjectByName(r.client, n, psmdb.VolumeSourceTypeToObj(s))
+		obj := psmdb.VolumeSourceTypeToObj(s)
+
+		ok, err := getObjectByName(r.client, n, obj.GetRuntimeObject())
 		if err != nil {
-			return 0, errors.Wrapf(err, "get %s", s)
+			return psmdb.CustomConfig{}, errors.Wrapf(err, "get %s", s)
 		}
-		if ok {
-			return s, nil
+		if !ok {
+			continue
 		}
+
+		hashHex, err := obj.GetHashHex()
+		if err != nil {
+			return psmdb.CustomConfig{}, errors.Wrapf(err, "failed to get hash of %s", s)
+		}
+
+		conf := psmdb.CustomConfig{
+			Type:    s,
+			HashHex: hashHex,
+		}
+
+		return conf, nil
 	}
 
-	return psmdb.VolumeSourceNone, nil
+	return psmdb.CustomConfig{}, nil
 }
 
 func getObjectByName(c client.Client, n types.NamespacedName, obj runtime.Object) (bool, error) {

@@ -1,7 +1,6 @@
 package psmdb
 
 import (
-	"crypto/md5"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -33,7 +32,7 @@ var secretFileMode int32 = 288
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
-	initContainers []corev1.Container, log logr.Logger, configSource VolumeSourceType,
+	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
 	resourcesSpec *api.ResourcesSpec) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
@@ -68,10 +67,10 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
-	if configSource.IsUsable() {
+	if customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: configSource.VolumeSource(MongodCustomConfigName(m.Name, replset.Name)),
+			VolumeSource: customConf.Type.VolumeSource(MongodCustomConfigName(m.Name, replset.Name)),
 		})
 	}
 
@@ -90,7 +89,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		)
 	}
 
-	c, err := container(m, replset, containerName, resources, ikeyName, configSource.IsUsable())
+	c, err := container(m, replset, containerName, resources, ikeyName, customConf.Type.IsUsable())
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -110,8 +109,8 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		annotations = make(map[string]string)
 	}
 
-	if c := replset.Configuration; c != "" && configSource == VolumeSourceConfigMap {
-		annotations["percona.com/configuration-hash"] = fmt.Sprintf("%x", md5.Sum([]byte(c)))
+	if customConf.Type.IsUsable() {
+		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
 	return appsv1.StatefulSetSpec{
