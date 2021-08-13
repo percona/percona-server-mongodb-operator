@@ -26,6 +26,11 @@ spinup_psmdb() {
 		"userAdmin:userAdmin123456@${cluster}.${namespace}"
 
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
+        sleep 10
+
+        desc 'read data'
+        compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+        compare_mongo_cmd "find" "myApp:myPass@$cluster-nv-0.$cluster.$namespace"
 }
 
 main() {
