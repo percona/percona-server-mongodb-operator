@@ -76,7 +76,7 @@ Use the following script to build the image:
 ```
 Please note the following:
 
-* You might need to add your user to docker group or run the build as root to access docker UNIX socket. 
+* You might need to add your user to the docker group or run the build as root to access the docker UNIX socket. 
 * Make sure you have enabled the experimental features for docker by adding the following into /etc/docker/daemon.json:
 ```
 {
