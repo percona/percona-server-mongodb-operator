@@ -52,7 +52,7 @@ curl https://sdk.cloud.google.com | bash
 
 ### Runtime requirements
 
-Also, you need a Kubernetes platform of [supported version](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/System-Requirements.html#officially-supported-platforms), available via [EKS](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/eks.html), [GKE](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/gke.html), [OpenShift](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/openshift.html) or [minikube](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/minikube.html) to run the Operator.  Other Kubernetes flavors and versions depend on the backward compatibility offered by Kubernetes itself.
+Also, you need a Kubernetes platform of [supported version](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/System-Requirements.html#officially-supported-platforms), available via [EKS](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/eks.html), [GKE](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/gke.html), [OpenShift](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/openshift.html) or [minikube](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/minikube.html) to run the Operator.  Other Kubernetes flavors and versions depend on the backward compatibility offered by Kubernetes.
 
 **Note:** there is no need to build an image if you are going to test some already-released version.
 
