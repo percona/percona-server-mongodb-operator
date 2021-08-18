@@ -466,13 +466,16 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) (changes
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		if ext, ok := cm[member.Host]; ok {
-			changes = ext.votes != member.Votes || ext.priority != member.Priority
+			changes = (ext.votes != member.Votes || ext.priority != member.Priority)
 			[]ConfigMember(*m)[i].Votes = ext.votes
 			[]ConfigMember(*m)[i].Priority = ext.priority
+			if changes {
+				return true
+			}
 		}
 	}
 
-	return changes
+	return false
 }
 
 // AddNew adds new members from given list
@@ -512,7 +515,7 @@ func (m *ConfigMembers) SetVotes() {
 			[]ConfigMember(*m)[i].Votes = member.Votes
 			[]ConfigMember(*m)[i].Priority = member.Priority
 
-			if member.Votes > 0 {
+			if member.Votes == 1 {
 				votes++
 			}
 

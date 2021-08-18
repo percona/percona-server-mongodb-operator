@@ -484,6 +484,12 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		if extNode.Port == 0 {
 			extNode.Port = 27017
 		}
+		if extNode.Votes < 0 || extNode.Votes > 1 {
+			return errors.Errorf("invalid votes for %s: votes must be 0 or 1", extNode.Host)
+		}
+		if extNode.Priority < 0 || extNode.Priority > 1000 {
+			return errors.Errorf("invalid priority for %s: priority must be between 0 and 1000", extNode.Host)
+		}
 	}
 
 	return nil

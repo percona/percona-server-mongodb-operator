@@ -214,7 +214,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
 	// sort config instances to prevent unnecessary updates
-	sort.Slice(cfgInstances, func(i, j int) bool { return cfgInstances[i] < cfgInstances[j] })
+	sort.Strings(cfgInstances)
 	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstances, ","))
 	args := []string{
 		"mongos",
