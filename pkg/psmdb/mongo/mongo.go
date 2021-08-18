@@ -446,7 +446,7 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) (changes bool) {
 }
 
 // ExternalNodesChanged checks if votes or priority fields changed for external nodes
-func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) (changes bool) {
+func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 	cm := make(map[string]struct {
 		votes    int
 		priority int
@@ -463,19 +463,19 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) (changes
 		}{votes: member.Votes, priority: member.Priority}
 	}
 
+	changes := false
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		if ext, ok := cm[member.Host]; ok {
-			changes = (ext.votes != member.Votes || ext.priority != member.Priority)
+			if ext.votes != member.Votes || ext.priority != member.Priority {
+				changes = true
+			}
 			[]ConfigMember(*m)[i].Votes = ext.votes
 			[]ConfigMember(*m)[i].Priority = ext.priority
-			if changes {
-				return true
-			}
 		}
 	}
 
-	return false
+	return changes
 }
 
 // AddNew adds new members from given list
