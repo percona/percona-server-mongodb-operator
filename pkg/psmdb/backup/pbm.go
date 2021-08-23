@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -77,6 +78,47 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 		scr.Data["MONGODB_BACKUP_PASSWORD"],
 		strings.Join(addrs, ","),
 	)
+
+	if !cluster.Spec.UnsafeConf {
+		// PBM connection is opened from the operator pod. In order to use SSL
+		// certificates of the cluster, we need to copy them to operator pod.
+		// This is especially important if the user passes custom config to set
+		// net.tls.mode to requireTLS.
+
+		sslSecret, err := secret(c, cluster.Namespace, cluster.Spec.Secrets.SSL)
+		if err != nil {
+			return nil, errors.Wrap(err, "get ssl secret")
+		}
+
+		tlsKey := sslSecret.Data["tls.key"]
+		tlsCert := sslSecret.Data["tls.crt"]
+		tlsPemFile := fmt.Sprintf("/tmp/%s-tls.pem", cluster.Name)
+		f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return nil, errors.Wrapf(err, "open %s", tlsPemFile)
+		}
+		defer f.Close()
+		if _, err := f.Write(append(tlsKey, tlsCert...)); err != nil {
+			return nil, errors.Wrapf(err, "write TLS key and certificate to %s", tlsPemFile)
+		}
+
+		caCert := sslSecret.Data["ca.crt"]
+		caCertFile := fmt.Sprintf("/tmp/%s-ca.crt", cluster.Name)
+		f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return nil, errors.Wrapf(err, "open %s", caCertFile)
+		}
+		defer f.Close()
+		if _, err := f.Write(caCert); err != nil {
+			return nil, errors.Wrapf(err, "write CA certificate to %s", caCertFile)
+		}
+
+		murl += fmt.Sprintf(
+			"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true",
+			tlsPemFile,
+			caCertFile,
+		)
+	}
 
 	pbmc, err := pbm.New(context.Background(), murl, "operator-pbm-ctl")
 	if err != nil {
