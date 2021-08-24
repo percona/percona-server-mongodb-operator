@@ -9,7 +9,7 @@ originalArgOne="$1"
 
 # allow the container to be started with `--user`
 # all mongo* commands should be dropped to the correct user
-if [[ "$originalArgOne" == mongo* ]] && [ "$(id -u)" = '0' ]; then
+if [[ $originalArgOne == mongo* ]] && [ "$(id -u)" = '0' ]; then
 	if [ "$originalArgOne" = 'mongod' ]; then
 		find /data/configdb /data/db \! -user mongodb -exec chown mongodb '{}' +
 	fi
@@ -24,9 +24,9 @@ fi
 
 # you should use numactl to start your mongod instances, including the config servers, mongos instances, and any clients.
 # https://docs.mongodb.com/manual/administration/production-notes/#configuring-numa-on-linux
-if [[ "$originalArgOne" == mongo* ]]; then
+if [[ $originalArgOne == mongo* ]]; then
 	numa='numactl --interleave=all'
-	if $numa true &> /dev/null; then
+	if $numa true &>/dev/null; then
 		set -- $numa "$@"
 	fi
 fi
@@ -47,7 +47,7 @@ file_env() {
 	if [ "${!var:-}" ]; then
 		val="${!var}"
 	elif [ "${!fileVar:-}" ]; then
-		val="$(< "${!fileVar}")"
+		val="$(<"${!fileVar}")"
 	fi
 	export "$var"="$val"
 	unset "$fileVar"
@@ -55,11 +55,12 @@ file_env() {
 
 # see https://github.com/docker-library/mongo/issues/147 (mongod is picky about duplicated arguments)
 _mongod_hack_have_arg() {
-	local checkArg="$1"; shift
+	local checkArg="$1"
+	shift
 	local arg
 	for arg; do
 		case "$arg" in
-			"$checkArg"|"$checkArg"=*)
+			"$checkArg" | "$checkArg"=*)
 				return 0
 				;;
 		esac
@@ -68,9 +69,11 @@ _mongod_hack_have_arg() {
 }
 # _mongod_hack_get_arg_val '--some-arg' "$@"
 _mongod_hack_get_arg_val() {
-	local checkArg="$1"; shift
+	local checkArg="$1"
+	shift
 	while [ "$#" -gt 0 ]; do
-		local arg="$1"; shift
+		local arg="$1"
+		shift
 		case "$arg" in
 			"$checkArg")
 				echo "$1"
@@ -88,32 +91,37 @@ declare -a mongodHackedArgs
 # _mongod_hack_ensure_arg '--some-arg' "$@"
 # set -- "${mongodHackedArgs[@]}"
 _mongod_hack_ensure_arg() {
-	local ensureArg="$1"; shift
-	mongodHackedArgs=( "$@" )
+	local ensureArg="$1"
+	shift
+	mongodHackedArgs=("$@")
 	if ! _mongod_hack_have_arg "$ensureArg" "$@"; then
-		mongodHackedArgs+=( "$ensureArg" )
+		mongodHackedArgs+=("$ensureArg")
 	fi
 }
 # _mongod_hack_ensure_no_arg '--some-unwanted-arg' "$@"
 # set -- "${mongodHackedArgs[@]}"
 _mongod_hack_ensure_no_arg() {
-	local ensureNoArg="$1"; shift
+	local ensureNoArg="$1"
+	shift
 	mongodHackedArgs=()
 	while [ "$#" -gt 0 ]; do
-		local arg="$1"; shift
+		local arg="$1"
+		shift
 		if [ "$arg" = "$ensureNoArg" ]; then
 			continue
 		fi
-		mongodHackedArgs+=( "$arg" )
+		mongodHackedArgs+=("$arg")
 	done
 }
 # _mongod_hack_ensure_no_arg '--some-unwanted-arg' "$@"
 # set -- "${mongodHackedArgs[@]}"
 _mongod_hack_ensure_no_arg_val() {
-	local ensureNoArg="$1"; shift
+	local ensureNoArg="$1"
+	shift
 	mongodHackedArgs=()
 	while [ "$#" -gt 0 ]; do
-		local arg="$1"; shift
+		local arg="$1"
+		shift
 		case "$arg" in
 			"$ensureNoArg")
 				shift # also skip the value
@@ -124,35 +132,41 @@ _mongod_hack_ensure_no_arg_val() {
 				continue
 				;;
 		esac
-		mongodHackedArgs+=( "$arg" )
+		mongodHackedArgs+=("$arg")
 	done
 }
 # _mongod_hack_ensure_arg_val '--some-arg' 'some-val' "$@"
 # set -- "${mongodHackedArgs[@]}"
 _mongod_hack_ensure_arg_val() {
-	local ensureArg="$1"; shift
-	local ensureVal="$1"; shift
+	local ensureArg="$1"
+	shift
+	local ensureVal="$1"
+	shift
 	_mongod_hack_ensure_no_arg_val "$ensureArg" "$@"
-	mongodHackedArgs+=( "$ensureArg" "$ensureVal" )
+	mongodHackedArgs+=("$ensureArg" "$ensureVal")
 }
 
 # required by mongodb 4.2
 # _mongod_hack_rename_arg_save_val '--arg-to-rename' '--arg-to-rename-to' "$@"
 # set -- "${mongodHackedArgs[@]}"
 _mongod_hack_rename_arg_save_val() {
-	local oldArg="$1"; shift
-	local newArg="$1"; shift
+	local oldArg="$1"
+	shift
+	local newArg="$1"
+	shift
 	if ! _mongod_hack_have_arg "$oldArg" "$@"; then
 		return 0
 	fi
 	local val=""
 	mongodHackedArgs=()
 	while [ "$#" -gt 0 ]; do
-		local arg="$1"; shift
+		local arg="$1"
+		shift
 		if [ "$arg" = "$oldArg" ]; then
-			val="$1"; shift
+			val="$1"
+			shift
 			continue
-		elif [[ "$arg" =~ "$oldArg"=(.*) ]]; then
+		elif [[ $arg =~ "$oldArg"=(.*) ]]; then
 			val=${BASH_REMATCH[1]}
 			continue
 		fi
@@ -165,8 +179,10 @@ _mongod_hack_rename_arg_save_val() {
 # _mongod_hack_rename_arg'--arg-to-rename' '--arg-to-rename-to' "$@"
 # set -- "${mongodHackedArgs[@]}"
 _mongod_hack_rename_arg() {
-	local oldArg="$1"; shift
-	local newArg="$1"; shift
+	local oldArg="$1"
+	shift
+	local newArg="$1"
+	shift
 	if _mongod_hack_have_arg "$oldArg" "$@"; then
 		_mongod_hack_ensure_no_arg "$oldArg" "$@"
 		_mongod_hack_ensure_arg "$newArg" "${mongodHackedArgs[@]}"
@@ -189,8 +205,8 @@ _parse_config() {
 	if configPath="$(_mongod_hack_get_arg_val --config "$@")"; then
 		# if --config is specified, parse it into a JSON file so we can remove a few problematic keys (especially SSL-related keys)
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
-		mongo --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" > "$jsonConfigFile"
-		jq 'del(.systemLog, .processManagement, .security)' "$jsonConfigFile" > "$tempConfigFile"
+		mongo --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
+		jq 'del(.systemLog, .processManagement, .security)' "$jsonConfigFile" >"$tempConfigFile"
 		return 0
 	fi
 
@@ -238,7 +254,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		# if we've got any /docker-entrypoint-initdb.d/* files to parse later, we should initdb
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-				*.sh|*.js) # this should match the set of files we check for below
+				*.sh | *.js) # this should match the set of files we check for below
 					shouldPerformInitdb="$f"
 					break
 					;;
@@ -253,8 +269,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 			"$dbPath/WiredTiger" \
 			"$dbPath/journal" \
 			"$dbPath/local.0" \
-			"$dbPath/storage.bson" \
-		; do
+			"$dbPath/storage.bson"; do
 			if [ -e "$path" ]; then
 				shouldPerformInitdb=
 				break
@@ -263,7 +278,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 	fi
 
 	if [ -n "$shouldPerformInitdb" ]; then
-		mongodHackedArgs=( "$@" )
+		mongodHackedArgs=("$@")
 		if _parse_config "$@"; then
 			_mongod_hack_ensure_arg_val --config "$tempConfigFile" "${mongodHackedArgs[@]}"
 		fi
@@ -292,7 +307,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 			_mongod_hack_ensure_arg_val --sslMode "$tlsMode" "${mongodHackedArgs[@]}"
 		fi
 
-		if stat "/proc/$$/fd/1" > /dev/null && [ -w "/proc/$$/fd/1" ]; then
+		if stat "/proc/$$/fd/1" >/dev/null && [ -w "/proc/$$/fd/1" ]; then
 			# https://github.com/mongodb/mongo/blob/38c0eb538d0fd390c6cb9ce9ae9894153f6e8ef5/src/mongo/db/initialize_server_global_state.cpp#L237-L251
 			# https://github.com/docker-library/mongo/issues/164#issuecomment-293965668
 			_mongod_hack_ensure_arg_val --logpath "/proc/$$/fd/1" "${mongodHackedArgs[@]}"
@@ -309,24 +324,24 @@ if [ "$originalArgOne" = 'mongod' ]; then
 
 		"${mongodHackedArgs[@]}" --fork
 
-		mongo=( mongo --host 127.0.0.1 --port 27017 --quiet )
+		mongo=(mongo --host 127.0.0.1 --port 27017 --quiet)
 
 		# check to see that our "mongod" actually did start up (catches "--help", "--version", MongoDB 3.2 being silly, slow prealloc, etc)
 		# https://jira.mongodb.org/browse/SERVER-16292
 		tries=30
 		while true; do
-			if ! { [ -s "$pidfile" ] && ps "$(< "$pidfile")" &> /dev/null; }; then
+			if ! { [ -s "$pidfile" ] && ps "$(<"$pidfile")" &>/dev/null; }; then
 				# bail ASAP if "mongod" isn't even running
 				echo >&2
 				echo >&2 "error: $originalArgOne does not appear to have stayed running -- perhaps it had an error?"
 				echo >&2
 				exit 1
 			fi
-			if "${mongo[@]}" 'admin' --eval 'quit(0)' &> /dev/null; then
+			if "${mongo[@]}" 'admin' --eval 'quit(0)' &>/dev/null; then
 				# success!
 				break
 			fi
-			(( tries-- ))
+			((tries--))
 			if [ "$tries" -le 0 ]; then
 				echo >&2
 				echo >&2 "error: $originalArgOne does not appear to have accepted connections quickly enough -- perhaps it had an error?"
@@ -353,9 +368,16 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		echo
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-				*.sh) echo "$0: running $f"; . "$f" ;;
-				*.js) echo "$0: running $f"; "${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"; echo ;;
-				*)    echo "$0: ignoring $f" ;;
+				*.sh)
+					echo "$0: running $f"
+					. "$f"
+					;;
+				*.js)
+					echo "$0: running $f"
+					"${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"
+					echo
+					;;
+				*) echo "$0: ignoring $f" ;;
 			esac
 			echo
 		done
@@ -369,7 +391,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 	fi
 fi
 
-if [[ "$originalArgOne" == mongo* ]]; then
+if [[ $originalArgOne == mongo* ]]; then
 	mongodHackedArgs=("$@")
 	MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
 	CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
@@ -395,16 +417,20 @@ if [[ "$originalArgOne" == mongo* ]]; then
 		fi
 	fi
 
-	MONGODB_VERSION=$(mongod --version  | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
-
+	MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 	if [ "$MONGODB_VERSION" == 'v4.2' ] || [ "$MONGODB_VERSION" == 'v4.4' ]; then
 		_mongod_hack_rename_arg_save_val --sslMode --tlsMode "${mongodHackedArgs[@]}"
 
-                if _parse_config "$@"; then
-                    tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "$jsonConfigFile")
-                    _mongod_hack_ensure_arg_val --tlsMode "$tlsMode" "${mongodHackedArgs[@]}"
-                fi
+		# don't add --tlsMode if allowUnsafeConfigurations is true
+		if clusterAuthMode="$(_mongod_hack_get_arg_val --clusterAuthMode "$@")"; then
+			if [[ $clusterAuthMode != "keyFile" ]]; then
+				if _parse_config "$@"; then
+					tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "$jsonConfigFile")
+					_mongod_hack_ensure_arg_val --tlsMode "$tlsMode" "${mongodHackedArgs[@]}"
+				fi
+			fi
+		fi
 
 		if _mongod_hack_have_arg '--tlsMode' "${mongodHackedArgs[@]}"; then
 			tlsMode="none"
@@ -433,7 +459,6 @@ if [[ "$originalArgOne" == mongo* ]]; then
 		_mongod_hack_rename_arg '--sslAllowConnectionsWithoutCertificates' '--tlsAllowConnectionsWithoutCertificates' "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg '--sslFIPSMode' '--tlsFIPSMode' "${mongodHackedArgs[@]}"
 
-
 		_mongod_hack_rename_arg_save_val --sslPEMKeyPassword --tlsCertificateKeyFilePassword "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg_save_val --sslClusterFile --tlsClusterFile "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg_save_val --sslCertificateSelector --tlsCertificateSelector "${mongodHackedArgs[@]}"
@@ -451,7 +476,7 @@ if [[ "$originalArgOne" == mongo* ]]; then
 	haveBindIp=
 	if _mongod_hack_have_arg --bind_ip "$@" || _mongod_hack_have_arg --bind_ip_all "$@"; then
 		haveBindIp=1
-	elif _parse_config "$@" && jq --exit-status '.net.bindIp // .net.bindIpAll' "$jsonConfigFile" > /dev/null; then
+	elif _parse_config "$@" && jq --exit-status '.net.bindIp // .net.bindIpAll' "$jsonConfigFile" >/dev/null; then
 		haveBindIp=1
 	fi
 	if [ -z "$haveBindIp" ]; then
