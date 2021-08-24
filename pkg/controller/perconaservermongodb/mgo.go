@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	v "github.com/hashicorp/go-version"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -16,6 +18,7 @@ import (
 )
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
+var sslDeprecatedVersion = v.Must(v.NewVersion("4.2"))
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
 	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
@@ -318,12 +321,25 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
 
+		var errb, outb bytes.Buffer
+		cmd := []string{"sh", "-c", "mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1\".\"$2}' | cut -c2-"}
+		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec mongod --version: %v / %s / %s", err, outb.String(), errb.String())
+		}
+		mongoVer := v.Must(v.NewVersion(strings.TrimSpace(outb.String())))
+
 		mongoCmd := "mongo"
 		if !m.Spec.UnsafeConf {
-			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+			// --tls* options is introduced in 4.2, we need to use --ssl* for older versions
+			if mongoVer.Compare(sslDeprecatedVersion) < 0 {
+				mongoCmd += " --ssl --sslPEMKeyFile /tmp/tls.pem --sslAllowInvalidCertificates --sslCAFile /etc/mongodb-ssl/ca.crt"
+			} else {
+				mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+			}
 		}
 
-		cmd := []string{
+		cmd = []string{
 			"sh", "-c",
 			fmt.Sprintf(
 				`
@@ -341,7 +357,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			`, mongoCmd, replset.Name, host),
 		}
 
-		var errb, outb bytes.Buffer
+		errb.Reset()
+		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
