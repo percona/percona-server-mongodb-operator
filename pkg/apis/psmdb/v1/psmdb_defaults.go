@@ -35,6 +35,7 @@ var (
 const (
 	minSafeMongosSize                = 2
 	minSafeReplicasetSizeWithArbiter = 4
+	clusterNameMaxLen                = 51
 )
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
@@ -245,6 +246,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	for _, replset := range repls {
+		if len(cr.Name+replset.Name) > clusterNameMaxLen {
+			return errors.Errorf("cluster name (%s) + replset name (%s) is too long, must be no more than %d characters", cr.Name, replset.Name, clusterNameMaxLen)
+		}
+
 		if replset.Storage == nil {
 			replset.Storage = cr.Spec.Mongod.Storage
 		}

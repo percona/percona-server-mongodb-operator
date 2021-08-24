@@ -1,7 +1,6 @@
 package psmdb
 
 import (
-	"crypto/md5"
 	"fmt"
 	"strconv"
 	"strings"
@@ -28,7 +27,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, configSource VolumeSourceType) (appsv1.DeploymentSpec, error) {
+func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig) (appsv1.DeploymentSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -43,7 +42,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		}
 	}
 
-	c, err := mongosContainer(cr, configSource.IsUsable())
+	c, err := mongosContainer(cr, customConf.Type.IsUsable())
 	if err != nil {
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -64,8 +63,8 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		annotations = make(map[string]string)
 	}
 
-	if c := cr.Spec.Sharding.Mongos.Configuration; c != "" && configSource == VolumeSourceConfigMap {
-		annotations["percona.com/configuration-hash"] = fmt.Sprintf("%x", md5.Sum([]byte(c)))
+	if customConf.Type.IsUsable() {
+		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
 	zero := intstr.FromInt(0)
@@ -89,7 +88,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
 				Containers:        containers,
 				InitContainers:    initContainers,
-				Volumes:           volumes(cr, configSource),
+				Volumes:           volumes(cr, customConf.Type),
 				SchedulerName:     cr.Spec.SchedulerName,
 				RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 			},
