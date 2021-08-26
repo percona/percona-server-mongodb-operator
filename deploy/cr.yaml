@@ -100,6 +100,52 @@ spec:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+    nonvoting:
+      enabled: false
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
+#    schedulerName: "default"
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+#        emptyDir: {}
+#        hostPath:
+#          path: /data
+#          type: Directory
+        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 1Gi
     arbiter:
       enabled: false
       size: 1

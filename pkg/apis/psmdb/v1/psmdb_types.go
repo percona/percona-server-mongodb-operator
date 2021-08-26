@@ -232,6 +232,21 @@ type ExternalNode struct {
 	Votes    int    `json:"votes"`
 }
 
+type NonVotingSpec struct {
+	Enabled                  bool                       `json:"enabled"`
+	Size                     int32                      `json:"size"`
+	Resources                *ResourcesSpec             `json:"resources,omitempty"`
+	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
+	Configuration            string                     `json:"configuration,omitempty"`
+
+	MultiAZ
+}
+
 type ReplsetSpec struct {
 	Resources                *ResourcesSpec             `json:"resources,omitempty"`
 	Name                     string                     `json:"name"`
@@ -247,6 +262,7 @@ type ReplsetSpec struct {
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
 	Configuration            string                     `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
+	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
 	MultiAZ
 }

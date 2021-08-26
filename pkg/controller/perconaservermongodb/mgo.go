@@ -21,12 +21,22 @@ var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mo
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
 	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
 
-	if replset.Size == 0 {
+	replsetSize := replset.Size
+
+	if replset.NonVoting.Enabled {
+		replsetSize += replset.NonVoting.Size
+	}
+
+	if replset.Arbiter.Enabled {
+		replsetSize += replset.Arbiter.Size
+	}
+
+	if replsetSize == 0 {
 		return api.AppStateReady, nil
 	}
 
 	// all pods needs to be scheduled to reconcile
-	if int(replset.Size) > len(pods.Items) {
+	if int(replsetSize) > len(pods.Items) {
 		return api.AppStateInit, nil
 	}
 
@@ -157,6 +167,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		case "mongod":
 			member.Tags = mongo.ReplsetTags{
 				"serviceName": cr.Name,
+			}
+		case "nonVoting":
+			member.Tags = mongo.ReplsetTags{
+				"serviceName": cr.Name,
+				"nonVoting":   "true",
 			}
 		}
 

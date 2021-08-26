@@ -240,6 +240,10 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, r
 		status.Size += rsSpec.Arbiter.Size
 	}
 
+	if rsSpec.NonVoting.Enabled {
+		status.Size += rsSpec.NonVoting.Size
+	}
+
 	for _, pod := range list.Items {
 		for _, cntr := range pod.Status.ContainerStatuses {
 			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {

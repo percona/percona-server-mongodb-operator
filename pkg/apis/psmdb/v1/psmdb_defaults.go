@@ -371,9 +371,15 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if err != nil {
 			return err
 		}
+
+		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
+			return errors.Wrap(err, "set nonvoting defaults")
+		}
+
 		if cr.Spec.Pause {
 			replset.Size = 0
 			replset.Arbiter.Enabled = false
+			replset.NonVoting.Enabled = false
 		}
 	}
 
@@ -490,6 +496,96 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		if extNode.Priority < 0 || extNode.Priority > 1000 {
 			return errors.Errorf("invalid priority for %s: priority must be between 0 and 1000", extNode.Host)
 		}
+	}
+
+	return nil
+}
+
+func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+	if !nv.Enabled {
+		return nil
+	}
+
+	if nv.VolumeSpec != nil {
+		if err := nv.VolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
+		}
+	} else {
+		nv.VolumeSpec = rs.VolumeSpec
+	}
+
+	startupDelaySecondsFlag := "--startupDelaySeconds"
+
+	if nv.LivenessProbe == nil {
+		nv.LivenessProbe = new(LivenessProbeExtended)
+	}
+	if nv.LivenessProbe.InitialDelaySeconds == 0 {
+		nv.LivenessProbe.InitialDelaySeconds = rs.LivenessProbe.InitialDelaySeconds
+	}
+	if nv.LivenessProbe.TimeoutSeconds == 0 {
+		nv.LivenessProbe.TimeoutSeconds = rs.LivenessProbe.TimeoutSeconds
+	}
+	if nv.LivenessProbe.PeriodSeconds == 0 {
+		nv.LivenessProbe.PeriodSeconds = rs.LivenessProbe.PeriodSeconds
+	}
+	if nv.LivenessProbe.FailureThreshold == 0 {
+		nv.LivenessProbe.FailureThreshold = rs.LivenessProbe.FailureThreshold
+	}
+	if nv.LivenessProbe.StartupDelaySeconds == 0 {
+		nv.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
+	}
+	if nv.LivenessProbe.Handler.Exec == nil {
+		nv.LivenessProbe.Probe.Handler.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/data/db/mongodb-healthcheck",
+				"k8s",
+				"liveness",
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem",
+			},
+		}
+	}
+	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+		nv.LivenessProbe.Handler.Exec.Command = append(
+			nv.LivenessProbe.Handler.Exec.Command,
+			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds))
+	}
+
+	if nv.ReadinessProbe == nil {
+		nv.ReadinessProbe = &corev1.Probe{
+			Handler: corev1.Handler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(cr.Spec.Mongod.Net.Port)),
+				},
+			},
+		}
+	}
+	if nv.ReadinessProbe.InitialDelaySeconds == 0 {
+		nv.ReadinessProbe.InitialDelaySeconds = rs.ReadinessProbe.InitialDelaySeconds
+	}
+	if nv.ReadinessProbe.TimeoutSeconds == 0 {
+		nv.ReadinessProbe.TimeoutSeconds = rs.ReadinessProbe.TimeoutSeconds
+	}
+	if nv.ReadinessProbe.PeriodSeconds == 0 {
+		nv.ReadinessProbe.PeriodSeconds = rs.ReadinessProbe.PeriodSeconds
+	}
+	if nv.ReadinessProbe.FailureThreshold == 0 {
+		nv.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
+	}
+
+	if len(nv.ServiceAccountName) == 0 {
+		nv.ServiceAccountName = WorkloadSA
+	}
+
+	nv.MultiAZ.reconcileOpts()
+
+	if nv.ContainerSecurityContext == nil {
+		nv.ContainerSecurityContext = rs.ContainerSecurityContext
+	}
+
+	if nv.PodSecurityContext == nil {
+		nv.PodSecurityContext = rs.PodSecurityContext
 	}
 
 	return nil
