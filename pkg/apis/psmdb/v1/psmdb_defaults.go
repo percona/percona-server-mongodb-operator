@@ -363,6 +363,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ServiceAccountName = WorkloadSA
 		}
 
+		if cr.Spec.Unmanaged && !replset.Expose.Enabled {
+			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
+		}
+
 		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
 		if err != nil {
 			return err
@@ -479,6 +483,18 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 	if rs.PodSecurityContext == nil {
 		rs.PodSecurityContext = &corev1.PodSecurityContext{
 			FSGroup: fsgroup,
+		}
+	}
+
+	for _, extNode := range rs.ExternalNodes {
+		if extNode.Port == 0 {
+			extNode.Port = 27017
+		}
+		if extNode.Votes < 0 || extNode.Votes > 1 {
+			return errors.Errorf("invalid votes for %s: votes must be 0 or 1", extNode.Host)
+		}
+		if extNode.Priority < 0 || extNode.Priority > 1000 {
+			return errors.Errorf("invalid priority for %s: priority must be between 0 and 1000", extNode.Host)
 		}
 	}
 

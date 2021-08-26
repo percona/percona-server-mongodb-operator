@@ -954,7 +954,30 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig)
+	cfgPods, err := r.getRSPods(cr, api.ConfigReplSetName)
+	if err != nil {
+		return errors.Wrap(err, "get configsvr pods")
+	}
+
+	// wait all configsvr pods to prevent unnecessary updates to mongos deployment
+	if int(cr.Spec.Sharding.ConfigsvrReplSet.Size) > len(cfgPods.Items) {
+		return nil
+	}
+
+	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
+	for _, pod := range cfgPods.Items {
+		host, err := psmdb.MongoHost(r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
+		if err != nil {
+			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
+		}
+		cfgInstances = append(cfgInstances, host)
+	}
+
+	for _, ext := range cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes {
+		cfgInstances = append(cfgInstances, ext.Host)
+	}
+
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig, cfgInstances)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
