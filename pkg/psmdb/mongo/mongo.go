@@ -477,6 +477,17 @@ func (m *ConfigMembers) SetVotes() {
 		if member.Hidden {
 			continue
 		}
+
+		if _, ok := member.Tags["nonVoting"]; ok {
+			// Non voting member is a regular ReplSet member with
+			// votes and priority equals to 0.
+
+			[]ConfigMember(*m)[i].Votes = 0
+			[]ConfigMember(*m)[i].Priority = 0
+
+			continue
+		}
+
 		if votes < MaxVotingMembers {
 			[]ConfigMember(*m)[i].Votes = 1
 			votes++
@@ -487,10 +498,13 @@ func (m *ConfigMembers) SetVotes() {
 		} else if member.ArbiterOnly {
 			// Arbiter should always have a vote
 			[]ConfigMember(*m)[i].Votes = 1
+
+			// We're over the max voters limit. Make room for the arbiter
 			[]ConfigMember(*m)[lastVoteIdx].Votes = 0
 			[]ConfigMember(*m)[lastVoteIdx].Priority = 0
 		}
 	}
+
 	if votes == 0 {
 		return
 	}
