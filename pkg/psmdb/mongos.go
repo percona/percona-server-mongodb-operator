@@ -1,8 +1,8 @@
 package psmdb
 
 import (
-	"crypto/md5"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -28,7 +28,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, configSource VolumeSourceType) (appsv1.DeploymentSpec, error) {
+func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (appsv1.DeploymentSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -43,7 +43,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		}
 	}
 
-	c, err := mongosContainer(cr, configSource.IsUsable())
+	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances)
 	if err != nil {
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -64,8 +64,8 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		annotations = make(map[string]string)
 	}
 
-	if c := cr.Spec.Sharding.Mongos.Configuration; c != "" && configSource == VolumeSourceConfigMap {
-		annotations["percona.com/configuration-hash"] = fmt.Sprintf("%x", md5.Sum([]byte(c)))
+	if customConf.Type.IsUsable() {
+		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
 	zero := intstr.FromInt(0)
@@ -89,7 +89,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
 				Containers:        containers,
 				InitContainers:    initContainers,
-				Volumes:           volumes(cr, configSource),
+				Volumes:           volumes(cr, customConf.Type),
 				SchedulerName:     cr.Spec.SchedulerName,
 				RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 			},
@@ -115,7 +115,7 @@ func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []core
 	return []corev1.Container{EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)}
 }
 
-func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool) (corev1.Container, error) {
+func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) (corev1.Container, error) {
 	fvar := false
 
 	resources, err := CreateResources(cr.Spec.Sharding.Mongos.ResourcesSpec)
@@ -164,7 +164,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool) (corev1.C
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args:            mongosContainerArgs(cr, resources, useConfigFile),
+		Args:            mongosContainerArgs(cr, resources, useConfigFile, cfgInstances),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongosPortName,
@@ -208,18 +208,14 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool) (corev1.C
 	return container, nil
 }
 
-func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool) []string {
+func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool, cfgInstances []string) []string {
 	mdSpec := cr.Spec.Mongod
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
-	cfgInstanses := make([]string, 0, cfgRs.Size)
-	for i := 0; i < int(cfgRs.Size); i++ {
-		podName := cr.Name + "-" + cfgRs.Name + "-" + strconv.Itoa(i)
-		cfgInstanses = append(cfgInstanses, GetAddr(cr, podName, cfgRs.Name))
-	}
-
-	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstanses, ","))
+	// sort config instances to prevent unnecessary updates
+	sort.Strings(cfgInstances)
+	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstances, ","))
 	args := []string{
 		"mongos",
 		"--bind_ip_all",

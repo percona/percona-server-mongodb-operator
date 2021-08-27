@@ -354,10 +354,7 @@ deploy_chaos_mesh() {
 	local chaos_mesh_ns=$1
 
 	desc 'install chaos-mesh'
-	local old_cm_namespace=$(helm list --all-namespaces --filter chaos-mesh | tail -n1 | awk -F' ' '{print $2}')
-	if [ "${old_cm_namespace}" != "NAMESPACE" ]; then
-		helm del chaos-mesh --namespace ${old_cm_namespace} || :
-	fi
+	helm del chaos-mesh --namespace ${chaos_mesh_ns} || :
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
 	if version_gt "1.19"; then
 		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 0.5.1 --set clusterScoped=false --set controllerManager.targetNamespace=${chaos_mesh_ns}
@@ -404,6 +401,12 @@ wait_for_running() {
 			wait_pod ${name}-${i}
 		fi
 	done
+	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.enabled}') == "true" ]]; then
+		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.size}') - 1))
+		for i in $(seq 0 $last_pod); do
+			wait_pod ${name}-nv-${i}
+		done
+	fi
 	sleep 10
 	if [[ ${check_cluster_readyness} == "true" ]]; then
 		set +x
