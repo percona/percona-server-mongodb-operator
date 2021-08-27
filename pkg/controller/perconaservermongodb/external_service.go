@@ -35,7 +35,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
-
 	if cr.Spec.Pause {
 		return nil
 	}
@@ -46,6 +45,12 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaSe
 	svcNames := make(map[string]struct{}, replset.Size)
 	for i := 0; i < int(replset.Size); i++ {
 		svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
+	}
+
+	if replset.NonVoting.Enabled {
+		for i := 0; i < int(replset.NonVoting.Size); i++ {
+			svcNames[service.Name+"-nv-"+strconv.Itoa(i)] = struct{}{}
+		}
 	}
 
 	// clear old services

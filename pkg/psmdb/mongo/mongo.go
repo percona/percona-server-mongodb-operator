@@ -445,6 +445,39 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) (changes bool) {
 	return changes
 }
 
+// ExternalNodesChanged checks if votes or priority fields changed for external nodes
+func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
+	cm := make(map[string]struct {
+		votes    int
+		priority int
+	}, len(compareWith))
+
+	for _, member := range compareWith {
+		_, ok := member.Tags["external"]
+		if !ok {
+			continue
+		}
+		cm[member.Host] = struct {
+			votes    int
+			priority int
+		}{votes: member.Votes, priority: member.Priority}
+	}
+
+	changes := false
+	for i := 0; i < len(*m); i++ {
+		member := []ConfigMember(*m)[i]
+		if ext, ok := cm[member.Host]; ok {
+			if ext.votes != member.Votes || ext.priority != member.Priority {
+				changes = true
+			}
+			[]ConfigMember(*m)[i].Votes = ext.votes
+			[]ConfigMember(*m)[i].Priority = ext.priority
+		}
+	}
+
+	return changes
+}
+
 // AddNew adds new members from given list
 func (m *ConfigMembers) AddNew(from ConfigMembers) (changes bool) {
 	cm := make(map[string]struct{}, len(*m))
@@ -477,9 +510,32 @@ func (m *ConfigMembers) SetVotes() {
 		if member.Hidden {
 			continue
 		}
+
+		if _, ok := member.Tags["external"]; ok {
+			[]ConfigMember(*m)[i].Votes = member.Votes
+			[]ConfigMember(*m)[i].Priority = member.Priority
+
+			if member.Votes == 1 {
+				votes++
+			}
+
+			continue
+		}
+    
+		if _, ok := member.Tags["nonVoting"]; ok {
+			// Non voting member is a regular ReplSet member with
+			// votes and priority equals to 0.
+
+			[]ConfigMember(*m)[i].Votes = 0
+			[]ConfigMember(*m)[i].Priority = 0
+
+			continue
+		}
+
 		if votes < MaxVotingMembers {
 			[]ConfigMember(*m)[i].Votes = 1
 			votes++
+
 			if !member.ArbiterOnly {
 				lastVoteIdx = i
 				[]ConfigMember(*m)[i].Priority = 1
@@ -487,10 +543,13 @@ func (m *ConfigMembers) SetVotes() {
 		} else if member.ArbiterOnly {
 			// Arbiter should always have a vote
 			[]ConfigMember(*m)[i].Votes = 1
+
+			// We're over the max voters limit. Make room for the arbiter
 			[]ConfigMember(*m)[lastVoteIdx].Votes = 0
 			[]ConfigMember(*m)[lastVoteIdx].Priority = 0
 		}
 	}
+
 	if votes == 0 {
 		return
 	}

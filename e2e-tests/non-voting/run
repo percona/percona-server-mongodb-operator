@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+spinup_psmdb() {
+	local cluster=$1
+	local config=$2
+	local size="${3:-3}"
+
+	desc 'create first PSMDB cluster'
+	apply_cluster $config
+
+	desc 'check if Pod is started'
+	wait_for_running "${cluster}" "$size"
+	sleep 20
+
+	compare_kubectl "statefulset/${cluster}-nv"
+
+	desc 'write data'
+
+	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+		"userAdmin:userAdmin123456@${cluster}.${namespace}"
+
+	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
+        sleep 10
+
+        desc 'read data'
+        compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+        compare_mongo_cmd "find" "myApp:myPass@$cluster-nv-0.$cluster.$namespace"
+}
+
+main() {
+	local cluster="nonvoting-rs0"
+	deploy_cert_manager
+	create_namespace $namespace
+	deploy_operator
+	kubectl_bin apply \
+		-f $conf_dir/client.yml \
+		-f $conf_dir/secrets.yml
+
+	desc "check non-voting members"
+	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml"
+
+	destroy $namespace
+}
+
+main

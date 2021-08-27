@@ -33,7 +33,9 @@ var secretFileMode int32 = 288
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
 	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
-	resourcesSpec *api.ResourcesSpec) (appsv1.StatefulSetSpec, error) {
+	resourcesSpec *api.ResourcesSpec, podSecurityContext *corev1.PodSecurityContext,
+	containerSecurityContext *corev1.SecurityContext, livenessProbe *api.LivenessProbeExtended,
+	readinessProbe *corev1.Probe, configuration string, configName string) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
 
@@ -70,7 +72,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	if customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: customConf.Type.VolumeSource(MongodCustomConfigName(m.Name, replset.Name)),
+			VolumeSource: customConf.Type.VolumeSource(configName),
 		})
 	}
 
@@ -89,7 +91,8 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		)
 	}
 
-	c, err := container(m, replset, containerName, resources, ikeyName, customConf.Type.IsUsable())
+	c, err := container(m, replset, containerName, resources, ikeyName, customConf.Type.IsUsable(),
+		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -125,7 +128,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				SecurityContext:    replset.PodSecurityContext,
+				SecurityContext:    podSecurityContext,
 				Affinity:           PodAffinity(m, multiAZ.Affinity, customLabels),
 				NodeSelector:       multiAZ.NodeSelector,
 				Tolerations:        multiAZ.Tolerations,
