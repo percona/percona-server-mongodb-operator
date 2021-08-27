@@ -76,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "check sys users data changes")
 	}
 
-	if !dataChanged {
+	if !dataChanged || cr.Spec.Unmanaged {
 		return nil
 	}
 

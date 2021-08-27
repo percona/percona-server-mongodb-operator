@@ -25,9 +25,10 @@ import (
 )
 
 var (
-	ErrMsgAuthFailedStr string = "server returned error on SASL authentication step: Authentication failed."
-	ErrSessionTimeout          = errors.New("timed out waiting for mongodb connection")
-	ErrPrimaryTimeout          = errors.New("timed out waiting for host to become primary")
+	ErrMsgAuthFailedStr      string = "server returned error on SASL authentication step: Authentication failed."
+	ErrNoReachableServersStr string = "no reachable servers"
+	ErrSessionTimeout               = errors.New("timed out waiting for mongodb connection")
+	ErrPrimaryTimeout               = errors.New("timed out waiting for host to become primary")
 )
 
 func GetSession(cnf *Config) (*mgo.Session, error) {
@@ -59,12 +60,23 @@ func GetSession(cnf *Config) (*mgo.Session, error) {
 	}
 
 	session, err := mgo.DialWithInfo(cnf.DialInfo)
-	if err != nil && err.Error() == ErrMsgAuthFailedStr {
-		log.Debug("authentication failed, retrying with authentication disabled")
-		cnf.DialInfo.Username = ""
-		cnf.DialInfo.Password = ""
-		session, err = mgo.DialWithInfo(cnf.DialInfo)
+	if err != nil {
+		switch err.Error() {
+		case ErrMsgAuthFailedStr:
+			log.Debug("authentication failed, retrying with authentication disabled")
+			cnf.DialInfo.Username = ""
+			cnf.DialInfo.Password = ""
+			session, err = mgo.DialWithInfo(cnf.DialInfo)
+		case ErrNoReachableServersStr:
+			log.Debug("connection failed, retrying without replSet")
+			cnf.DialInfo.ReplicaSetName = ""
+			// if replset is not yet initialized, we won't have users either
+			cnf.DialInfo.Username = ""
+			cnf.DialInfo.Password = ""
+			session, err = mgo.DialWithInfo(cnf.DialInfo)
+		}
 	}
+
 	if err != nil {
 		return nil, err
 	}
