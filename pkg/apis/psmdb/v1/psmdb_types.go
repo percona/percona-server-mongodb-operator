@@ -49,6 +49,7 @@ const (
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
 	Pause                   bool                                 `json:"pause,omitempty"`
+	Unmanaged               bool                                 `json:"unmanaged,omitempty"`
 	CRVersion               string                               `json:"crVersion,omitempty"`
 	Platform                *version.Platform                    `json:"platform,omitempty"`
 	Image                   string                               `json:"image,omitempty"`
@@ -224,6 +225,27 @@ type PodAffinity struct {
 	Advanced    *corev1.Affinity `json:"advanced,omitempty"`
 }
 
+type ExternalNode struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port,omitempty"`
+	Priority int    `json:"priority"`
+	Votes    int    `json:"votes"`
+}
+
+type NonVotingSpec struct {
+	Enabled                  bool                       `json:"enabled"`
+	Size                     int32                      `json:"size"`
+	Resources                *ResourcesSpec             `json:"resources,omitempty"`
+	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Configuration            string                     `json:"configuration,omitempty"`
+
+	MultiAZ
+}
+
 type ReplsetSpec struct {
 	Resources                *ResourcesSpec             `json:"resources,omitempty"`
 	Name                     string                     `json:"name"`
@@ -238,6 +260,8 @@ type ReplsetSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
 	Configuration            string                     `json:"configuration,omitempty"`
+	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
+	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
 	MultiAZ
 }

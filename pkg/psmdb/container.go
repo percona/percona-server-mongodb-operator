@@ -11,7 +11,8 @@ import (
 )
 
 func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
-	ikeyName string, useConfigFile bool) (corev1.Container, error) {
+	ikeyName string, useConfigFile bool, livenessProbe *api.LivenessProbeExtended, readinessProbe *corev1.Probe,
+	containerSecurityContext *corev1.SecurityContext) (corev1.Container, error) {
 	fvar := false
 
 	volumes := []corev1.VolumeMount{
@@ -99,10 +100,10 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			},
 		},
 		WorkingDir:      MongodContainerDataDir,
-		LivenessProbe:   &replset.LivenessProbe.Probe,
-		ReadinessProbe:  replset.ReadinessProbe,
+		LivenessProbe:   &livenessProbe.Probe,
+		ReadinessProbe:  readinessProbe,
 		Resources:       resources,
-		SecurityContext: replset.ContainerSecurityContext,
+		SecurityContext: containerSecurityContext,
 		VolumeMounts:    volumes,
 	}
 
