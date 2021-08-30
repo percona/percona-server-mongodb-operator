@@ -18,8 +18,7 @@ func (*Blackhole) Save(_ string, data io.Reader, _ int) error {
 	return err
 }
 
-func (*Blackhole) Files(_ string) ([][]byte, error)                    { return [][]byte{}, nil }
-func (*Blackhole) List(_ string) ([]storage.FileInfo, error)           { return []storage.FileInfo{}, nil }
+func (*Blackhole) List(_, _ string) ([]storage.FileInfo, error)        { return []storage.FileInfo{}, nil }
 func (*Blackhole) Delete(_ string) error                               { return nil }
 func (*Blackhole) FileStat(_ string) (inf storage.FileInfo, err error) { return }
 

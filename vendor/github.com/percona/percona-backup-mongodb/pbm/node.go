@@ -3,10 +3,11 @@ package pbm
 import (
 	"context"
 	"fmt"
-	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -29,11 +30,8 @@ const (
 	ReplRoleConfigSrv = "configsrv"
 
 	// TmpUsersCollection and TmpRoles are tmp collections used to avoid
-	// user related issues while resoring on new cluster.
-	// See https://jira.percona.com/browse/PBM-425
-	//
-	// Backup should ensure abscense of this collection to avoid
-	// restore conflicts. See https://jira.percona.com/browse/PBM-460
+	// user related issues while resoring on new cluster and preserving UUID
+	// See https://jira.percona.com/browse/PBM-425, https://jira.percona.com/browse/PBM-636
 	TmpUsersCollection = `pbmRUsers`
 	TmpRolesCollection = `pbmRRoles`
 )
@@ -74,18 +72,9 @@ func (n *Node) Name() string {
 }
 
 func (n *Node) Connect() error {
-	conn, err := mongo.NewClient(options.Client().ApplyURI(n.curi).SetAppName("pbm-agent-exec").SetDirect(true))
+	conn, err := n.connect(true)
 	if err != nil {
-		return errors.Wrap(err, "create mongo client")
-	}
-	err = conn.Connect(n.ctx)
-	if err != nil {
-		return errors.Wrap(err, "connect")
-	}
-
-	err = conn.Ping(n.ctx, nil)
-	if err != nil {
-		return errors.Wrap(err, "ping")
+		return err
 	}
 
 	if n.cn != nil {
@@ -97,6 +86,24 @@ func (n *Node) Connect() error {
 
 	n.cn = conn
 	return nil
+}
+
+func (n *Node) connect(direct bool) (*mongo.Client, error) {
+	conn, err := mongo.NewClient(options.Client().ApplyURI(n.curi).SetAppName("pbm-agent-exec").SetDirect(direct))
+	if err != nil {
+		return nil, errors.Wrap(err, "create mongo client")
+	}
+	err = conn.Connect(n.ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "connect")
+	}
+
+	err = conn.Ping(n.ctx, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "ping")
+	}
+
+	return conn, nil
 }
 
 func (n *Node) GetInfo() (*NodeInfo, error) {
@@ -142,12 +149,7 @@ func (n *Node) GetMongoVersion() (*MongoVersion, error) {
 }
 
 func (n *Node) GetReplsetStatus() (*ReplsetStatus, error) {
-	status := &ReplsetStatus{}
-	err := n.cn.Database(DB).RunCommand(n.ctx, bson.D{{"replSetGetStatus", 1}}).Decode(status)
-	if err != nil {
-		return nil, errors.Wrap(err, "run mongo command replSetGetStatus")
-	}
-	return status, err
+	return GetReplsetStatus(n.ctx, n.cn)
 }
 
 func (n *Node) Status() (*NodeStatus, error) {
@@ -164,7 +166,7 @@ func (n *Node) Status() (*NodeStatus, error) {
 		}
 	}
 
-	return nil, errors.New("not found")
+	return nil, ErrNotFound
 }
 
 // ReplicationLag returns node replication lag in seconds
@@ -212,36 +214,96 @@ func (n *Node) CurrentUser() (*AuthInfo, error) {
 }
 
 func (n *Node) DropTMPcoll() error {
-	err := n.cn.Database(DB).Collection(TmpRolesCollection).Drop(n.ctx)
+	cn, err := n.connect(false)
 	if err != nil {
-		return errors.Wrapf(err, "drop tmp roles collection %s", TmpRolesCollection)
+		return errors.Wrap(err, "connect to primary")
 	}
+	defer cn.Disconnect(n.ctx)
 
-	err = n.cn.Database(DB).Collection(TmpUsersCollection).Drop(n.ctx)
+	err = DropTMPcoll(n.ctx, cn)
 	if err != nil {
-		return errors.Wrapf(err, "drop tmp users collection %s", TmpUsersCollection)
+		return err
 	}
 
 	return nil
 }
 
-func (n *Node) EnsureNoTMPcoll() error {
-	cols, err := n.cn.Database(DB).ListCollectionNames(n.ctx, bson.D{})
+func DropTMPcoll(ctx context.Context, cn *mongo.Client) error {
+	err := cn.Database(DB).Collection(TmpRolesCollection).Drop(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "list collections in %s", DB)
+		return errors.Wrapf(err, "drop collection %s", TmpRolesCollection)
 	}
 
-	var ext []string
-	for _, n := range cols {
-		if n == TmpRolesCollection || n == TmpUsersCollection {
-			ext = append(ext, DB+"."+n)
-		}
+	err = cn.Database(DB).Collection(TmpUsersCollection).Drop(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "drop collection %s", TmpUsersCollection)
 	}
-	if len(ext) > 0 {
-		return errors.Errorf(
-			"PBM temporary collections exist. It will lead to a failed restore. Please, drop next collections manually: %s",
-			strings.Join(ext, ", "),
-		)
-	}
+
 	return nil
+}
+
+func (n *Node) WaitForWrite(ts primitive.Timestamp) (err error) {
+	var lw primitive.Timestamp
+	for i := 0; i < 21; i++ {
+		lw, err = LastWrite(n.cn, false)
+		if err == nil && primitive.CompareTimestamp(lw, ts) >= 0 {
+			return nil
+		}
+		time.Sleep(time.Second * 1)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return errors.New("run out of time")
+}
+
+func LastWrite(cn *mongo.Client, majority bool) (primitive.Timestamp, error) {
+	inf := &NodeInfo{}
+	err := cn.Database("admin").RunCommand(context.Background(), bson.D{{"isMaster", 1}}).Decode(inf)
+	if err != nil {
+		return primitive.Timestamp{}, errors.Wrap(err, "get NodeInfo data")
+	}
+	lw := inf.LastWrite.MajorityOpTime.TS
+	if !majority {
+		lw = inf.LastWrite.OpTime.TS
+	}
+	if lw.T == 0 {
+		return primitive.Timestamp{}, errors.New("last write timestamp is nil")
+	}
+	return lw, nil
+}
+
+func (n *Node) CopyUsersNRolles() (lastWrite primitive.Timestamp, err error) {
+	cn, err := n.connect(false)
+	if err != nil {
+		return lastWrite, errors.Wrap(err, "connect to primary")
+	}
+	defer cn.Disconnect(n.ctx)
+
+	err = DropTMPcoll(n.ctx, cn)
+	if err != nil {
+		return lastWrite, errors.Wrap(err, "drop tmp collections before copy")
+
+	}
+
+	_, err = CopyColl(n.ctx,
+		cn.Database("admin").Collection("system.roles"),
+		cn.Database(DB).Collection(TmpRolesCollection),
+		bson.M{},
+	)
+	if err != nil {
+		return lastWrite, errors.Wrap(err, "copy admin.system.roles")
+	}
+	_, err = CopyColl(n.ctx,
+		cn.Database("admin").Collection("system.users"),
+		cn.Database(DB).Collection(TmpUsersCollection),
+		bson.M{},
+	)
+	if err != nil {
+		return lastWrite, errors.Wrap(err, "copy admin.system.users")
+	}
+
+	return LastWrite(cn, false)
 }
