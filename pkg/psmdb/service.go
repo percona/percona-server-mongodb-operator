@@ -32,9 +32,8 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        m.Name + "-" + replset.Name,
-			Namespace:   m.Namespace,
-			Annotations: replset.Expose.ServiceAnnotations,
+			Name:      m.Name + "-" + replset.Name,
+			Namespace: m.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -59,8 +58,9 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: m.Namespace,
+			Name:        podName,
+			Namespace:   m.Namespace,
+			Annotations: replset.Expose.ServiceAnnotations,
 		},
 	}
 
@@ -91,6 +91,7 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
 		svc.Spec.ExternalTrafficPolicy = "Cluster"
+		svc.Spec.LoadBalancerSourceRanges = replset.Expose.LoadBalancerSourceRanges
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
