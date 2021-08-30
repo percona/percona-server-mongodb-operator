@@ -2,8 +2,10 @@ package tls
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -12,6 +14,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -99,4 +106,35 @@ func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err er
 	privKey := keyOut.Bytes()
 
 	return cert, tlsCert, privKey, nil
+}
+
+// Config returns tls.Config to be used in mongo.Config
+func Config(k8sclient client.Client, cr *api.PerconaServerMongoDB) (tls.Config, error) {
+	secretName := cr.Spec.Secrets.SSL
+	if len(secretName) == 0 {
+		secretName = cr.Name + "-ssl"
+	}
+	certSecret := &corev1.Secret{}
+	err := k8sclient.Get(context.TODO(), types.NamespacedName{
+		Name:      secretName,
+		Namespace: cr.Namespace,
+	}, certSecret)
+	if err != nil {
+		return tls.Config{}, errors.Wrap(err, "get ssl certSecret")
+	}
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
+
+	var clientCerts []tls.Certificate
+	cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
+	if err != nil {
+		return tls.Config{}, errors.Wrap(err, "load keypair")
+	}
+	clientCerts = append(clientCerts, cert)
+
+	return tls.Config{
+		InsecureSkipVerify: true,
+		RootCAs:            pool,
+		Certificates:       clientCerts,
+	}, nil
 }

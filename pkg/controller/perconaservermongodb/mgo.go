@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -187,7 +186,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 		member := mongo.ConfigMember{
 			ID:           i + memberC,
-			Host:         extNode.Host + ":" + strconv.Itoa(extNode.Port),
+			Host:         extNode.HostPort(),
 			Votes:        extNode.Votes,
 			Priority:     extNode.Priority,
 			BuildIndexes: true,

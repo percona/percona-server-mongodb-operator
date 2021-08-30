@@ -36,7 +36,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(cr *api.PerconaServerMon
 }
 
 // Start requests backup on PBM
-func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]float64) (api.PerconaServerMongoDBBackupStatus, error) {
 	var status api.PerconaServerMongoDBBackupStatus
 
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
@@ -44,7 +44,7 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMon
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
-	err := b.pbm.SetConfig(stg, b.spec.PITR)
+	err := b.pbm.SetConfig(stg, b.spec.PITR, priority)
 	if err != nil {
 		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
@@ -84,10 +84,31 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMon
 func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
-	meta, err := b.pbm.C.GetBackupMeta(cr.Status.PBMname)
-	if err != nil {
-		return status, errors.Wrap(err, "get pbm backup meta")
+	var meta *pbm.BackupMeta
+	var retries uint64 = 0
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	// PBM 1.5.0 needs some sync up before we can read the backup meta
+	for range ticker.C {
+		retries++
+
+		var err error
+		meta, err = b.pbm.C.GetBackupMeta(cr.Status.PBMname)
+		if err == nil {
+			break
+		}
+
+		if errors.Is(err, pbm.ErrNotFound) {
+			log.Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
+		} else {
+			return status, errors.Wrap(err, "get pbm backup meta")
+		}
+
+		if retries > 59 {
+			break
+		}
 	}
+
 	if meta == nil || meta.Name == "" {
 		log.Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
