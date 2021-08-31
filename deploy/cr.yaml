@@ -8,6 +8,7 @@ spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
+#  unmanaged: false
   crVersion: 1.10.0
   image: percona/percona-server-mongodb:4.4.6-8
   imagePullPolicy: Always
