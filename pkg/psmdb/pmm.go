@@ -309,6 +309,22 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmse
 		pmmAgentScriptEnv := PMMAgentScript()
 		pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
 	}
+	if cr.CompareVersion("1.10.0") >= 0 {
+		// PMM team added these flags which allows us to avoid
+		// container crash, but just restart pmm-agent till it recovers
+		// the connection.
+		sidecarEnvs := []corev1.EnvVar{
+			{
+				Name:  "PMM_AGENT_SIDECAR",
+				Value: "true",
+			},
+			{
+				Name:  "PMM_AGENT_SIDECAR_SLEEP",
+				Value: "5",
+			},
+		}
+		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
+	}
 
 	return pmmC, nil
 }
