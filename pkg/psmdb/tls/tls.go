@@ -125,16 +125,14 @@ func Config(k8sclient client.Client, cr *api.PerconaServerMongoDB) (tls.Config, 
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(certSecret.Data["ca.crt"])
 
-	var clientCerts []tls.Certificate
 	cert, err := tls.X509KeyPair(certSecret.Data["tls.crt"], certSecret.Data["tls.key"])
 	if err != nil {
 		return tls.Config{}, errors.Wrap(err, "load keypair")
 	}
-	clientCerts = append(clientCerts, cert)
 
 	return tls.Config{
 		InsecureSkipVerify: true,
 		RootCAs:            pool,
-		Certificates:       clientCerts,
+		Certificates:       []tls.Certificate{cert},
 	}, nil
 }

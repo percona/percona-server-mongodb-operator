@@ -84,9 +84,12 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]f
 func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
-	var meta *pbm.BackupMeta
-	var retries uint64 = 0
-	ticker := time.NewTicker(1 * time.Second)
+	var (
+		meta    *pbm.BackupMeta
+		retries uint64
+	)
+	const maxRetries = 60
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	// PBM 1.5.0 needs some sync up before we can read the backup meta
 	for range ticker.C {
@@ -104,7 +107,7 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 			return status, errors.Wrap(err, "get pbm backup meta")
 		}
 
-		if retries > 59 {
+		if retries >= maxRetries {
 			break
 		}
 	}

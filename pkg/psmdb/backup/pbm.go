@@ -130,6 +130,9 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 		PITR: pbm.PITRConf{
 			Enabled: pitr.Enabled,
 		},
+		Backup: pbm.BackupConf{
+			Priority: priority,
+		},
 	}
 
 	switch stg.Type {
@@ -159,8 +162,6 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 	default:
 		return errors.New("unsupported backup storage type")
 	}
-
-	conf.Backup.Priority = priority
 
 	if err := b.C.SetConfig(conf); err != nil {
 		return errors.Wrap(err, "write config")
