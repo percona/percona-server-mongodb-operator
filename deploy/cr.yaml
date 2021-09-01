@@ -8,6 +8,7 @@ spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
+#  unmanaged: false
   crVersion: 1.10.0
   image: percona/percona-server-mongodb:4.4.6-8
   imagePullPolicy: Always
@@ -33,6 +34,12 @@ spec:
 
   - name: rs0
     size: 3
+#    externalNodes:
+#    - host: 34.124.76.90
+#    - host: 34.124.76.91
+#      votes: 0
+#      priority: 0
+#    - host: 34.124.76.92
 #    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #    configuration: |
 #      operationProfiling:
@@ -198,6 +205,12 @@ spec:
 
     configsvrReplSet:
       size: 3
+#      externalNodes:
+#      - host: 34.124.76.93
+#      - host: 34.124.76.94
+#        votes: 0
+#        priority: 0
+#      - host: 34.124.76.95
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        operationProfiling:
@@ -247,6 +260,13 @@ spec:
 #        name: rs-sidecar-1
       podDisruptionBudget:
         maxUnavailable: 1
+      expose:
+        enabled: false
+        exposeType: LoadBalancer
+#        loadBalancerSourceRanges:
+#          - 10.0.0.0/8
+#        serviceAnnotations:
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
       resources:
         limits:
           cpu: "300m"
