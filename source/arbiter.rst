@@ -10,9 +10,10 @@ node <https://docs.mongodb.com/manual/core/replica-set-elections/#replica-set-el
 becomes the primary node. 
 
 The need for elections influences the choice of the number of nodes in the cluster.
-(particularly, that's the reason to avoid an even number of nodes, and to have
-at least three nodes).
-But sometimes there is a contradiction between the number of nodes suitable for
+Elections are the reason to avoid even number of nodes, and to have at least
+three and not more than seven participating nodes.
+
+Still, sometimes there is a contradiction between the number of nodes suitable for
 elections and the number of nodes needed to store data. You can solve this
 contradiction in two ways:
 
@@ -53,30 +54,31 @@ with 4 data instances and 1 Arbiter:
 Adding non-voting nodes
 -----------------------
 
-Normally, each node stores a complete copy of the data,
-but there is also a possibility, to reduce disk IO and space used by the
-database, to add an `arbiter node <https://docs.mongodb.com/manual/core/replica-set-arbiter/>`_. An arbiter cannot become a primary and does not have a complete copy of the data. The arbiter does have one election vote and can be the odd number for elections. The arbiter does not demand a persistent volume.
+`Non-voting member <https://docs.mongodb.com/manual/tutorial/configure-a-non-voting-replica-set-member/>`_
+is a Replica Set node which does not participate in the primary
+election process. This feature is required if having more than 7 nodes, or if
+there is a `node in the edge location <https://en.wikipedia.org/wiki/Edge_computing>`_,
+which obviously should not participate in the voting process.
 
-Percona Distribution for MongoDB Operator has the ability to create Replica Set Arbiter
-nodes if needed. This feature can be configured in the Replica Set
-section of the
+Percona Distribution for MongoDB Operator has the ability to configure non-voting
+nodes in the Replica Set section of the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file:
 
--  set ``arbiter.enabled`` option to ``true`` to allow Arbiter instances,
--  use ``arbiter.size`` option to set the desired amount of Arbiter instances.
+-  set ``nonvoting.enabled`` option to ``true`` to allow non-voting instances,
+-  use ``nonvoting.size`` option to set the desired amount of non-voting instances.
 
 For example, the following keys in ``deploy/cr.yaml`` will create a cluster
-with 4 data instances and 1 Arbiter:
+with 3 data instances and 1 non-voting instance:
 
 .. code:: yaml
 
    ....
    replsets:
      ....
-     size: 4
+     size: 3
      ....
-     arbiter:
+     nonvoting:
        enabled: true
        size: 1
        ....
