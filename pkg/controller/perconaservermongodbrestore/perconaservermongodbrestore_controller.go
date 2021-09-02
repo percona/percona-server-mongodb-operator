@@ -207,7 +207,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			return status, errors.Wrap(err, "get storage")
 		}
 
-		err = pbmc.SetConfig(storage, cluster.Spec.Backup.PITR.Disabled())
+		priorities, err := pbmc.GetPriorities(r.client, cluster)
+		if err != nil {
+			return status, errors.Wrap(err, "get pbm priorities")
+		}
+
+		err = pbmc.SetConfig(storage, cluster.Spec.Backup.PITR.Disabled(), priorities)
 		if err != nil {
 			return status, errors.Wrap(err, "set pbm config")
 		}

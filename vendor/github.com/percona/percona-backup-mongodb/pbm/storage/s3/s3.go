@@ -3,7 +3,6 @@ package s3
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -41,7 +40,7 @@ type Conf struct {
 	EndpointURL          string      `bson:"endpointUrl,omitempty" json:"endpointUrl" yaml:"endpointUrl,omitempty"`
 	Bucket               string      `bson:"bucket" json:"bucket" yaml:"bucket"`
 	Prefix               string      `bson:"prefix,omitempty" json:"prefix,omitempty" yaml:"prefix,omitempty"`
-	Credentials          Credentials `bson:"credentials" json:"credentials,omitempty" yaml:"credentials"`
+	Credentials          Credentials `bson:"credentials" json:"-" yaml:"credentials"`
 	ServerSideEncryption *AWSsse     `bson:"serverSideEncryption,omitempty" json:"serverSideEncryption,omitempty" yaml:"serverSideEncryption,omitempty"`
 	UploadPartSize       int         `bson:"uploadPartSize,omitempty" json:"uploadPartSize,omitempty" yaml:"uploadPartSize,omitempty"`
 }
@@ -92,6 +91,7 @@ const (
 type S3 struct {
 	opts Conf
 	log  *log.Event
+	s3s  *s3.S3
 }
 
 func New(opts Conf, l *log.Event) (*S3, error) {
@@ -100,10 +100,17 @@ func New(opts Conf, l *log.Event) (*S3, error) {
 		return nil, errors.Wrap(err, "cast options")
 	}
 
-	return &S3{
+	s := &S3{
 		opts: opts,
 		log:  l,
-	}, nil
+	}
+
+	s.s3s, err = s.s3session()
+	if err != nil {
+		return nil, errors.Wrap(err, "AWS session")
+	}
+
+	return s, nil
 }
 
 const defaultPartSize = 10 * 1024 * 1024 // 10Mb
@@ -178,91 +185,23 @@ func (s *S3) Save(name string, data io.Reader, sizeb int) error {
 	}
 }
 
-func (s *S3) Files(suffix string) ([][]byte, error) {
-	s3s, err := s.s3session()
-	if err != nil {
-		return nil, errors.Wrap(err, "AWS session")
-	}
+func (s *S3) List(prefix, suffix string) ([]storage.FileInfo, error) {
+	prfx := path.Join(s.opts.Prefix, prefix)
 
-	lparams := &s3.ListObjectsInput{
-		Bucket:    aws.String(s.opts.Bucket),
-		Delimiter: aws.String("/"),
-	}
-	if s.opts.Prefix != "" {
-		lparams.Prefix = aws.String(s.opts.Prefix)
-		if s.opts.Prefix[len(s.opts.Prefix)-1] != '/' {
-			*lparams.Prefix += "/"
-		}
-	}
-
-	var bcps [][]byte
-	var berr error
-	err = s3s.ListObjectsPages(lparams,
-		func(page *s3.ListObjectsOutput, lastPage bool) bool {
-			for _, o := range page.Contents {
-				name := aws.StringValue(o.Key)
-				if strings.HasSuffix(name, suffix) {
-					s3obj, err := s3s.GetObject(&s3.GetObjectInput{
-						Bucket: aws.String(s.opts.Bucket),
-						Key:    aws.String(name),
-					})
-					if err != nil {
-						berr = errors.Wrapf(err, "get object '%s'", name)
-						return false
-					}
-
-					sse := s.opts.ServerSideEncryption
-					if sse != nil && sse.SseAlgorithm != "" {
-						s3obj.ServerSideEncryption = aws.String(sse.SseAlgorithm)
-						if sse.SseAlgorithm == s3.ServerSideEncryptionAwsKms {
-							s3obj.SSEKMSKeyId = aws.String(sse.KmsKeyID)
-						}
-					}
-
-					b, err := ioutil.ReadAll(s3obj.Body)
-					if err != nil {
-						berr = errors.Wrapf(err, "read object '%s'", name)
-						return false
-					}
-					bcps = append(bcps, b)
-				}
-			}
-			return true
-		})
-
-	if err != nil {
-		return nil, errors.Wrap(err, "get backup list")
-	}
-
-	if berr != nil {
-		return nil, errors.Wrap(berr, "metadata")
-	}
-
-	return bcps, nil
-}
-
-func (s *S3) List(prefix string) ([]storage.FileInfo, error) {
-	s3s, err := s.s3session()
-	if err != nil {
-		return nil, errors.Wrap(err, "AWS session")
+	if prfx != "" && !strings.HasSuffix(prfx, "/") {
+		prfx = prfx + "/"
 	}
 
 	lparams := &s3.ListObjectsInput{
 		Bucket: aws.String(s.opts.Bucket),
 	}
-	if s.opts.Prefix != "" {
-		lparams.Prefix = aws.String(s.opts.Prefix)
-		if s.opts.Prefix[len(s.opts.Prefix)-1] != '/' {
-			*lparams.Prefix += "/"
-		}
-	}
 
-	if aws.StringValue(lparams.Prefix) != "" || prefix != "" {
-		lparams.Prefix = aws.String(path.Join(aws.StringValue(lparams.Prefix), prefix))
+	if prfx != "" {
+		lparams.Prefix = aws.String(prfx)
 	}
 
 	var files []storage.FileInfo
-	err = s3s.ListObjectsPages(lparams,
+	err := s.s3s.ListObjectsPages(lparams,
 		func(page *s3.ListObjectsOutput, lastPage bool) bool {
 			for _, o := range page.Contents {
 				f := aws.StringValue(o.Key)
@@ -273,10 +212,13 @@ func (s *S3) List(prefix string) ([]storage.FileInfo, error) {
 				if f[0] == '/' {
 					f = f[1:]
 				}
-				files = append(files, storage.FileInfo{
-					Name: f,
-					Size: aws.Int64Value(o.Size),
-				})
+
+				if strings.HasSuffix(f, suffix) {
+					files = append(files, storage.FileInfo{
+						Name: f,
+						Size: aws.Int64Value(o.Size),
+					})
+				}
 			}
 			return true
 		})
@@ -289,12 +231,7 @@ func (s *S3) List(prefix string) ([]storage.FileInfo, error) {
 }
 
 func (s *S3) FileStat(name string) (inf storage.FileInfo, err error) {
-	s3s, err := s.s3session()
-	if err != nil {
-		return inf, errors.Wrap(err, "AWS session")
-	}
-
-	h, err := s3s.HeadObject(&s3.HeadObjectInput{
+	h, err := s.s3s.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(s.opts.Bucket),
 		Key:    aws.String(path.Join(s.opts.Prefix, name)),
 	})
@@ -309,7 +246,7 @@ func (s *S3) FileStat(name string) (inf storage.FileInfo, err error) {
 	inf.Size = aws.Int64Value(h.ContentLength)
 
 	if inf.Size == 0 {
-		return inf, errors.New("file empty")
+		return inf, storage.ErrEmpty
 	}
 	if aws.BoolValue(h.DeleteMarker) {
 		return inf, errors.New("file has delete marker")
@@ -446,23 +383,19 @@ func (pr *partReader) setSize(o *s3.GetObjectOutput) {
 // If it fails to do so or connection error happened, it recreates the session
 // and tries again up to `downloadRetries` times.
 func (s *S3) SourceReader(name string) (io.ReadCloser, error) {
-	s3s, err := s.s3session()
-	if err != nil {
-		return nil, errors.Wrap(err, "AWS session")
-	}
-
 	pr := s.newPartReader(name)
-	pr.setSession(s3s)
+	pr.setSession(s.s3s)
 
 	r, w := io.Pipe()
 
 	go func() {
 		defer w.Close()
 
+		var err error
 	Loop:
 		for {
 			for i := 0; i < downloadRetries; i++ {
-				_, err := pr.tryNext(w)
+				_, err = pr.tryNext(w)
 				if err == nil {
 					continue Loop
 				}
@@ -495,11 +428,7 @@ func (s *S3) SourceReader(name string) (io.ReadCloser, error) {
 // Delete deletes given file.
 // It returns storage.ErrNotExist if a file isn't exists
 func (s *S3) Delete(name string) error {
-	s3s, err := s.s3session()
-	if err != nil {
-		return errors.Wrap(err, "AWS session")
-	}
-	_, err = s3s.DeleteObject(&s3.DeleteObjectInput{
+	_, err := s.s3s.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(s.opts.Bucket),
 		Key:    aws.String(path.Join(s.opts.Prefix, name)),
 	})

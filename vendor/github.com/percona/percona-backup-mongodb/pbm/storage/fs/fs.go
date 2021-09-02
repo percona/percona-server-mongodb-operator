@@ -2,7 +2,6 @@ package fs
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -67,16 +66,16 @@ func (fs *FS) FileStat(name string) (inf storage.FileInfo, err error) {
 	inf.Size = f.Size()
 
 	if inf.Size == 0 {
-		return inf, errors.New("file empty")
+		return inf, storage.ErrEmpty
 	}
 
 	return inf, nil
 }
 
-func (fs *FS) List(prefix string) ([]storage.FileInfo, error) {
+func (fs *FS) List(prefix, suffix string) ([]storage.FileInfo, error) {
 	var files []storage.FileInfo
 
-	prefix = path.Join(fs.opts.Path, prefix)
+	prefix = filepath.Join(fs.opts.Path, prefix)
 
 	err := filepath.Walk(prefix, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -94,37 +93,15 @@ func (fs *FS) List(prefix string) ([]storage.FileInfo, error) {
 			if f[0] == '/' {
 				f = f[1:]
 			}
-			files = append(files, storage.FileInfo{Name: f, Size: info.Size()})
+			if strings.HasSuffix(f, suffix) {
+				files = append(files, storage.FileInfo{Name: f, Size: info.Size()})
+			}
 		}
 
 		return nil
 	})
 
 	return files, err
-}
-
-func (fs *FS) Files(suffix string) ([][]byte, error) {
-	files, err := ioutil.ReadDir(fs.opts.Path)
-	if err != nil {
-		return nil, errors.Wrap(err, "read dir")
-	}
-
-	var bcps [][]byte
-	for _, f := range files {
-		if f.IsDir() || !strings.HasSuffix(f.Name(), suffix) {
-			continue
-		}
-
-		fpath := path.Join(fs.opts.Path, f.Name())
-		data, err := ioutil.ReadFile(fpath)
-		if err != nil {
-			return nil, errors.Wrapf(err, "read file '%s'", fpath)
-		}
-
-		bcps = append(bcps, data)
-	}
-
-	return bcps, nil
 }
 
 // Delete deletes given file from FS.

@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	v "github.com/hashicorp/go-version"
@@ -230,6 +231,10 @@ type ExternalNode struct {
 	Port     int    `json:"port,omitempty"`
 	Priority int    `json:"priority"`
 	Votes    int    `json:"votes"`
+}
+
+func (e *ExternalNode) HostPort() string {
+	return e.Host + ":" + strconv.Itoa(e.Port)
 }
 
 type NonVotingSpec struct {
@@ -670,4 +675,15 @@ func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
 	if len(s.Conditions) > maxStatusesQuantity {
 		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
 	}
+}
+
+// GetExternalNodes returns all external nodes for all replsets
+func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
+	extNodes := make([]*ExternalNode, 0)
+
+	for _, replset := range cr.Spec.Replsets {
+		extNodes = append(extNodes, replset.ExternalNodes...)
+	}
+
+	return extNodes
 }
