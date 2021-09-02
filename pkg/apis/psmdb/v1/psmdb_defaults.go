@@ -242,6 +242,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		cr.Spec.Sharding.ConfigsvrReplSet.Arbiter.Enabled = false
+		for _, rs := range repls {
+			if len(rs.ExternalNodes) > 0 && len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes) < 1 {
+				return errors.Errorf("ConfigsvrReplSet must have externalNodes if replset %s has", rs.Name)
+			}
+			if len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes) > 0 && len(rs.ExternalNodes) < 1 {
+				return errors.Errorf("replset %s must have externalNodes if ConfigsvrReplSet has", rs.Name)
+			}
+		}
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 
@@ -486,6 +494,10 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		}
 	}
 
+	if len(rs.ExternalNodes) > 0 && !rs.Expose.Enabled {
+		return errors.Errorf("replset %s must be exposed to add external nodes", rs.Name)
+	}
+
 	for _, extNode := range rs.ExternalNodes {
 		if extNode.Port == 0 {
 			extNode.Port = 27017
@@ -495,6 +507,9 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		}
 		if extNode.Priority < 0 || extNode.Priority > 1000 {
 			return errors.Errorf("invalid priority for %s: priority must be between 0 and 1000", extNode.Host)
+		}
+		if extNode.Votes == 0 && extNode.Priority != 0 {
+			return errors.Errorf("invalid priority for %s: non-voting members must have priority 0", extNode.Host)
 		}
 	}
 
