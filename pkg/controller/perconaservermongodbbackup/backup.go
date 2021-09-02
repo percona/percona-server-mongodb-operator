@@ -84,35 +84,12 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]f
 func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
-	var (
-		meta    *pbm.BackupMeta
-		retries uint64
-	)
-	const maxRetries = 60
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	// PBM 1.5.0 needs some sync up before we can read the backup meta
-	for range ticker.C {
-		retries++
-
-		var err error
-		meta, err = b.pbm.C.GetBackupMeta(cr.Status.PBMname)
-		if err == nil {
-			break
-		}
-
-		if errors.Is(err, pbm.ErrNotFound) {
-			log.Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
-		} else {
-			return status, errors.Wrap(err, "get pbm backup meta")
-		}
-
-		if retries >= maxRetries {
-			break
-		}
+	meta, err := b.pbm.C.GetBackupMeta(cr.Status.PBMname)
+	if err != nil && !errors.Is(err, pbm.ErrNotFound) {
+		return status, errors.Wrap(err, "get pbm backup meta")
 	}
 
-	if meta == nil || meta.Name == "" {
+	if meta == nil || meta.Name == "" || errors.Is(err, pbm.ErrNotFound) {
 		log.Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
