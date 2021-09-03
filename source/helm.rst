@@ -59,8 +59,8 @@ any of the Operator's :ref:`operator.custom-resource-options`.
 .. note:: Parameters from the :ref:`Replica Set section<operator.replsets-section>`
    are treated differently: if you specify *any* parameter from `replsets<operator.replsets-section>`,
    the Operator *will not* use default values for this Replica Set.
-   So do not specify Replica Set options at all or specify the whole set of
-   options for the Replica Set.
+   So do not specify Replica Set options at all or specify all needed options
+   for the Replica Set.
 
 The following example will deploy a Percona Server for MongoDB Cluster in the
 ``psmdb`` namespace, with disabled backups and 20 Gi storage:
