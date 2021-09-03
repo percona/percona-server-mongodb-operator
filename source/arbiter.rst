@@ -51,6 +51,8 @@ with 4 data instances and 1 Arbiter:
        size: 1
        ....
 
+.. note:: You can find description of other possible options in the :ref:`replsets.arbiter section<replsets-arbiter-enabled>` of the :ref:`Custom Resource options reference<operator.custom-resource-options>`.
+
 Adding non-voting nodes
 -----------------------
 
@@ -82,3 +84,6 @@ with 3 data instances and 1 non-voting instance:
        enabled: true
        size: 1
        ....
+
+.. note:: You can find description of other possible options in the :ref:`replsets.nonvoting section<replsets-nonvoting-enabled>` of the :ref:`Custom Resource options reference<operator.custom-resource-options>`.
+
