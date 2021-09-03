@@ -68,4 +68,6 @@ The following example will deploy a Percona Server for MongoDB Cluster in the
 .. code:: bash
 
    helm install my-db percona/psmdb-db --namespace psmdb \
-     --set backup.enabled=false
+     --set "replsets[0].name=rs0" --set "replsets[0].size=3" \
+     --set "replsets[0].volumeSpec.pvc.resources.requests.storage=20Gi" \
+     --set backup.enabled=false --set sharding.enabled=false
