@@ -117,6 +117,13 @@ type ShardRemoveResp struct {
 	OKResponse `bson:",inline"`
 }
 
+type IsMasterResp struct {
+	IsMaster   bool   `bson:"ismaster" json:"ismaster"`
+	IsArbiter  bool   `bson:"arbiterOnly" json:"arbiterOnly"`
+	Msg        string `bson:"msg" json:"msg"`
+	OKResponse `bson:",inline"`
+}
+
 type Status struct {
 	Set                     string         `bson:"set" json:"set"`
 	Date                    time.Time      `bson:"date" json:"date"`
@@ -148,6 +155,15 @@ type Member struct {
 	PingMs            int64               `bson:"pingMs,omitempty" json:"pingMs,omitempty"`
 	Self              bool                `bson:"self,omitempty" json:"self,omitempty"`
 	SyncingTo         string              `bson:"syncingTo,omitempty" json:"syncingTo,omitempty"`
+}
+
+func (s *Status) GetSelf() *Member {
+	for _, member := range s.Members {
+		if member.Self {
+			return member
+		}
+	}
+	return nil
 }
 
 type Optime struct {
