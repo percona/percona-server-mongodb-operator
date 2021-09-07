@@ -53,6 +53,12 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaSe
 		}
 	}
 
+	if replset.Arbiter.Enabled {
+		for i := 0; i < int(replset.Arbiter.Size); i++ {
+			svcNames[service.Name+"-arbiter-"+strconv.Itoa(i)] = struct{}{}
+		}
+	}
+
 	// clear old services
 	svcList := &corev1.ServiceList{}
 	err := r.client.List(context.TODO(),
