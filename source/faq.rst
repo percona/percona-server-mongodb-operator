@@ -120,3 +120,14 @@ the following steps:
       kubectl delete pod/my-cluster-name-rs0-2 pvc/mongod-data-my-cluster-name-rs0-2
 
 The Operator will automatically recreate the needed Pod and PVC after deletion.
+
+How to carry on migration and/or disaster Recovery for a MongoDB Cluster
+========================================================================
+
+Disaster recovery allows you to restore MongoDB Cluster as a replica from an
+existing one. It uses same technologies as migration of an existing cluster (but
+in case of migration, the cluster you would like to "restore" doesn't exist).
+
+You can use :ref:`cross-site replication<operator-replication>` for both tasks.
+Also, see `this blogpost <...>`_ with detailed explanation and example of this
+disaster recovery techniques.
