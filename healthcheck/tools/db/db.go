@@ -22,44 +22,57 @@ import (
 	log "github.com/sirupsen/logrus"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
-	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
 
 var (
 	ErrMsgAuthFailedStr      string = "server returned error on SASL authentication step: Authentication failed."
 	ErrNoReachableServersStr string = "no reachable servers"
-	ErrSessionTimeout               = errors.New("timed out waiting for mongodb connection")
-	ErrPrimaryTimeout               = errors.New("timed out waiting for host to become primary")
 )
 
 func Dial(conf *Config) (*mgo.Client, error) {
-	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer connectcancel()
-
-	opts := options.Client().
-		SetHosts(conf.Hosts).
-		SetReplicaSet(conf.ReplSetName).
-		SetAuth(options.Credential{
-			Password: conf.Password,
-			Username: conf.Username,
-		}).
-		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
-		SetReadPreference(readpref.Primary()).SetTLSConfig(conf.TLSConf)
-
 	log.WithFields(log.Fields{
 		"hosts":      conf.Hosts,
 		"ssl":        conf.SSL.Enabled,
 		"ssl_secure": conf.SSL.Insecure,
 	}).Debug("Connecting to mongodb")
 
+	opts := options.Client().
+		SetHosts(conf.Hosts).
+		SetReplicaSet(conf.ReplSetName).
+		SetAuth(options.Credential{Password: conf.Password, Username: conf.Username}).
+		SetTLSConfig(conf.TLSConf).
+		SetServerSelectionTimeout(2 * time.Second).
+		SetConnectTimeout(3 * time.Second)
+
 	if conf.Username != "" && conf.Password != "" {
 		log.WithFields(log.Fields{"user": conf.Username}).Debug("Enabling authentication for session")
 	}
 
-	client, err := mgo.Connect(ctx, opts)
+	client, err := mgo.Connect(context.TODO(), opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to mongo replica set")
+	}
+
+	if err := client.Ping(context.TODO(), nil); err != nil {
+		if err := client.Disconnect(context.TODO()); err != nil {
+			return nil, errors.Wrap(err, "disconnect client")
+		}
+
+		opts := options.Client().
+			SetHosts(conf.Hosts).
+			SetTLSConfig(conf.TLSConf).
+			SetServerSelectionTimeout(2 * time.Second).
+			SetConnectTimeout(3 * time.Second).
+			SetDirect(true)
+
+		client, err = mgo.Connect(context.TODO(), opts)
+		if err != nil {
+			return nil, errors.Wrap(err, "connect to mongo replica set")
+		}
+
+		if err := client.Ping(context.TODO(), nil); err != nil {
+			return nil, errors.Wrap(err, "ping mongo")
+		}
 	}
 
 	return client, nil

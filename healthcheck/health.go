@@ -36,7 +36,7 @@ var OkMemberStates = []mongo.MemberState{
 	mongo.MemberStateRollback,
 }
 
-var ErrNoReplsetConfigStr string = "no replset config has been received"
+var ErrNoReplsetConfigStr string = "(NotYetInitialized) no replset config has been received"
 
 // getSelfMemberState returns the replication state of the local MongoDB member
 func getSelfMemberState(rsStatus *mongo.Status) *mongo.MemberState {
@@ -108,17 +108,17 @@ func HealthCheckMongodLiveness(client *mgo.Client, startupDelaySeconds int64) (*
 
 	res := client.Database("admin").RunCommand(context.TODO(), replSetStatusCommand)
 	if res.Err() != nil {
-		return nil, errors.Wrap(err, "get replsetGetStatus response")
+		// if we come this far, it means db connection was successful
+		// standalone mongod nodes in an unmanaged cluster doesn't need
+		// to die before they added to a replset
+		if res.Err().Error() == ErrNoReplsetConfigStr {
+			return nil, nil
+		}
+		return nil, errors.Wrap(res.Err(), "get replsetGetStatus response")
 	}
 
 	rsStatus := ReplSetStatus{}
 	if err := res.Decode(&rsStatus); err != nil {
-		// if we come this far, it means db connection was successful
-		// standalone mongod nodes in an unmanaged cluster doesn't need
-		// to die before they added to a replset
-		if err.Error() == ErrNoReplsetConfigStr {
-			return nil, nil
-		}
 		return nil, errors.Wrap(err, "get replsetGetStatus response")
 	}
 

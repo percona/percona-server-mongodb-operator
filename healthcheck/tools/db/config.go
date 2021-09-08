@@ -17,7 +17,6 @@ package db
 import (
 	"io/ioutil"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/alecthomas/kingpin"
@@ -110,21 +109,9 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 	).Envar(pkg.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
 
 	conf.SSL = ssl
-	return conf, nil
-}
+	if err := conf.configureTLS(); err != nil {
+		return nil, errors.Wrap(err, "get TLS config")
+	}
 
-func (cnf *Config) Uri() string {
-	options := []string{}
-	if cnf.ReplSetName != "" {
-		options = append(options, "replicaSet="+cnf.ReplSetName)
-	}
-	if cnf.SSL.Enabled {
-		options = append(options, "ssl=true")
-	}
-	hosts := strings.Join(cnf.Hosts, ",")
-	uri := "mongodb://" + cnf.Username + ":" + cnf.Password + "@" + hosts
-	if len(options) > 0 {
-		uri = uri + "?" + strings.Join(options, "&")
-	}
-	return uri
+	return conf, nil
 }

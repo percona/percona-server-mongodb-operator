@@ -48,7 +48,7 @@ func LastSSLError() error {
 	return lastSSLErr
 }
 
-func (cnf *Config) configureSSLDialInfo() error {
+func (cnf *Config) configureTLS() error {
 	config := &tls.Config{
 		InsecureSkipVerify: cnf.SSL.Insecure,
 	}
