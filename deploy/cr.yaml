@@ -102,7 +102,7 @@ spec:
 #      minAvailable: 0
     expose:
       enabled: false
-      exposeType: LoadBalancer
+      exposeType: ClusterIP
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
@@ -262,7 +262,7 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: false
-        exposeType: LoadBalancer
+        exposeType: ClusterIP
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
