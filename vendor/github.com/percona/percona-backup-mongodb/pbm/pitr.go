@@ -45,6 +45,32 @@ func (p *PBM) IsPITR() (bool, error) {
 	return cfg.PITR.Enabled, nil
 }
 
+// PITRrun checks if PITR slicing is running. It looks for PITR locks
+// and returns true if there is at least one not stale.
+func (p *PBM) PITRrun() (bool, error) {
+	l, err := p.GetLocks(&LockHeader{Type: CmdPITR})
+	if errors.Is(err, mongo.ErrNoDocuments) || len(l) == 0 {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, errors.Wrap(err, "get locks")
+	}
+
+	ct, err := p.ClusterTime()
+	if err != nil {
+		return false, errors.Wrap(err, "get cluster time")
+	}
+
+	for _, lk := range l {
+		if lk.Heartbeat.T+StaleFrameSec >= ct.T {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // PITRLastChunkMeta returns the most recent PITR chunk for the given Replset
 func (p *PBM) PITRLastChunkMeta(rs string) (*PITRChunk, error) {
 	return p.pitrChunk(rs, -1)

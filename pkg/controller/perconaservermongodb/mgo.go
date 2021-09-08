@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -187,7 +186,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 		member := mongo.ConfigMember{
 			ID:           i + memberC,
-			Host:         extNode.Host + ":" + strconv.Itoa(extNode.Port),
+			Host:         extNode.HostPort(),
 			Votes:        extNode.Votes,
 			Priority:     extNode.Priority,
 			BuildIndexes: true,
@@ -239,7 +238,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		switch member.State {
 		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 			membersLive++
-		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback:
+		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback, mongo.MemberStateDown:
 			return api.AppStateInit, nil
 		default:
 			return api.AppStateError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)

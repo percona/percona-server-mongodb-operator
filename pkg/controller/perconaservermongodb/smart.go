@@ -12,7 +12,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
-	mgo "go.mongodb.org/mongo-driver/mongo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -121,7 +120,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}()
 
-	primary, err := r.getPrimaryPod(client)
+	primary, err := psmdb.GetPrimaryPod(client)
 	if err != nil {
 		return fmt.Errorf("get primary pod: %v", err)
 	}
@@ -256,13 +255,4 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMong
 	}
 
 	return errors.New("reach pod wait limit")
-}
-
-func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(client *mgo.Client) (string, error) {
-	status, err := mongo.RSStatus(context.TODO(), client)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get rs status")
-	}
-
-	return status.Primary().Name, nil
 }

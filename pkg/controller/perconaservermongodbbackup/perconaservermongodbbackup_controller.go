@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
@@ -153,7 +152,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup, bcp *Backup) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
-	cluster := &api.PerconaServerMongoDB{}
+	cluster := &psmdbv1.PerconaServerMongoDB{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
 	if err != nil {
 		return status, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
@@ -177,15 +176,19 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 	}
 
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
+		priorities, err := bcp.pbm.GetPriorities(r.client, cluster)
+		if err != nil {
+			return status, errors.Wrap(err, "get PBM priorities")
+		}
 		time.Sleep(10 * time.Second)
-		return bcp.Start(cr)
+		return bcp.Start(cr, priorities)
 	}
 
 	time.Sleep(5 * time.Second)
 	return bcp.Status(cr)
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *api.PerconaServerMongoDBBackup, b *Backup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *psmdbv1.PerconaServerMongoDBBackup, b *Backup) error {
 	var err error = nil
 	if cr.ObjectMeta.DeletionTimestamp == nil {
 		return nil

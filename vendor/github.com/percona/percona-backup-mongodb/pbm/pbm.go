@@ -43,22 +43,21 @@ const (
 	RestoresCollection = "pbmRestores"
 	// CmdStreamCollection is the name of the mongo collection that contains backup/restore commands stream
 	CmdStreamCollection = "pbmCmd"
-	// PITRCollection represents current incremental backups state
-	PITRCollection = "pbmPITRState"
 	//PITRChunksCollection contains index metadata of PITR chunks
 	PITRChunksCollection = "pbmPITRChunks"
 	//PITRChunksOldCollection contains archived index metadata of PITR chunks
 	PITRChunksOldCollection = "pbmPITRChunks.old"
-	// StatusCollection stores pbm status
-	StatusCollection = "pbmStatus"
 	// PBMOpLogCollection contains log of aquired locks (hence run ops)
 	PBMOpLogCollection = "pbmOpLog"
-	// AgentsStatusCollection is a agents registry with its status/health checks
+	// AgentsStatusCollection is an agents registry with its status/health checks
 	AgentsStatusCollection = "pbmAgents"
 
 	// MetadataFileSuffix is a suffix for the metadata file on a storage
 	MetadataFileSuffix = ".pbm.json"
 )
+
+// ErrNotFound - object not found
+var ErrNotFound = errors.New("not found")
 
 // Command represents actions that could be done on behalf of the client by the agents
 type Command string
@@ -291,7 +290,7 @@ func (p *PBM) Logger() *log.Logger {
 
 const (
 	cmdCollectionSizeBytes      = 1 << 20  // 1Mb
-	pbmOplogCollectionSizeBytes = 10 << 20 // 1Mb
+	pbmOplogCollectionSizeBytes = 10 << 20 // 10Mb
 	logsCollectionSizeBytes     = 50 << 20 // 50Mb
 )
 
@@ -430,20 +429,31 @@ func connect(ctx context.Context, uri, appName string) (*mongo.Client, error) {
 
 // BackupMeta is a backup's metadata
 type BackupMeta struct {
-	OPID             string              `bson:"opid" json:"opid"`
-	Name             string              `bson:"name" json:"name"`
-	Replsets         []BackupReplset     `bson:"replsets" json:"replsets"`
-	Compression      CompressionType     `bson:"compression" json:"compression"`
-	Store            StorageConf         `bson:"store" json:"store"`
-	MongoVersion     string              `bson:"mongodb_version" json:"mongodb_version,omitempty"`
-	StartTS          int64               `bson:"start_ts" json:"start_ts"`
-	LastTransitionTS int64               `bson:"last_transition_ts" json:"last_transition_ts"`
-	LastWriteTS      primitive.Timestamp `bson:"last_write_ts" json:"last_write_ts"`
-	Hb               primitive.Timestamp `bson:"hb" json:"hb"`
-	Status           Status              `bson:"status" json:"status"`
-	Conditions       []Condition         `bson:"conditions" json:"conditions"`
-	Error            string              `bson:"error,omitempty" json:"error,omitempty"`
-	PBMVersion       string              `bson:"pbm_version,omitempty" json:"pbm_version,omitempty"`
+	OPID             string               `bson:"opid" json:"opid"`
+	Name             string               `bson:"name" json:"name"`
+	Replsets         []BackupReplset      `bson:"replsets" json:"replsets"`
+	Compression      CompressionType      `bson:"compression" json:"compression"`
+	Store            StorageConf          `bson:"store" json:"store"`
+	MongoVersion     string               `bson:"mongodb_version" json:"mongodb_version,omitempty"`
+	StartTS          int64                `bson:"start_ts" json:"start_ts"`
+	LastTransitionTS int64                `bson:"last_transition_ts" json:"last_transition_ts"`
+	FirstWriteTS     primitive.Timestamp  `bson:"first_write_ts" json:"first_write_ts"`
+	LastWriteTS      primitive.Timestamp  `bson:"last_write_ts" json:"last_write_ts"`
+	Hb               primitive.Timestamp  `bson:"hb" json:"hb"`
+	Status           Status               `bson:"status" json:"status"`
+	Conditions       []Condition          `bson:"conditions" json:"conditions"`
+	Nomination       []BackupRsNomination `bson:"n" json:"n"`
+	Error            string               `bson:"error,omitempty" json:"error,omitempty"`
+	PBMVersion       string               `bson:"pbm_version,omitempty" json:"pbm_version,omitempty"`
+	BalancerStatus   BalancerMode         `bson:"balancer" json:"balancer"`
+}
+
+// BackupRsNomination is used to choose (nominate and elect) nodes for the backup
+// within a replica set
+type BackupRsNomination struct {
+	RS    string   `bson:"rs" json:"rs"`
+	Nodes []string `bson:"n" json:"n"`
+	Ack   string   `bson:"ack" json:"ack"`
 }
 
 type Condition struct {
@@ -539,12 +549,13 @@ func (p *PBM) BackupHB(bcpName string) error {
 	return errors.Wrap(err, "write into db")
 }
 
-func (p *PBM) SetLastWrite(bcpName string, ts primitive.Timestamp) error {
+func (p *PBM) SetFirstLastWrite(bcpName string, first, last primitive.Timestamp) error {
 	_, err := p.Conn.Database(DB).Collection(BcpCollection).UpdateOne(
 		p.ctx,
 		bson.D{{"name", bcpName}},
 		bson.D{
-			{"$set", bson.M{"last_write_ts": ts}},
+			{"$set", bson.M{"first_write_ts": first}},
+			{"$set", bson.M{"last_write_ts": last}},
 		},
 	)
 
@@ -615,14 +626,15 @@ func (p *PBM) GetBackupByOPID(opid string) (*BackupMeta, error) {
 }
 
 func (p *PBM) getBackupMeta(clause bson.D) (*BackupMeta, error) {
-	b := new(BackupMeta)
 	res := p.Conn.Database(DB).Collection(BcpCollection).FindOne(p.ctx, clause)
 	if res.Err() != nil {
 		if res.Err() == mongo.ErrNoDocuments {
-			return b, nil
+			return nil, ErrNotFound
 		}
 		return nil, errors.Wrap(res.Err(), "get")
 	}
+
+	b := &BackupMeta{}
 	err := res.Decode(b)
 	return b, errors.Wrap(err, "decode")
 }
@@ -708,7 +720,7 @@ func (p *PBM) BackupsList(limit int64) ([]BackupMeta, error) {
 	return backups, cur.Err()
 }
 
-// ClusterMembers returns list of replicasets current cluster consts of
+// ClusterMembers returns list of replicasets current cluster consists of
 // (shards + configserver). The list would consist of on rs if cluster is
 // a non-sharded rs. If `inf` is nil, method would request mongo to define it.
 func (p *PBM) ClusterMembers(inf *NodeInfo) ([]Shard, error) {
@@ -809,6 +821,36 @@ func (p *PBM) LogGetExactSeverity(r *log.LogRequest, limit int64) ([]log.LogEntr
 	return p.log.Get(r, limit, true)
 }
 
+// SetBalancerStatus sets balancer status
+func (p *PBM) SetBalancerStatus(m BalancerMode) error {
+	var cmd string
+
+	switch m {
+	case BalancerModeOn:
+		cmd = "_configsvrBalancerStart"
+	case BalancerModeOff:
+		cmd = "_configsvrBalancerStop"
+	default:
+		return errors.Errorf("unknown mode %s", m)
+	}
+
+	err := p.Conn.Database("admin").RunCommand(p.ctx, bson.D{{cmd, 1}}).Err()
+	if err != nil {
+		return errors.Wrap(err, "run mongo command")
+	}
+	return nil
+}
+
+// GetBalancerStatus returns balancer status
+func (p *PBM) GetBalancerStatus() (*BalancerStatus, error) {
+	inf := &BalancerStatus{}
+	err := p.Conn.Database("admin").RunCommand(p.ctx, bson.D{{"_configsvrBalancerStatus", 1}}).Decode(inf)
+	if err != nil {
+		return nil, errors.Wrap(err, "run mongo command")
+	}
+	return inf, nil
+}
+
 type Epoch primitive.Timestamp
 
 func (p *PBM) GetEpoch() (Epoch, error) {
@@ -852,98 +894,21 @@ func FileCompression(ext string) CompressionType {
 	}
 }
 
-type AgentStat struct {
-	Node          string              `bson:"n"`
-	RS            string              `bson:"rs"`
-	Ver           string              `bson:"v"`
-	PBMStatus     SubsysStatus        `bson:"pbms"`
-	NodeStatus    SubsysStatus        `bson:"nodes"`
-	StorageStatus SubsysStatus        `bson:"stors"`
-	Heartbeat     primitive.Timestamp `bson:"hb"`
-}
-
-type SubsysStatus struct {
-	OK  bool   `bson:"ok"`
-	Err string `bson:"e"`
-}
-
-func (s *AgentStat) OK() (ok bool, errs []string) {
-	ok = true
-	if !s.PBMStatus.OK {
-		ok = false
-		errs = append(errs, fmt.Sprintf("PBM connection: %s", s.PBMStatus.Err))
-	}
-	if !s.NodeStatus.OK {
-		ok = false
-		errs = append(errs, fmt.Sprintf("node connection: %s", s.NodeStatus.Err))
-	}
-	if !s.StorageStatus.OK {
-		ok = false
-		errs = append(errs, fmt.Sprintf("storage: %s", s.StorageStatus.Err))
-	}
-
-	return ok, errs
-}
-
-func (p *PBM) SetAgentStatus(stat AgentStat) error {
-	ct, err := p.ClusterTime()
+// CopyColl copy documents matching the given filter and return number of copied documents
+func CopyColl(ctx context.Context, from, to *mongo.Collection, filter interface{}) (n int, err error) {
+	cur, err := from.Find(ctx, filter)
 	if err != nil {
-		return errors.Wrap(err, "get cluster time")
+		return 0, errors.Wrap(err, "create cursor")
 	}
-	stat.Heartbeat = ct
+	defer cur.Close(ctx)
 
-	_, err = p.Conn.Database(DB).Collection(AgentsStatusCollection).ReplaceOne(
-		p.ctx,
-		bson.D{{"n", stat.Node}, {"rs", stat.RS}},
-		stat,
-		options.Replace().SetUpsert(true),
-	)
-	return errors.Wrap(err, "write into db")
-}
-
-func (p *PBM) RmAgentStatus(stat AgentStat) error {
-	_, err := p.Conn.Database(DB).Collection(AgentsStatusCollection).DeleteOne(
-		p.ctx,
-		bson.D{{"n", stat.Node}, {"rs", stat.RS}},
-	)
-
-	return err
-}
-
-// GetAgentStatus returns agent status by given node and rs
-// it's up to user how to handle ErrNoDocuments
-func (p *PBM) GetAgentStatus(rs, node string) (s AgentStat, err error) {
-	res := p.Conn.Database(DB).Collection(AgentsStatusCollection).FindOne(
-		p.ctx,
-		bson.D{{"n", node}, {"rs", rs}},
-	)
-	if res.Err() != nil {
-		return s, errors.Wrap(res.Err(), "query mongo")
+	for cur.Next(ctx) {
+		_, err = to.InsertOne(ctx, cur.Current)
+		if err != nil {
+			return 0, errors.Wrap(err, "insert document")
+		}
+		n++
 	}
 
-	err = res.Decode(&s)
-	return s, errors.Wrap(err, "decode")
-}
-
-// AgentStatusGC cleans up stale agent statuses
-func (p *PBM) AgentStatusGC() error {
-	ct, err := p.ClusterTime()
-	if err != nil {
-		return errors.Wrap(err, "get cluster time")
-	}
-	// 30 secs is the connection time out for mongo. So if there are some connection issues the agent checker
-	// may stuck for 30 sec on ping (trying to connect), it's HB became stale and it would be collected.
-	// Which would lead to the false clamin "not found" in the status output. So stale range should at least 30 sec
-	// (+5 just in case).
-	stalesec := AgentsStatCheckRange.Seconds() * 3
-	if stalesec < 35 {
-		stalesec = 35
-	}
-	ct.T -= uint32(stalesec)
-	_, err = p.Conn.Database(DB).Collection(AgentsStatusCollection).DeleteMany(
-		p.ctx,
-		bson.M{"hb": bson.M{"$lt": ct}},
-	)
-
-	return errors.Wrap(err, "delete")
+	return n, nil
 }

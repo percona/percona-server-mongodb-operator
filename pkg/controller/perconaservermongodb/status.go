@@ -226,7 +226,7 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
-	list, err := r.getRSPods(cr, rsSpec.Name)
+	list, err := psmdb.GetRSPods(r.client, cr, rsSpec.Name)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)
 	}

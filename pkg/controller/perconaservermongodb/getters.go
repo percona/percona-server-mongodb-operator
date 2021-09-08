@@ -7,10 +7,10 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -46,19 +46,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(cr *api.PerconaServerMongo
 	)
 
 	return mongosPods, err
-}
-
-func (r *ReconcilePerconaServerMongoDB) getRSPods(cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
-	pods := corev1.PodList{}
-	err := r.client.List(context.TODO(),
-		&pods,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(rsLabels(cr, rsName)),
-		},
-	)
-
-	return pods, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
@@ -168,12 +155,6 @@ func clusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
-}
-
-func rsLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
-	lbls := clusterLabels(cr)
-	lbls["app.kubernetes.io/replset"] = rsName
-	return lbls
 }
 
 func mongodLabels(cr *api.PerconaServerMongoDB) map[string]string {

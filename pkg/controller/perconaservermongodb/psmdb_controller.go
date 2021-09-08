@@ -350,7 +350,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			"app.kubernetes.io/component":  "mongod",
 		}
 
-		pods, err := r.getRSPods(cr, replset.Name)
+		pods, err := psmdb.GetRSPods(r.client, cr, replset.Name)
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
@@ -954,7 +954,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	cfgPods, err := r.getRSPods(cr, api.ConfigReplSetName)
+	cfgPods, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
 	if err != nil {
 		return errors.Wrap(err, "get configsvr pods")
 	}
