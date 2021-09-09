@@ -16,7 +16,6 @@ package db
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -40,9 +39,7 @@ func Dial(conf *Config) (*mgo.Client, error) {
 		SetHosts(conf.Hosts).
 		SetReplicaSet(conf.ReplSetName).
 		SetAuth(options.Credential{Password: conf.Password, Username: conf.Username}).
-		SetTLSConfig(conf.TLSConf).
-		SetServerSelectionTimeout(2 * time.Second).
-		SetConnectTimeout(3 * time.Second)
+		SetTLSConfig(conf.TLSConf)
 
 	if conf.Username != "" && conf.Password != "" {
 		log.WithFields(log.Fields{"user": conf.Username}).Debug("Enabling authentication for session")
@@ -61,8 +58,6 @@ func Dial(conf *Config) (*mgo.Client, error) {
 		opts := options.Client().
 			SetHosts(conf.Hosts).
 			SetTLSConfig(conf.TLSConf).
-			SetServerSelectionTimeout(2 * time.Second).
-			SetConnectTimeout(3 * time.Second).
 			SetDirect(true)
 
 		client, err = mgo.Connect(context.TODO(), opts)
