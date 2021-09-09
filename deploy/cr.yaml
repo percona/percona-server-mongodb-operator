@@ -37,6 +37,7 @@ spec:
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
+#      port: 27017
 #      votes: 0
 #      priority: 0
 #    - host: 34.124.76.92
@@ -208,6 +209,7 @@ spec:
 #      externalNodes:
 #      - host: 34.124.76.93
 #      - host: 34.124.76.94
+#        port: 27017
 #        votes: 0
 #        priority: 0
 #      - host: 34.124.76.95
