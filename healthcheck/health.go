@@ -16,7 +16,6 @@ package healthcheck
 
 import (
 	"context"
-	"fmt"
 
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -61,18 +60,18 @@ func isStateOk(memberState *mongo.MemberState, okMemberStates []mongo.MemberStat
 func HealthCheck(client *mgo.Client, okMemberStates []mongo.MemberState) (State, *mongo.MemberState, error) {
 	rsStatus, err := mongo.RSStatus(context.TODO(), client)
 	if err != nil {
-		return StateFailed, nil, fmt.Errorf("error getting replica set status: %s", err)
+		return StateFailed, nil, errors.Wrap(err, "get replica set status")
 	}
 
 	state := getSelfMemberState(&rsStatus)
 	if state == nil {
-		return StateFailed, state, fmt.Errorf("found no member state for self in replica set status")
+		return StateFailed, state, errors.New("found no member state for self in replica set status")
 	}
 	if isStateOk(state, okMemberStates) {
 		return StateOk, state, nil
 	}
 
-	return StateFailed, state, fmt.Errorf("member has unhealthy replication state: %d", state)
+	return StateFailed, state, errors.Errorf("member has unhealthy replication state: %d", state)
 }
 
 func HealthCheckMongosLiveness(client *mgo.Client) error {
@@ -179,16 +178,16 @@ func CheckState(rs ReplSetStatus, startupDelaySeconds int64, oplogSize int64) er
 	case mongo.MemberStateStartup, mongo.MemberStateStartup2:
 		if (rs.InitialSyncStatus == nil && uptime > 30+oplogSize*60) || // give 60 seconds to each 1Gb of oplog
 			(rs.InitialSyncStatus != nil && uptime > startupDelaySeconds) {
-			return fmt.Errorf("state is %d and uptime is %d", rs.MyState, uptime)
+			return errors.Errorf("state is %d and uptime is %d", rs.MyState, uptime)
 		}
 	case mongo.MemberStateRecovering:
 		if uptime > startupDelaySeconds {
-			return fmt.Errorf("state is %d and uptime is %d", rs.MyState, uptime)
+			return errors.Errorf("state is %d and uptime is %d", rs.MyState, uptime)
 		}
 	case mongo.MemberStateUnknown, mongo.MemberStateDown, mongo.MemberStateRollback, mongo.MemberStateRemoved:
-		return fmt.Errorf("invalid state %d", rs.MyState)
+		return errors.Errorf("invalid state %d", rs.MyState)
 	default:
-		return fmt.Errorf("state is unknown %d", rs.MyState)
+		return errors.Errorf("state is unknown %d", rs.MyState)
 	}
 
 	return nil

@@ -116,10 +116,8 @@ func main() {
 		case "mongod":
 			memberState, err := healthcheck.HealthCheckMongodLiveness(client, int64(*startupDelaySeconds))
 			if err != nil {
-				log.Error(err.Error())
-				if err := client.Disconnect(context.TODO()); err != nil {
-					log.Errorf("failed to disconnect: %v", err)
-				}
+				client.Disconnect(context.TODO())
+				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
 				os.Exit(1)
 			}
 			log.Infof("Member passed Kubernetes liveness check with replication state: %d", memberState)
@@ -127,10 +125,8 @@ func main() {
 		case "mongos":
 			err := healthcheck.HealthCheckMongosLiveness(client)
 			if err != nil {
-				log.Error(err.Error())
-				if err := client.Disconnect(context.TODO()); err != nil {
-					log.Errorf("failed to disconnect: %v", err)
-				}
+				client.Disconnect(context.TODO())
+				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
 				os.Exit(1)
 			}
 		}
@@ -140,19 +136,15 @@ func main() {
 		switch *component {
 
 		case "mongod":
+			client.Disconnect(context.TODO())
 			log.Error("readiness check for mongod is not implemented")
-			if err := client.Disconnect(context.TODO()); err != nil {
-				log.Errorf("failed to disconnect: %v", err)
-			}
 			os.Exit(1)
 
 		case "mongos":
 			err := healthcheck.MongosReadinessCheck(client)
 			if err != nil {
-				log.Error(err.Error())
-				if err := client.Disconnect(context.TODO()); err != nil {
-					log.Errorf("failed to disconnect: %v", err)
-				}
+				client.Disconnect(context.TODO())
+				log.Errorf("Member failed Kubernetes readiness check: %s", err.Error())
 				os.Exit(1)
 			}
 		}

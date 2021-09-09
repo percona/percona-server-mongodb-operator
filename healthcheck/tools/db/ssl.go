@@ -17,10 +17,10 @@ package db
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
 	"os"
 
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -59,12 +59,12 @@ func (cnf *Config) configureTLS() error {
 
 	pemOk, err := isFileExists(cnf.SSL.PEMKeyFile)
 	if err != nil {
-		return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.PEMKeyFile, err)
+		return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.PEMKeyFile)
 	}
 
 	caOk, err := isFileExists(cnf.SSL.CAFile)
 	if err != nil {
-		return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.CAFile, err)
+		return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.CAFile)
 	}
 
 	if !pemOk || !caOk {
@@ -76,12 +76,7 @@ func (cnf *Config) configureTLS() error {
 
 	certificates, err := tls.LoadX509KeyPair(cnf.SSL.PEMKeyFile, cnf.SSL.PEMKeyFile)
 	if err != nil {
-		return fmt.Errorf(
-			"Cannot load key pair from '%s' to connect to server '%s'. Got: %v",
-			cnf.SSL.PEMKeyFile,
-			cnf.Hosts,
-			err,
-		)
+		return errors.Wrapf(err, "load key pair from '%s' to connect to server '%s'", cnf.SSL.PEMKeyFile, cnf.Hosts)
 	}
 
 	config.Certificates = []tls.Certificate{certificates}
@@ -89,7 +84,7 @@ func (cnf *Config) configureTLS() error {
 	log.Debugf("Loading SSL/TLS Certificate Authority: %s", cnf.SSL.CAFile)
 	ca, err := cnf.SSL.loadCaCertificate()
 	if err != nil {
-		return fmt.Errorf("Couldn't load client CAs from %s. Got: %s", cnf.SSL.CAFile, err)
+		return errors.Wrapf(err, "load client CAs from %s", cnf.SSL.CAFile)
 	}
 
 	config.RootCAs = ca
