@@ -152,7 +152,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 			continue
 		}
 
-		log.Info(fmt.Sprintf("apply changes to secondary pod %s", pod.Name))
+		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
 		updateRevision := sfs.Status.UpdateRevision
 		if pod.Labels["app.kubernetes.io/component"] == "arbiter" {
@@ -169,7 +169,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}
 
-	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" {
+	// If the primary is external, we can't match it with a running pod and
+	// it'll have an empty name
+	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
 		err = mongo.StepDown(context.TODO(), client, forceStepDown)
@@ -177,7 +179,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 			return errors.Wrap(err, "failed to do step down")
 		}
 
-		log.Info(fmt.Sprintf("apply changes to primary pod %s", primaryPod.Name))
+		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
 		if err := r.applyNWait(cr, sfs.Status.UpdateRevision, &primaryPod, waitLimit); err != nil {
 			return fmt.Errorf("failed to apply changes: %v", err)
 		}
