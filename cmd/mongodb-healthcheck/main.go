@@ -95,7 +95,7 @@ func main() {
 			}
 			os.Exit(state.ExitCode())
 		}
-		log.Debugf("Member passed DC/OS health check with replication state: %d", memberState)
+		log.Debugf("Member passed DC/OS health check with replication state: %d", *memberState)
 
 	case "dcos readiness":
 		log.Debug("Running DC/OS readiness check")
@@ -120,7 +120,7 @@ func main() {
 				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
 				os.Exit(1)
 			}
-			log.Infof("Member passed Kubernetes liveness check with replication state: %d", memberState)
+			log.Infof("Member passed Kubernetes liveness check with replication state: %d", *memberState)
 
 		case "mongos":
 			err := healthcheck.HealthCheckMongosLiveness(client)
@@ -129,6 +129,7 @@ func main() {
 				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
 				os.Exit(1)
 			}
+			log.Infof("Member passed Kubernetes liveness check")
 		}
 
 	case "k8s readiness":
