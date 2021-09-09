@@ -109,6 +109,8 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
+	case pbm.StatusStarting:
+		status.State = api.BackupStateRequested
 	default:
 		status.State = api.BackupStateRunning
 	}
