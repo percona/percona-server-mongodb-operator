@@ -556,7 +556,11 @@ func (m *ConfigMembers) SetVotes() {
 
 			if !member.ArbiterOnly {
 				lastVoteIdx = i
-				[]ConfigMember(*m)[i].Priority = 1
+				// Priority can be any number in range [0,1000].
+				// We're setting it to 2 as default, to allow
+				// users to configure external nodes with lower
+				// priority than local nodes.
+				[]ConfigMember(*m)[i].Priority = 2
 			}
 		} else if member.ArbiterOnly {
 			// Arbiter should always have a vote

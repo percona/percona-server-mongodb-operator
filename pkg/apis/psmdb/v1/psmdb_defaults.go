@@ -434,10 +434,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Backup.PITR.Enabled = false
 	}
 
-	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
-		return errors.New("backup.enabled must be false on unmanaged clusters")
-	}
-
 	if cr.Spec.Backup.PITR.Enabled && len(cr.Spec.Backup.Storages) != 1 {
 		cr.Spec.Backup.PITR.Enabled = false
 		log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
@@ -449,6 +445,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 	if len(cr.Spec.ClusterServiceDNSSuffix) == 0 {
 		cr.Spec.ClusterServiceDNSSuffix = DefaultDNSSuffix
+	}
+
+	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
+		return errors.New("backup.enabled must be false on unmanaged clusters")
+	}
+
+	if cr.Spec.Unmanaged && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
+		return errors.New("SmartUpdate is not allowed on unmanaged clusters, set updateStrategy to RollingUpdate or OnDelete")
 	}
 
 	return nil
