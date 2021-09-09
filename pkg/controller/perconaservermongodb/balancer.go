@@ -14,7 +14,7 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB) error {
-	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 {
+	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Unmanaged {
 		return nil
 	}
 
@@ -101,7 +101,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 }
 
 func (r *ReconcilePerconaServerMongoDB) disableBalancer(cr *api.PerconaServerMongoDB) error {
-	if !cr.Spec.Sharding.Enabled {
+	if !cr.Spec.Sharding.Enabled || cr.Spec.Unmanaged {
 		return nil
 	}
 
