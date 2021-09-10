@@ -17,15 +17,11 @@ package db
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
-	"strings"
-	"time"
 
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/mgo.v2"
 )
 
 var lastSSLErr error
@@ -52,102 +48,47 @@ func LastSSLError() error {
 	return lastSSLErr
 }
 
-func (cnf *Config) configureSSLDialInfo() error {
+func (cnf *Config) configureTLS() error {
 	config := &tls.Config{
 		InsecureSkipVerify: cnf.SSL.Insecure,
 	}
 
-	if len(cnf.SSL.PEMKeyFile) > 0 && len(cnf.SSL.CAFile) > 0 {
-		pemOk, err := isFileExists(cnf.SSL.PEMKeyFile)
-		if err != nil {
-			return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.PEMKeyFile, err)
-		}
-
-		caOk, err := isFileExists(cnf.SSL.CAFile)
-		if err != nil {
-			return fmt.Errorf("Failed to check if file with name %s exists, err: %v", cnf.SSL.CAFile, err)
-		}
-
-		if pemOk && caOk {
-			log.Debugf("Loading SSL/TLS PEM certificate: %s", cnf.SSL.PEMKeyFile)
-
-			certificates, err := tls.LoadX509KeyPair(cnf.SSL.PEMKeyFile, cnf.SSL.PEMKeyFile)
-			if err != nil {
-				return fmt.Errorf(
-					"Cannot load key pair from '%s' to connect to server '%s'. Got: %v",
-					cnf.SSL.PEMKeyFile,
-					cnf.DialInfo.Addrs,
-					err,
-				)
-			}
-
-			config.Certificates = []tls.Certificate{certificates}
-
-			log.Debugf("Loading SSL/TLS Certificate Authority: %s", cnf.SSL.CAFile)
-			ca, err := cnf.SSL.loadCaCertificate()
-			if err != nil {
-				return fmt.Errorf("Couldn't load client CAs from %s. Got: %s", cnf.SSL.CAFile, err)
-			}
-
-			config.RootCAs = ca
-
-			cnf.DialInfo.DialServer = tlsDial(config)
-		} else {
-			cnf.SSL = nil
-		}
+	if len(cnf.SSL.PEMKeyFile) == 0 || len(cnf.SSL.CAFile) == 0 {
+		return nil
 	}
 
-	return nil
-}
-
-func tlsDial(config *tls.Config) func(addr *mgo.ServerAddr) (net.Conn, error) {
-	return func(addr *mgo.ServerAddr) (net.Conn, error) {
-		conn, err := tls.Dial("tcp", addr.String(), config)
-		if err != nil {
-			log.Errorf("could not connect to %v. got: %v", addr, err)
-			lastSSLErr = err
-			return nil, err
-		}
-
-		if !config.InsecureSkipVerify {
-			dnsName := strings.SplitN(addr.String(), ":", 2)[0]
-			err = validateConnection(conn, config, dnsName)
-			if err != nil {
-				log.Errorf("Could not disable hostname validation. Got: %v", err)
-			}
-		}
-
-		return conn, err
-	}
-}
-
-func validateConnection(conn *tls.Conn, tlsConfig *tls.Config, dnsName string) error {
-	var err error
-	if err = conn.Handshake(); err != nil {
-		conn.Close()
-		return err
-	}
-
-	opts := x509.VerifyOptions{
-		Roots:         tlsConfig.RootCAs,
-		CurrentTime:   time.Now(),
-		DNSName:       dnsName,
-		Intermediates: x509.NewCertPool(),
-	}
-
-	certs := conn.ConnectionState().PeerCertificates
-	for i, cert := range certs {
-		if i == 0 {
-			continue
-		}
-		opts.Intermediates.AddCert(cert)
-	}
-
-	_, err = certs[0].Verify(opts)
+	pemOk, err := isFileExists(cnf.SSL.PEMKeyFile)
 	if err != nil {
-		conn.Close()
-		return err
+		return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.PEMKeyFile)
 	}
+
+	caOk, err := isFileExists(cnf.SSL.CAFile)
+	if err != nil {
+		return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.CAFile)
+	}
+
+	if !pemOk || !caOk {
+		cnf.SSL = nil
+		return nil
+	}
+
+	log.Debugf("Loading SSL/TLS PEM certificate: %s", cnf.SSL.PEMKeyFile)
+
+	certificates, err := tls.LoadX509KeyPair(cnf.SSL.PEMKeyFile, cnf.SSL.PEMKeyFile)
+	if err != nil {
+		return errors.Wrapf(err, "load key pair from '%s' to connect to server '%s'", cnf.SSL.PEMKeyFile, cnf.Hosts)
+	}
+
+	config.Certificates = []tls.Certificate{certificates}
+
+	log.Debugf("Loading SSL/TLS Certificate Authority: %s", cnf.SSL.CAFile)
+	ca, err := cnf.SSL.loadCaCertificate()
+	if err != nil {
+		return errors.Wrapf(err, "load client CAs from %s", cnf.SSL.CAFile)
+	}
+
+	config.RootCAs = ca
+	cnf.TLSConf = config
 
 	return nil
 }

@@ -63,6 +63,7 @@ type Client struct {
 	registry        *bsoncodec.Registry
 	marshaller      BSONAppender
 	monitor         *event.CommandMonitor
+	serverAPI       *driver.ServerAPIOptions
 	serverMonitor   *event.ServerMonitor
 	sessionPool     *session.Pool
 
@@ -242,7 +243,7 @@ func (c *Client) Disconnect(ctx context.Context) error {
 
 // Ping sends a ping command to verify that the client can connect to the deployment.
 //
-// The rp paramter is used to determine which server is selected for the operation.
+// The rp parameter is used to determine which server is selected for the operation.
 // If it is nil, the client's read preference is used.
 //
 // If the server is down, Ping will try to select a server until the client's server selection timeout expires.
@@ -298,6 +299,9 @@ func (c *Client) StartSession(opts ...*options.SessionOptions) (Session, error) 
 	if sopts.DefaultMaxCommitTime != nil {
 		coreOpts.DefaultMaxCommitTime = sopts.DefaultMaxCommitTime
 	}
+	if sopts.Snapshot != nil {
+		coreOpts.Snapshot = sopts.Snapshot
+	}
 
 	sess, err := session.NewClientSession(c.sessionPool, c.id, session.Explicit, coreOpts)
 	if err != nil {
@@ -323,7 +327,7 @@ func (c *Client) endSessions(ctx context.Context) {
 	sessionIDs := c.sessionPool.IDSlice()
 	op := operation.NewEndSessions(nil).ClusterClock(c.clock).Deployment(c.deployment).
 		ServerSelector(description.ReadPrefSelector(readpref.PrimaryPreferred())).CommandMonitor(c.monitor).
-		Database("admin").Crypt(c.cryptFLE)
+		Database("admin").Crypt(c.cryptFLE).ServerAPI(c.serverAPI)
 
 	totalNumIDs := len(sessionIDs)
 	var currentBatch []bsoncore.Document
@@ -353,6 +357,17 @@ func (c *Client) configure(opts *options.ClientOptions) error {
 	var topologyOpts []topology.Option
 
 	// TODO(GODRIVER-814): Add tests for topology, server, and connection related options.
+
+	// ServerAPIOptions need to be handled early as other client and server options below reference
+	// c.serverAPI and serverOpts.serverAPI.
+	if opts.ServerAPIOptions != nil {
+		// convert passed in options to driver form for client.
+		c.serverAPI = convertToDriverAPIOptions(opts.ServerAPIOptions)
+
+		serverOpts = append(serverOpts, topology.WithServerAPI(func(*driver.ServerAPIOptions) *driver.ServerAPIOptions {
+			return c.serverAPI
+		}))
+	}
 
 	// ClusterClock
 	c.clock = new(session.ClusterClock)
@@ -399,9 +414,16 @@ func (c *Client) configure(opts *options.ClientOptions) error {
 			func(opts ...string) []string { return append(opts, comps...) },
 		))
 	}
+
+	var loadBalanced bool
+	if opts.LoadBalanced != nil {
+		loadBalanced = *opts.LoadBalanced
+	}
+
 	// Handshaker
 	var handshaker = func(driver.Handshaker) driver.Handshaker {
-		return operation.NewIsMaster().AppName(appName).Compressors(comps).ClusterClock(c.clock)
+		return operation.NewIsMaster().AppName(appName).Compressors(comps).ClusterClock(c.clock).
+			ServerAPI(c.serverAPI).LoadBalanced(loadBalanced)
 	}
 	// Auth & Database & Password & Username
 	if opts.Auth != nil {
@@ -433,6 +455,8 @@ func (c *Client) configure(opts *options.ClientOptions) error {
 			Authenticator: authenticator,
 			Compressors:   comps,
 			ClusterClock:  c.clock,
+			ServerAPI:     c.serverAPI,
+			LoadBalanced:  loadBalanced,
 		}
 		if mechanism == "" {
 			// Required for SASL mechanism negotiation during handshake
@@ -615,6 +639,22 @@ func (c *Client) configure(opts *options.ClientOptions) error {
 		)
 	}
 
+	// LoadBalanced
+	if opts.LoadBalanced != nil {
+		topologyOpts = append(
+			topologyOpts,
+			topology.WithLoadBalanced(func(bool) bool { return *opts.LoadBalanced }),
+		)
+		serverOpts = append(
+			serverOpts,
+			topology.WithServerLoadBalanced(func(bool) bool { return *opts.LoadBalanced }),
+		)
+		connOpts = append(
+			connOpts,
+			topology.WithConnectionLoadBalanced(func(bool) bool { return *opts.LoadBalanced }),
+		)
+	}
+
 	serverOpts = append(
 		serverOpts,
 		topology.WithClock(func(*session.ClusterClock) *session.ClusterClock { return c.clock }),
@@ -757,6 +797,18 @@ func (c *Client) validSession(sess *session.Client) error {
 	return nil
 }
 
+// convertToDriverAPIOptions converts a options.ServerAPIOptions instance to a driver.ServerAPIOptions.
+func convertToDriverAPIOptions(s *options.ServerAPIOptions) *driver.ServerAPIOptions {
+	driverOpts := driver.NewServerAPIOptions(string(s.ServerAPIVersion))
+	if s.Strict != nil {
+		driverOpts.SetStrict(*s.Strict)
+	}
+	if s.DeprecationErrors != nil {
+		driverOpts.SetDeprecationErrors(*s.DeprecationErrors)
+	}
+	return driverOpts
+}
+
 // Database returns a handle for a database with the given name configured with the given DatabaseOptions.
 func (c *Client) Database(name string, opts ...*options.DatabaseOptions) *Database {
 	return newDatabase(c, name, opts...)
@@ -806,7 +858,8 @@ func (c *Client) ListDatabases(ctx context.Context, filter interface{}, opts ...
 	ldo := options.MergeListDatabasesOptions(opts...)
 	op := operation.NewListDatabases(filterDoc).
 		Session(sess).ReadPreference(c.readPreference).CommandMonitor(c.monitor).
-		ServerSelector(selector).ClusterClock(c.clock).Database("admin").Deployment(c.deployment).Crypt(c.cryptFLE)
+		ServerSelector(selector).ClusterClock(c.clock).Database("admin").Deployment(c.deployment).Crypt(c.cryptFLE).
+		ServerAPI(c.serverAPI)
 
 	if ldo.NameOnly != nil {
 		op = op.NameOnly(*ldo.NameOnly)
@@ -925,4 +978,12 @@ func (c *Client) Watch(ctx context.Context, pipeline interface{},
 // closed (i.e. EndSession has not been called).
 func (c *Client) NumberSessionsInProgress() int {
 	return c.sessionPool.CheckedOut()
+}
+
+func (c *Client) createBaseCursorOptions() driver.CursorOptions {
+	return driver.CursorOptions{
+		CommandMonitor: c.monitor,
+		Crypt:          c.cryptFLE,
+		ServerAPI:      c.serverAPI,
+	}
 }
