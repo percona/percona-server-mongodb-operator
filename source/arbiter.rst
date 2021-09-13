@@ -58,7 +58,7 @@ Adding non-voting nodes
 
 `Non-voting member <https://docs.mongodb.com/manual/tutorial/configure-a-non-voting-replica-set-member/>`_
 is a Replica Set node which does not participate in the primary
-election process. This feature is required if having more than 7 nodes, or if
+election process. This feature is required to have more than 7 nodes, or if
 there is a `node in the edge location <https://en.wikipedia.org/wiki/Edge_computing>`_,
 which obviously should not participate in the voting process.
 
