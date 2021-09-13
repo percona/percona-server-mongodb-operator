@@ -123,6 +123,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		periodSecondsDeafult = int32(30)
 		failureThresholdDefault = int32(4)
 	}
+	if cr.CompareVersion("1.10.0") >= 0 {
+		timeoutSecondsDefault = int32(10)
+	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 
 	if !cr.Spec.Sharding.Enabled {
