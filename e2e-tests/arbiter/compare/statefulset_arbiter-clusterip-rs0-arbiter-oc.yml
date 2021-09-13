@@ -99,7 +99,7 @@ spec:
           initialDelaySeconds: 60
           periodSeconds: 30
           successThreshold: 1
-          timeoutSeconds: 5
+          timeoutSeconds: 10
         name: mongod-arbiter
         ports:
         - containerPort: 27017
