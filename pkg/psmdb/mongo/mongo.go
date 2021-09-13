@@ -386,6 +386,24 @@ func StepDown(ctx context.Context, client *mongo.Client, force bool) error {
 	return nil
 }
 
+func IsMaster(ctx context.Context, client *mongo.Client) (*IsMasterResp, error) {
+	cur := client.Database("admin").RunCommand(ctx, bson.D{{Key: "isMaster", Value: 1}})
+	if cur.Err() != nil {
+		return nil, errors.Wrap(cur.Err(), "run isMaster")
+	}
+
+	resp := IsMasterResp{}
+	if err := cur.Decode(&resp); err != nil {
+		return nil, errors.Wrap(err, "decode isMaster response")
+	}
+
+	if resp.OK != 1 {
+		return nil, errors.Errorf("mongo says: %s", resp.Errmsg)
+	}
+
+	return &resp, nil
+}
+
 // UpdateUserPass updates user's password
 func UpdateUserPass(ctx context.Context, client *mongo.Client, name, pass string) error {
 	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()

@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/Percona-Lab/percona-version-service/api v0.0.0-20200714141734-e9fed619b55c
 	github.com/alecthomas/kingpin v2.2.6+incompatible
+	github.com/aws/aws-sdk-go v1.34.28 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/errors v0.19.6
 	github.com/go-openapi/runtime v0.19.16
@@ -23,7 +24,7 @@ require (
 	github.com/timvaillancourt/go-mongodb-fixtures v0.0.0-20180517014041-bee1cce826fb // indirect
 	github.com/timvaillancourt/go-mongodb-replset v0.0.0-20180529222116-173aaa3b66af
 	github.com/valyala/fasthttp v1.17.0
-	go.mongodb.org/mongo-driver v1.5.1
+	go.mongodb.org/mongo-driver v1.7.0
 	golang.org/x/tools v0.0.0-20201028153306-37f0764111ff // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect

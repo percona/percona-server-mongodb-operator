@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/percona/percona-server-mongodb-operator/healthcheck"
@@ -64,38 +65,46 @@ func main() {
 	}
 
 	if enableSecrets {
-		cnf.DialInfo.Password = tools.PasswordFromFile(
+		cnf.Password = tools.PasswordFromFile(
 			os.Getenv(dcos.EnvMesosSandbox),
-			cnf.DialInfo.Password,
+			cnf.Password,
 			"password",
 		)
 	}
 
-	session, err := db.GetSession(cnf)
+	client, err := db.Dial(cnf)
 	if err != nil {
 		log.Fatalf("connection error: %v", err)
 	}
 
-	defer session.Close()
+	defer func() {
+		if err := client.Disconnect(context.TODO()); err != nil {
+			log.Fatalf("failed to disconnect: %v", err)
+		}
+	}()
 
 	switch command {
 
 	case "dcos health":
 		log.Debug("Running DC/OS health check")
-		state, memberState, err := healthcheck.HealthCheck(session, healthcheck.OkMemberStates)
+		state, memberState, err := healthcheck.HealthCheck(client, healthcheck.OkMemberStates)
 		if err != nil {
 			log.Debug(err.Error())
-			session.Close()
+			if err := client.Disconnect(context.TODO()); err != nil {
+				log.Errorf("failed to disconnect: %v", err)
+			}
 			os.Exit(state.ExitCode())
 		}
-		log.Debugf("Member passed DC/OS health check with replication state: %s", memberState)
+		log.Debugf("Member passed DC/OS health check with replication state: %d", *memberState)
 
 	case "dcos readiness":
 		log.Debug("Running DC/OS readiness check")
-		state, err := healthcheck.ReadinessCheck(session)
+		state, err := healthcheck.ReadinessCheck(client)
 		if err != nil {
 			log.Debug(err.Error())
-			session.Close()
+			if err := client.Disconnect(context.TODO()); err != nil {
+				log.Errorf("failed to disconnect: %v", err)
+			}
 			os.Exit(state.ExitCode())
 		}
 		log.Debug("Member passed DC/OS readiness check")
@@ -105,21 +114,22 @@ func main() {
 		switch *component {
 
 		case "mongod":
-			memberState, err := healthcheck.HealthCheckMongodLiveness(session, int64(*startupDelaySeconds))
+			memberState, err := healthcheck.HealthCheckMongodLiveness(client, int64(*startupDelaySeconds))
 			if err != nil {
-				log.Error(err.Error())
-				session.Close()
+				client.Disconnect(context.TODO())
+				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
 				os.Exit(1)
 			}
-			log.Infof("Member passed Kubernetes liveness check with replication state: %s", memberState)
+			log.Infof("Member passed Kubernetes liveness check with replication state: %d", *memberState)
 
 		case "mongos":
-			err := healthcheck.HealthCheckMongosLiveness(session)
+			err := healthcheck.HealthCheckMongosLiveness(client)
 			if err != nil {
-				log.Error(err.Error())
-				session.Close()
+				client.Disconnect(context.TODO())
+				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
 				os.Exit(1)
 			}
+			log.Infof("Member passed Kubernetes liveness check")
 		}
 
 	case "k8s readiness":
@@ -127,15 +137,15 @@ func main() {
 		switch *component {
 
 		case "mongod":
+			client.Disconnect(context.TODO())
 			log.Error("readiness check for mongod is not implemented")
-			session.Close()
 			os.Exit(1)
 
 		case "mongos":
-			err := healthcheck.MongosReadinessCheck(session)
+			err := healthcheck.MongosReadinessCheck(client)
 			if err != nil {
-				log.Error(err.Error())
-				session.Close()
+				client.Disconnect(context.TODO())
+				log.Errorf("Member failed Kubernetes readiness check: %s", err.Error())
 				os.Exit(1)
 			}
 		}
