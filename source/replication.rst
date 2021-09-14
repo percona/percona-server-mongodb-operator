@@ -51,7 +51,7 @@ configuration file as follows.
 The above example is using the LoadBalancer Kubernetes Service object, but there
 are other options (ClusterIP, NodePort, etc.).
 
-.. note:: The above example will create a LoadBalancer per each MongoDB Pod.
+.. note:: The above example will create a LoadBalancer per each Replica Set Pod.
    In most cases, this Load Balancer should be internet-facing for cross-region
    replication to work.
    
