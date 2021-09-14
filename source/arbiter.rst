@@ -62,6 +62,8 @@ election process. This feature is required to have more than 7 nodes, or if
 there is a `node in the edge location <https://en.wikipedia.org/wiki/Edge_computing>`_,
 which obviously should not participate in the voting process.
 
+.. note:: It is possible to add a non-voting node in the edge location through the ``externalNodes`` option. Please see :ref:`cross-site replication documentation<operator-replication>` for details.
+
 Percona Distribution for MongoDB Operator has the ability to configure non-voting
 nodes in the Replica Set section of the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
@@ -86,4 +88,3 @@ with 3 data instances and 1 non-voting instance:
        ....
 
 .. note:: You can find description of other possible options in the :ref:`replsets.nonvoting section<replsets-nonvoting-enabled>` of the :ref:`Custom Resource options reference<operator.custom-resource-options>`.
-
