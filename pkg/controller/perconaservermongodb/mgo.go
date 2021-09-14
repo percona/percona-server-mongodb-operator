@@ -163,7 +163,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		case "arbiter":
 			member.ArbiterOnly = true
 			member.Priority = 0
-		case "mongod":
+		case "mongod", "cfg":
 			member.Tags = mongo.ReplsetTags{
 				"serviceName": cr.Name,
 			}
@@ -194,6 +194,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 
 		members = append(members, member)
+	}
+
+	if cnf.Members.FixTags(members) {
+		cnf.Members.SetVotes()
+
+		cnf.Version++
+		if err := mongo.WriteConfig(context.TODO(), cli, cnf); err != nil {
+			return api.AppStateError, errors.Wrap(err, "fix tags: write mongo config")
+		}
 	}
 
 	if cnf.Members.RemoveOld(members) {
