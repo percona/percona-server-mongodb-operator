@@ -3,12 +3,12 @@
 Set up Percona Server for MongoDB cross-site replication
 ========================================================
 
-The cross-site replication involves configuring one MongoDB cluster as *Main*, and another MongoDB cluster as *Replica* to allow replication between them:
+The cross-site replication involves configuring one MongoDB site as *Main*, and another MongoDB site as *Replica* to allow replication between them:
 
- .. image:: ./assets/images/pxc-replication.svg
+ .. image:: ./assets/images/replication-pods.svg
    :align: center
 
-The Operator automates configuration of *Main* and *Replica* MongoDB Clusters, but the feature itself is not bound to Kubernetes. Either *Main* or *Replica* can run outside of Kubernetes, be regular MongoDB and be out of the Operators’ control.
+The Operator automates configuration of *Main* and *Replica* MongoDB sites, but the feature itself is not bound to Kubernetes. Either *Main* or *Replica* can run outside of Kubernetes, be regular MongoDB and be out of the Operators’ control.
 
 This feature can be useful in several cases: 
 - simplify the migration of the MongoDB cluster to and from Kubernetes
@@ -28,9 +28,15 @@ Exposing instances of the MongoDB cluster
 
 You need to expose all Replica Set nodes (including Config
 Servers) through a dedicated service to ensure that *Main* and *Replica*
-clusters can reach each other. This is done through the
-``replsets.expose`` and ``sharding.expose`` sections in the ``deploy/cr.yaml``
-configuration file as follows.
+can reach each other, like in a full mesh:
+
+ .. image:: ./assets/images/replication-mesh.svg
+   :align: center
+
+This is done through the
+``replsets.expose``, ``sharding.configsvrReplSet.expose``, and
+``sharding.mongos.expose`` sections in the ``deploy/cr.yaml`` configuration file
+as follows.
 
 .. code:: yaml
 
@@ -64,8 +70,8 @@ executing ``kubectl get services -l "app.kubernetes.io/instance=CLUSTER_NAME"`` 
 Configuring cross-site replication on Main site
 ------------------------------------------------------
 
-The cluster managed by the Operator should "know" about external nodes for the
-Replica Sets. You can configure this information in the
+The cluster managed by the Operator should be able to reach external nodes of the
+Replica Sets. You can provide needed information in the
 ``replsets.externalNodes`` and ``sharding.configsvrReplset.externalNodes``
 subsections of the ``deploy/cr.yaml`` configuration file. Following keys can
 be set to specify each external *Replica*, both for its Replica Set and Config Server
@@ -111,7 +117,7 @@ Here is an example:
            - host: cfg-2.percona.com
            ...
 
-The *Main* cluster will be ready for replication when you apply changes as usual:
+The *Main* site will be ready for replication when you apply changes as usual:
 
 .. code:: bash
 
@@ -119,13 +125,13 @@ The *Main* cluster will be ready for replication when you apply changes as usual
 
 .. _operator-replication-source-secrets:
 
-Getting the Main cluster secrets and certificates to be copied to Replica
-*************************************************************************
+Getting the cluster secrets and certificates to be copied from Main to Replica
+******************************************************************************
 
-*Main* and *Replica* cluster should have same Secrets objects (to have same
-users credentials) and certificates. So you may need to copy them from your
-*Main* cluster. Names of the corresponding objects are set in the ``users``,
-``ssl``, and ``sslInternal`` keys of the Custom Resource ``secrets`` subsection
+*Main* and *Replica* should have same Secrets objects (to have same
+users credentials) and certificates. So you may need to copy them from *Main*.
+Names of the corresponding objects are set in the ``users``, ``ssl``, and
+``sslInternal`` keys of the Custom Resource ``secrets`` subsection
 (``my-cluster-name-secrets``, ``my-cluster-name-ssl``, and
 ``my-cluster-name-ssl-internal`` by default).
 
@@ -138,7 +144,7 @@ If you can get Secrets from an existing cluster by executing the
 
 Next remove the ``annotations``, ``creationTimestamp``, ``resourceVersion``,
 ``selfLink``, and ``uid`` metadata fields from the resulting file to make it
-ready for the *Replica* cluster.
+ready for the *Replica*.
 
 .. _operator-replication-replica:
 
@@ -147,7 +153,7 @@ Configuring cross-site replication on Replica instances
 
 When the Operator creates a new cluster, a lot of things are happening, such as
 electing the Primary, generating certificates, and picking specific names. This
-should not happen if we want Operator to run the cluster as *Replica*, so first
+should not happen if we want the Operator to run the *Replica* site, so first
 of all the cluster should be put into unmanaged state by setting the
 ``unmanaged`` key in the ``deploy/cr.yaml`` configuration file to true.
 
@@ -155,11 +161,11 @@ of all the cluster should be put into unmanaged state by setting the
    controlling the Replica Set configuration, but it will also result in not
    generating certificates and users credentials for new clusters.
 
-The cluster should also "know" about external nodes for the Replica Sets. You
-can configure this information in the ``replsets.externalNodes`` and
+The cluster should be able to reach external nodes of the Replica Sets. You
+can provide needed information in the ``replsets.externalNodes`` and
 ``sharding.configsvrReplset.externalNodes`` subsections of the
 ``deploy/cr.yaml`` configuration file. Following keys can be set to specify each
-exernal instance of the *Main* cluster, (both Replica Set and Config Server
+exernal instance of the *Main* site, (both Replica Set and Config Server
 instances):
 
 * set ``host`` to URL or IP address of the external replset instance,
@@ -201,20 +207,20 @@ Here is an example:
          - host: rs0-repl1.percona.com
          ...
 
-*Main* and *Replica* cluster should have same Secrets objects, so don't forget
-to apply Secrets from your *Main* cluster. Names of the corresponding objects
+*Main* and *Replica* sites should have same Secrets objects, so don't forget
+to apply Secrets from your *Main* site. Names of the corresponding objects
 are set in the ``users``, ``ssl``, and ``sslInternal`` keys of the Custom
 Resource ``secrets`` subsection (``my-cluster-name-secrets``,
 ``my-cluster-name-ssl``, and ``my-cluster-name-ssl-internal`` by default).
 
 :ref:`Copy your secrets from an existing cluster<operator-replication-source-secrets>`
-and apply each of them on your *Replica* cluster as follows:
+and apply each of them on your *Replica* site as follows:
 
 .. code:: bash
 
    $  kubectl apply -f my-cluster-secrets.yaml
 
-The *Replica* cluster will be ready for replication when you apply changes as usual:
+The *Replica* site will be ready for replication when you apply changes as usual:
 
 .. code:: bash
 
