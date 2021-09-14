@@ -68,7 +68,7 @@ The cluster managed by the Operator should "know" about external nodes for the
 Replica Sets. You can configure this information in the
 ``replsets.externalNodes`` and ``sharding.configsvrReplset.externalNodes``
 subsections of the ``deploy/cr.yaml`` configuration file. Following keys can
-be set to specify each exernal *Replica*, both for its Replica Set and Config Server
+be set to specify each external *Replica*, both for its Replica Set and Config Server
 instances:
 
 * set ``host`` to URL or IP address of the external replset instance,
