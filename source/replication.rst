@@ -10,7 +10,9 @@ The cross-site replication involves configuring one MongoDB cluster as *Main*, a
 
 The Operator automates configuration of *Main* and *Replica* MongoDB Clusters, but the feature itself is not bound to Kubernetes. Either *Main* or *Replica* can run outside of Kubernetes, be regular MongoDB and be out of the Operators’ control.
 
-This feature can be useful in several cases: for example, it can simplify migration from on-premises to the cloud with replication, and it can be really helpful in case of the disaster recovery too.
+This feature can be useful in several cases: 
+- simplify the migration of the MongoDB cluster to and from Kubernetes
+- add remote nodes to the replica set for disaster recovery 
 
 .. Describe how to stop/start replication
    Describe how to perform a failover
