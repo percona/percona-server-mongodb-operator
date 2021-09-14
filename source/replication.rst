@@ -26,7 +26,7 @@ Configuring the cross-site replication for the cluster controlled by the Operato
 Exposing instances of the MongoDB cluster
 --------------------------------------------
 
-You need to expose ReplicaSet instances of both clusters (including Config
+You need to expose all Replica Set nodes (including Config
 Servers) through a dedicated service to ensure that *Main* and *Replica*
 clusters can reach each other. This is done through the
 ``replsets.expose`` and ``sharding.expose`` sections in the ``deploy/cr.yaml``
