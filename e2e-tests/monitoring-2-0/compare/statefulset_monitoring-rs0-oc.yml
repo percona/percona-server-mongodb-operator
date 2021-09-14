@@ -236,7 +236,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 10
             successThreshold: 1
-            timeoutSeconds: 10
+            timeoutSeconds: 5
           name: pmm-client
           ports:
             - containerPort: 7777
