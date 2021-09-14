@@ -61,7 +61,7 @@ executing ``kubectl get services -l "app.kubernetes.io/instance=CLUSTER_NAME"`` 
 
 .. _operator-replication-source:
 
-Configuring cross-site replication on Main instances
+Configuring cross-site replication on Main site
 ------------------------------------------------------
 
 The cluster managed by the Operator should "know" about external nodes for the
