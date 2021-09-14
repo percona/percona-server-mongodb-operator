@@ -79,7 +79,7 @@ Optionaly you can set the following additional keys:
 
 * ``priority`` key sets the `priority <https://docs.mongodb.com/manual/reference/replica-configuration/#mongodb-rsconf-rsconf.members-n-.priority>`_
   of the external node (``2`` by default for all local members of the cluster;
-  external nodes should have lower priority to avoid some unmanaged node elected
+  external nodes should have lower priority to avoid unmanaged node being elected
   as a primary; ``0`` adds the node as a :ref:`non-voting member<nonvoting>`),
 * ``votes`` key sets the number of `votes <https://docs.mongodb.com/manual/reference/replica-configuration/#mongodb-rsconf-rsconf.members-n-.votes>`_
   an external node can cast in a replica set election (``0`` by default, and
