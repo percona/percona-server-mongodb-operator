@@ -45,17 +45,6 @@ if :ref:`Arbiter<arbiter>` is not enabled.
 .. note:: Use Storage Class with XFS as the default filesystem if possible
    `to achieve better MongoDB performance <https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb>`_.
 
-Platform-specific limitations
-------------------------------
-
-The Operator is subsequent to specific platform limitations.
-
-* Minikube doesn't support multi-node cluster configurations because of its
-  local nature, which is in collision with the default affinity requirements
-  of the Operator. To arrange this, the :ref:`install-minikube` instruction
-  includes an additional step which turns off the requirement of having not
-  less than three Nodes.
-
 
 
 
