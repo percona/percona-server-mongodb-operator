@@ -46,4 +46,4 @@ COPY build/ps-entry.sh /ps-entry.sh
 # Mozilla licensed source code should be included
 COPY vendor/github.com/hashicorp /lib
 
-USER nobody
+USER 2
