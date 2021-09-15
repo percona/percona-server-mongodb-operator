@@ -37,6 +37,7 @@ spec:
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
+#      port: 27017
 #      votes: 0
 #      priority: 0
 #    - host: 34.124.76.92
@@ -102,7 +103,7 @@ spec:
 #      minAvailable: 0
     expose:
       enabled: false
-      exposeType: LoadBalancer
+      exposeType: ClusterIP
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
@@ -208,6 +209,7 @@ spec:
 #      externalNodes:
 #      - host: 34.124.76.93
 #      - host: 34.124.76.94
+#        port: 27017
 #        votes: 0
 #        priority: 0
 #      - host: 34.124.76.95
@@ -262,7 +264,7 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: false
-        exposeType: LoadBalancer
+        exposeType: ClusterIP
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        serviceAnnotations:

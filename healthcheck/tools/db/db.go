@@ -15,110 +15,60 @@
 package db
 
 import (
-	"errors"
-	"net/url"
-	"time"
+	"context"
 
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	mgo "go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var (
 	ErrMsgAuthFailedStr      string = "server returned error on SASL authentication step: Authentication failed."
 	ErrNoReachableServersStr string = "no reachable servers"
-	ErrSessionTimeout               = errors.New("timed out waiting for mongodb connection")
-	ErrPrimaryTimeout               = errors.New("timed out waiting for host to become primary")
 )
 
-func GetSession(cnf *Config) (*mgo.Session, error) {
-	cnf.DialInfo.Password = url.QueryEscape(cnf.DialInfo.Password)
-
-	if cnf.SSL == nil {
-		cnf.SSL = &SSLConfig{}
-	}
-
+func Dial(conf *Config) (*mgo.Client, error) {
 	log.WithFields(log.Fields{
-		"hosts":      cnf.DialInfo.Addrs,
-		"ssl":        cnf.SSL.Enabled,
-		"ssl_secure": !cnf.SSL.Insecure,
+		"hosts":      conf.Hosts,
+		"ssl":        conf.SSL.Enabled,
+		"ssl_secure": conf.SSL.Insecure,
 	}).Debug("Connecting to mongodb")
 
-	if cnf.DialInfo.Username != "" && cnf.DialInfo.Password != "" {
-		log.WithFields(log.Fields{
-			"user":   cnf.DialInfo.Username,
-			"source": cnf.DialInfo.Source,
-		}).Debug("Enabling authentication for session")
+	opts := options.Client().
+		SetHosts(conf.Hosts).
+		SetReplicaSet(conf.ReplSetName).
+		SetAuth(options.Credential{Password: conf.Password, Username: conf.Username}).
+		SetTLSConfig(conf.TLSConf)
+
+	if conf.Username != "" && conf.Password != "" {
+		log.WithFields(log.Fields{"user": conf.Username}).Debug("Enabling authentication for session")
 	}
 
-	if cnf.SSL.Enabled {
-		err := cnf.configureSSLDialInfo()
+	client, err := mgo.Connect(context.TODO(), opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "connect to mongo replica set")
+	}
+
+	if err := client.Ping(context.TODO(), nil); err != nil {
+		if err := client.Disconnect(context.TODO()); err != nil {
+			return nil, errors.Wrap(err, "disconnect client")
+		}
+
+		opts := options.Client().
+			SetHosts(conf.Hosts).
+			SetTLSConfig(conf.TLSConf).
+			SetDirect(true)
+
+		client, err = mgo.Connect(context.TODO(), opts)
 		if err != nil {
-			log.Errorf("failed to configure SSL/TLS: %s", err)
-			return nil, err
+			return nil, errors.Wrap(err, "connect to mongo replica set")
+		}
+
+		if err := client.Ping(context.TODO(), nil); err != nil {
+			return nil, errors.Wrap(err, "ping mongo")
 		}
 	}
 
-	session, err := mgo.DialWithInfo(cnf.DialInfo)
-	if err != nil {
-		switch err.Error() {
-		case ErrMsgAuthFailedStr:
-			log.Debug("authentication failed, retrying with authentication disabled")
-			cnf.DialInfo.Username = ""
-			cnf.DialInfo.Password = ""
-			session, err = mgo.DialWithInfo(cnf.DialInfo)
-		case ErrNoReachableServersStr:
-			log.Debug("connection failed, retrying without replSet")
-			cnf.DialInfo.ReplicaSetName = ""
-			// if replset is not yet initialized, we won't have users either
-			cnf.DialInfo.Username = ""
-			cnf.DialInfo.Password = ""
-			session, err = mgo.DialWithInfo(cnf.DialInfo)
-		}
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	session.SetMode(mgo.Monotonic, true)
-	return session, err
-}
-
-func WaitForSession(cnf *Config, maxRetries uint, sleepDuration time.Duration) (*mgo.Session, error) {
-	var err error
-	var tries uint
-	for tries <= maxRetries || maxRetries == 0 {
-		session, err := GetSession(cnf)
-		if err == nil && session.Ping() == nil {
-			return session, err
-		}
-		time.Sleep(sleepDuration)
-		tries++
-	}
-	if err == nil {
-		return nil, ErrSessionTimeout
-	}
-	return nil, err
-}
-
-func WaitForPrimary(session *mgo.Session, maxRetries uint, sleepDuration time.Duration) error {
-	resp := struct {
-		IsMaster bool `bson:"ismaster"`
-		ReadOnly bool `bson:"readOnly"`
-	}{}
-	var err error
-	var tries uint
-	for tries <= maxRetries {
-		err = session.Run(bson.D{{Name: "isMaster", Value: "1"}}, &resp)
-		if err == nil && resp.IsMaster && !resp.ReadOnly {
-			return nil
-		}
-		time.Sleep(sleepDuration)
-		tries++
-	}
-	if err == nil {
-		return ErrPrimaryTimeout
-	}
-	return err
+	return client, nil
 }
