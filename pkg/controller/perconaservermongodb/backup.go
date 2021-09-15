@@ -206,6 +206,10 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongo
 }
 
 func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
 	// pitr is disabled right before restore so it must not be re-enabled during restore
 	isRestoring, err := r.isRestoreRunning(cr)
 	if err != nil {
