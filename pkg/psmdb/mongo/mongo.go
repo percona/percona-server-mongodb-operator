@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/pkg/errors"
@@ -457,6 +458,31 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) (changes bool) {
 		if _, ok := cm[member.Host]; !ok {
 			*m = append([]ConfigMember(*m)[:i], []ConfigMember(*m)[i+1:]...)
 			changes = true
+		}
+	}
+
+	return changes
+}
+
+// FixTags corrects the tags of any member if they changed.
+// Especially the "external" tag can change if cluster is switched from
+// unmanaged to managed.
+func (m *ConfigMembers) FixTags(compareWith ConfigMembers) (changes bool) {
+	if len(*m) < 1 {
+		return changes
+	}
+
+	cm := make(map[string]ReplsetTags, len(compareWith))
+
+	for _, member := range compareWith {
+		cm[member.Host] = member.Tags
+	}
+
+	for i := 0; i < len(*m); i++ {
+		member := []ConfigMember(*m)[i]
+		if c, ok := cm[member.Host]; ok && len(member.Tags) > 0 {
+			changes = !reflect.DeepEqual(member.Tags, c)
+			[]ConfigMember(*m)[i].Tags = c
 		}
 	}
 
