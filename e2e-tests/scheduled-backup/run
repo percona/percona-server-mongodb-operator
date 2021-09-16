@@ -25,7 +25,7 @@ deploy_minio
 label_node
 
 cat - <<-EOF | kubectl apply -f -
-	        apiVersion: scheduling.k8s.io/v1beta1
+	        apiVersion: scheduling.k8s.io/v1
 	        kind: PriorityClass
 	        metadata:
 	            name: high-priority
