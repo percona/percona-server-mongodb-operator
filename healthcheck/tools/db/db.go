@@ -16,6 +16,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -39,7 +40,9 @@ func Dial(conf *Config) (*mgo.Client, error) {
 		SetHosts(conf.Hosts).
 		SetReplicaSet(conf.ReplSetName).
 		SetAuth(options.Credential{Password: conf.Password, Username: conf.Username}).
-		SetTLSConfig(conf.TLSConf)
+		SetTLSConfig(conf.TLSConf).
+		SetConnectTimeout(10 * time.Second).
+		SetServerSelectionTimeout(10 * time.Second)
 
 	if conf.Username != "" && conf.Password != "" {
 		log.WithFields(log.Fields{"user": conf.Username}).Debug("Enabling authentication for session")
@@ -58,11 +61,13 @@ func Dial(conf *Config) (*mgo.Client, error) {
 		opts := options.Client().
 			SetHosts(conf.Hosts).
 			SetTLSConfig(conf.TLSConf).
+			SetConnectTimeout(10 * time.Second).
+			SetServerSelectionTimeout(10 * time.Second).
 			SetDirect(true)
 
 		client, err = mgo.Connect(context.TODO(), opts)
 		if err != nil {
-			return nil, errors.Wrap(err, "connect to mongo replica set")
+			return nil, errors.Wrap(err, "connect to mongo replica set with direct")
 		}
 
 		if err := client.Ping(context.TODO(), nil); err != nil {

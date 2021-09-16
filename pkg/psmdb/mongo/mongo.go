@@ -27,7 +27,7 @@ type Config struct {
 }
 
 func Dial(conf *Config) (*mongo.Client, error) {
-	ctx, connectcancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, connectcancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer connectcancel()
 
 	opts := options.Client().
@@ -54,7 +54,7 @@ func Dial(conf *Config) (*mongo.Client, error) {
 		}
 	}()
 
-	ctx, pingcancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, pingcancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer pingcancel()
 
 	err = client.Ping(ctx, readpref.Primary())
