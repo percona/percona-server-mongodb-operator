@@ -46,7 +46,7 @@ spec:
 #      operationProfiling:
 #        mode: slowOp
 #      systemLog:
-#         verbosity: 1
+#        verbosity: 1
 #    storage:
 #      engine: wiredTiger
 #      inMemory:
@@ -111,6 +111,12 @@ spec:
     nonvoting:
       enabled: false
       size: 3
+#      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+#      configuration: |
+#        operationProfiling:
+#          mode: slowOp
+#        systemLog:
+#          verbosity: 1
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
