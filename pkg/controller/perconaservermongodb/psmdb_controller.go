@@ -774,29 +774,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
 
 		if rs.Configuration == "" {
-			err := deleteConfigMapIfExists(r.client, cr, name)
-			if err != nil {
+			if err := deleteConfigMapIfExists(r.client, cr, name); err != nil {
 				return errors.Wrap(err, "failed to delete mongod config map")
 			}
-
-			continue
-		}
-
-		err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cr.Namespace,
-			},
-			Data: map[string]string{
-				"mongod.conf": rs.Configuration,
-			},
-		})
-		if err != nil {
-			return errors.Wrap(err, "create or update config map")
+		} else {
+			err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: cr.Namespace,
+				},
+				Data: map[string]string{
+					"mongod.conf": rs.Configuration,
+				},
+			})
+			if err != nil {
+				return errors.Wrap(err, "create or update config map")
+			}
 		}
 
 		if !rs.NonVoting.Enabled {
@@ -812,7 +809,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 			continue
 		}
 
-		err = r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
+		err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: cr.Namespace,
