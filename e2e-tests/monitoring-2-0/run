@@ -17,21 +17,21 @@ platform=kubernetes
 helm del --purge monitoring || :
 helm repo remove stable || :
 helm repo add stable https://charts.helm.sh/stable
-if [[ -n "${OPENSHIFT}" ]]; then
-    platform=openshift
-    oc adm policy add-scc-to-user privileged -z percona-server-mongodb-operator
-    oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
-    retry 10 60 helm install monitoring --set platform=$platform --set sa=percona-server-mongodb-operator --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-2.21.0.tgz
+if [[ -n ${OPENSHIFT} ]]; then
+	platform=openshift
+	oc adm policy add-scc-to-user privileged -z percona-server-mongodb-operator
+	oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
+	retry 10 60 helm install monitoring --set platform=$platform --set sa=percona-server-mongodb-operator --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-2.21.0.tgz
 else
-    retry 10 60 helm install monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-2.21.0.tgz
+	retry 10 60 helm install monitoring --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-2.21.0.tgz
 fi
 sleep 20
 
 desc 'create PSMDB cluster'
 kubectl_bin apply \
-    -f $conf_dir/secrets.yml \
-    -f $conf_dir/client.yml \
-    -f $test_dir/conf/secrets.yml
+	-f $conf_dir/secrets.yml \
+	-f $conf_dir/client.yml \
+	-f $test_dir/conf/secrets.yml
 
 apply_cluster $test_dir/conf/$cluster-rs0.yml
 desc 'check if all 3 Pods started'
@@ -66,8 +66,8 @@ get_qan20_values $cluster-rs0-0 admin:admin
 get_qan20_values $cluster-cfg-0 admin:admin
 get_qan20_values $MONGOS_POD_NAME admin:admin
 
-if [[ -n "${OPENSHIFT}" ]]; then
-    oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
+if [[ -n ${OPENSHIFT} ]]; then
+	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
 fi
 
 helm delete monitoring
