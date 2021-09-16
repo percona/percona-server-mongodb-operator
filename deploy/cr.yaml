@@ -142,6 +142,9 @@ spec:
 #      nodeSelector:
 #        disktype: ssd
 #    schedulerName: "default"
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
       resources:
         limits:
           cpu: "300m"
