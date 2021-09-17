@@ -10,7 +10,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.10.0
-  image: percona/percona-server-mongodb:4.4.6-8
+  image: percona/percona-server-mongodb:4.4.8-9
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -26,7 +26,7 @@ spec:
     users: my-cluster-name-secrets
   pmm:
     enabled: false
-    image: percona/pmm-client:2.18.0
+    image: percona/pmm-client:2.21.0
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
