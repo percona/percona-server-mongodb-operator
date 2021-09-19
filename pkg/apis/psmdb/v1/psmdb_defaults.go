@@ -35,7 +35,7 @@ var (
 const (
 	minSafeMongosSize                = 2
 	minSafeReplicasetSizeWithArbiter = 4
-	clusterNameMaxLen                = 51
+	clusterNameMaxLen                = 50
 )
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
