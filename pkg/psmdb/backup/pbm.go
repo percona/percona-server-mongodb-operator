@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
@@ -274,7 +275,7 @@ func (b *PBM) GetTimelinesPITR() ([]pbm.Timeline, error) {
 	}
 
 	for _, s := range shards {
-		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, now, nil)
+		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, primitive.Timestamp{T: uint32(now)}, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting timelines for %s", s.RS)
 		}
@@ -298,13 +299,33 @@ func (b *PBM) GetLatestTimelinePITR() (pbm.Timeline, error) {
 	return timelines[len(timelines)-1], nil
 }
 
+// PITRGetChunkContains returns a pitr slice chunk that belongs to the
+// given replica set and contains the given timestamp
+func (p *PBM) pitrGetChunkContains(rs string, ts primitive.Timestamp) (*pbm.PITRChunk, error) {
+	res := p.C.Conn.Database(pbm.DB).Collection(pbm.PITRChunksCollection).FindOne(
+		context.TODO(),
+		bson.D{
+			{"rs", rs},
+			{"start_ts", bson.M{"$lte": ts}},
+			{"end_ts", bson.M{"$gte": ts}},
+		},
+	)
+	if res.Err() != nil {
+		return nil, errors.Wrap(res.Err(), "get")
+	}
+
+	chnk := new(pbm.PITRChunk)
+	err := res.Decode(chnk)
+	return chnk, errors.Wrap(err, "decode")
+}
+
 func (b *PBM) GetPITRChunkContains(unixTS int64) (*pbm.PITRChunk, error) {
 	nodeInfo, err := b.C.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}
 
-	c, err := b.C.PITRGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
+	c, err := b.pitrGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errNoOplogsForPITR
