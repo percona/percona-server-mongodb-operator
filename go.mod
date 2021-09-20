@@ -5,7 +5,6 @@ go 1.13
 require (
 	github.com/Percona-Lab/percona-version-service/api v0.0.0-20200714141734-e9fed619b55c
 	github.com/alecthomas/kingpin v2.2.6+incompatible
-	github.com/aws/aws-sdk-go v1.34.28 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/errors v0.19.6
 	github.com/go-openapi/runtime v0.19.16
@@ -16,7 +15,7 @@ require (
 	github.com/jetstack/cert-manager v0.15.1
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/operator-framework/operator-sdk v0.17.2
-	github.com/percona/percona-backup-mongodb v1.5.0
+	github.com/percona/percona-backup-mongodb v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.7.0
@@ -35,7 +34,7 @@ require (
 )
 
 replace (
-	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
+	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
 	k8s.io/api => k8s.io/api v0.17.4 // Required by client-go
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.4 // Required by client-go
 	k8s.io/client-go => k8s.io/client-go v0.17.4 // Required by prometheus-operator

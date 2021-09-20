@@ -31,9 +31,35 @@ type Config struct {
 	Epoch   primitive.Timestamp `bson:"epoch" json:"-" yaml:"-"`
 }
 
+func (c Config) String() string {
+	if c.Storage.S3.Credentials.AccessKeyID != "" {
+		c.Storage.S3.Credentials.AccessKeyID = "***"
+	}
+	if c.Storage.S3.Credentials.SecretAccessKey != "" {
+		c.Storage.S3.Credentials.SecretAccessKey = "***"
+	}
+	if c.Storage.S3.Credentials.Vault.Secret != "" {
+		c.Storage.S3.Credentials.Vault.Secret = "***"
+	}
+	if c.Storage.S3.Credentials.Vault.Token != "" {
+		c.Storage.S3.Credentials.Vault.Token = "***"
+	}
+	if c.Storage.Azure.Credentials.Key != "" {
+		c.Storage.Azure.Credentials.Key = "***"
+	}
+
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Sprintln("error:", err)
+	}
+
+	return string(b)
+}
+
 // PITRConf is a Point-In-Time Recovery options
 type PITRConf struct {
-	Enabled bool `bson:"enabled" json:"enabled" yaml:"enabled"`
+	Enabled      bool    `bson:"enabled" json:"enabled" yaml:"enabled"`
+	OplogSpanMin float64 `bson:"oplogSpanMin" json:"oplogSpanMin" yaml:"oplogSpanMin"`
 }
 
 // StorageType represents a type of the destination storage for backups
@@ -146,10 +172,16 @@ func (p *PBM) SetConfigByte(buf []byte) error {
 }
 
 func (p *PBM) SetConfig(cfg Config) error {
-	if cfg.Storage.Type == StorageS3 {
+	switch cfg.Storage.Type {
+	case StorageS3:
 		err := cfg.Storage.S3.Cast()
 		if err != nil {
 			return errors.Wrap(err, "cast storage")
+		}
+	case StorageFilesystem:
+		err := cfg.Storage.Filesystem.Cast()
+		if err != nil {
+			return errors.Wrap(err, "check config")
 		}
 	}
 	ct, err := p.ClusterTime()
@@ -202,8 +234,13 @@ func (p *PBM) SetConfigVar(key, val string) error {
 	}
 
 	// TODO: how to be with special case options like pitr.enabled
-	if key == "pitr.enabled" {
+	switch key {
+	case "pitr.enabled":
 		return errors.Wrap(p.confSetPITR(key, v.(bool)), "write to db")
+	case "storage.filesystem.path":
+		if v.(string) == "" {
+			return errors.New("storage.filesystem.path can't be empty")
+		}
 	}
 
 	_, err = p.Conn.Database(DB).Collection(ConfigCollection).UpdateOne(

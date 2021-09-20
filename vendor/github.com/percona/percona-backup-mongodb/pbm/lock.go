@@ -16,13 +16,13 @@ const StaleFrameSec uint32 = 30
 
 // LockHeader describes the lock. This data will be serialased into the mongo document.
 type LockHeader struct {
-	Type    Command `bson:"type,omitempty"`
-	Replset string  `bson:"replset,omitempty"`
-	Node    string  `bson:"node,omitempty"`
-	OPID    string  `bson:"opid,omitempty"`
+	Type    Command `bson:"type,omitempty" json:"type,omitempty"`
+	Replset string  `bson:"replset,omitempty" json:"replset,omitempty"`
+	Node    string  `bson:"node,omitempty" json:"node,omitempty"`
+	OPID    string  `bson:"opid,omitempty" json:"opid,omitempty"`
 	// should be a pointer so mongo find with empty epoch would work
 	// otherwise it always set it at least to "epoch":{"$timestamp":{"t":0,"i":0}}
-	Epoch *primitive.Timestamp `bson:"epoch,omitempty"`
+	Epoch *primitive.Timestamp `bson:"epoch,omitempty" json:"epoch,omitempty"`
 }
 
 type LockData struct {

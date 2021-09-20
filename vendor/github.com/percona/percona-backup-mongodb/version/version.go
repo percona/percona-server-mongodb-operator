@@ -9,7 +9,7 @@ import (
 )
 
 // current PBM version
-const version = "1.5.0"
+const version = "1.6.0"
 
 // !!! should be sorted in the ascending order
 var breakingChangesV = []string{
@@ -60,6 +60,17 @@ func Current() (v Info) {
 	v.GoVersion = runtime.Version()
 
 	return v
+}
+
+func (i Info) String() string {
+	return fmt.Sprintf(plain,
+		i.Version,
+		i.Platform,
+		i.GitCommit,
+		i.GitBranch,
+		i.BuildTime,
+		i.GoVersion,
+	)
 }
 
 func (i Info) Short() string {

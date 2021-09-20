@@ -134,6 +134,38 @@ func (b *Blob) FileStat(name string) (inf storage.FileInfo, err error) {
 	return inf, nil
 }
 
+func (b *Blob) Copy(src, dst string) error {
+	to := b.c.NewBlobURL(path.Join(b.opts.Prefix, dst))
+	from := b.c.NewBlobURL(path.Join(b.opts.Prefix, src))
+
+	r, err := to.StartCopyFromURL(context.TODO(), from.URL(), nil, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
+	if err != nil {
+		return errors.Wrap(err, "start copy")
+	}
+
+	status := r.CopyStatus()
+	for status == azblob.CopyStatusPending {
+		time.Sleep(time.Second * 2)
+		p, err := to.GetProperties(context.TODO(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		if err != nil {
+			return errors.Wrap(err, "get copy status")
+		}
+		status = p.CopyStatus()
+	}
+
+	switch status {
+	case azblob.CopyStatusSuccess:
+		return nil
+
+	case azblob.CopyStatusAborted:
+		return errors.New("copy aborted")
+	case azblob.CopyStatusFailed:
+		return errors.New("copy failed")
+	default:
+		return errors.Errorf("undefined status")
+	}
+}
+
 func (b *Blob) SourceReader(name string) (io.ReadCloser, error) {
 	o, err := b.c.NewBlockBlobURL(path.Join(b.opts.Prefix, name)).Download(context.TODO(), 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
