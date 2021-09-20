@@ -24,7 +24,7 @@ type Logger struct {
 	node string
 }
 
-type LogEntry struct {
+type Entry struct {
 	ObjID   primitive.ObjectID `bson:"-" json:"-"` // to get sense of mgs total ordering while reading logs
 	Time    string             `bson:"-" json:"t"`
 	TS      int64              `bson:"ts" json:"-"`
@@ -55,17 +55,17 @@ func tsUTC(ts int64) string {
 	return time.Unix(ts, 0).UTC().Format(time.RFC3339)
 }
 
-func (e *LogEntry) String() (s string) {
+func (e *Entry) String() (s string) {
 	return e.string(tsLocal, false)
 }
 
-func (e *LogEntry) StringNode() (s string) {
+func (e *Entry) StringNode() (s string) {
 	return e.string(tsLocal, true)
 }
 
 type tsformatf func(ts int64) string
 
-func (e *LogEntry) string(f tsformatf, showNode bool) (s string) {
+func (e *Entry) string(f tsformatf, showNode bool) (s string) {
 	node := ""
 	if showNode {
 		node = " [" + e.RS + "/" + e.Node + "]"
@@ -135,7 +135,7 @@ func (l *Logger) output(s Severity, event string, obj, opid string, epoch primit
 	_, tz := time.Now().Local().Zone()
 	t := time.Now().UTC()
 
-	e := &LogEntry{
+	e := &Entry{
 		TS:    t.Unix(),
 		Tns:   t.Nanosecond(),
 		TZone: tz,
@@ -181,7 +181,7 @@ func (l *Logger) Fatal(event string, obj, opid string, epoch primitive.Timestamp
 	l.output(Fatal, event, obj, opid, epoch, msg, args...)
 }
 
-func (l *Logger) Output(e *LogEntry) error {
+func (l *Logger) Output(e *Entry) error {
 	var rerr error
 
 	if l.cn != nil {
@@ -250,51 +250,24 @@ type LogRequest struct {
 	LogKeys
 }
 
-type OutFormat int
-
-const (
-	FormatText OutFormat = iota
-	FormatJSON
-)
-
-func (l *Logger) PrintLogs(to io.Writer, f OutFormat, r *LogRequest, limit int64, showNode bool) error {
-	cur, err := l.Get(r, limit, false)
-	if err != nil {
-		return errors.Wrap(err, "get list from mongo")
-	}
-
-	var fn entryFn
-
-	switch f {
-	case FormatJSON:
-		enc := json.NewEncoder(to)
-		fn = func(e LogEntry) error {
-			e.Time = tsUTC(e.TS)
-			err := enc.Encode(e)
-			return errors.Wrap(err, "json encode message")
-		}
-	default:
-		fn = func(e LogEntry) error {
-			_, err := io.WriteString(to, e.string(tsUTC, showNode)+"\n")
-			return errors.Wrap(err, "write message")
-		}
-	}
-	return processList(cur, fn)
+type Entries struct {
+	Data     []Entry `json:"data"`
+	ShowNode bool    `json:"-"`
 }
 
-type entryFn func(e LogEntry) error
-
-func processList(e []LogEntry, fn entryFn) error {
-	for i := len(e) - 1; i >= 0; i-- {
-		err := fn(e[i])
-		if err != nil {
-			return errors.Wrap(err, "process message")
-		}
-	}
-	return nil
+func (e Entries) MarshalJSON() ([]byte, error) {
+	return json.Marshal(e.Data)
 }
 
-func (l *Logger) Get(r *LogRequest, limit int64, exactSeverity bool) ([]LogEntry, error) {
+func (e Entries) String() (s string) {
+	for _, entry := range e.Data {
+		s += entry.string(tsUTC, e.ShowNode) + "\n"
+	}
+
+	return s
+}
+
+func Get(cn *mongo.Collection, r *LogRequest, limit int64, exactSeverity bool) (*Entries, error) {
 	filter := bson.D{bson.E{"s", bson.M{"$lte": r.Severity}}}
 	if exactSeverity {
 		filter = bson.D{bson.E{"s", r.Severity}}
@@ -325,7 +298,7 @@ func (l *Logger) Get(r *LogRequest, limit int64, exactSeverity bool) ([]LogEntry
 		filter = append(filter, bson.E{"ts", bson.M{"$lte": r.TimeMax.Unix()}})
 	}
 
-	cur, err := l.cn.Find(
+	cur, err := cn.Find(
 		context.TODO(),
 		filter,
 		options.Find().SetLimit(limit).SetSort(bson.D{{"ts", -1}, {"ns", -1}}),
@@ -335,9 +308,9 @@ func (l *Logger) Get(r *LogRequest, limit int64, exactSeverity bool) ([]LogEntry
 	}
 	defer cur.Close(context.TODO())
 
-	logs := []LogEntry{}
+	e := new(Entries)
 	for cur.Next(context.TODO()) {
-		l := LogEntry{}
+		l := Entry{}
 		err := cur.Decode(&l)
 		if err != nil {
 			return nil, errors.Wrap(err, "message decode")
@@ -345,8 +318,8 @@ func (l *Logger) Get(r *LogRequest, limit int64, exactSeverity bool) ([]LogEntry
 		if id, ok := cur.Current.Lookup("_id").ObjectIDOK(); ok {
 			l.ObjID = id
 		}
-		logs = append(logs, l)
+		e.Data = append(e.Data, l)
 	}
 
-	return logs, nil
+	return e, nil
 }

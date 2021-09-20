@@ -16,6 +16,14 @@ type Conf struct {
 	Path string `bson:"path" json:"path" yaml:"path"`
 }
 
+func (c *Conf) Cast() error {
+	if c.Path == "" {
+		return errors.New("path can't be empty")
+	}
+
+	return nil
+}
+
 type FS struct {
 	opts Conf
 }
@@ -102,6 +110,19 @@ func (fs *FS) List(prefix, suffix string) ([]storage.FileInfo, error) {
 	})
 
 	return files, err
+}
+
+func (fs *FS) Copy(src, dst string) error {
+	from, err := os.Open(path.Join(fs.opts.Path, src))
+	if err != nil {
+		return errors.Wrap(err, "open src")
+	}
+	to, err := os.Create(path.Join(fs.opts.Path, dst))
+	if err != nil {
+		return errors.Wrap(err, "create dst")
+	}
+	_, err = io.Copy(to, from)
+	return err
 }
 
 // Delete deletes given file from FS.

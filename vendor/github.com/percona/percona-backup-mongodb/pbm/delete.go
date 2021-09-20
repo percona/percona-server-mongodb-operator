@@ -18,7 +18,13 @@ func (p *PBM) DeleteBackup(name string, l *log.Event) error {
 	if err != nil {
 		return errors.Wrap(err, "get backup meta")
 	}
-	err = p.probeDelete(meta)
+
+	tlns, err := p.PITRTimelines()
+	if err != nil {
+		return errors.Wrap(err, "get PITR chunks")
+	}
+
+	err = p.probeDelete(meta, tlns)
 	if err != nil {
 		return err
 	}
@@ -38,23 +44,10 @@ func (p *PBM) DeleteBackup(name string, l *log.Event) error {
 		return errors.Wrap(err, "delete metadata from db")
 	}
 
-	// need to delete invalidated PITR chunks
-	nxt, err := p.BackupGetNext(meta)
-	if err != nil {
-		return errors.Wrap(err, "get next backup")
-	}
-
-	upto := primitive.Timestamp{}
-	if nxt == nil {
-		upto.T = uint32(time.Now().Unix())
-	} else {
-		upto.T = uint32(nxt.StartTS)
-	}
-
-	return p.deleteChunks(meta.LastWriteTS, upto, stg)
+	return nil
 }
 
-func (p *PBM) probeDelete(backup *BackupMeta) error {
+func (p *PBM) probeDelete(backup *BackupMeta, tlns []Timeline) error {
 	// check if backup isn't running
 	switch backup.Status {
 	case StatusDone, StatusCancelled, StatusError:
@@ -62,20 +55,26 @@ func (p *PBM) probeDelete(backup *BackupMeta) error {
 		return errors.Errorf("unable to delete backup in %s state", backup.Status)
 	}
 
-	// we shouldn't delete the last backup if PITR is ON
+	// if backup isn't a base for any PITR timeline
+	for _, t := range tlns {
+		if backup.LastWriteTS.T == t.Start {
+			return errors.Errorf("unable to delete: backup is a base for '%s'", t)
+		}
+	}
+
 	ispitr, err := p.IsPITR()
 	if err != nil {
 		return errors.Wrap(err, "unable check pitr state")
 	}
-	if !ispitr {
+
+	// if PITR is ON and there are no chunks yet we shouldn't delete the most recent back
+	if !ispitr || tlns != nil {
 		return nil
 	}
-
 	nxt, err := p.BackupGetNext(backup)
 	if err != nil {
 		return errors.Wrap(err, "check next backup")
 	}
-
 	if nxt == nil {
 		return errors.New("unable to delete the last backup while PITR is on")
 	}
@@ -111,6 +110,11 @@ func (p *PBM) DeleteOlderThan(t time.Time, l *log.Event) error {
 		return errors.Wrap(err, "get storage")
 	}
 
+	tlns, err := p.PITRTimelines()
+	if err != nil {
+		return errors.Wrap(err, "get PITR chunks")
+	}
+
 	cur, err := p.Conn.Database(DB).Collection(BcpCollection).Find(
 		p.ctx,
 		bson.M{
@@ -128,7 +132,7 @@ func (p *PBM) DeleteOlderThan(t time.Time, l *log.Event) error {
 			return errors.Wrap(err, "decode backup meta")
 		}
 
-		err = p.probeDelete(m)
+		err = p.probeDelete(m, tlns)
 		if err != nil {
 			l.Info("deleting %s: %v", m.Name, err)
 			continue
@@ -149,22 +153,42 @@ func (p *PBM) DeleteOlderThan(t time.Time, l *log.Event) error {
 		return errors.Wrap(cur.Err(), "cursor")
 	}
 
-	fbcp, err := p.GetFirstBackup()
-	if err != nil {
-		return errors.Wrap(err, "get first backup")
-	}
-	tsto := primitive.Timestamp{}
-	if fbcp == nil {
-		tsto.T = uint32(time.Now().Unix())
-	} else {
-		tsto.T = uint32(fbcp.StartTS)
-	}
-
-	return p.deleteChunks(primitive.Timestamp{T: 1, I: 1}, tsto, stg)
+	return nil
 }
 
-func (p *PBM) deleteChunks(start, end primitive.Timestamp, stg storage.Storage) error {
-	chunks, err := p.PITRGetChunksSlice("", start, end)
+// DeletePITR deletes backups which older than given `until` Time. It will round `until` down
+// to the last write of the closest preceding backup in order not to make gaps. So usually it
+// gonna leave some extra chunks. E.g. if `until = 13` and the last write of the closest preceding
+// backup is `10` it will leave `11` and `12` chunks as well since `13` won't be restorable
+// without `11` and `12` (contiguous timeline from the backup).
+// It deletes all chunks if `until` is nil.
+func (p *PBM) DeletePITR(until *time.Time, l *log.Event) error {
+	stg, err := p.GetStorage(l)
+	if err != nil {
+		return errors.Wrap(err, "get storage")
+	}
+
+	var zerots primitive.Timestamp
+	if until == nil {
+		return p.deleteChunks(zerots, zerots, stg)
+	}
+
+	bcp, err := p.GetLastBackup(&primitive.Timestamp{T: uint32(until.Unix()), I: 0})
+	if err != nil {
+		return errors.Wrap(err, "get recent backup")
+	}
+
+	return p.deleteChunks(zerots, bcp.LastWriteTS, stg)
+}
+
+func (p *PBM) deleteChunks(start, until primitive.Timestamp, stg storage.Storage) (err error) {
+	var chunks []PITRChunk
+
+	if until.T > 0 {
+		chunks, err = p.PITRGetChunksSliceUntil("", until)
+	} else {
+		chunks, err = p.PITRGetChunksSlice("", start, until)
+	}
 	if err != nil {
 		return errors.Wrap(err, "get pitr chunks")
 	}

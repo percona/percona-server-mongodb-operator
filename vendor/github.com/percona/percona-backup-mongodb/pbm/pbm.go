@@ -71,6 +71,7 @@ const (
 	CmdPITR             Command = "pitr"
 	CmdPITRestore       Command = "pitrestore"
 	CmdDeleteBackup     Command = "delete"
+	CmdDeletePITR       Command = "deletePitr"
 )
 
 func (c Command) String() string {
@@ -89,6 +90,8 @@ func (c Command) String() string {
 		return "PITR restore"
 	case CmdDeleteBackup:
 		return "Delete"
+	case CmdDeletePITR:
+		return "Delete PITR chunks"
 	default:
 		return "Undefined"
 	}
@@ -102,6 +105,7 @@ type Cmd struct {
 	Restore    RestoreCmd      `bson:"restore,omitempty"`
 	PITRestore PITRestoreCmd   `bson:"pitrestore,omitempty"`
 	Delete     DeleteBackupCmd `bson:"delete,omitempty"`
+	DeletePITR DeletePITRCmd   `bson:"deletePitr,omitempty"`
 	TS         int64           `bson:"ts"`
 	OPID       OPID            `bson:"-"`
 }
@@ -169,15 +173,23 @@ func (r RestoreCmd) String() string {
 type PITRestoreCmd struct {
 	Name string `bson:"name"`
 	TS   int64  `bson:"ts"`
+	Bcp  string `bson:"bcp"`
 }
 
 func (p PITRestoreCmd) String() string {
+	if p.Bcp != "" {
+		return fmt.Sprintf("name: %s, point-in-time ts: %d, base-snapshot: %s", p.Name, p.TS, p.Bcp)
+	}
 	return fmt.Sprintf("name: %s, point-in-time ts: %d", p.Name, p.TS)
 }
 
 type DeleteBackupCmd struct {
 	Backup    string `bson:"backup"`
 	OlderThan int64  `bson:"olderthan"`
+}
+
+type DeletePITRCmd struct {
+	OlderThan int64 `bson:"olderthan"`
 }
 
 func (d DeleteBackupCmd) String() string {
@@ -549,12 +561,23 @@ func (p *PBM) BackupHB(bcpName string) error {
 	return errors.Wrap(err, "write into db")
 }
 
-func (p *PBM) SetFirstLastWrite(bcpName string, first, last primitive.Timestamp) error {
+func (p *PBM) SetFirstWrite(bcpName string, first primitive.Timestamp) error {
 	_, err := p.Conn.Database(DB).Collection(BcpCollection).UpdateOne(
 		p.ctx,
 		bson.D{{"name", bcpName}},
 		bson.D{
 			{"$set", bson.M{"first_write_ts": first}},
+		},
+	)
+
+	return err
+}
+
+func (p *PBM) SetLastWrite(bcpName string, last primitive.Timestamp) error {
+	_, err := p.Conn.Database(DB).Collection(BcpCollection).UpdateOne(
+		p.ctx,
+		bson.D{{"name", bcpName}},
+		bson.D{
 			{"$set", bson.M{"last_write_ts": last}},
 		},
 	)
@@ -587,18 +610,6 @@ func (p *PBM) ChangeRSState(bcpName string, rsName string, s Status, msg string)
 			{"$set", bson.M{"replsets.$.last_transition_ts": ts}},
 			{"$set", bson.M{"replsets.$.error": msg}},
 			{"$push", bson.M{"replsets.$.conditions": Condition{Timestamp: ts, Status: s, Error: msg}}},
-		},
-	)
-
-	return err
-}
-
-func (p *PBM) SetRSFirstWrite(bcpName string, rsName string, ts primitive.Timestamp) error {
-	_, err := p.Conn.Database(DB).Collection(BcpCollection).UpdateOne(
-		p.ctx,
-		bson.D{{"name", bcpName}, {"replsets.name", rsName}},
-		bson.D{
-			{"$set", bson.M{"replsets.$.first_write_ts": ts}},
 		},
 	)
 
@@ -645,7 +656,7 @@ func (p *PBM) GetFirstBackup() (*BackupMeta, error) {
 }
 
 // GetLastBackup returns last successfully finished backup
-// and nil if there is no such backup yet. If ts isn't nil it will
+// or nil if there is no such backup yet. If ts isn't nil it will
 // search for the most recent backup that finished before specified timestamp
 func (p *PBM) GetLastBackup(before *primitive.Timestamp) (*BackupMeta, error) {
 	return p.getRecentBackup(before, -1)
@@ -700,6 +711,36 @@ func (p *PBM) BackupsList(limit int64) ([]BackupMeta, error) {
 		p.ctx,
 		bson.M{},
 		options.Find().SetLimit(limit).SetSort(bson.D{{"start_ts", -1}}),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "query mongo")
+	}
+
+	defer cur.Close(p.ctx)
+
+	backups := []BackupMeta{}
+	for cur.Next(p.ctx) {
+		b := BackupMeta{}
+		err := cur.Decode(&b)
+		if err != nil {
+			return nil, errors.Wrap(err, "message decode")
+		}
+		backups = append(backups, b)
+	}
+
+	return backups, cur.Err()
+}
+
+func (p *PBM) BackupsDoneList(after *primitive.Timestamp, limit int64, order int) ([]BackupMeta, error) {
+	q := bson.D{{"status", StatusDone}}
+	if after != nil {
+		q = append(q, bson.E{"last_write_ts", bson.M{"$gte": after}})
+	}
+
+	cur, err := p.Conn.Database(DB).Collection(BcpCollection).Find(
+		p.ctx,
+		q,
+		options.Find().SetLimit(limit).SetSort(bson.D{{"last_write_ts", order}}),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "query mongo")
@@ -813,12 +854,12 @@ func (p *PBM) ClusterTime() (primitive.Timestamp, error) {
 	return inf.ClusterTime.ClusterTime, nil
 }
 
-func (p *PBM) LogGet(r *log.LogRequest, limit int64) ([]log.LogEntry, error) {
-	return p.log.Get(r, limit, false)
+func (p *PBM) LogGet(r *log.LogRequest, limit int64) (*log.Entries, error) {
+	return log.Get(p.Conn.Database(DB).Collection(LogCollection), r, limit, false)
 }
 
-func (p *PBM) LogGetExactSeverity(r *log.LogRequest, limit int64) ([]log.LogEntry, error) {
-	return p.log.Get(r, limit, true)
+func (p *PBM) LogGetExactSeverity(r *log.LogRequest, limit int64) (*log.Entries, error) {
+	return log.Get(p.Conn.Database(DB).Collection(LogCollection), r, limit, true)
 }
 
 // SetBalancerStatus sets balancer status
