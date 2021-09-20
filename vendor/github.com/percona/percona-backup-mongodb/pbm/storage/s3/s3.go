@@ -230,6 +230,16 @@ func (s *S3) List(prefix, suffix string) ([]storage.FileInfo, error) {
 	return files, nil
 }
 
+func (s *S3) Copy(src, dst string) error {
+	_, err := s.s3s.CopyObject(&s3.CopyObjectInput{
+		Bucket:     aws.String(s.opts.Bucket),
+		CopySource: aws.String(path.Join(s.opts.Bucket, s.opts.Prefix, src)),
+		Key:        aws.String(path.Join(s.opts.Prefix, dst)),
+	})
+
+	return err
+}
+
 func (s *S3) FileStat(name string) (inf storage.FileInfo, err error) {
 	h, err := s.s3s.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(s.opts.Bucket),
@@ -281,7 +291,7 @@ func (s *S3) newPartReader(fname string) *partReader {
 }
 
 func (pr *partReader) setSession(s *s3.S3) {
-	s.Client.Config.HTTPClient.Timeout = time.Second * 30
+	s.Client.Config.HTTPClient.Timeout = time.Second * 60
 	pr.sess = s
 }
 
@@ -344,8 +354,16 @@ func (pr *partReader) writeNext(w io.Writer) (n int64, err error) {
 		return 0, io.EOF
 	}
 
+	// The last chunk during the PITR restore usually won't be read fully
+	// (high chances that the targeted time will be in the middle of the chunk)
+	// so in this case the reader (oplog.Apply) will close the pipe once reaching the
+	// targeted time.
+	if err != nil && errors.Is(err, io.ErrClosedPipe) {
+		return n, nil
+	}
+
 	if err != nil {
-		pr.l.Warning("errReadObj Err: %v", err)
+		pr.l.Warning("io.copy: %v", err)
 		return n, errReadObj(err)
 	}
 
@@ -403,7 +421,7 @@ func (s *S3) SourceReader(name string) (io.ReadCloser, error) {
 					return
 				}
 				if errors.Is(err, io.ErrClosedPipe) {
-					s.log.Warning("reader closed pipe, stopping download")
+					s.log.Info("reader closed pipe, stopping download")
 					return
 				}
 
@@ -418,6 +436,7 @@ func (s *S3) SourceReader(name string) (io.ReadCloser, error) {
 				s.log.Info("session recreated, resuming download")
 			}
 			s.log.Error("download '%s/%s' file from S3: %v", s.opts.Bucket, name, err)
+			w.CloseWithError(errors.Wrapf(err, "download '%s/%s'", s.opts.Bucket, name))
 			return
 		}
 	}()

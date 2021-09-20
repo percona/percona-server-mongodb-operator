@@ -27,4 +27,6 @@ type Storage interface {
 	// Delete deletes given file.
 	// It returns storage.ErrNotExist if a file doesn't exists.
 	Delete(name string) error
+	// Copy makes a copy of the src objec/file under dst name
+	Copy(src, dst string) error
 }
