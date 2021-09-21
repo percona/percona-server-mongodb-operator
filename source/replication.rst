@@ -5,7 +5,7 @@ Set up Percona Server for MongoDB cross-site replication
 
 The cross-site replication involves configuring one MongoDB site as *Main*, and another MongoDB site as *Replica* to allow replication between them:
 
- .. image:: ./assets/images/replication-pods.svg
+.. image:: ./assets/images/replication-pods.svg
    :align: center
 
 The Operator automates configuration of *Main* and *Replica* MongoDB sites, but the feature itself is not bound to Kubernetes. Either *Main* or *Replica* can run outside of Kubernetes, be regular MongoDB and be out of the Operators’ control.
@@ -30,7 +30,7 @@ You need to expose all Replica Set nodes (including Config
 Servers) through a dedicated service to ensure that *Main* and *Replica*
 can reach each other, like in a full mesh:
 
- .. image:: ./assets/images/replication-mesh.svg
+.. image:: ./assets/images/replication-mesh.svg
    :align: center
 
 This is done through the
@@ -146,6 +146,8 @@ Next remove the ``annotations``, ``creationTimestamp``, ``resourceVersion``,
 ``selfLink``, and ``uid`` metadata fields from the resulting file to make it
 ready for the *Replica*.
 
+You will need to :ref:`further apply these secrets on Replica<operator-replication-replica-secrets>`.
+
 .. _operator-replication-replica:
 
 Configuring cross-site replication on Replica instances
@@ -161,25 +163,6 @@ of all the cluster should be put into unmanaged state by setting the
    controlling the Replica Set configuration, but it will also result in not
    generating certificates and users credentials for new clusters.
 
-The cluster should be able to reach external nodes of the Replica Sets. You
-can provide needed information in the ``replsets.externalNodes`` and
-``sharding.configsvrReplset.externalNodes`` subsections of the
-``deploy/cr.yaml`` configuration file. Following keys can be set to specify each
-exernal instance of the *Main* site, (both Replica Set and Config Server
-instances):
-
-* set ``host`` to URL or IP address of the external replset instance,
-* set ``port`` to the port number of the external node (or rely on the ``27017``
-  default value),
-
-Optionaly you can set the following additional keys:
-
-* ``priority`` key sets the `priority <https://docs.mongodb.com/manual/reference/replica-configuration/#mongodb-rsconf-rsconf.members-n-.priority>`_
-  of the external node (``0`` by default, which adds the node as a :ref:`non-voting member<nonvoting>`),
-* ``votes`` key sets the number of `votes <https://docs.mongodb.com/manual/reference/replica-configuration/#mongodb-rsconf-rsconf.members-n-.votes>`_
-  an external node can cast in a replica set election (``0`` by default, and
-  ``0`` for non-voting members of the cluster).
-
 Here is an example:
 
 .. code:: yaml
@@ -189,23 +172,9 @@ Here is an example:
      replsets:
      - name: rs0
        size: 3
-       externalNodes:
-       - host: rs0-repl0.percona.com
-         port: 27017
-         priority: 0
-         votes: 0
-       - host: rs0-repl1.percona.com
        ...
-     sharding:
-       configsvrReplSet:
-       size: 3
-       externalNodes:
-         - host: rs0-repl0.percona.com
-           port: 27017
-           priority: 0
-           votes: 0   
-         - host: rs0-repl1.percona.com
-         ...
+
+.. _operator-replication-replica-secrets:
 
 *Main* and *Replica* sites should have same Secrets objects, so don't forget
 to apply Secrets from your *Main* site. Names of the corresponding objects
