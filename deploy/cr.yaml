@@ -5,8 +5,6 @@ metadata:
 #  finalizers:
 #    - delete-psmdb-pvc
 spec:
-#  platform: openshift
-#  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
 #  unmanaged: false
   crVersion: 1.10.0
@@ -34,14 +32,6 @@ spec:
 
   - name: rs0
     size: 3
-#    externalNodes:
-#    - host: 34.124.76.90
-#    - host: 34.124.76.91
-#      port: 27017
-#      votes: 0
-#      priority: 0
-#    - host: 34.124.76.92
-#    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #    configuration: |
 #      operationProfiling:
 #        mode: slowOp
@@ -62,7 +52,7 @@ spec:
 #        indexConfig:
 #          prefixCompression: true
     affinity:
-      antiAffinityTopologyKey: "kubernetes.io/hostname"
+      antiAffinityTopologyKey: "none"
 #      advanced:
 #        nodeAffinity:
 #          requiredDuringSchedulingIgnoredDuringExecution:
@@ -138,11 +128,11 @@ spec:
 #    schedulerName: "default"
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "200m"
+          memory: "0.4G"
         requests:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "200m"
+          memory: "0.4G"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -184,11 +174,11 @@ spec:
 #    schedulerName: "default"
     resources:
       limits:
-        cpu: "300m"
-        memory: "0.5G"
+        cpu: "200m"
+        memory: "0.4G"
       requests:
-        cpu: "300m"
-        memory: "0.5G"
+        cpu: "200m"
+        memory: "0.4G"
     volumeSpec:
 #      emptyDir: {}
 #      hostPath:
@@ -199,28 +189,20 @@ spec:
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
-            storage: 3Gi
+            storage: 1Gi
 
   sharding:
     enabled: true
 
     configsvrReplSet:
       size: 3
-#      externalNodes:
-#      - host: 34.124.76.93
-#      - host: 34.124.76.94
-#        port: 27017
-#        votes: 0
-#        priority: 0
-#      - host: 34.124.76.95
-#      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        operationProfiling:
 #          mode: slowOp
 #        systemLog:
 #           verbosity: 1
       affinity:
-        antiAffinityTopologyKey: "kubernetes.io/hostname"
+        antiAffinityTopologyKey: "none"
 #        advanced:
 #          nodeAffinity:
 #            requiredDuringSchedulingIgnoredDuringExecution:
@@ -271,11 +253,11 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "200m"
+          memory: "0.4G"
         requests:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "200m"
+          memory: "0.4G"
       volumeSpec:
 #       emptyDir: {}
 #       hostPath:
@@ -286,16 +268,16 @@ spec:
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
-              storage: 3Gi
+              storage: 1Gi
 
     mongos:
-      size: 3
+      size: 2
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        systemLog:
 #           verbosity: 1
       affinity:
-        antiAffinityTopologyKey: "kubernetes.io/hostname"
+        antiAffinityTopologyKey: "none"
 #        advanced:
 #          nodeAffinity:
 #            requiredDuringSchedulingIgnoredDuringExecution:
@@ -328,11 +310,11 @@ spec:
         maxUnavailable: 1
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "200m"
+          memory: "0.4G"
         requests:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "200m"
+          memory: "0.4G"
       expose:
         exposeType: ClusterIP
 #        loadBalancerSourceRanges:
@@ -393,21 +375,13 @@ spec:
 #        cpu: "300m"
 #        memory: "0.5G"
     storages:
-#      s3-us-west:
-#        type: s3
-#        s3:
-#          bucket: S3-BACKUP-BUCKET-NAME-HERE
-#          credentialsSecret: my-cluster-name-backup-s3
-#          region: us-west-2
-#          prefix: ""
-#      minio:
-#        type: s3
-#        s3:
-#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
-#          region: us-east-1
-#          credentialsSecret: my-cluster-name-backup-minio
-#          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
-#          prefix: ""
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: rebrain-testing
+          endpointUrl: http://minio-service:9000/
     pitr:
       enabled: false
     tasks:

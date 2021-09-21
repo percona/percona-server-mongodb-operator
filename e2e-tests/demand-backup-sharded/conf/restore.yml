@@ -1,7 +1,7 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBRestore
 metadata:
-  name:
+  name: restore-rebrain-testing-1
 spec:
-  clusterName: some-name
-  backupName:
+  clusterName: my-cluster-name
+  backupName: backup-minio-new
