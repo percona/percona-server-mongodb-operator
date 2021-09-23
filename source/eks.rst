@@ -124,7 +124,12 @@ Install the Operator
       rolebinding.rbac.authorization.k8s.io/service-account-percona-server-mongodb-operator created
       deployment.apps/percona-server-mongodb-operator created
 
-4. The Operator has been started, and you can create the Percona Server for MongoDB:
+4. The Operator has been started, and you can create the Percona Server for MongoDB.
+   Change the version service endpoint in the ``deploy/cr.yaml`` configuration
+   file for the **Operator 0.10.0 preview release**: change the
+   ``versionServiceEndpoint`` key from ``https://check.percona.com`` to
+   ``https://check-dev.percona.com``. Now Percona Server for MongoDB cluster
+   can be created with the following command:
 
    .. code:: bash
 
