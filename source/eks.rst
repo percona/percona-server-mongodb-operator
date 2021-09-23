@@ -98,7 +98,7 @@ Install the Operator
 
    .. code:: bash
 
-      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
+      git clone -b release-1.10.0 https://github.com/percona/percona-server-mongodb-operator
 
    After the repository is downloaded, change the directory to run the rest of the commands in this document:
 

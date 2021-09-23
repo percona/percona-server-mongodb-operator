@@ -41,7 +41,7 @@ Install the Operator via the command-line interface
 
    .. code:: bash
 
-      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
+      git clone -b release-1.10.0 https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
    .. note::
