@@ -43,6 +43,9 @@ Bugs Fixed
 * :jirabug:`K8SPSMDB-553`: Fix a bug where wrong S3 credentials caused backup to keep running despite the actual failure
 * :jirabug:`K8SPSMDB-496`: Fix a bug where Pods did not restart if custom MongoDB config was updated with a secret or a configmap
 
+Supported Platforms
+================================================================================
+
 The following platforms were tested and are officially supported by the Operator 1.10.0:
 
 * OpenShift 4.6 - 4.8
