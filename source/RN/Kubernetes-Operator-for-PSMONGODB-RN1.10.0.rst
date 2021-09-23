@@ -13,7 +13,7 @@ Release Highlights
 
 * Starting from this release, the Operator implements as a technical preview the possibility to :ref:`include non-voting replica set members<arbiter-nonvoting>` into the cluster, which do not participate in the primary election process. This feature enables users to deploy non-voting members with the Operator through a Custom Resource object without manual configuration.
 
-* The technical preview of the :ref:`cross-site replication<hperator-replication>` feature allows users to add external replica set nodes into the cluster managed by the Operator, including scenarios when one of the clusters is outside of the Kubernetes environment. External nodes can be run by another Operator or can be regular MongoDB deployment. The feature is intended for the following use cases:
+* The technical preview of the :ref:`cross-site replication<operator-replication>` feature allows users to add external replica set nodes into the cluster managed by the Operator, including scenarios when one of the clusters is outside of the Kubernetes environment. External nodes can be run by another Operator or can be regular MongoDB deployment. The feature is intended for the following use cases:
 
   * provide migrations of your regular MongoDB database to the Percona Server for MongoDB cluster under the Operator control, or carry on backward migration,
   * deploy cross-regional clusters for Disaster Recovery.
@@ -23,7 +23,7 @@ New Features
 
 * :jirabug:`K8SPSMDB-479`: Allow users to add :ref:`non-voting members<arbiter-nonvoting>` to MongoDB replica, needed to have more than 7 nodes or to create a node in the edge location
 
-* :jirabug:`K8SPSMDB-265`: :ref:`Cross region replication<hperator-replication>` feature simplifies the migrations and enables Disaster Recovery capabilities for MongoDB on Kubernetes
+* :jirabug:`K8SPSMDB-265`: :ref:`Cross region replication<operator-replication>` feature simplifies the migrations and enables Disaster Recovery capabilities for MongoDB on Kubernetes
 
 Improvements
 ================================================================================
