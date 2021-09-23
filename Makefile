@@ -37,6 +37,14 @@ help:
 clean:
 	-rm -rf $(BUILDDIR)/*
 
+htmlnetlify:
+	@echo "Building html doc"
+
+	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) -c source/conf-netlify $(BUILDDIR)/html
+	@echo
+	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
+
+
 html:
 	@echo "Downloading percona-theme ..."
 	@wget -O percona-theme.tar.gz https://www.percona.com/docs/theme-1-4/percona-server-for-mongodb/
