@@ -152,7 +152,7 @@ Install Percona Server for MongoDB
          ...
 
    c. Create/apply the Custom Resource file. Change the version service endpoint
-      in the ``deploy/cr.yaml`` file for the **Operator 0.10.0 preview release**:
+      in the ``deploy/cr.yaml`` file for the **Operator 1.10.0 preview release**:
       change the ``versionServiceEndpoint`` key from ``https://check.percona.com``
       to ``https://check-dev.percona.com``, and apply this file with the
       following command:
