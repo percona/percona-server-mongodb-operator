@@ -63,6 +63,7 @@ Management
    private
    update
    scaling
+   replication
    monitoring
    debug
 
