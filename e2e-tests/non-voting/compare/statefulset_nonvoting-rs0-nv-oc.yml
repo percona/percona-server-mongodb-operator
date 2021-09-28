@@ -96,10 +96,10 @@ spec:
                 - --sslPEMKeyFile
                 - /tmp/tls.pem
                 - --startupDelaySeconds
-                - "7200"
-            failureThreshold: 4
-            initialDelaySeconds: 60
-            periodSeconds: 30
+                - "7201"
+            failureThreshold: 3
+            initialDelaySeconds: 70
+            periodSeconds: 31
             successThreshold: 1
             timeoutSeconds: 10
           name: mongod-nv
@@ -124,7 +124,6 @@ spec:
               memory: 300M
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -165,8 +164,9 @@ spec:
               name: mongod-data
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
+      serviceAccount: default
+      serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
         - name: nonvoting-mongodb-keyfile
