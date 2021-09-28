@@ -48,11 +48,6 @@ spec:
           resources:
             requests:
               storage: 2Gi
-      containerSecurityContext:
-        privileged: false
-      podSecurityContext:
-        fsGroup: 1001
-        supplementalGroups: [1001, 1002, 1003]
       schedulerName: default-scheduler
     volumeSpec:
       persistentVolumeClaim:
