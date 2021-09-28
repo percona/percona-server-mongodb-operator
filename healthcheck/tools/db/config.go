@@ -16,6 +16,7 @@ package db
 
 import (
 	"io/ioutil"
+	"net/url"
 	"os"
 	"time"
 
@@ -89,6 +90,8 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 	} else {
 		return nil, errors.Wrap(err, "failed to get password")
 	}
+
+	conf.Password = url.QueryEscape(conf.Password)
 
 	ssl := &SSLConfig{}
 	app.Flag(

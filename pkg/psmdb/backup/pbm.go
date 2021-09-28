@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -61,7 +62,7 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 
 	murl := fmt.Sprintf("mongodb://%s:%s@%s/",
 		scr.Data["MONGODB_BACKUP_USER"],
-		scr.Data["MONGODB_BACKUP_PASSWORD"],
+		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_PASSWORD"])),
 		strings.Join(addrs, ","),
 	)
 
@@ -95,7 +96,7 @@ func (b *PBM) GetPriorities(k8sclient client.Client, cluster *api.PerconaServerM
 
 	c := psmdb.Credentials{
 		Username: string(usersSecret.Data["MONGODB_BACKUP_USER"]),
-		Password: string(usersSecret.Data["MONGODB_BACKUP_PASSWORD"]),
+		Password: url.QueryEscape(string(usersSecret.Data["MONGODB_BACKUP_PASSWORD"])),
 	}
 
 	for _, rs := range cluster.Spec.Replsets {
