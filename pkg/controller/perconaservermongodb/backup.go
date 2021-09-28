@@ -246,7 +246,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		return errors.Wrap(err, "failed to get current pitr status")
 	}
 
-	var enabled = v.(bool)
+	enabled := v.(bool)
 
 	if enabled == cr.Spec.Backup.PITR.Enabled {
 		return nil
@@ -255,6 +255,10 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 	err = pbm.C.SetConfigVar("pitr.enabled", strconv.FormatBool(cr.Spec.Backup.PITR.Enabled))
 	if err != nil {
 		return errors.Wrap(err, "failed to update pitr status")
+	}
+	err = pbm.C.SetConfigVar("pitr.oplogSpanMin", strconv.FormatFloat(cr.Spec.Backup.PITR.OplogSpanMin, 'f', -1, 64))
+	if err != nil {
+		return errors.Wrap(err, "failed to update pitr oplog span")
 	}
 
 	return nil
