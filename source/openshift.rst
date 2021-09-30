@@ -41,7 +41,7 @@ Install the Operator via the command-line interface
 
    .. code:: bash
 
-      git clone -b release-1.10.0 https://github.com/percona/percona-server-mongodb-operator
+      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
    .. note::
@@ -151,11 +151,7 @@ Install Percona Server for MongoDB
               antiAffinityTopologyKey: "none"
          ...
 
-   c. Create/apply the Custom Resource file. Change the version service endpoint
-      in the ``deploy/cr.yaml`` file for the **Operator 1.10.0 preview release**:
-      change the ``versionServiceEndpoint`` key from ``https://check.percona.com``
-      to ``https://check-dev.percona.com``, and apply this file with the
-      following command:
+   c. Create/apply the Custom Resource file:
 
       .. code:: bash
 
