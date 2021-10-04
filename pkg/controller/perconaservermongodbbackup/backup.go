@@ -1,7 +1,6 @@
 package perconaservermongodbbackup
 
 import (
-	"context"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -9,7 +8,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 type Backup struct {
@@ -17,22 +15,16 @@ type Backup struct {
 	spec api.BackupSpec
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) newBackup(cr *api.PerconaServerMongoDBBackup) (*Backup, error) {
-	cluster := &api.PerconaServerMongoDB{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
-	}
-
+func (r *ReconcilePerconaServerMongoDBBackup) newBackup(
+	cluster *api.PerconaServerMongoDB,
+	cr *api.PerconaServerMongoDBBackup,
+) (*Backup, error) {
 	cn, err := backup.NewPBM(r.client, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "create pbm object")
 	}
 
-	return &Backup{
-		pbm:  cn,
-		spec: cluster.Spec.Backup,
-	}, nil
+	return &Backup{pbm: cn, spec: cluster.Spec.Backup}, nil
 }
 
 // Start requests backup on PBM
