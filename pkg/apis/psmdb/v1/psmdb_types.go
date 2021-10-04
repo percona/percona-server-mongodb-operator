@@ -2,9 +2,11 @@ package v1
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -189,16 +191,18 @@ type PMMSpec struct {
 }
 
 type MultiAZ struct {
-	Affinity            *PodAffinity             `json:"affinity,omitempty"`
-	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
-	Tolerations         []corev1.Toleration      `json:"tolerations,omitempty"`
-	PriorityClassName   string                   `json:"priorityClassName,omitempty"`
-	ServiceAccountName  string                   `json:"serviceAccountName,omitempty"`
-	Annotations         map[string]string        `json:"annotations,omitempty"`
-	Labels              map[string]string        `json:"labels,omitempty"`
-	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
-	RuntimeClassName    *string                  `json:"runtimeClassName,omitempty"`
-	Sidecars            []corev1.Container       `json:"sidecars,omitempty"`
+	Affinity            *PodAffinity                   `json:"affinity,omitempty"`
+	NodeSelector        map[string]string              `json:"nodeSelector,omitempty"`
+	Tolerations         []corev1.Toleration            `json:"tolerations,omitempty"`
+	PriorityClassName   string                         `json:"priorityClassName,omitempty"`
+	ServiceAccountName  string                         `json:"serviceAccountName,omitempty"`
+	Annotations         map[string]string              `json:"annotations,omitempty"`
+	Labels              map[string]string              `json:"labels,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec       `json:"podDisruptionBudget,omitempty"`
+	RuntimeClassName    *string                        `json:"runtimeClassName,omitempty"`
+	Sidecars            []corev1.Container             `json:"sidecars,omitempty"`
+	SidecarVolumes      []corev1.Volume                `json:"sidecarVolumes,omitempty"`
+	SidecarPVCs         []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
 }
 
 func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Container, noSkips bool) {
@@ -214,6 +218,48 @@ func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Contai
 	}
 
 	return
+}
+
+func (m *MultiAZ) WithSidecarVolumes(logger logr.Logger, volumes []corev1.Volume) []corev1.Volume {
+	names := make(map[string]struct{}, len(volumes))
+	for i := range volumes {
+		names[volumes[i].Name] = struct{}{}
+	}
+
+	rv := make([]corev1.Volume, 0, len(volumes)+len(m.SidecarVolumes))
+	rv = append(rv, volumes...)
+
+	for _, v := range m.SidecarVolumes {
+		if _, ok := names[v.Name]; ok {
+			logger.Info(fmt.Sprintf("Sidecar volume name cannot be %s. It's skipped", v.Name))
+			continue
+		}
+
+		rv = append(rv, v)
+	}
+
+	return rv
+}
+
+func (m *MultiAZ) WithSidecarPVCs(logger logr.Logger, pvcs []corev1.PersistentVolumeClaim) []corev1.PersistentVolumeClaim {
+	names := make(map[string]struct{}, len(pvcs))
+	for i := range pvcs {
+		names[pvcs[i].Name] = struct{}{}
+	}
+
+	rv := make([]corev1.PersistentVolumeClaim, 0, len(pvcs)+len(m.SidecarPVCs))
+	rv = append(rv, pvcs...)
+
+	for _, p := range m.SidecarPVCs {
+		if _, ok := names[p.Name]; ok {
+			logger.Info(fmt.Sprintf("Sidecar PVC name cannot be %s. It's skipped", p.Name))
+			continue
+		}
+
+		rv = append(rv, p)
+	}
+
+	return rv
 }
 
 type PodDisruptionBudgetSpec struct {

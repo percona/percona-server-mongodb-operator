@@ -1275,6 +1275,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServ
 		}
 	}
 
+	sfsSpec.Template.Spec.Volumes = multiAZ.WithSidecarVolumes(log, sfsSpec.Template.Spec.Volumes)
+	sfsSpec.VolumeClaimTemplates = multiAZ.WithSidecarPVCs(log, sfsSpec.VolumeClaimTemplates)
+
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
 		sfsSpec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}

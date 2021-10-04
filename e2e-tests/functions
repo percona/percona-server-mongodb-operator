@@ -509,6 +509,13 @@ compare_kubectl() {
 		| $sed "s#^apiVersion: batch/v1beta1#apiVersion: batch/v1#" \
 			>${new_result}
 
+	if version_gt "1.22"; then
+		yq d -i ${new_result} 'spec.internalTrafficPolicy'
+		if [[ $expected_result == */cronjob* ]]; then
+			yq d -i ${new_result} 'metadata.generation'
+		fi
+	fi
+
 	diff -u "$expected_result" "$new_result"
 }
 
