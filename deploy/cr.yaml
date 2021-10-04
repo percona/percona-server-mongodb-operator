@@ -419,7 +419,7 @@ spec:
 #          prefix: ""
     pitr:
       enabled: false
-#       oplogSpanMin: 10
+#      oplogSpanMin: 10
     tasks:
 #      - name: daily-s3-us-west
 #        enabled: true
