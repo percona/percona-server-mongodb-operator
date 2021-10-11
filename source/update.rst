@@ -32,8 +32,8 @@ Semi-automatic upgrade
 
    .. code:: bash
 
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/release-1.10.0/deploy/crd.yaml
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/release-1.10.0/deploy/rbac.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
 
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
    ``RollingUpdate``, and apply changes with the
@@ -81,8 +81,8 @@ Manual upgrade
 
    .. code:: bash
 
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/release-1.10.0/deploy/crd.yaml
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/release-1.10.0/deploy/rbac.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
 
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
    ``OnDelete``, and apply changes with the ``kubectl apply -f deploy/cr.yaml``

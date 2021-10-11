@@ -29,11 +29,11 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
 
 #. Deploy the operator with the following command::
 
-     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/release-1.10.0/deploy/bundle.yaml
+     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/bundle.yaml
 
 #. Deploy MongoDB cluster with::
 
-     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/release-1.10.0/deploy/cr-minimal.yaml
+     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/cr-minimal.yaml
      
    This deploys a one shard MongoDB cluster with one replica set with one node,
    one mongos node and one config server node. ``deploy/cr-minimal.yaml`` is for minimal 
@@ -46,7 +46,7 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    
    You can clone the repository with all manifests and source code by executing the following command::
    
-      git clone -b release-1.10.0 https://github.com/percona/percona-server-mongodb-operator
+      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
 
 #. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
    including the password for the admin user, which you will need to access the

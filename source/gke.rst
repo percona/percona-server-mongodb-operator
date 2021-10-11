@@ -77,7 +77,7 @@ Installing the Operator
 
    .. code:: bash
 
-      git clone -b release-1.10.0 https://github.com/percona/percona-server-mongodb-operator
+      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
 
    After the repository is downloaded, change the directory to run the rest of the commands in this document:
 
@@ -103,12 +103,7 @@ Installing the Operator
       rolebinding.rbac.authorization.k8s.io/service-account-percona-server-mongodb-operator created
       deployment.apps/percona-server-mongodb-operator created
 
-5. The operator has been started, and you can create the Percona Server for MongoDB.
-   Change the version service endpoint in the ``deploy/cr.yaml`` configuration
-   file for the **Operator 1.10.0 preview release**: change the
-   ``versionServiceEndpoint`` key from ``https://check.percona.com`` to
-   ``https://check-dev.percona.com``. Now Percona Server for MongoDB cluster can
-   be created with the following command:
+5. The operator has been started, and you can create the Percona Server for MongoDB:
 
    .. code:: bash
 
