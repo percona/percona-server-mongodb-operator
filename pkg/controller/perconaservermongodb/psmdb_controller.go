@@ -42,8 +42,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var secretFileMode int32 = 288
-var log = logf.Log.WithName("controller_psmdb")
+var (
+	secretFileMode int32 = 288
+	log                  = logf.Log.WithName("controller_psmdb")
+)
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -859,7 +861,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.Percona
 }
 
 func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, cmName string) error {
-	var configMap = &corev1.ConfigMap{}
+	configMap := &corev1.ConfigMap{}
 
 	err := cl.Get(context.TODO(), types.NamespacedName{
 		Namespace: cr.Namespace,
@@ -1441,9 +1443,10 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error
 
 	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
-	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!isObjectMetaEqual(objectMeta, oldObjectMeta) {
-
+	// annotations changes are ignored to prevent object re-creation
+	// e.g. "exportType: NodePort": the port is unknown in advance
+	// and is changing on every changes
+	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash || !areLabelsEqual(objectMeta, oldObjectMeta) {
 		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
@@ -1507,9 +1510,8 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 	}, nil
 }
 
-func isObjectMetaEqual(old, new metav1.Object) bool {
-	return compareMaps(old.GetAnnotations(), new.GetAnnotations()) &&
-		compareMaps(old.GetLabels(), new.GetLabels())
+func areLabelsEqual(old, new metav1.Object) bool {
+	return compareMaps(old.GetLabels(), new.GetLabels())
 }
 
 func compareMaps(x, y map[string]string) bool {
