@@ -144,27 +144,28 @@ spec:
           requests:
             storage: 1Gi
     size: 3
-  - name: rs2
-    affinity:
-      antiAffinityTopologyKey: none
-    resources:
-      limits:
-        cpu: 500m
-        memory: 1G
-      requests:
-        cpu: 100m
-        memory: 0.1G
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1Gi
-    size: 3
-    sidecars:
-    - image: busybox
-      command: ["/bin/sh"]
-      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
-      name: rs-sidecar-1
+# TODO: Uncomment after fix for https://jira.percona.com/browse/PBM-725
+#  - name: rs2
+#    affinity:
+#      antiAffinityTopologyKey: none
+#    resources:
+#      limits:
+#        cpu: 500m
+#        memory: 1G
+#      requests:
+#        cpu: 100m
+#        memory: 0.1G
+#    volumeSpec:
+#      persistentVolumeClaim:
+#        resources:
+#          requests:
+#            storage: 1Gi
+#    size: 3
+#    sidecars:
+#    - image: busybox
+#      command: ["/bin/sh"]
+#      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+#      name: rs-sidecar-1
   secrets:
     key: some-key
     users: some-users
