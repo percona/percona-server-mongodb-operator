@@ -1,5 +1,4 @@
 .. _arbiter:
-
 Using Replica Set Arbiter nodes and non-voting nodes
 ====================================================
 
@@ -52,6 +51,8 @@ with 4 data instances and 1 Arbiter:
        ....
 
 .. note:: You can find description of other possible options in the :ref:`replsets.arbiter section<replsets-arbiter-enabled>` of the :ref:`Custom Resource options reference<operator.custom-resource-options>`.
+
+.. _arbiter-nonvoting:
 
 Adding non-voting nodes
 -----------------------

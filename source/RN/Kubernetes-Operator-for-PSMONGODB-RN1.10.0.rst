@@ -4,7 +4,7 @@
 *Percona Distribution for MongoDB Operator* 1.10.0
 ================================================================================
 
-:Date: September 23, 2021
+:Date: September 30, 2021
 
 :Installation: For installation please refer to `the documentation page <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
@@ -13,7 +13,7 @@ Release Highlights
 
 * Starting from this release, the Operator implements as a technical preview the possibility to :ref:`include non-voting replica set members<arbiter-nonvoting>` into the cluster, which do not participate in the primary election process. This feature enables users to deploy non-voting members with the Operator through a Custom Resource object without manual configuration.
 
-* The technical preview of the :ref:`cross-site replication<hperator-replication>` feature allows users to add external replica set nodes into the cluster managed by the Operator, including scenarios when one of the clusters is outside of the Kubernetes environment. External nodes can be run by another Operator or can be regular MongoDB deployment. The feature is intended for the following use cases:
+* The technical preview of the :ref:`cross-site replication<operator-replication>` feature allows users to add external replica set nodes into the cluster managed by the Operator, including scenarios when one of the clusters is outside of the Kubernetes environment. External nodes can be run by another Operator or can be regular MongoDB deployment. The feature is intended for the following use cases:
 
   * provide migrations of your regular MongoDB database to the Percona Server for MongoDB cluster under the Operator control, or carry on backward migration,
   * deploy cross-regional clusters for Disaster Recovery.
@@ -23,7 +23,7 @@ New Features
 
 * :jirabug:`K8SPSMDB-479`: Allow users to add :ref:`non-voting members<arbiter-nonvoting>` to MongoDB replica, needed to have more than 7 nodes or to create a node in the edge location
 
-* :jirabug:`K8SPSMDB-265`: :ref:`Cross region replication<hperator-replication>` feature simplifies the migrations and enables Disaster Recovery capabilities for MongoDB on Kubernetes
+* :jirabug:`K8SPSMDB-265`: :ref:`Cross region replication<operator-replication>` feature simplifies the migrations and enables Disaster Recovery capabilities for MongoDB on Kubernetes
 
 Improvements
 ================================================================================
@@ -43,11 +43,14 @@ Bugs Fixed
 * :jirabug:`K8SPSMDB-553`: Fix a bug where wrong S3 credentials caused backup to keep running despite the actual failure
 * :jirabug:`K8SPSMDB-496`: Fix a bug where Pods did not restart if custom MongoDB config was updated with a secret or a configmap
 
+Supported Platforms
+================================================================================
+
 The following platforms were tested and are officially supported by the Operator 1.10.0:
 
 * OpenShift 4.6 - 4.8
 * Google Kubernetes Engine (GKE) 1.17 - 1.21
-* Amazon Elastic Container Service for Kubernetes (EKS) 1.16-1.21
+* Amazon Elastic Container Service for Kubernetes (EKS) 1.16 - 1.21
 * Minikube 1.22
 
 This list only includes the platforms that the Percona Operators are specifically tested on as part of the release process. Other Kubernetes flavors and versions depend on the backward compatibility offered by Kubernetes itself.

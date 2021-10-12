@@ -128,7 +128,7 @@ Install Percona Server for MongoDB
    to the :ref:`TLS instructions <tls>`.
 
 3. Percona Server for MongoDB cluster can
-   be created at any time with the following two steps:
+   be created at any time with the following steps:
 
    a. Uncomment the ``deploy/cr.yaml`` field ``#platform:`` and edit the field
       to ``platform: openshift``. The result should be like this:
@@ -151,7 +151,7 @@ Install Percona Server for MongoDB
               antiAffinityTopologyKey: "none"
          ...
 
-   c. Create/apply the CR file:
+   c. Create/apply the Custom Resource file:
 
       .. code:: bash
 

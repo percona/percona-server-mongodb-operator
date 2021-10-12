@@ -121,10 +121,15 @@ latex:
 	      "(use \`make latexpdf' here to do that automatically)."
 
 latexpdf:
+	@for i in ./source/*.rst; do sed -i '/\.\. figure::/s/\.svg/\.pdf/g' "$$i"; done
+	@for i in ./source/*.rst; do sed -i '/\.\. image::/s/\.svg/\.pdf/g' "$$i"; done
 	$(SPHINXBUILD) -b latex $(ALLSPHINXOPTS) $(BUILDDIR)/latex
 	@echo "Running LaTeX files through pdflatex..."
 	make -C $(BUILDDIR)/latex all-pdf
+	@for i in ./source/*.rst; do sed -i '/\.\. figure::/s/\.pdf/\.svg/g' "$$i"; done
+	@for i in ./source/*.rst; do sed -i '/\.\. image::/s/\.pdf/\.svg/g' "$$i"; done
 	@echo "pdflatex finished; the PDF files are in $(BUILDDIR)/latex."
+
 
 text:
 	$(SPHINXBUILD) -b text $(ALLSPHINXOPTS) $(BUILDDIR)/text

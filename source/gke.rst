@@ -103,7 +103,6 @@ Installing the Operator
       rolebinding.rbac.authorization.k8s.io/service-account-percona-server-mongodb-operator created
       deployment.apps/percona-server-mongodb-operator created
 
-
 5. The operator has been started, and you can create the Percona Server for MongoDB:
 
    .. code:: bash
