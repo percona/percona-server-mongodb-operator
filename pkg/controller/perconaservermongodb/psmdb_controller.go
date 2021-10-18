@@ -1443,10 +1443,15 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error
 
 	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
-	// annotations changes are ignored to prevent object re-creation
-	// e.g. "exportType: NodePort": the port is unknown in advance
-	// and is changing on every changes
-	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash || !areLabelsEqual(objectMeta, oldObjectMeta) {
+	updateObject := false
+	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+		!compareMaps(oldObjectMeta.GetLabels(), objectMeta.GetLabels()) {
+		updateObject = true
+	} else if _, ok := obj.(*corev1.Service); !ok {
+		updateObject = !compareMaps(oldObjectMeta.GetAnnotations(), objectMeta.GetAnnotations())
+	}
+
+	if updateObject {
 		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
@@ -1508,10 +1513,6 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 		UID:        ca.GetUID(),
 		Controller: &trueVar,
 	}, nil
-}
-
-func areLabelsEqual(old, new metav1.Object) bool {
-	return compareMaps(old.GetLabels(), new.GetLabels())
 }
 
 func compareMaps(x, y map[string]string) bool {
