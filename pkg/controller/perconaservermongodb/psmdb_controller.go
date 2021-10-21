@@ -1448,6 +1448,8 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error
 		!compareMaps(oldObjectMeta.GetLabels(), objectMeta.GetLabels()) {
 		updateObject = true
 	} else if _, ok := obj.(*corev1.Service); !ok {
+		// ignore annotations changes for Service object
+		// in case NodePort, to avoid port changing
 		updateObject = !compareMaps(oldObjectMeta.GetAnnotations(), objectMeta.GetAnnotations())
 	}
 
