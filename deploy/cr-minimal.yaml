@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: minimal-cluster
 spec:
-  crVersion: 1.10.0
+  crVersion: 1.11.0
   image: percona/percona-server-mongodb:4.4.8-9
   allowUnsafeConfigurations: true
   upgradeOptions:
