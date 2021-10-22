@@ -10,7 +10,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.11.0
-  image: percona/percona-server-mongodb:4.4.8-9
+  image: percona/percona-server-mongodb:4.4.9-10
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
