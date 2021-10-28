@@ -20,19 +20,29 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoDB) error {
 	secretObj := corev1.Secret{}
-	err := r.client.Get(context.TODO(),
+	secretInternalObj := corev1.Secret{}
+	errSecret := r.client.Get(context.TODO(),
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.Secrets.SSL,
 		},
 		&secretObj,
 	)
-	if err == nil {
+	errInternalSecret := r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Spec.Secrets.SSL + "-ssl-internal",
+		},
+		&secretInternalObj,
+	)
+	if errSecret == nil && errInternalSecret == nil {
 		return nil
-	} else if !k8serrors.IsNotFound(err) {
-		return fmt.Errorf("get secret: %v", err)
+	} else if !k8serrors.IsNotFound(errSecret) {
+		return fmt.Errorf("get secret: %v", errSecret)
+	} else if !k8serrors.IsNotFound(errInternalSecret) {
+		return fmt.Errorf("get internal secret: %v", errInternalSecret)
 	}
-	err = r.createSSLByCertManager(cr)
+	err := r.createSSLByCertManager(cr)
 	if err != nil {
 		log.Error(err, "issue cert with cert-manager")
 		err = r.createSSLManualy(cr)
