@@ -46,12 +46,6 @@ func wrapperKeyBSONType(key string) bsontype.Type {
 		return bsontype.DBPointer
 	case "$date":
 		return bsontype.DateTime
-	case "$ref":
-		fallthrough
-	case "$id":
-		fallthrough
-	case "$db":
-		return bsontype.EmbeddedDocument // dbrefs aren't bson types
 	case "$minKey":
 		return bsontype.MinKey
 	case "$maxKey":
@@ -217,7 +211,7 @@ func parseDatetimeString(data string) (int64, error) {
 		return 0, fmt.Errorf("invalid $date value string: %s", data)
 	}
 
-	return t.Unix()*1e3 + int64(t.Nanosecond())/1e6, nil
+	return int64(primitive.NewDateTimeFromTime(t)), nil
 }
 
 func parseDatetimeObject(data *extJSONObject) (d int64, err error) {

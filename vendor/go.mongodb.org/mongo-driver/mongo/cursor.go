@@ -9,6 +9,7 @@ package mongo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 
@@ -20,7 +21,8 @@ import (
 )
 
 // Cursor is used to iterate over a stream of documents. Each document can be decoded into a Go type via the Decode
-// method or accessed as raw BSON via the Current field.
+// method or accessed as raw BSON via the Current field. This type is not goroutine safe and must not be used
+// concurrently by multiple goroutines.
 type Cursor struct {
 	// Current contains the BSON bytes of the current change document. This property is only valid until the next call
 	// to Next or TryNext. If continued access is required, a copy must be made.
@@ -28,6 +30,7 @@ type Cursor struct {
 
 	bc            batchCursor
 	batch         *bsoncore.DocumentSequence
+	batchLength   int
 	registry      *bsoncodec.Registry
 	clientSession *session.Client
 
@@ -53,6 +56,10 @@ func newCursorWithSession(bc batchCursor, registry *bsoncodec.Registry, clientSe
 	if bc.ID() == 0 {
 		c.closeImplicitSession()
 	}
+
+	// Initialize just the batchLength here so RemainingBatchLength will return an accurate result. The actual batch
+	// will be pulled up by the first Next/TryNext call.
+	c.batchLength = c.bc.Batch().DocumentCount()
 	return c, nil
 }
 
@@ -102,6 +109,8 @@ func (c *Cursor) next(ctx context.Context, nonBlocking bool) bool {
 	doc, err := c.batch.Next()
 	switch err {
 	case nil:
+		// Consume the next document in the current batch.
+		c.batchLength--
 		c.Current = bson.Raw(doc)
 		return true
 	case io.EOF: // Need to do a getMore
@@ -116,7 +125,7 @@ func (c *Cursor) next(ctx context.Context, nonBlocking bool) bool {
 		// If we don't have a next batch
 		if !c.bc.Next(ctx) {
 			// Do we have an error? If so we return false.
-			c.err = c.bc.Err()
+			c.err = replaceErrors(c.bc.Err())
 			if c.err != nil {
 				return false
 			}
@@ -138,10 +147,13 @@ func (c *Cursor) next(ctx context.Context, nonBlocking bool) bool {
 			c.closeImplicitSession()
 		}
 
+		// Use the new batch to update the batch and batchLength fields. Consume the first document in the batch.
 		c.batch = c.bc.Batch()
+		c.batchLength = c.batch.DocumentCount()
 		doc, err = c.batch.Next()
 		switch err {
 		case nil:
+			c.batchLength--
 			c.Current = bson.Raw(doc)
 			return true
 		case io.EOF: // Empty batch so we continue
@@ -165,7 +177,7 @@ func (c *Cursor) Err() error { return c.err }
 // the first call, any subsequent calls will not change the state.
 func (c *Cursor) Close(ctx context.Context) error {
 	defer c.closeImplicitSession()
-	return c.bc.Close(ctx)
+	return replaceErrors(c.bc.Close(ctx))
 }
 
 // All iterates the cursor and decodes each document into results. The results parameter must be a pointer to a slice.
@@ -176,10 +188,18 @@ func (c *Cursor) Close(ctx context.Context) error {
 func (c *Cursor) All(ctx context.Context, results interface{}) error {
 	resultsVal := reflect.ValueOf(results)
 	if resultsVal.Kind() != reflect.Ptr {
-		return errors.New("results argument must be a pointer to a slice")
+		return fmt.Errorf("results argument must be a pointer to a slice, but was a %s", resultsVal.Kind())
 	}
 
 	sliceVal := resultsVal.Elem()
+	if sliceVal.Kind() == reflect.Interface {
+		sliceVal = sliceVal.Elem()
+	}
+
+	if sliceVal.Kind() != reflect.Slice {
+		return fmt.Errorf("results argument must be a pointer to a slice, but was a pointer to %s", sliceVal.Kind())
+	}
+
 	elementType := sliceVal.Type().Elem()
 	var index int
 	var err error
@@ -200,12 +220,18 @@ func (c *Cursor) All(ctx context.Context, results interface{}) error {
 		batch = c.bc.Batch()
 	}
 
-	if err = c.bc.Err(); err != nil {
+	if err = replaceErrors(c.bc.Err()); err != nil {
 		return err
 	}
 
 	resultsVal.Elem().Set(sliceVal.Slice(0, index))
 	return nil
+}
+
+// RemainingBatchLength returns the number of documents left in the current batch. If this returns zero, the subsequent
+// call to Next or TryNext will do a network request to fetch the next batch.
+func (c *Cursor) RemainingBatchLength() int {
+	return c.batchLength
 }
 
 // addFromBatch adds all documents from batch to sliceVal starting at the given index. It returns the new slice value,
@@ -244,8 +270,10 @@ func (c *Cursor) closeImplicitSession() {
 }
 
 // BatchCursorFromCursor returns a driver.BatchCursor for the given Cursor. If there is no underlying
-// driver.BatchCursor, nil is returned. This method is deprecated and does not have any stability guarantees. It may be
-// removed in the future.
+// driver.BatchCursor, nil is returned.
+//
+// Deprecated: This is an unstable function because the driver.BatchCursor type exists in the "x" package. Neither this
+// function nor the driver.BatchCursor type should be used by applications and may be changed or removed in any release.
 func BatchCursorFromCursor(c *Cursor) *driver.BatchCursor {
 	bc, _ := c.bc.(*driver.BatchCursor)
 	return bc

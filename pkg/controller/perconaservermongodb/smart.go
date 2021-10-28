@@ -8,15 +8,16 @@ import (
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
-	mgo "go.mongodb.org/mongo-driver/mongo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
@@ -58,12 +59,22 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	ok, err := r.isBackupRunning(cr)
+	isBackupRunning, err := r.isBackupRunning(cr)
 	if err != nil {
-		return fmt.Errorf("failed to check active backups: %v", err)
+		return errors.Wrap(err, "failed to check active backups")
 	}
-	if ok {
-		log.Info("can't start 'SmartUpdate': waiting for running backups finished")
+	if isBackupRunning {
+		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
+		return nil
+	}
+
+	hasActiveJobs, err := backup.HasActiveJobs(r.client, cr, backup.Job{}, backup.NotPITRLock)
+	if err != nil {
+		return errors.Wrap(err, "failed to check active jobs")
+	}
+
+	if hasActiveJobs {
+		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
 	}
 
@@ -74,24 +85,30 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}
 
+	matchLabels := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/replset":    replset.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	if sfs.Labels["app.kubernetes.io/component"] == "nonVoting" {
+		matchLabels["app.kubernetes.io/component"] = "nonVoting"
+	}
+
 	list := corev1.PodList{}
 	if err := r.client.List(context.TODO(),
 		&list,
-		&client.ListOptions{
-			Namespace: cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   cr.Name,
-				"app.kubernetes.io/replset":    replset.Name,
-				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-				"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			}),
+		&k8sclient.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(matchLabels),
 		},
 	); err != nil {
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, list, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}
@@ -103,7 +120,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}()
 
-	primary, err := r.getPrimaryPod(client)
+	primary, err := psmdb.GetPrimaryPod(client)
 	if err != nil {
 		return fmt.Errorf("get primary pod: %v", err)
 	}
@@ -118,38 +135,54 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
-		pod := pod
+		if replset.Expose.Enabled {
+			host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+			if err != nil {
+				return errors.Wrapf(err, "get mongo host for pod %s", pod.Name)
+			}
+
+			if host == primary {
+				primaryPod = pod
+				continue
+			}
+		}
+
 		if strings.HasPrefix(primary, fmt.Sprintf("%s.%s.%s", pod.Name, sfs.Name, sfs.Namespace)) {
 			primaryPod = pod
-		} else {
-			log.Info(fmt.Sprintf("apply changes to secondary pod %s", pod.Name))
+			continue
+		}
 
-			updateRevision := sfs.Status.UpdateRevision
+		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
-			if pod.Labels["app.kubernetes.io/component"] == "arbiter" {
-				arbiterSfs, err := r.getArbiterStatefulset(cr, pod.Labels["app.kubernetes.io/replset"])
-				if err != nil {
-					return errors.Wrap(err, "failed to get arbiter statefilset")
-				}
-
-				updateRevision = arbiterSfs.Status.UpdateRevision
+		updateRevision := sfs.Status.UpdateRevision
+		if pod.Labels["app.kubernetes.io/component"] == "arbiter" {
+			arbiterSfs, err := r.getArbiterStatefulset(cr, pod.Labels["app.kubernetes.io/replset"])
+			if err != nil {
+				return errors.Wrap(err, "failed to get arbiter statefilset")
 			}
 
-			if err := r.applyNWait(cr, updateRevision, &pod, waitLimit); err != nil {
-				return fmt.Errorf("failed to apply changes: %v", err)
-			}
+			updateRevision = arbiterSfs.Status.UpdateRevision
+		}
+
+		if err := r.applyNWait(cr, updateRevision, &pod, waitLimit); err != nil {
+			return errors.Wrap(err, "failed to apply changes")
 		}
 	}
 
-	log.Info("doing step down...")
-	err = mongo.StepDown(context.TODO(), client)
-	if err != nil {
-		return errors.Wrap(err, "failed to do step down")
-	}
+	// If the primary is external, we can't match it with a running pod and
+	// it'll have an empty name
+	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" && len(primaryPod.Name) > 0 {
+		forceStepDown := replset.Size == 1
+		log.Info("doing step down...", "force", forceStepDown)
+		err = mongo.StepDown(context.TODO(), client, forceStepDown)
+		if err != nil {
+			return errors.Wrap(err, "failed to do step down")
+		}
 
-	log.Info(fmt.Sprintf("apply changes to primary pod %s", primaryPod.Name))
-	if err := r.applyNWait(cr, sfs.Status.UpdateRevision, &primaryPod, waitLimit); err != nil {
-		return fmt.Errorf("failed to apply changes: %v", err)
+		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
+		if err := r.applyNWait(cr, sfs.Status.UpdateRevision, &primaryPod, waitLimit); err != nil {
+			return fmt.Errorf("failed to apply changes: %v", err)
+		}
 	}
 
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
@@ -160,7 +193,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMongoDB) (bool, error) {
 	sfsList := appsv1.StatefulSetList{}
 	if err := r.client.List(context.TODO(), &sfsList,
-		&client.ListOptions{
+		&k8sclient.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
 				"app.kubernetes.io/instance": cr.Name,
@@ -184,29 +217,35 @@ func (r *ReconcilePerconaServerMongoDB) applyNWait(cr *api.PerconaServerMongoDB,
 		log.Info(fmt.Sprintf("pod %s is already updated", pod.Name))
 	} else {
 		if err := r.client.Delete(context.TODO(), pod); err != nil {
-			return fmt.Errorf("failed to delete pod: %v", err)
+			return errors.Wrap(err, "delete pod")
 		}
 	}
 
-	if err := r.waitPodRestart(updateRevision, pod, waitLimit); err != nil {
-		return fmt.Errorf("failed to wait pod: %v", err)
+	if err := r.waitPodRestart(cr, updateRevision, pod, waitLimit); err != nil {
+		return errors.Wrap(err, "wait pod restart")
 	}
 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, pod *corev1.Pod, waitLimit int) error {
+func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
 	for i := 0; i < waitLimit; i++ {
 		time.Sleep(time.Second * 1)
 
 		err := r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
 		if err != nil && !k8sErrors.IsNotFound(err) {
-			return err
+			return errors.Wrap(err, "get pod")
+		}
+
+		// We update status in every loop to not wait until the end of smart update
+		if err := r.updateStatus(cr, nil, api.AppStateInit); err != nil {
+			return errors.Wrap(err, "update status")
 		}
 
 		ready := false
 		for _, container := range pod.Status.ContainerStatuses {
-			if container.Name == "mongod" || container.Name == "mongod-arbiter" {
+			switch container.Name {
+			case "mongod", "mongod-arbiter", "mongod-nv":
 				ready = container.Ready
 			}
 		}
@@ -217,14 +256,5 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(updateRevision string, po
 		}
 	}
 
-	return fmt.Errorf("reach pod wait limit")
-}
-
-func (r *ReconcilePerconaServerMongoDB) getPrimaryPod(client *mgo.Client) (string, error) {
-	status, err := mongo.RSStatus(context.TODO(), client)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get rs status")
-	}
-
-	return status.Primary().Name, nil
+	return errors.New("reach pod wait limit")
 }

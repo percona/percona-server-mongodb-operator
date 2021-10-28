@@ -11,6 +11,10 @@ spec:
     debug: true
     restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    resources:
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
     storages:
       aws-s3:
         type: s3
@@ -35,16 +39,16 @@ spec:
           endpointUrl: https://storage.googleapis.com
           prefix: psmdb
     tasks:
-    - name: every-min-aws-s3
-      enabled: true
-      schedule: "* * * * *"
-      compressionType: gzip
-      storageName: aws-s3
     - name: every-min-minio
       enabled: true
       schedule: "* * * * *"
       compressionType: gzip
       storageName: minio
+    - name: every-min-aws-s3
+      enabled: true
+      schedule: "* * * * *"
+      compressionType: gzip
+      storageName: aws-s3
     - name: every-min-gcp-cs
       enabled: true
       schedule: "* * * * *"

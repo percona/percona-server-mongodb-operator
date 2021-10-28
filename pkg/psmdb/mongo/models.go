@@ -17,15 +17,16 @@ type ReplsetTags map[string]string
 
 // RSMember document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
 type ConfigMember struct {
-	ID           int         `bson:"_id" json:"_id"`
-	Host         string      `bson:"host" json:"host"`
-	ArbiterOnly  bool        `bson:"arbiterOnly" json:"arbiterOnly"`
-	BuildIndexes bool        `bson:"buildIndexes" json:"buildIndexes"`
-	Hidden       bool        `bson:"hidden" json:"hidden"`
-	Priority     int         `bson:"priority" json:"priority"`
-	Tags         ReplsetTags `bson:"tags,omitempty" json:"tags,omitempty"`
-	SlaveDelay   int64       `bson:"slaveDelay" json:"slaveDelay"`
-	Votes        int         `bson:"votes" json:"votes"`
+	ID                 int         `bson:"_id" json:"_id"`
+	Host               string      `bson:"host" json:"host"`
+	ArbiterOnly        bool        `bson:"arbiterOnly" json:"arbiterOnly"`
+	BuildIndexes       bool        `bson:"buildIndexes" json:"buildIndexes"`
+	Hidden             bool        `bson:"hidden" json:"hidden"`
+	Priority           int         `bson:"priority" json:"priority"`
+	Tags               ReplsetTags `bson:"tags,omitempty" json:"tags,omitempty"`
+	SlaveDelay         *int64      `bson:"slaveDelay,omitempty" json:"slaveDelay,omitempty"`
+	SecondaryDelaySecs *int64      `bson:"secondaryDelaySecs,omitempty" json:"secondaryDelaySecs,omitempty"`
+	Votes              int         `bson:"votes" json:"votes"`
 }
 
 type ConfigMembers []ConfigMember
@@ -98,6 +99,13 @@ type ShardList struct {
 	OKResponse `bson:",inline"`
 }
 
+type FCV struct {
+	FCV struct {
+		Version string `json:"version" bson:"version"`
+	} `json:"featureCompatibilityVersion" bson:"featureCompatibilityVersion"`
+	OKResponse `bson:",inline"`
+}
+
 const ShardRemoveCompleted string = "completed"
 
 type ShardRemoveResp struct {
@@ -107,6 +115,13 @@ type ShardRemoveResp struct {
 		Chunks      int `json:"chunks" bson:"chunks"`
 		JumboChunks int `json:"jumboChunks" bson:"jumboChunks"`
 	} `json:"remaining" bson:"remaining"`
+	OKResponse `bson:",inline"`
+}
+
+type IsMasterResp struct {
+	IsMaster   bool   `bson:"ismaster" json:"ismaster"`
+	IsArbiter  bool   `bson:"arbiterOnly" json:"arbiterOnly"`
+	Msg        string `bson:"msg" json:"msg"`
 	OKResponse `bson:",inline"`
 }
 
@@ -141,6 +156,15 @@ type Member struct {
 	PingMs            int64               `bson:"pingMs,omitempty" json:"pingMs,omitempty"`
 	Self              bool                `bson:"self,omitempty" json:"self,omitempty"`
 	SyncingTo         string              `bson:"syncingTo,omitempty" json:"syncingTo,omitempty"`
+}
+
+func (s *Status) GetSelf() *Member {
+	for _, member := range s.Members {
+		if member.Self {
+			return member
+		}
+	}
+	return nil
 }
 
 type Optime struct {

@@ -57,7 +57,19 @@ spec:
         resources:
           requests:
             storage: 1Gi
-    size: 3
+    size: 2
+    arbiter:
+      enabled: true
+      size: 1
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.3G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      affinity:
+        antiAffinityTopologyKey: none
   secrets:
     key: some-key
     users: some-users

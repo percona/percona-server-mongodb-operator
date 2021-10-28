@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ycsb
+spec:
+  containers:
+    - name: ycsb
+      image: plavi/test:ycsb
+      env:
+        - name: MONGODB_USER
+          value: backup
+        - name: MONGODB_PASSWORD
+          value: backup123456
+        - name: MONGODB_HOSTNAME
+          value: my-cluster-name-mongos.default.svc.cluster.local
+          #value: my-cluster-name-rs0.default.svc.cluster.local
+        - name: MONGODB_DATABASE
+          value: ycsb_test
+      command: ["bash"]
+      args:
+        - "-c"
+        - |
+          /ycsb/bin/ycsb \
+          load \
+          mongodb \
+          -s -P /ycsb/workloads/workloadb \
+          -p recordcount=100000 \
+          -threads 4 \
+          -p mongodb.url="mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_HOSTNAME}/${MONGODB_DATABASE}?ssl=false&authSource=admin&connectTimeoutMS=300000" \
+          -p mongodb.auth="true"
+
+          /ycsb/bin/ycsb \
+          run \
+          mongodb \
+          -s -P /ycsb/workloads/workloadb \
+          -p recordcount=100000 \
+          -p operationcount=500000 \
+          -threads 8 \
+          -p mongodb.url="mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_HOSTNAME}/${MONGODB_DATABASE}?ssl=false&authSource=admin&connectTimeoutMS=300000" \
+          -p mongodb.auth="true"

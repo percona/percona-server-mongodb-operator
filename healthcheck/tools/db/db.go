@@ -15,95 +15,65 @@
 package db
 
 import (
-	"errors"
+	"context"
 	"time"
 
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	mgo "go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var (
-	ErrMsgAuthFailedStr string = "server returned error on SASL authentication step: Authentication failed."
-	ErrSessionTimeout          = errors.New("timed out waiting for mongodb connection")
-	ErrPrimaryTimeout          = errors.New("timed out waiting for host to become primary")
+	ErrMsgAuthFailedStr      string = "server returned error on SASL authentication step: Authentication failed."
+	ErrNoReachableServersStr string = "no reachable servers"
 )
 
-func GetSession(cnf *Config) (*mgo.Session, error) {
-	if cnf.SSL == nil {
-		cnf.SSL = &SSLConfig{}
-	}
-
+func Dial(conf *Config) (*mgo.Client, error) {
 	log.WithFields(log.Fields{
-		"hosts":      cnf.DialInfo.Addrs,
-		"ssl":        cnf.SSL.Enabled,
-		"ssl_secure": !cnf.SSL.Insecure,
+		"hosts":      conf.Hosts,
+		"ssl":        conf.SSL.Enabled,
+		"ssl_secure": conf.SSL.Insecure,
 	}).Debug("Connecting to mongodb")
 
-	if cnf.DialInfo.Username != "" && cnf.DialInfo.Password != "" {
-		log.WithFields(log.Fields{
-			"user":   cnf.DialInfo.Username,
-			"source": cnf.DialInfo.Source,
-		}).Debug("Enabling authentication for session")
+	opts := options.Client().
+		SetHosts(conf.Hosts).
+		SetReplicaSet(conf.ReplSetName).
+		SetAuth(options.Credential{Password: conf.Password, Username: conf.Username}).
+		SetTLSConfig(conf.TLSConf).
+		SetConnectTimeout(10 * time.Second).
+		SetServerSelectionTimeout(10 * time.Second)
+
+	if conf.Username != "" && conf.Password != "" {
+		log.WithFields(log.Fields{"user": conf.Username}).Debug("Enabling authentication for session")
 	}
 
-	if cnf.SSL.Enabled {
-		err := cnf.configureSSLDialInfo()
-		if err != nil {
-			log.Errorf("failed to configure SSL/TLS: %s", err)
-			return nil, err
-		}
-	}
-
-	session, err := mgo.DialWithInfo(cnf.DialInfo)
-	if err != nil && err.Error() == ErrMsgAuthFailedStr {
-		log.Debug("authentication failed, retrying with authentication disabled")
-		cnf.DialInfo.Username = ""
-		cnf.DialInfo.Password = ""
-		session, err = mgo.DialWithInfo(cnf.DialInfo)
-	}
+	client, err := mgo.Connect(context.TODO(), opts)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "connect to mongo replica set")
 	}
 
-	session.SetMode(mgo.Monotonic, true)
-	return session, err
-}
-
-func WaitForSession(cnf *Config, maxRetries uint, sleepDuration time.Duration) (*mgo.Session, error) {
-	var err error
-	var tries uint
-	for tries <= maxRetries || maxRetries == 0 {
-		session, err := GetSession(cnf)
-		if err == nil && session.Ping() == nil {
-			return session, err
+	if err := client.Ping(context.TODO(), nil); err != nil {
+		if err := client.Disconnect(context.TODO()); err != nil {
+			return nil, errors.Wrap(err, "disconnect client")
 		}
-		time.Sleep(sleepDuration)
-		tries++
-	}
-	if err == nil {
-		return nil, ErrSessionTimeout
-	}
-	return nil, err
-}
 
-func WaitForPrimary(session *mgo.Session, maxRetries uint, sleepDuration time.Duration) error {
-	resp := struct {
-		IsMaster bool `bson:"ismaster"`
-		ReadOnly bool `bson:"readOnly"`
-	}{}
-	var err error
-	var tries uint
-	for tries <= maxRetries {
-		err = session.Run(bson.D{{Name: "isMaster", Value: "1"}}, &resp)
-		if err == nil && resp.IsMaster && !resp.ReadOnly {
-			return nil
+		opts := options.Client().
+			SetHosts(conf.Hosts).
+			SetTLSConfig(conf.TLSConf).
+			SetConnectTimeout(10 * time.Second).
+			SetServerSelectionTimeout(10 * time.Second).
+			SetDirect(true)
+
+		client, err = mgo.Connect(context.TODO(), opts)
+		if err != nil {
+			return nil, errors.Wrap(err, "connect to mongo replica set with direct")
 		}
-		time.Sleep(sleepDuration)
-		tries++
+
+		if err := client.Ping(context.TODO(), nil); err != nil {
+			return nil, errors.Wrap(err, "ping mongo")
+		}
 	}
-	if err == nil {
-		return ErrPrimaryTimeout
-	}
-	return err
+
+	return client, nil
 }

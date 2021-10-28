@@ -16,6 +16,11 @@ spec:
   replsets:
   - name: rs0
     size: 1
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+      systemLog:
+        verbosity: 1
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
     podDisruptionBudget:

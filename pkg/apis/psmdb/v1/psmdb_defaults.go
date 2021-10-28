@@ -32,6 +32,12 @@ var (
 	defaultImagePullPolicy                = corev1.PullAlways
 )
 
+const (
+	minSafeMongosSize                = 2
+	minSafeReplicasetSizeWithArbiter = 4
+	clusterNameMaxLen                = 50
+)
+
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
 func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
@@ -117,6 +123,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		periodSecondsDeafult = int32(30)
 		failureThresholdDefault = int32(4)
 	}
+	if cr.CompareVersion("1.10.0") >= 0 {
+		timeoutSecondsDefault = int32(10)
+	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 
 	if !cr.Spec.Sharding.Enabled {
@@ -136,6 +145,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.Pause {
 			cr.Spec.Sharding.Mongos.Size = 0
+		} else {
+			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
+				log.Info(fmt.Sprintf("Mongos size will be changed from %d to %d due to safe config", cr.Spec.Sharding.Mongos.Size, minSafeMongosSize))
+				log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
+				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
+			}
 		}
 
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
@@ -230,10 +245,22 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		cr.Spec.Sharding.ConfigsvrReplSet.Arbiter.Enabled = false
+		for _, rs := range repls {
+			if len(rs.ExternalNodes) > 0 && len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes) < 1 {
+				return errors.Errorf("ConfigsvrReplSet must have externalNodes if replset %s has", rs.Name)
+			}
+			if len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes) > 0 && len(rs.ExternalNodes) < 1 {
+				return errors.Errorf("replset %s must have externalNodes if ConfigsvrReplSet has", rs.Name)
+			}
+		}
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 
 	for _, replset := range repls {
+		if len(cr.Name+replset.Name) > clusterNameMaxLen {
+			return errors.Errorf("cluster name (%s) + replset name (%s) is too long, must be no more than %d characters", cr.Name, replset.Name, clusterNameMaxLen)
+		}
+
 		if replset.Storage == nil {
 			replset.Storage = cr.Spec.Mongod.Storage
 		}
@@ -347,13 +374,23 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ServiceAccountName = WorkloadSA
 		}
 
+		if cr.Spec.Unmanaged && !replset.Expose.Enabled {
+			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
+		}
+
 		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
 		if err != nil {
 			return err
 		}
+
+		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
+			return errors.Wrap(err, "set nonvoting defaults")
+		}
+
 		if cr.Spec.Pause {
 			replset.Size = 0
 			replset.Arbiter.Enabled = false
+			replset.NonVoting.Enabled = false
 		}
 	}
 
@@ -396,12 +433,29 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
+	if !cr.Spec.Backup.Enabled {
+		cr.Spec.Backup.PITR.Enabled = false
+	}
+
+	if cr.Spec.Backup.PITR.Enabled && len(cr.Spec.Backup.Storages) != 1 {
+		cr.Spec.Backup.PITR.Enabled = false
+		log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
+	}
+
 	if cr.Status.Replsets == nil {
 		cr.Status.Replsets = make(map[string]*ReplsetStatus)
 	}
 
 	if len(cr.Spec.ClusterServiceDNSSuffix) == 0 {
 		cr.Spec.ClusterServiceDNSSuffix = DefaultDNSSuffix
+	}
+
+	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
+		return errors.New("backup.enabled must be false on unmanaged clusters")
+	}
+
+	if cr.Spec.Unmanaged && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
+		return errors.New("SmartUpdate is not allowed on unmanaged clusters, set updateStrategy to RollingUpdate or OnDelete")
 	}
 
 	return nil
@@ -451,6 +505,115 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		}
 	}
 
+	if len(rs.ExternalNodes) > 0 && !rs.Expose.Enabled {
+		return errors.Errorf("replset %s must be exposed to add external nodes", rs.Name)
+	}
+
+	for _, extNode := range rs.ExternalNodes {
+		if extNode.Port == 0 {
+			extNode.Port = 27017
+		}
+		if extNode.Votes < 0 || extNode.Votes > 1 {
+			return errors.Errorf("invalid votes for %s: votes must be 0 or 1", extNode.Host)
+		}
+		if extNode.Priority < 0 || extNode.Priority > 1000 {
+			return errors.Errorf("invalid priority for %s: priority must be between 0 and 1000", extNode.Host)
+		}
+		if extNode.Votes == 0 && extNode.Priority != 0 {
+			return errors.Errorf("invalid priority for %s: non-voting members must have priority 0", extNode.Host)
+		}
+	}
+
+	return nil
+}
+
+func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+	if !nv.Enabled {
+		return nil
+	}
+
+	if nv.VolumeSpec != nil {
+		if err := nv.VolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
+		}
+	} else {
+		nv.VolumeSpec = rs.VolumeSpec
+	}
+
+	startupDelaySecondsFlag := "--startupDelaySeconds"
+
+	if nv.LivenessProbe == nil {
+		nv.LivenessProbe = new(LivenessProbeExtended)
+	}
+	if nv.LivenessProbe.InitialDelaySeconds == 0 {
+		nv.LivenessProbe.InitialDelaySeconds = rs.LivenessProbe.InitialDelaySeconds
+	}
+	if nv.LivenessProbe.TimeoutSeconds == 0 {
+		nv.LivenessProbe.TimeoutSeconds = rs.LivenessProbe.TimeoutSeconds
+	}
+	if nv.LivenessProbe.PeriodSeconds == 0 {
+		nv.LivenessProbe.PeriodSeconds = rs.LivenessProbe.PeriodSeconds
+	}
+	if nv.LivenessProbe.FailureThreshold == 0 {
+		nv.LivenessProbe.FailureThreshold = rs.LivenessProbe.FailureThreshold
+	}
+	if nv.LivenessProbe.StartupDelaySeconds == 0 {
+		nv.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
+	}
+	if nv.LivenessProbe.Handler.Exec == nil {
+		nv.LivenessProbe.Probe.Handler.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/data/db/mongodb-healthcheck",
+				"k8s",
+				"liveness",
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem",
+			},
+		}
+	}
+	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+		nv.LivenessProbe.Handler.Exec.Command = append(
+			nv.LivenessProbe.Handler.Exec.Command,
+			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds))
+	}
+
+	if nv.ReadinessProbe == nil {
+		nv.ReadinessProbe = &corev1.Probe{
+			Handler: corev1.Handler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(cr.Spec.Mongod.Net.Port)),
+				},
+			},
+		}
+	}
+	if nv.ReadinessProbe.InitialDelaySeconds == 0 {
+		nv.ReadinessProbe.InitialDelaySeconds = rs.ReadinessProbe.InitialDelaySeconds
+	}
+	if nv.ReadinessProbe.TimeoutSeconds == 0 {
+		nv.ReadinessProbe.TimeoutSeconds = rs.ReadinessProbe.TimeoutSeconds
+	}
+	if nv.ReadinessProbe.PeriodSeconds == 0 {
+		nv.ReadinessProbe.PeriodSeconds = rs.ReadinessProbe.PeriodSeconds
+	}
+	if nv.ReadinessProbe.FailureThreshold == 0 {
+		nv.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
+	}
+
+	if len(nv.ServiceAccountName) == 0 {
+		nv.ServiceAccountName = WorkloadSA
+	}
+
+	nv.MultiAZ.reconcileOpts()
+
+	if nv.ContainerSecurityContext == nil {
+		nv.ContainerSecurityContext = rs.ContainerSecurityContext
+	}
+
+	if nv.PodSecurityContext == nil {
+		nv.PodSecurityContext = rs.PodSecurityContext
+	}
+
 	return nil
 }
 
@@ -460,17 +623,14 @@ func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
 		log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
 	}
 
-	// Replset size can't be 0 or 1.
-	// But 2 + the Arbiter is possible.
-	if rs.Size < 2 {
-		loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize))
-		rs.Size = defaultMongodSize
-	}
-
 	if rs.Arbiter.Enabled {
 		if rs.Arbiter.Size != 1 {
 			loginfo(fmt.Sprintf("Arbiter size will be changed from %d to 1 due to safe config", rs.Arbiter.Size))
 			rs.Arbiter.Size = 1
+		}
+		if rs.Size < minSafeReplicasetSizeWithArbiter {
+			loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, minSafeReplicasetSizeWithArbiter))
+			rs.Size = minSafeReplicasetSizeWithArbiter
 		}
 		if rs.Size%2 != 0 {
 			loginfo(fmt.Sprintf("Arbiter will be switched off. There is no need in arbiter with odd replset size (%d)", rs.Size))
@@ -478,6 +638,10 @@ func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
 			rs.Arbiter.Size = 0
 		}
 	} else {
+		if rs.Size < 2 {
+			loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize))
+			rs.Size = defaultMongodSize
+		}
 		if rs.Size%2 == 0 {
 			loginfo(fmt.Sprintf("Replset size will be increased from %d to %d", rs.Size, rs.Size+1))
 			rs.Size++

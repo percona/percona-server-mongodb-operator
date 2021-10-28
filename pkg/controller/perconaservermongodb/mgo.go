@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"regexp"
 	"time"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -19,48 +18,73 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	pods corev1.PodList, mongosPods []corev1.Pod) (mongoClusterState, error) {
+	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
 
-	if replset.Size == 0 {
-		return clusterReady, nil
+	replsetSize := replset.Size
+
+	if replset.NonVoting.Enabled {
+		replsetSize += replset.NonVoting.Size
 	}
 
-	session, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleClusterAdmin)
+	if replset.Arbiter.Enabled {
+		replsetSize += replset.Arbiter.Size
+	}
+
+	if replsetSize == 0 {
+		return api.AppStateReady, nil
+	}
+
+	// all pods needs to be scheduled to reconcile
+	if int(replsetSize) > len(pods.Items) {
+		return api.AppStateInit, nil
+	}
+
+	if cr.Spec.Unmanaged {
+		return api.AppStateReady, nil
+	}
+
+	cli, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
 	if err != nil {
-		// try to init replset and if succseed
-		// we'll go further on the next reconcile iteration
-		if !cr.Status.Replsets[replset.Name].Initialized {
-			err = r.handleReplsetInit(cr, replset, pods.Items)
-			if err != nil {
-				return clusterInit, errors.Wrap(err, "handleReplsetInit:")
-			}
-			cr.Status.Replsets[replset.Name].Initialized = true
-			cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
-				Status:             api.ConditionTrue,
-				Type:               api.ClusterRSInit,
-				Message:            replset.Name,
-				LastTransitionTime: metav1.NewTime(time.Now()),
-			})
-			return clusterInit, nil
+		if cr.Status.Replsets[replset.Name].Initialized {
+			return api.AppStateError, errors.Wrap(err, "dial:")
 		}
-		return clusterError, errors.Wrap(err, "dial:")
-	} else if !cr.Status.Replsets[replset.Name].Initialized {
-		// this can happended when cluster was initialized but status update failed
+
+		err := r.handleReplsetInit(cr, replset, pods.Items)
+		if err != nil {
+			return api.AppStateInit, errors.Wrap(err, "handleReplsetInit")
+		}
+
+		err = r.createSystemUsers(cr, replset)
+		if err != nil {
+			return api.AppStateInit, errors.Wrap(err, "create system users")
+		}
 
 		cr.Status.Replsets[replset.Name].Initialized = true
-
-		cr.Status.Conditions = append(cr.Status.Conditions, api.ClusterCondition{
+		cr.Status.AddCondition(api.ClusterCondition{
 			Status:             api.ConditionTrue,
-			Type:               api.ClusterRSInit,
+			Type:               api.AppStateInit,
 			Message:            replset.Name,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		})
 
-		return clusterInit, nil
+		return api.AppStateInit, nil
+	}
+
+	// this can happen if cluster is initialized but status update failed
+	if !cr.Status.Replsets[replset.Name].Initialized {
+		cr.Status.Replsets[replset.Name].Initialized = true
+		cr.Status.AddCondition(api.ClusterCondition{
+			Status:             api.ConditionTrue,
+			Type:               api.AppStateInit,
+			Message:            replset.Name,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		})
+
+		return api.AppStateInit, nil
 	}
 
 	defer func() {
-		err := session.Disconnect(context.TODO())
+		err := cli.Disconnect(context.TODO())
 		if err != nil {
 			log.Error(err, "failed to close connection")
 		}
@@ -68,20 +92,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 	rstRunning, err := r.isRestoreRunning(cr)
 	if err != nil {
-		return clusterInit, errors.Wrap(err, "failed to check running restore")
+		return api.AppStateInit, errors.Wrap(err, "failed to check running restore")
 	}
 
 	if cr.Spec.Sharding.Enabled &&
 		!rstRunning &&
 		cr.Status.Replsets[replset.Name].Initialized &&
 		cr.Status.Replsets[replset.Name].Status == api.AppStateReady &&
+		cr.Status.Mongos != nil &&
 		cr.Status.Mongos.Status == api.AppStateReady &&
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 {
 
 		mongosSession, err := r.mongosClientWithRole(cr, roleClusterAdmin)
 		if err != nil {
-			return clusterError, errors.Wrap(err, "failed to get mongos connection")
+			return api.AppStateError, errors.Wrap(err, "failed to get mongos connection")
 		}
 
 		defer func() {
@@ -93,7 +118,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 		in, err := inShard(mongosSession, replset.Name)
 		if err != nil {
-			return clusterError, errors.Wrap(err, "get shard")
+			return api.AppStateError, errors.Wrap(err, "get shard")
 		}
 
 		if !in {
@@ -101,7 +126,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 			err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods[0])
 			if err != nil {
-				return clusterError, errors.Wrap(err, "add shard")
+				return api.AppStateError, errors.Wrap(err, "add shard")
 			}
 
 			log.Info("added to shard", "rs", replset.Name)
@@ -111,9 +136,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		cr.Status.Replsets[replset.Name].AddedAsShard = &t
 	}
 
-	cnf, err := mongo.ReadConfig(context.TODO(), session)
+	cnf, err := mongo.ReadConfig(context.TODO(), cli)
 	if err != nil {
-		return clusterError, errors.Wrap(err, "get mongo config")
+		return api.AppStateError, errors.Wrap(err, "get mongo config")
 	}
 
 	members := mongo.ConfigMembers{}
@@ -125,7 +150,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 		host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
-			return clusterError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
+			return api.AppStateError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
 
 		member := mongo.ConfigMember{
@@ -138,55 +163,102 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		case "arbiter":
 			member.ArbiterOnly = true
 			member.Priority = 0
-		case "mongod":
+		case "mongod", "cfg":
 			member.Tags = mongo.ReplsetTags{
 				"serviceName": cr.Name,
+			}
+		case "nonVoting":
+			member.Tags = mongo.ReplsetTags{
+				"serviceName": cr.Name,
+				"nonVoting":   "true",
 			}
 		}
 
 		members = append(members, member)
 	}
 
+	memberC := len(members)
+	for i, extNode := range replset.ExternalNodes {
+		if i+memberC >= mongo.MaxMembers {
+			log.Error(errReplsetLimit, "rs", replset.Name)
+			break
+		}
+
+		member := mongo.ConfigMember{
+			ID:           i + memberC,
+			Host:         extNode.HostPort(),
+			Votes:        extNode.Votes,
+			Priority:     extNode.Priority,
+			BuildIndexes: true,
+			Tags:         mongo.ReplsetTags{"external": "true"},
+		}
+
+		members = append(members, member)
+	}
+
+	if cnf.Members.FixTags(members) {
+		cnf.Members.SetVotes()
+
+		cnf.Version++
+		if err := mongo.WriteConfig(context.TODO(), cli, cnf); err != nil {
+			return api.AppStateError, errors.Wrap(err, "fix tags: write mongo config")
+		}
+	}
+
 	if cnf.Members.RemoveOld(members) {
 		cnf.Members.SetVotes()
 
 		cnf.Version++
-		err = mongo.WriteConfig(context.TODO(), session, cnf)
+		err = mongo.WriteConfig(context.TODO(), cli, cnf)
 		if err != nil {
-			return clusterError, errors.Wrap(err, "delete: write mongo config")
+			return api.AppStateError, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
-	if cnf.Members.AddNew(members) {
+	if cnf.Members.AddNew(members) || cnf.Members.ExternalNodesChanged(members) {
 		cnf.Members.RemoveOld(members)
 		cnf.Members.SetVotes()
 
 		cnf.Version++
-		err = mongo.WriteConfig(context.TODO(), session, cnf)
+		err = mongo.WriteConfig(context.TODO(), cli, cnf)
 		if err != nil {
-			return clusterError, errors.Wrap(err, "add new: write mongo config")
+			return api.AppStateError, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
 
-	rsStatus, err := mongo.RSStatus(context.TODO(), session)
+	rsStatus, err := mongo.RSStatus(context.TODO(), cli)
 	if err != nil {
-		return clusterError, errors.Wrap(err, "unable to get replset members")
+		return api.AppStateError, errors.Wrap(err, "unable to get replset members")
 	}
+
 	membersLive := 0
 	for _, member := range rsStatus.Members {
+		var tags mongo.ReplsetTags
+		for i := range cnf.Members {
+			if member.Id == cnf.Members[i].ID {
+				tags = cnf.Members[i].Tags
+				break
+			}
+		}
+		if _, ok := tags["external"]; ok {
+			continue
+		}
+
 		switch member.State {
 		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 			membersLive++
-		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback:
-			return clusterInit, nil
+		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback, mongo.MemberStateDown:
+			return api.AppStateInit, nil
 		default:
-			return clusterError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
+			return api.AppStateError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
 		}
 	}
+
 	if membersLive == len(pods.Items) {
-		return clusterReady, nil
+		return api.AppStateReady, nil
 	}
-	return clusterInit, nil
+
+	return api.AppStateInit, nil
 }
 
 func inShard(client *mgo.Client, rsName string) (bool, error) {
@@ -206,58 +278,21 @@ func inShard(client *mgo.Client, rsName string) (bool, error) {
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
-const (
-	mongoInitAdminUser = `
-	db.getSiblingDB("admin").createUser(
+func mongoInitAdminUser(user, pwd string) string {
+	return fmt.Sprintf(`db.getSiblingDB("admin").createUser(
 		{
-			user: "${MONGODB_USER_ADMIN_USER}",
-			pwd: "${MONGODB_USER_ADMIN_PASSWORD}",
+			user: "%s",
+			pwd: "%s",
 			roles: [ "userAdminAnyDatabase" ] 
 		}
-	)
-	`
-
-	mongoInitUsers = `
-	db.getSiblingDB("admin").createUser(
-		{
-			user: "${MONGODB_CLUSTER_ADMIN_USER}",
-			pwd: "${MONGODB_CLUSTER_ADMIN_PASSWORD}",
-			roles: [ "clusterAdmin" ] 
-		}
-	)
-	db.getSiblingDB("admin").createUser(
-		{
-			user: "${MONGODB_CLUSTER_MONITOR_USER}",
-			pwd: "${MONGODB_CLUSTER_MONITOR_PASSWORD}",
-			roles: [ "clusterMonitor" ] 
-		}
-	)
-	
-	db.getSiblingDB("admin").createRole({ "role": "pbmAnyAction",
-		  "privileges": [
-			 { "resource": { "anyResource": true },
-			   "actions": [ "anyAction" ]
-			 }
-		  ],
-		  "roles": []
-	   });
-	db.getSiblingDB("admin").createUser(
-		{
-			user: "${MONGODB_BACKUP_USER}",
-			pwd: "${MONGODB_BACKUP_PASSWORD}",
-			"roles" : [
-				{ "db" : "admin", "role" : "readWrite", "collection": "" },
-				{ "db" : "admin", "role" : "backup" },
-				{ "db" : "admin", "role" : "clusterMonitor" },
-				{ "db" : "admin", "role" : "restore" },
-				{ "db" : "admin", "role" : "pbmAnyAction" }
-			 ]
-		}
-	)
-	`
-)
+	)`, user, pwd)
+}
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
 	cli, err := r.mongosClientWithRole(cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Errorf("failed to get mongos connection: %v", err)
@@ -291,7 +326,6 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerM
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPod corev1.Pod) error {
 
-	var re = regexp.MustCompile(`(?m)"ok"\s*:\s*1,`)
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
 		return errors.Errorf("rsPod %s is not ready", rspod.Name)
 	}
@@ -299,33 +333,33 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 		return errors.New("mongos pod is not ready")
 	}
 
-	host := psmdb.GetAddr(m, rspod.Name, replset.Name)
-
-	cmd := []string{
-		"sh", "-c",
-		fmt.Sprintf(
-			`
-				cat <<-EOF | mongo "mongodb://${MONGODB_CLUSTER_ADMIN_USER}:${MONGODB_CLUSTER_ADMIN_PASSWORD}@localhost"
-				sh.addShard("%s/%s")
-				EOF
-			`, replset.Name, host),
-	}
-
-	var errb, outb bytes.Buffer
-	err := r.clientcmd.Exec(&mongosPod, "mongos", cmd, nil, &outb, &errb, false)
+	host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, rspod)
 	if err != nil {
-		return fmt.Errorf("exec sh.addShard: %v / %s / %s", err, outb.String(), errb.String())
+		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
 
-	if !re.Match(outb.Bytes()) {
-		return errors.Errorf("failed to add shard: %s", outb.String())
+	cli, err := r.mongosClientWithRole(m, roleClusterAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to get mongos client")
+	}
+
+	defer func() {
+		err := cli.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongos connection")
+		}
+	}()
+
+	err = mongo.AddShard(context.Background(), cli, replset.Name, host)
+	if err != nil {
+		return errors.Wrap(err, "failed to add shard")
 	}
 
 	return nil
 }
 
 // handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
-// This must be ran from within the running container to utilise the MongoDB Localhost Exeception.
+// This must be ran from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
 //
@@ -335,7 +369,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			continue
 		}
 
-		log.Info("Initiating replset", "replset", replset.Name, "pod", pod.Name)
+		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
@@ -368,12 +402,15 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		time.Sleep(time.Second * 5)
 
-		cmd[2] = fmt.Sprintf(
-			`
+		userAdmin, err := r.getInternalCredentials(m, roleUserAdmin)
+		if err != nil {
+			return errors.Wrap(err, "failed to get userAdmin credentials")
+		}
+
+		cmd[2] = fmt.Sprintf(`
 			cat <<-EOF | mongo 
 			%s
-			EOF
-			`, mongoInitAdminUser)
+			EOF`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
@@ -381,22 +418,75 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		cmd[2] = fmt.Sprintf(
-			`
-			cat <<-EOF | mongo "mongodb://${MONGODB_USER_ADMIN_USER}:${MONGODB_USER_ADMIN_PASSWORD}@%s/?replicaSet=%s"
-			%s
-			EOF
-			`, host, replset.Name, mongoInitUsers)
-		errb.Reset()
-		outb.Reset()
-		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			return fmt.Errorf("exec add users: %v / %s / %s", err, outb.String(), errb.String())
-		}
+		log.Info("replset was initialized", "replset", replset.Name, "pod", pod.Name)
 
 		return nil
 	}
+
 	return errNoRunningMongodContainers
+}
+
+func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	cli, err := r.mongoClientWithRole(cr, *replset, roleUserAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to get mongo client")
+	}
+
+	defer func() {
+		err := cli.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close mongo connection")
+		}
+	}()
+
+	clusterAdmin, err := r.getInternalCredentials(cr, roleClusterAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to get cluster admin")
+	}
+
+	err = mongo.CreateUser(context.Background(), cli, clusterAdmin.Username, clusterAdmin.Password, roleClusterAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to create clusterAdmin")
+	}
+
+	monitorUser, err := r.getInternalCredentials(cr, roleClusterMonitor)
+	if err != nil {
+		return errors.Wrap(err, "failed to get cluster admin")
+	}
+
+	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password, roleClusterMonitor)
+	if err != nil {
+		return errors.Wrap(err, "failed to create monitorUser")
+	}
+
+	err = mongo.CreateRole(context.Background(), cli, "pbmAnyAction",
+		[]interface{}{
+			map[string]interface{}{
+				"resource": map[string]bool{"anyResource": true},
+				"actions":  []string{"anyAction"},
+			},
+		}, []interface{}{})
+	if err != nil {
+		return errors.Wrap(err, "failed to create role")
+	}
+
+	backupUser, err := r.getInternalCredentials(cr, roleBackup)
+	if err != nil {
+		return errors.Wrap(err, "failed to get cluster admin")
+	}
+
+	err = mongo.CreateUser(context.Background(), cli, backupUser.Username, backupUser.Password,
+		map[string]string{"db": "admin", "role": "readWrite", "collection": ""},
+		map[string]string{"db": "admin", "role": string(roleBackup)},
+		map[string]string{"db": "admin", "role": string(roleClusterMonitor)},
+		map[string]string{"db": "admin", "role": "restore"},
+		map[string]string{"db": "admin", "role": "pbmAnyAction"},
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create backup")
+	}
+
+	return nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod
