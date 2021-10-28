@@ -37,9 +37,9 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 	)
 	if errSecret == nil && errInternalSecret == nil {
 		return nil
-	} else if !k8serrors.IsNotFound(errSecret) {
+	} else if errSecret != nil && !k8serrors.IsNotFound(errSecret) {
 		return fmt.Errorf("get secret: %v", errSecret)
-	} else if !k8serrors.IsNotFound(errInternalSecret) {
+	} else if errInternalSecret != nil && !k8serrors.IsNotFound(errInternalSecret) {
 		return fmt.Errorf("get internal secret: %v", errInternalSecret)
 	}
 	err := r.createSSLByCertManager(cr)
