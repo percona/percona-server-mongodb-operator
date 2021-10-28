@@ -11,6 +11,7 @@ fail() {
     exit 1
 }
 
+"$dir/default-cr/run" || fail "default-cr"
 "$dir/arbiter/run" || fail "arbiter"
 "$dir/data-sharded/run" || fail "data-sharded"
 "$dir/demand-backup-sharded/run" || fail "demand-backup-sharded"
