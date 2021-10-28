@@ -8,17 +8,12 @@ test_dir="$(dirname $0)"
 src_dir="$(realpath ${test_dir}/..)"
 IMAGE=$(echo "$IMAGE" | sed -e 's#percona/#perconalab/#')
 
-no_cache="--no-cache"
-squash="--squash"
-
-while [ "${1:-}" != "" ]; do
-	case "$1" in
-		"--cache") no_cache= ;;
-		"--no-squash") squash= ;;
-		*) ;;
-	esac
-	shift
-done
+if [[ ${DOCKER_NOCACHE:-1} == 1 ]]; then
+	no_cache="--no-cache"
+fi
+if [[ ${DOCKER_SQUASH:-1} == 1 ]]; then
+	squash="--squash"
+fi
 
 build_operator() {
 	if [ "${RELEASE:-1}" = 0 ]; then
