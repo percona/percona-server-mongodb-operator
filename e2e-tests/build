@@ -8,6 +8,18 @@ test_dir="$(dirname $0)"
 src_dir="$(realpath ${test_dir}/..)"
 IMAGE=$(echo "$IMAGE" | sed -e 's#percona/#perconalab/#')
 
+no_cache="--no-cache"
+squash="--squash"
+
+while [ "${1:-}" != "" ]; do
+	case "$1" in
+		"--cache") no_cache= ;;
+		"--no-squash") squash= ;;
+		*) ;;
+	esac
+	shift
+done
+
 build_operator() {
     if [ "${RELEASE:-1}" = 0 ]; then
         GO_LDFLAGS="-race"
@@ -20,8 +32,8 @@ build_operator() {
             --build-arg GIT_COMMIT=$GIT_COMMIT \
             --build-arg GIT_BRANCH=$GIT_BRANCH \
             --build-arg GO_LDFLAGS="$GO_LDFLAGS" \
-            --squash \
-            --no-cache \
+            $squash \
+            $no_cache \
             -t "${IMAGE}" -f build/Dockerfile .
     popd
     docker push ${IMAGE}
