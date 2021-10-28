@@ -194,7 +194,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 		Type: corev1.SecretTypeTLS,
 	}
 	err = r.client.Create(context.TODO(), &secretObj)
-	if err != nil {
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create TLS secret: %v", err)
 	}
 
@@ -215,7 +215,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 		Type: corev1.SecretTypeTLS,
 	}
 	err = r.client.Create(context.TODO(), &secretObjInternal)
-	if err != nil {
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create TLS internal secret: %v", err)
 	}
 	return nil
