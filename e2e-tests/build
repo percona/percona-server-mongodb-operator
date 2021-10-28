@@ -21,25 +21,23 @@ while [ "${1:-}" != "" ]; do
 done
 
 build_operator() {
-    if [ "${RELEASE:-1}" = 0 ]; then
-        GO_LDFLAGS="-race"
-    fi
+	if [ "${RELEASE:-1}" = 0 ]; then
+		GO_LDFLAGS="-race"
+	fi
 
-    export IMAGE
-    export GO_LDFLAGS="-w -s -trimpath $GO_LDFLAGS"
-    pushd ${src_dir}
-        docker build \
-            --build-arg GIT_COMMIT=$GIT_COMMIT \
-            --build-arg GIT_BRANCH=$GIT_BRANCH \
-            --build-arg GO_LDFLAGS="$GO_LDFLAGS" \
-            $squash \
-            $no_cache \
-            -t "${IMAGE}" -f build/Dockerfile .
-    popd
-    docker push ${IMAGE}
+	export IMAGE
+	export GO_LDFLAGS="-w -s -trimpath $GO_LDFLAGS"
+	pushd ${src_dir}
+	docker build \
+		--build-arg GIT_COMMIT=$GIT_COMMIT \
+		--build-arg GIT_BRANCH=$GIT_BRANCH \
+		--build-arg GO_LDFLAGS="$GO_LDFLAGS" \
+		$squash \
+		$no_cache \
+		-t "${IMAGE}" -f build/Dockerfile .
+	popd
+	docker push ${IMAGE}
 }
 
-until docker ps;
-    do sleep 1;
-done
+until docker ps; do sleep 1; done
 build_operator
