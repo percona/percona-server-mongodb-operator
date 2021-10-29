@@ -14,6 +14,8 @@ file to be executed automatically in proper time. *On-demand backups*
 can be done manually at any moment. Both ways use the `Percona
 Backup for MongoDB <https://github.com/percona/percona-backup-mongodb>`_ tool.
 
+.. warning:: Backups made with the Operator versions before 1.9.0 are incompatible for restore with the Operator 1.9.0 and later. That is because Percona Backup for MongoDB 1.5.0 used by the newer Operator versions `processes system collections Users and Roles differently <https://www.percona.com/doc/percona-backup-mongodb/running.html#pbm-running-backup-restoring>`_. The recommended approach is to **make a fresh backup after upgrading Percona Distribution for MongoDB Operator to version 1.9.0**.
+
 .. contents:: :local:
 
 .. _backups.scheduled:

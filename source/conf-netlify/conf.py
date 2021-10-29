@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Percona XtraBackup documentation build configuration file, created by
@@ -22,15 +23,24 @@ import sys, os
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #needs_sphinx = '1.0'
+sys.path.append(os.path.abspath("../"))
 
-sys.path.append(os.path.abspath('ext'))
+#sys.path.append(os.path.abspath('ext'))
+import sphinx_rtd_theme
 
+from conf import *
+
+
+#html_theme = "sphinx_rtd_theme"
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 
-extensions = ['sphinx.ext.intersphinx', 'sphinx.ext.todo',
-              'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.extlinks', 'sphinx-prompt',  ]
+#extensions = ['sphinx.ext.intersphinx', 'sphinx.ext.todo',
+#              'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.extlinks', 'sphinx-prompt', ]
 
+extensions.append('sphinx-prompt')
+extensions.append('sphinx_rtd_theme')
+#extensions.append('sphinxcontrib.fulltoc')
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -79,7 +89,7 @@ exclude_patterns = ['*.txt']
 # The reST default role (used for this markup: `text`) to use for all documents.
 #default_role = None
 
-primary_domain = 'psdom'
+#primary_domain = 'psdom'
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
 #add_function_parentheses = True
@@ -163,7 +173,24 @@ extlinks = {'bug':
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'percona-theme'
+#html_sidebars['**']=['globaltoc.html', 'searchbox.html', 'localtoc.html', 'logo-text.html']
+#html_sidebars = {
+#   '**': ['globaltoc.html', 'searchbox.html', 'localtoc.html', 'logo-text.html'],
+#}
+#html_theme = "sphinx_rtd_theme"
+#html_theme_options = {
+#     'collapse_navigation': False,
+#}
+html_theme = 'sphinx_material'
+html_theme_options = {
+    'base_url': 'http://bashtage.github.io/sphinx-material/',
+    'repo_url': 'https://github.com/percona/percona-server-mongodb-operator',
+    'repo_name': 'percona/percona-server-mongodb-operator',
+    'color_accent': 'grey',
+    'color_primary': 'orange',
+    'globaltoc_collapse': True,
+    'version_dropdown': False,
+}
 html_add_permalinks = ""
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -171,7 +198,7 @@ html_add_permalinks = ""
 #html_theme_options = {}
 
 # Add any paths that contain custom themes here, relative to this directory.
-html_theme_path = ['.', './percona-theme']
+#html_theme_path = ['.', './percona-theme']
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".

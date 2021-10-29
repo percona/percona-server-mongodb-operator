@@ -1,8 +1,9 @@
 System Requirements
 +++++++++++++++++++
 
-The Operator was developed and tested with Percona Server for MongoDB 4.0,
-4.2, and 4.4. Other options may also work but have not been tested.
+The Operator was developed and tested with Percona Server for MongoDB 4.0, 4.2,
+4.4, and 5.0 technical preview. Other options may also work but have not been
+tested.
 
 .. note:: The `MMAPv1 storage engine <https://docs.mongodb.com/manual/core/storage-engines/>`_
    is no longer supported for all MongoDB versions starting from the Operator
@@ -16,10 +17,10 @@ Officially supported platforms
 The following platforms were tested and are officially supported by the Operator
 {{{release}}}: 
 
-* OpenShift 4.7
+* OpenShift 4.6 - 4.8
 * Google Kubernetes Engine (GKE) 1.17 - 1.21
-* Amazon Elastic Container Service for Kubernetes (EKS) 1.16-1.20
-* Minikube 1.20
+* Amazon Elastic Container Service for Kubernetes (EKS) 1.16 - 1.21
+* Minikube 1.22
 * VMWare Tanzu
 
 Other Kubernetes platforms may also work but have not been tested.
@@ -43,17 +44,6 @@ if :ref:`Arbiter<arbiter>` is not enabled.
 
 .. note:: Use Storage Class with XFS as the default filesystem if possible
    `to achieve better MongoDB performance <https://dba.stackexchange.com/questions/190578/is-xfs-still-the-best-choice-for-mongodb>`_.
-
-Platform-specific limitations
-------------------------------
-
-The Operator is subsequent to specific platform limitations.
-
-* Minikube doesn't support multi-node cluster configurations because of its
-  local nature, which is in collision with the default affinity requirements
-  of the Operator. To arrange this, the :ref:`install-minikube` instruction
-  includes an additional step which turns off the requirement of having not
-  less than three Nodes.
 
 
 

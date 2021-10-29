@@ -32,33 +32,38 @@ Semi-automatic upgrade
 
    .. code:: bash
 
-      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
-      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
 
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
-   ``RollingUpdate``.
+   ``RollingUpdate``, and apply changes with the
+   ``kubectl apply -f deploy/cr.yaml`` command.
 
 #. Now you should `apply a patch <https://kubernetes.io/docs/tasks/run-application/update-api-object-kubectl-patch/>`_ to your
    deployment, supplying necessary image names with a newer version tag. This
    is done with the ``kubectl patch deployment`` command. For example, updating
-   to the ``{{{release}}}`` version should look as follows::
+   to the ``{{{release}}}`` version should look as follows:
 
-     kubectl patch deployment percona-server-mongodb-operator \
-        -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
+   .. code:: bash
 
-     kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "spec": {
+      $ kubectl patch deployment percona-server-mongodb-operator \
+         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
+
+      $ kubectl patch psmdb my-cluster-name --type=merge --patch '{
+         "spec": {
             "crVersion":"{{{release}}}",
             "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
-        }}'
+         }}'
 
 #. The deployment rollout will be automatically triggered by the applied patch.
    You can track the rollout process in real time using the
-   ``kubectl rollout status`` command with the name of your cluster::
+   ``kubectl rollout status`` command with the name of your cluster:
 
-     kubectl rollout status sts my-cluster-name-rs0
+   .. code:: bash
+
+      $ kubectl rollout status sts my-cluster-name-rs0
 
 .. _operator-update-manual-updates:
 
@@ -76,49 +81,59 @@ Manual upgrade
 
    .. code:: bash
 
-      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
-      kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
 
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
-   ``OnDelete``.
+   ``OnDelete``, and apply changes with the ``kubectl apply -f deploy/cr.yaml``
+   command.
 
 #. Now you should `apply a patch <https://kubernetes.io/docs/tasks/run-application/update-api-object-kubectl-patch/>`_ to your
    deployment, supplying necessary image names with a newer version tag. This
    is done with the ``kubectl patch deployment`` command. For example, updating
-   to the ``{{{release}}}`` version should look as follows::
+   to the ``{{{release}}}`` version should look as follows:
 
-     kubectl patch deployment percona-server-mongodb-operator \
-        -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
+   .. code:: bash
 
-     kubectl patch psmdb my-cluster-name --type=merge --patch '{
-        "spec": {
+      $ kubectl patch deployment percona-server-mongodb-operator \
+         -p'{"spec":{"template":{"spec":{"containers":[{"name":"percona-server-mongodb-operator","image":"percona/percona-server-mongodb-operator:{{{release}}}"}]}}}}'
+
+      $ kubectl patch psmdb my-cluster-name --type=merge --patch '{
+         "spec": {
             "crVersion":"{{{release}}}",
             "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}",
             "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
-        }}'
+         }}'
 
 #. Pod with the newer Percona Server for MongoDB image will start after you
    delete it. Delete targeted Pods manually one by one to make them restart in
    the desired order:
 
-   #. Delete the Pod using its name with the command like the following one::
+   #. Delete the Pod using its name with the command like the following one:
 
-         kubectl delete pod my-cluster-name-rs0-2
+      .. code:: bash
+
+         $ kubectl delete pod my-cluster-name-rs0-2
 
 
-   #. Wait until Pod becomes ready::
+   #. Wait until Pod becomes ready:
 
-         kubectl get pod my-cluster-name-rs0-2
+      .. code:: bash
+
+         $ kubectl get pod my-cluster-name-rs0-2
 
 
       The output should be like this::
+
+      .. code:: text
 
          NAME                    READY   STATUS    RESTARTS   AGE
          my-cluster-name-rs0-2   1/1     Running   0          3m33s
 
 #. The update process is successfully finished when all Pods have been
-   restarted.
+   restarted (including the mongos and Config Server nodes, if
+   :ref:`operator.sharding` is on).
 
 .. _operator-update-smartupdates:
 
@@ -130,7 +145,8 @@ the newer versions of Percona Server for MongoDB within the method named *Smart
 Updates*.
 
 To have this upgrade method enabled, make sure that the ``updateStrategy`` key
-in the ``deploy/cr.yaml`` configuration file is set to ``SmartUpdate``.
+in the ``deploy/cr.yaml`` configuration file is set to ``SmartUpdate``, and
+apply changes with the ``kubectl apply -f deploy/cr.yaml`` command.
 
 When automatic updates are enabled, the Operator will carry on upgrades
 according to the following algorithm. It will query a special *Version Service* 
@@ -190,13 +206,16 @@ updates:
       
       .. code:: bash
       
-         kubectl run version-service --image=perconalab/version-service --env="SERVE_HTTP=true" --port 11000 --expose
+         $ kubectl run version-service --image=perconalab/version-service --env="SERVE_HTTP=true" --port 11000 --expose
 
    .. note:: Version Service is never checked if automatic updates are disabled.
       If automatic updates are enabled, but Version Service URL can not be
       reached, upgrades will not occur.
 
 #. Use the ``schedule`` option to specify the update checks time in CRON format.
+
+#. Don't forget to apply changes with the ``kubectl apply -f deploy/cr.yaml``
+   command.
 
 The following example sets the midnight update checks with the official
 Percona's Version Service:

@@ -37,6 +37,14 @@ help:
 clean:
 	-rm -rf $(BUILDDIR)/*
 
+htmlnetlify:
+	@echo "Building html doc"
+
+	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) -c source/conf-netlify $(BUILDDIR)/html
+	@echo
+	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
+
+
 html:
 	@echo "Downloading percona-theme ..."
 	@wget -O percona-theme.tar.gz https://www.percona.com/docs/theme-1-4/percona-server-for-mongodb/
@@ -113,10 +121,15 @@ latex:
 	      "(use \`make latexpdf' here to do that automatically)."
 
 latexpdf:
+	@for i in ./source/*.rst; do sed -i '/\.\. figure::/s/\.svg/\.pdf/g' "$$i"; done
+	@for i in ./source/*.rst; do sed -i '/\.\. image::/s/\.svg/\.pdf/g' "$$i"; done
 	$(SPHINXBUILD) -b latex $(ALLSPHINXOPTS) $(BUILDDIR)/latex
 	@echo "Running LaTeX files through pdflatex..."
 	make -C $(BUILDDIR)/latex all-pdf
+	@for i in ./source/*.rst; do sed -i '/\.\. figure::/s/\.pdf/\.svg/g' "$$i"; done
+	@for i in ./source/*.rst; do sed -i '/\.\. image::/s/\.pdf/\.svg/g' "$$i"; done
 	@echo "pdflatex finished; the PDF files are in $(BUILDDIR)/latex."
+
 
 text:
 	$(SPHINXBUILD) -b text $(ALLSPHINXOPTS) $(BUILDDIR)/text
