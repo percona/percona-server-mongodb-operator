@@ -458,6 +458,19 @@ wait_for_delete() {
 	set -o xtrace
 }
 
+function compare_generation() {
+	local generation="$1"
+	local resource_type="$2"
+	local resource_name="$3"
+	local current_generation
+
+	current_generation="$(kubectl_bin get ${resource_type} "${resource_name}" -o jsonpath='{.metadata.generation}')"
+	if [[ ${generation} != "${current_generation}" ]]; then
+		echo "Generation for ${resource_type}/${resource_name} is: ${current_generation}, but should be: ${generation}"
+		exit 1
+	fi
+}
+
 compare_kubectl() {
 	local resource="$1"
 	local postfix="$2"
@@ -918,7 +931,7 @@ wait_cluster_consistency() {
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
 	until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		let retry+=1
-		if [ $retry -ge 16 ]; then
+		if [ $retry -ge 32 ]; then
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
