@@ -199,7 +199,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return bcp.Start(cr, priorities)
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(6 * time.Second)
 	return bcp.Status(cr)
 }
 
