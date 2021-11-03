@@ -10,7 +10,7 @@ IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
-SKIP_BACKUPS_TO_AWS_GCP=${SKIP_BACKUPS_TO_AWS_GCP:-1}
+SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -21,7 +21,7 @@ conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 
 if [ -f "$conf_dir/cloud-secret.yml" ]; then
-	SKIP_BACKUPS_TO_AWS_GCP=''
+	SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
 fi
 
 if oc get projects; then
@@ -50,10 +50,11 @@ version_gt() {
 }
 
 apply_s3_storage_secrets() {
-	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 		kubectl_bin apply \
 			-f $conf_dir/minio-secret.yml \
-			-f $conf_dir/cloud-secret.yml
+			-f $conf_dir/cloud-secret.yml \
+			-f $conf_dir/azure-secret.yml
 	else
 		kubectl_bin apply \
 			-f $conf_dir/minio-secret.yml
@@ -841,7 +842,7 @@ cat_config() {
 }
 
 apply_cluster() {
-	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 		cat_config "$1" \
 			| kubectl_bin apply -f -
 	else
