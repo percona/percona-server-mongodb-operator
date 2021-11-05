@@ -31,7 +31,10 @@ build_operator() {
 		$no_cache \
 		-t "${IMAGE}" -f build/Dockerfile .
 	popd
-	docker push ${IMAGE}
+
+	if [ "${DOCKER_PUSH:-1}" = 1 ]; then
+		docker push ${IMAGE}
+	fi
 }
 
 until docker ps; do sleep 1; done
