@@ -34,8 +34,10 @@ func ReadinessCheck(client *mongo.Client) (State, error) {
 
 func MongosReadinessCheck(client *mongo.Client) error {
 	ss := ServerStatus{}
-
-	cur := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "listDatabases", Value: 1}})
+	cur := client.Database("admin").RunCommand(context.TODO(), bson.D{
+		{Key: "listDatabases", Value: 1},
+		{Key: "filter", Value: bson.D{{Key: "name", Value: "admin"}}},
+		{Key: "nameOnly", Value: true}})
 	if cur.Err() != nil {
 		return errors.Wrap(cur.Err(), "run listDatabases")
 	}
