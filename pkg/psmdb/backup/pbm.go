@@ -167,6 +167,7 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 	if err := b.C.SetConfig(conf); err != nil {
 		return errors.Wrap(err, "write config")
 	}
+	time.Sleep(11 * time.Second) // give time to init new storage
 
 	return nil
 }
