@@ -408,13 +408,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServ
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1.PerconaServerMongoDBRestore) error {
 	err := r.client.Status().Update(context.TODO(), cr)
 	if err != nil {
-		// maybe it's k8s v1.10 and earlier (e.g. oc3.9) that doesn't support status updates
-		// so try to update whole CR
-		// TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
-		err := r.client.Update(context.TODO(), cr)
-		if err != nil {
-			return fmt.Errorf("send update: %v", err)
-		}
+		return errors.Wrap(err, "send update")
 	}
 	return nil
 }

@@ -237,13 +237,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *psmdbv1.Percon
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	err := r.client.Status().Update(context.TODO(), cr)
 	if err != nil {
-		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
-		// so try to update whole CR
-		// TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
-		err := r.client.Update(context.TODO(), cr)
-		if err != nil {
-			return errors.Wrap(err, "send update")
-		}
+		return errors.Wrap(err, "send update")
 	}
 	return nil
 }

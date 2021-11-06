@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
@@ -247,6 +248,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		}
 	}
 
+	patch := client.MergeFrom(cr.DeepCopy())
 	newVersion, err := vs.GetExactVersion(cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
 	if err != nil {
 		return errors.Wrap(err, "failed to check version")
@@ -279,7 +281,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		cr.Spec.PMM.Image = newVersion.PMMImage
 	}
 
-	err = r.client.Update(context.Background(), cr)
+	err = r.client.Patch(context.Background(), cr, patch)
 	if err != nil {
 		return fmt.Errorf("failed to update CR: %v", err)
 	}
