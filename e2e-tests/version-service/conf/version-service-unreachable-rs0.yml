@@ -62,6 +62,8 @@ spec:
         resources:
           requests:
             storage: 1Gi
+    readinessProbe:
+      failureThreshold: 5
     size: 3
   secrets:
     key: some-key
