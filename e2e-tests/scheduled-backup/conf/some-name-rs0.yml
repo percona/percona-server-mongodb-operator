@@ -38,6 +38,13 @@ spec:
           bucket: operator-testing
           endpointUrl: https://storage.googleapis.com
           prefix: psmdb
+      azure-blob:
+        type: azure
+        azure:
+          account: pxcperator
+          container: operato-test-storage
+          prefix: psmdb
+          credentialsSecret: azure-secret
     tasks:
     - name: weekly
       enabled: true

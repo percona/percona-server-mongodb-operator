@@ -38,6 +38,13 @@ spec:
           bucket: operator-testing
           endpointUrl: https://storage.googleapis.com
           prefix: psmdb
+      azure-blob:
+        type: azure
+        azure:
+          account: pxcperator
+          container: operato-test-storage
+          prefix: psmdb
+          credentialsSecret: azure-secret
     tasks:
     - name: every-min-minio
       enabled: true
@@ -54,6 +61,11 @@ spec:
       schedule: "* * * * *"
       compressionType: gzip
       storageName: gcp-cs
+    - name: every-min-azure-blob
+      enabled: true
+      schedule: "* * * * *"
+      compressionType: gzip
+      storageName: azure-blob
     - name: weekly
       enabled: true
       schedule: "0 0 * * 0"

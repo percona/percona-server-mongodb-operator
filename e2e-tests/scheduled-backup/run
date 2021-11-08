@@ -71,12 +71,14 @@ wait_cron ${cluster%%-rs0}-backup-every-min-minio
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
     wait_cron ${cluster%%-rs0}-backup-every-min-aws-s3
     wait_cron ${cluster%%-rs0}-backup-every-min-gcp-cs
+    wait_cron ${cluster%%-rs0}-backup-every-min-azure-blob
 fi
 
 compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-minio
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
     compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-aws-s3
     compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-gcp-cs
+    compare_kubectl cronjob/${cluster%%-rs0}-backup-every-min-azure-blob
 fi
 sleep 35
 
@@ -84,8 +86,10 @@ apply_cluster "$test_dir/conf/$cluster.yml"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
     backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
     backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
+    backup_name_azure=$(kubectl_bin get psmdb-backup | grep azure-blob | awk '{print$1}' | head -1)
     wait_backup "$backup_name_aws"
     wait_backup "$backup_name_gcp"
+    wait_backup "$backup_name_azure"
 fi
 
 backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print$1}' | head -1)
@@ -114,12 +118,19 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
     curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip >/dev/null
     run_restore "$backup_name_gcp" 3
     wait_restore "$backup_name_gcp" 3
+
+    desc 'check backup and restore -- azure-blob'
+    backup_dest_azure=$(get_backup_dest "$backup_name_azure")
+    curl -s "https://pxcperator.blob.core.windows.net/operato-test-storage/${backup_dest_azure}_rs0.dump.gz" | gunzip >/dev/null
+    run_restore "$backup_name_azure" 3
+    wait_restore "$backup_name_azure" 3
 fi
 
 unlabel_node
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
     kubectl patch psmdb-backup -n "$namespace" "$backup_name_aws" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
     kubectl patch psmdb-backup -n "$namespace" "$backup_name_gcp" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
+    kubectl patch psmdb-backup -n "$namespace" "$backup_name_azure" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
 fi
 kubectl patch psmdb-backup -n "$namespace" "$backup_name_minio" --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"
 
