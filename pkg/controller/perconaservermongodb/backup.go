@@ -238,23 +238,46 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		}
 	}
 
-	v, err := pbm.C.GetConfigVar("pitr.enabled")
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return nil
-	}
+	val, err := pbm.C.GetConfigVar("pitr.enabled")
 	if err != nil {
-		return errors.Wrap(err, "failed to get current pitr status")
-	}
+		if !errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.Wrap(err, "get pitr.enabled")
+		}
 
-	var enabled = v.(bool)
-
-	if enabled == cr.Spec.Backup.PITR.Enabled {
 		return nil
 	}
 
-	err = pbm.C.SetConfigVar("pitr.enabled", strconv.FormatBool(cr.Spec.Backup.PITR.Enabled))
+	enabled, ok := val.(bool)
+	if !ok {
+		return errors.Wrap(err, "unexpected value of pitr.enabled")
+	}
+
+	if enabled != cr.Spec.Backup.PITR.Enabled {
+		val := strconv.FormatBool(cr.Spec.Backup.PITR.Enabled)
+		if err := pbm.C.SetConfigVar("pitr.enabled", val); err != nil {
+			return errors.Wrap(err, "update pitr.enabled")
+		}
+	}
+
+	val, err = pbm.C.GetConfigVar("pitr.oplogSpanMin")
 	if err != nil {
-		return errors.Wrap(err, "failed to update pitr status")
+		if !errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.Wrap(err, "get pitr.oplogSpanMin")
+		}
+
+		return nil
+	}
+
+	oplogSpanMin, ok := val.(float64)
+	if !ok {
+		return errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
+	}
+
+	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin {
+		val := strconv.FormatFloat(cr.Spec.Backup.PITR.OplogSpanMin, 'f', -1, 64)
+		if err := pbm.C.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
+			return errors.Wrap(err, "update pitr.oplogSpanMin")
+		}
 	}
 
 	return nil
