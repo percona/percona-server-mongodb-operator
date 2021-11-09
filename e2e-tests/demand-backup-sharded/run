@@ -100,7 +100,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-	curl -s "https://pxcperator.blob.core.windows.net/operato-test-storage/${backup_dest_azure}_rs0.dump.gz" | gunzip >/dev/null
+	curl -s "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz" | gunzip >/dev/null
 	run_restore $backup_name_azure 3 1 "-mongos"
 	wait_restore $backup_name_azure 3 1 "-mongos"
 fi
