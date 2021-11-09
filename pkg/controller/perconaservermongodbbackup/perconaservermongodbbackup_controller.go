@@ -22,6 +22,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 var log = logf.Log.WithName("controller_perconaservermongodbbackup")
@@ -129,7 +130,22 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, errors.Wrap(err, "fields check")
 	}
 
-	bcp, err := r.newBackup(cr)
+	cluster := &psmdbv1.PerconaServerMongoDB{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
+	if err != nil {
+		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
+	}
+
+	svr, err := version.Server()
+	if err != nil {
+		return rr, errors.Wrapf(err, "fetch server version")
+	}
+
+	if err := cluster.CheckNSetDefaults(svr.Platform, log); err != nil {
+		return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
+	}
+
+	bcp, err := r.newBackup(cluster, cr)
 	if err != nil {
 		return rr, errors.Wrap(err, "create backup object")
 	}
@@ -140,7 +156,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 		return rr, errors.Wrap(err, "failed to run finalizer")
 	}
 
-	status, err = r.reconcile(cr, bcp)
+	status, err = r.reconcile(cluster, cr, bcp)
 	if err != nil {
 		return rr, errors.Wrap(err, "reconcile backup")
 	}
@@ -149,14 +165,12 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 }
 
 // reconcile backup. firstly we check if there are concurrent jobs running
-func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServerMongoDBBackup, bcp *Backup) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
+func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
+	cluster *psmdbv1.PerconaServerMongoDB,
+	cr *psmdbv1.PerconaServerMongoDBBackup,
+	bcp *Backup,
+) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
-
-	cluster := &psmdbv1.PerconaServerMongoDB{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
-	if err != nil {
-		return status, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
-	}
 
 	if err := cluster.CanBackup(); err != nil {
 		return status, errors.Wrap(err, "failed to run backup")
@@ -189,7 +203,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(cr *psmdbv1.PerconaServe
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *psmdbv1.PerconaServerMongoDBBackup, b *Backup) error {
-	var err error = nil
+	var err error
 	if cr.ObjectMeta.DeletionTimestamp == nil {
 		return nil
 	}
@@ -225,7 +239,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(cr *psmdbv1.PerconaSe
 	if err != nil {
 		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
 		// so try to update whole CR
-		//TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
+		// TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
 		err := r.client.Update(context.TODO(), cr)
 		if err != nil {
 			return errors.Wrap(err, "send update")
