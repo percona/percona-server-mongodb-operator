@@ -534,7 +534,6 @@ type BackupStorageS3Spec struct {
 }
 
 type BackupStorageAzureSpec struct {
-	Account           string `json:"account,omitempty"`
 	Container         string `json:"container,omitempty"`
 	Prefix            string `json:"prefix,omitempty"`
 	CredentialsSecret string `json:"credentialsSecret"`

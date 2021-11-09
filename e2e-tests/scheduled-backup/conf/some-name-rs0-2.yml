@@ -41,7 +41,6 @@ spec:
       azure-blob:
         type: azure
         azure:
-          account: k8soperators
           container: operator-testing
           prefix: psmdb
           credentialsSecret: azure-secret

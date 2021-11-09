@@ -24,10 +24,11 @@ import (
 )
 
 const (
-	agentContainerName          = "backup-agent"
-	awsAccessKeySecretKey       = "AWS_ACCESS_KEY_ID"
-	awsSecretAccessKeySecretKey = "AWS_SECRET_ACCESS_KEY"
-	azureStorageKeySecretKey    = "AZURE_STORAGE_KEY"
+	agentContainerName               = "backup-agent"
+	awsAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
+	awsSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
+	azureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
+	azureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 )
 
 type PBM struct {
@@ -173,11 +174,11 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 		conf.Storage = pbm.StorageConf{
 			Type: pbm.StorageAzure,
 			Azure: azure.Conf{
-				Account:   stg.Azure.Account,
+				Account:   string(azureSecret.Data[azureStorageAccountNameSecretKey]),
 				Container: stg.Azure.Container,
 				Prefix:    stg.Azure.Prefix,
 				Credentials: azure.Credentials{
-					Key: string(azureSecret.Data[azureStorageKeySecretKey]),
+					Key: string(azureSecret.Data[azureStorageAccountKeySecretKey]),
 				},
 			},
 		}
