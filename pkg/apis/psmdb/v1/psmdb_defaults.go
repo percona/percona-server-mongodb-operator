@@ -117,7 +117,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	timeoutSecondsDefault := int32(5)
 	initialDelaySecondsDefault := int32(90)
 	periodSecondsDefault := int32(10)
-	successThresholdDefault := int32(1)
 	failureThresholdDefault := int32(12)
 	if cr.CompareVersion("1.4.0") >= 0 {
 		initialDelaySecondsDefault = int32(60)
@@ -188,22 +187,19 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 
-		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
+		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds < 1 {
 			cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
 		}
-		if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds == 0 {
+		if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds < 1 {
 			cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
 		}
-		if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds == 0 {
+		if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds < 1 {
 			cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDefault
 		}
-		if cr.Spec.Sharding.Mongos.LivenessProbe.SuccessThreshold == 0 {
-			cr.Spec.Sharding.Mongos.LivenessProbe.SuccessThreshold = successThresholdDefault
-		}
-		if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold == 0 {
+		if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold < 1 {
 			cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
 		}
-		if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
+		if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds < 1 {
 			cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
 		}
 
@@ -229,19 +225,19 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 
-		if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = 10
 		}
-		if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = 2
 		}
-		if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds == 0 {
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = 1
 		}
-		if cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold == 0 {
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold = 1
 		}
-		if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold == 0 {
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = 3
 		}
 
@@ -344,19 +340,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 
-		if replset.LivenessProbe.InitialDelaySeconds == 0 {
+		if replset.LivenessProbe.InitialDelaySeconds < 1 {
 			replset.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
 		}
-		if replset.LivenessProbe.TimeoutSeconds == 0 {
+		if replset.LivenessProbe.TimeoutSeconds < 1 {
 			replset.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
 		}
-		if replset.LivenessProbe.PeriodSeconds == 0 {
+		if replset.LivenessProbe.PeriodSeconds < 1 {
 			replset.LivenessProbe.PeriodSeconds = periodSecondsDefault
 		}
-		if replset.LivenessProbe.SuccessThreshold == 0 {
-			replset.LivenessProbe.SuccessThreshold = successThresholdDefault
-		}
-		if replset.LivenessProbe.FailureThreshold == 0 {
+		if replset.LivenessProbe.FailureThreshold < 1 {
 			replset.LivenessProbe.FailureThreshold = failureThresholdDefault
 		}
 
@@ -370,22 +363,23 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 
-		if replset.ReadinessProbe.InitialDelaySeconds == 0 {
+		if replset.ReadinessProbe.InitialDelaySeconds < 1 {
 			replset.ReadinessProbe.InitialDelaySeconds = 10
 		}
-		if replset.ReadinessProbe.TimeoutSeconds == 0 {
+		if replset.ReadinessProbe.TimeoutSeconds < 1 {
 			replset.ReadinessProbe.TimeoutSeconds = 2
 		}
-		if replset.ReadinessProbe.PeriodSeconds == 0 {
+		if replset.ReadinessProbe.PeriodSeconds < 1 {
 			replset.ReadinessProbe.PeriodSeconds = 3
 		}
-		if replset.ReadinessProbe.SuccessThreshold == 0 {
+		if replset.ReadinessProbe.SuccessThreshold < 1 {
 			replset.ReadinessProbe.SuccessThreshold = 1
 		}
-		if replset.ReadinessProbe.FailureThreshold == 0 {
-			replset.ReadinessProbe.FailureThreshold = 8
+		if replset.ReadinessProbe.FailureThreshold < 1 {
 			if cr.CompareVersion("1.11.0") >= 0 && replset.Name == ConfigReplSetName {
 				replset.ReadinessProbe.FailureThreshold = 3
+			} else {
+				replset.ReadinessProbe.FailureThreshold = 8
 			}
 		}
 
@@ -570,19 +564,19 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if nv.LivenessProbe == nil {
 		nv.LivenessProbe = new(LivenessProbeExtended)
 	}
-	if nv.LivenessProbe.InitialDelaySeconds == 0 {
+	if nv.LivenessProbe.InitialDelaySeconds < 1 {
 		nv.LivenessProbe.InitialDelaySeconds = rs.LivenessProbe.InitialDelaySeconds
 	}
-	if nv.LivenessProbe.TimeoutSeconds == 0 {
+	if nv.LivenessProbe.TimeoutSeconds < 1 {
 		nv.LivenessProbe.TimeoutSeconds = rs.LivenessProbe.TimeoutSeconds
 	}
-	if nv.LivenessProbe.PeriodSeconds == 0 {
+	if nv.LivenessProbe.PeriodSeconds < 1 {
 		nv.LivenessProbe.PeriodSeconds = rs.LivenessProbe.PeriodSeconds
 	}
-	if nv.LivenessProbe.FailureThreshold == 0 {
+	if nv.LivenessProbe.FailureThreshold < 1 {
 		nv.LivenessProbe.FailureThreshold = rs.LivenessProbe.FailureThreshold
 	}
-	if nv.LivenessProbe.StartupDelaySeconds == 0 {
+	if nv.LivenessProbe.StartupDelaySeconds < 1 {
 		nv.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
 	}
 	if nv.LivenessProbe.Handler.Exec == nil {
@@ -612,16 +606,16 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 			},
 		}
 	}
-	if nv.ReadinessProbe.InitialDelaySeconds == 0 {
+	if nv.ReadinessProbe.InitialDelaySeconds < 1 {
 		nv.ReadinessProbe.InitialDelaySeconds = rs.ReadinessProbe.InitialDelaySeconds
 	}
-	if nv.ReadinessProbe.TimeoutSeconds == 0 {
+	if nv.ReadinessProbe.TimeoutSeconds < 1 {
 		nv.ReadinessProbe.TimeoutSeconds = rs.ReadinessProbe.TimeoutSeconds
 	}
-	if nv.ReadinessProbe.PeriodSeconds == 0 {
+	if nv.ReadinessProbe.PeriodSeconds < 1 {
 		nv.ReadinessProbe.PeriodSeconds = rs.ReadinessProbe.PeriodSeconds
 	}
-	if nv.ReadinessProbe.FailureThreshold == 0 {
+	if nv.ReadinessProbe.FailureThreshold < 1 {
 		nv.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
 	}
 
