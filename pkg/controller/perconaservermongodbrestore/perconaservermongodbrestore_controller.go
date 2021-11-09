@@ -25,6 +25,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 var log = logf.Log.WithName("controller_perconaservermongodbrestore")
@@ -146,6 +147,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 
 	if cluster.Spec.Unmanaged {
 		return status, errors.New("cluster is unmanaged")
+	}
+
+	svr, err := version.Server()
+	if err != nil {
+		return status, errors.Wrapf(err, "fetch server version")
+	}
+
+	if err := cluster.CheckNSetDefaults(svr.Platform, log); err != nil {
+		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
 	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
@@ -300,7 +310,7 @@ func runRestore(backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (
 			},
 		}
 	case pitr.Type == psmdbv1.PITRestoreTypeDate:
-		var ts = pitr.Date.Unix()
+		ts := pitr.Date.Unix()
 
 		if _, err := pbmc.GetPITRChunkContains(ts); err != nil {
 			return "", err
@@ -389,7 +399,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1.PerconaS
 	if err != nil {
 		// maybe it's k8s v1.10 and earlier (e.g. oc3.9) that doesn't support status updates
 		// so try to update whole CR
-		//TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
+		// TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
 		err := r.client.Update(context.TODO(), cr)
 		if err != nil {
 			return fmt.Errorf("send update: %v", err)
