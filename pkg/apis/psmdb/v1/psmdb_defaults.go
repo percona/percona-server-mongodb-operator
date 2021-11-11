@@ -234,7 +234,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = 1
 		}
-		if cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold < 1 {
+		if cr.CompareVersion("1.11.0") >= 0 && cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold == 0 {
+			cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold = 1
+		} else if cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold < 0 {
+			// skip "0" for compartibility but still not allow invalid value
 			cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold = 1
 		}
 		if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold < 1 {
