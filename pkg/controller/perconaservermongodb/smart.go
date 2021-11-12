@@ -54,14 +54,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	statefulSetChanged := false
-	for _, pod := range list.Items {
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
-			statefulSetChanged = true
-			break
-		}
+	sfsChanged, err := isSfsChanged(sfs, &list)
+	if err != nil {
+		return errors.Wrap(err, "is statefulSet changed")
 	}
-	if !statefulSetChanged {
+	if !sfsChanged {
 		return nil
 	}
 
@@ -75,31 +72,15 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrapf(err, "get config statefulset %s/%s", cr.Namespace, cr.Name+"-"+api.ConfigReplSetName)
 		}
-		cfgLabels := map[string]string{
-			"app.kubernetes.io/name":       "percona-server-mongodb",
-			"app.kubernetes.io/instance":   cr.Name,
-			"app.kubernetes.io/replset":    api.ConfigReplSetName,
-			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-			"app.kubernetes.io/part-of":    "percona-server-mongodb",
+		cfgList, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
+		if err != nil {
+			return errors.Wrap(err, "get cfg pod list")
 		}
-		cfgList := corev1.PodList{}
-		if err := r.client.List(context.TODO(),
-			&cfgList,
-			&k8sclient.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(cfgLabels),
-			},
-		); err != nil {
-			return fmt.Errorf("get pod list: %v", err)
+		cfgSfsChanged, err := isSfsChanged(&cfgSfs, &cfgList)
+		if err != nil {
+			return errors.Wrap(err, "is cfg statefulSet changed")
 		}
-		cfgChanged := false
-		for _, pod := range cfgList.Items {
-			if pod.ObjectMeta.Labels["controller-revision-hash"] != cfgSfs.Status.UpdateRevision {
-				cfgChanged = true
-				break
-			}
-		}
-		if cfgChanged {
+		if cfgSfsChanged {
 			log.Info("waiting for config RS update")
 			return nil
 		}
@@ -287,4 +268,16 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMong
 	}
 
 	return errors.New("reach pod wait limit")
+}
+
+func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) (bool, error) {
+	for _, pod := range podList.Items {
+		if pod.Labels["app.kubernetes.io/component"] != sfs.Labels["app.kubernetes.io/component"] {
+			continue
+		}
+		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
+			return true, nil
+		}
+	}
+	return false, nil
 }
