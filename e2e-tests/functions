@@ -242,6 +242,7 @@ wait_restore() {
 	echo
 	set -o xtrace
 
+  sleep 20
 	simple_data_check "${cluster}" "${2}" "$isSharded" "$cluster_pfx"
 }
 
