@@ -10,7 +10,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.11.0
-  image: percona/percona-server-mongodb:4.4.8-9
+  image: percona/percona-server-mongodb:4.4.9-10
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -90,8 +90,14 @@ spec:
 #      initialDelaySeconds: 60
 #      periodSeconds: 30
 #      successThreshold: 1
-#      timeoutSeconds: 5
+#      timeoutSeconds: 10
 #      startupDelaySeconds: 7200
+#    readinessProbe:
+#      failureThreshold: 8
+#      initialDelaySeconds: 10
+#      periodSeconds: 3
+#      successThreshold: 1
+#      timeoutSeconds: 2
 #    runtimeClassName: image-rc
 #    sidecars:
 #    - image: busybox
@@ -263,6 +269,19 @@ spec:
 #            blockCompressor: snappy
 #          indexConfig:
 #            prefixCompression: true
+#      livenessProbe:
+#        failureThreshold: 4
+#        initialDelaySeconds: 60
+#        periodSeconds: 30
+#        successThreshold: 1
+#        timeoutSeconds: 10
+#        startupDelaySeconds: 7200
+#      readinessProbe:
+#        failureThreshold: 3
+#        initialDelaySeconds: 10
+#        periodSeconds: 3
+#        successThreshold: 1
+#        timeoutSeconds: 2
 #      runtimeClassName: image-rc
 #      sidecars:
 #      - image: busybox
@@ -327,6 +346,19 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
+#      livenessProbe:
+#        failureThreshold: 4
+#        initialDelaySeconds: 60
+#        periodSeconds: 30
+#        successThreshold: 1
+#        timeoutSeconds: 10
+#        startupDelaySeconds: 7200
+#      readinessProbe:
+#        failureThreshold: 3
+#        initialDelaySeconds: 10
+#        periodSeconds: 3
+#        successThreshold: 1
+#        timeoutSeconds: 2
 #      runtimeClassName: image-rc
 #      sidecars:
 #      - image: busybox
