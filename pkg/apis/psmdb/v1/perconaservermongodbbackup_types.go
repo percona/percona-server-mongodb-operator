@@ -34,15 +34,16 @@ const (
 type PerconaServerMongoDBBackupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	State          BackupState          `json:"state,omitempty"`
-	StartAt        *metav1.Time         `json:"start,omitempty"`
-	CompletedAt    *metav1.Time         `json:"completed,omitempty"`
-	LastTransition *metav1.Time         `json:"lastTransition,omitempty"`
-	Destination    string               `json:"destination,omitempty"`
-	StorageName    string               `json:"storageName,omitempty"`
-	S3             *BackupStorageS3Spec `json:"s3,omitempty"`
-	PBMname        string               `json:"pbmName,omitempty"`
-	Error          string               `json:"error,omitempty"`
+	State          BackupState             `json:"state,omitempty"`
+	StartAt        *metav1.Time            `json:"start,omitempty"`
+	CompletedAt    *metav1.Time            `json:"completed,omitempty"`
+	LastTransition *metav1.Time            `json:"lastTransition,omitempty"`
+	Destination    string                  `json:"destination,omitempty"`
+	StorageName    string                  `json:"storageName,omitempty"`
+	S3             *BackupStorageS3Spec    `json:"s3,omitempty"`
+	Azure          *BackupStorageAzureSpec `json:"azure,omitempty"`
+	PBMname        string                  `json:"pbmName,omitempty"`
+	Error          string                  `json:"error,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
