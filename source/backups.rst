@@ -84,13 +84,21 @@ Here is an example of `deploy/cr.yaml <https://github.com/percona/percona-server
         storageName: s3-us-west
      ...
 
-if you use some S3-compatible storage instead of the original
+If you use some S3-compatible storage instead of the original
 Amazon S3, the `endpointURL <https://docs.min.io/docs/aws-cli-with-minio.html>`_ is needed in the ``s3`` subsection which points to the actual cloud used for backups and
 is specific to the cloud provider. For example, using `Google Cloud <https://cloud.google.com>`_ involves the `following <https://storage.googleapis.com>`_ endpointUrl:
 
 .. code:: yaml
 
    endpointUrl: https://storage.googleapis.com
+
+Also, you can avoid storing backup files in the S3 bucket root. Specify an
+additional ``prefix``, and a subdirectory with the specified name will be
+created to store backup files in it:
+
+.. code:: yaml
+
+   prefix: "mongobackups"
 
 The options within these three subsections are further explained in the
 :ref:`Operator Custom Resource options<operator.backup-section>`.
@@ -234,7 +242,7 @@ restoration can be done in the following way.
      subsection instead of ``spec.backupName`` field to point on the appropriate
      S3-compatible storage. This ``backupSource`` subsection should contain
      a ``destination`` key equal to the s3 bucket with a special ``s3://``
-     prefix, followed by necessary S3 configuration keys, same as in
+     specifier, followed by necessary S3 configuration keys, same as in
      ``deploy/cr.yaml`` file:
 
      .. code-block:: yaml
@@ -245,6 +253,7 @@ restoration can be done in the following way.
           s3:
             credentialsSecret: my-cluster-name-backup-s3
             region: us-west-2
+            prefix: ""
             endpointUrl: https://URL-OF-THE-S3-COMPATIBLE-STORAGE
    * you can also use a ``storageName`` key to specify the exact name of the
      storage (the actual storage should be already defined in the
@@ -319,6 +328,7 @@ Following steps are needed to roll back the cluster to a specific date and time:
           s3:
             credentialsSecret: my-cluster-name-backup-s3
             region: us-west-2
+            prefix: ""
             endpointUrl: https://URL-OF-THE-S3-COMPATIBLE-STORAGE
    * you can also use a ``storageName`` key to specify the exact name of the
      storage (the actual storage should be already defined in the
