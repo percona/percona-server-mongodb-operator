@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"strings"
 	"time"
 
@@ -23,9 +24,11 @@ import (
 )
 
 const (
-	agentContainerName          = "backup-agent"
-	awsAccessKeySecretKey       = "AWS_ACCESS_KEY_ID"
-	awsSecretAccessKeySecretKey = "AWS_SECRET_ACCESS_KEY"
+	agentContainerName               = "backup-agent"
+	awsAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
+	awsSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
+	azureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
+	azureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 )
 
 type PBM struct {
@@ -160,6 +163,25 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 		}
 	case api.BackupStorageFilesystem:
 		return errors.New("filesystem backup storage not supported yet, skipping storage name")
+	case api.BackupStorageAzure:
+		if stg.Azure.CredentialsSecret == "" {
+			return errors.New("no credentials specified for the secret name")
+		}
+		azureSecret, err := secret(b.k8c, b.namespace, stg.Azure.CredentialsSecret)
+		if err != nil {
+			return errors.Wrap(err, "getting azure credentials secret name")
+		}
+		conf.Storage = pbm.StorageConf{
+			Type: pbm.StorageAzure,
+			Azure: azure.Conf{
+				Account:   string(azureSecret.Data[azureStorageAccountNameSecretKey]),
+				Container: stg.Azure.Container,
+				Prefix:    stg.Azure.Prefix,
+				Credentials: azure.Credentials{
+					Key: string(azureSecret.Data[azureStorageAccountKeySecretKey]),
+				},
+			},
+		}
 	default:
 		return errors.New("unsupported backup storage type")
 	}
