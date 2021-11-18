@@ -61,11 +61,16 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]f
 			Time: time.Unix(time.Now().Unix(), 0),
 		},
 		S3:    &stg.S3,
+		Azure: &stg.Azure,
 		State: api.BackupStateRequested,
 	}
 
 	if stg.S3.Prefix != "" {
 		status.Destination = stg.S3.Prefix + "/"
+	}
+
+	if stg.Azure.Prefix != "" {
+		status.Destination = stg.Azure.Prefix + "/"
 	}
 	status.Destination += status.PBMname
 
