@@ -533,16 +533,24 @@ type BackupStorageS3Spec struct {
 	CredentialsSecret string `json:"credentialsSecret"`
 }
 
+type BackupStorageAzureSpec struct {
+	Container         string `json:"container,omitempty"`
+	Prefix            string `json:"prefix,omitempty"`
+	CredentialsSecret string `json:"credentialsSecret"`
+}
+
 type BackupStorageType string
 
 const (
 	BackupStorageFilesystem BackupStorageType = "filesystem"
 	BackupStorageS3         BackupStorageType = "s3"
+	BackupStorageAzure      BackupStorageType = "azure"
 )
 
 type BackupStorageSpec struct {
-	Type BackupStorageType   `json:"type"`
-	S3   BackupStorageS3Spec `json:"s3,omitempty"`
+	Type  BackupStorageType      `json:"type"`
+	S3    BackupStorageS3Spec    `json:"s3,omitempty"`
+	Azure BackupStorageAzureSpec `json:"azure,omitempty"`
 }
 
 type PITRSpec struct {
