@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -47,12 +48,12 @@ func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongo
 	return secrets, errors.Wrap(err, "get user secrets")
 }
 
-func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (Credentials, error) {
+func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (psmdb.Credentials, error) {
 	return r.getCredentials(cr, api.UserSecretName(cr), role)
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (Credentials, error) {
-	creds := Credentials{}
+func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (psmdb.Credentials, error) {
+	creds := psmdb.Credentials{}
 	usersSecret, err := r.getUserSecret(cr, name)
 	if err != nil {
 		return creds, errors.Wrap(err, "failed to get user secret")
@@ -91,8 +92,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	)
 	if err == nil {
 		return nil
+	} else if k8serrors.IsNotFound(err) && cr.Spec.Unmanaged {
+		return errors.Errorf("users secret '%s' is required for unmanaged clusters", cr.Spec.Secrets.Users)
 	} else if !k8serrors.IsNotFound(err) {
-		return fmt.Errorf("get users secret: %v", err)
+		return errors.Wrap(err, "get users secret")
 	}
 
 	data := make(map[string][]byte)
@@ -131,9 +134,4 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 	}
 
 	return nil
-}
-
-type Credentials struct {
-	Username string
-	Password string
 }

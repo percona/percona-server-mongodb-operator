@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -76,7 +77,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		return errors.Wrap(err, "check sys users data changes")
 	}
 
-	if !dataChanged {
+	if !dataChanged || cr.Spec.Unmanaged {
 		return nil
 	}
 
@@ -101,7 +102,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 
 			pods = append(pods, mongosList.Items...)
 
-			cfgPodlist, err := r.getRSPods(cr, api.ConfigReplSetName)
+			cfgPodlist, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
 			if err != nil {
 				return errors.Wrap(err, "failed to get mongos pods")
 			}

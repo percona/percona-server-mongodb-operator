@@ -42,8 +42,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var secretFileMode int32 = 288
-var log = logf.Log.WithName("controller_psmdb")
+var (
+	secretFileMode int32 = 288
+	log                  = logf.Log.WithName("controller_psmdb")
+)
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -347,9 +349,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			"app.kubernetes.io/replset":    replset.Name,
 			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 			"app.kubernetes.io/part-of":    "percona-server-mongodb",
+			"app.kubernetes.io/component":  "mongod",
 		}
 
-		pods, err := r.getRSPods(cr, replset.Name)
+		pods, err := psmdb.GetRSPods(r.client, cr, replset.Name)
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
@@ -360,14 +363,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			return reconcile.Result{}, errors.Wrap(err, "get pods list for mongos")
 		}
 
-		_, err = r.reconcileStatefulSet(false, cr, replset, matchLabels, internalKey)
+		_, err = r.reconcileStatefulSet(cr, replset, matchLabels, internalKey)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
 		}
 
 		if replset.Arbiter.Enabled {
-			_, err := r.reconcileStatefulSet(true, cr, replset, matchLabels, internalKey)
+			matchLabels["app.kubernetes.io/component"] = "arbiter"
+			_, err := r.reconcileStatefulSet(cr, replset, matchLabels, internalKey)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
@@ -380,6 +384,25 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 			if err != nil && !k8serrors.IsNotFound(err) {
 				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
+			}
+		}
+
+		if replset.NonVoting.Enabled {
+			matchLabels["app.kubernetes.io/component"] = "nonVoting"
+			_, err := r.reconcileStatefulSet(cr, replset, matchLabels, internalKey)
+			if err != nil {
+				err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
+				return reconcile.Result{}, err
+			}
+		} else {
+			err := r.client.Delete(context.TODO(), psmdb.NewStatefulSet(
+				cr.Name+"-"+replset.Name+"-nv",
+				cr.Namespace,
+			))
+
+			if err != nil && !k8serrors.IsNotFound(err) {
+				err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
 			}
 		}
@@ -548,7 +571,8 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 			continue
 		}
 
-		if v.Labels["app.kubernetes.io/component"] == "arbiter" {
+		component := v.Labels["app.kubernetes.io/component"]
+		if component == "arbiter" || component == "nonVoting" {
 			continue
 		}
 
@@ -752,29 +776,52 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
 
 		if rs.Configuration == "" {
-			err := deleteConfigMapIfExists(r.client, cr, name)
-			if err != nil {
+			if err := deleteConfigMapIfExists(r.client, cr, name); err != nil {
 				return errors.Wrap(err, "failed to delete mongod config map")
+			}
+		} else {
+			err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: cr.Namespace,
+				},
+				Data: map[string]string{
+					"mongod.conf": rs.Configuration,
+				},
+			})
+			if err != nil {
+				return errors.Wrap(err, "create or update config map")
+			}
+		}
+
+		if !rs.NonVoting.Enabled {
+			continue
+		}
+
+		name = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
+		if rs.NonVoting.Configuration == "" {
+			if err := deleteConfigMapIfExists(r.client, cr, name); err != nil {
+				return errors.Wrap(err, "failed to delete nonvoting mongod config map")
 			}
 
 			continue
 		}
 
 		err := r.createOrUpdateConfigMap(cr, &corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: cr.Namespace,
 			},
 			Data: map[string]string{
-				"mongod.conf": rs.Configuration,
+				"mongod.conf": rs.NonVoting.Configuration,
 			},
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create or update nonvoting config map")
 		}
 	}
 
@@ -814,7 +861,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.Percona
 }
 
 func deleteConfigMapIfExists(cl client.Client, cr *api.PerconaServerMongoDB, cmName string) error {
-	var configMap = &corev1.ConfigMap{}
+	configMap := &corev1.ConfigMap{}
 
 	err := cl.Get(context.TODO(), types.NamespacedName{
 		Namespace: cr.Namespace,
@@ -906,7 +953,30 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig)
+	cfgPods, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
+	if err != nil {
+		return errors.Wrap(err, "get configsvr pods")
+	}
+
+	// wait all configsvr pods to prevent unnecessary updates to mongos deployment
+	if int(cr.Spec.Sharding.ConfigsvrReplSet.Size) > len(cfgPods.Items) {
+		return nil
+	}
+
+	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
+	for _, pod := range cfgPods.Items {
+		host, err := psmdb.MongoHost(r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
+		if err != nil {
+			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
+		}
+		cfgInstances = append(cfgInstances, host)
+	}
+
+	for _, ext := range cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes {
+		cfgInstances = append(cfgInstances, ext.Host)
+	}
+
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig, cfgInstances)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
@@ -1024,29 +1094,49 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 }
 
 // TODO: reduce cyclomatic complexity
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *api.PerconaServerMongoDB,
-	replset *api.ReplsetSpec, matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
+	matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
 
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
-	matchLabels["app.kubernetes.io/component"] = "mongod"
 	multiAZ := replset.MultiAZ
 	pdbspec := replset.PodDisruptionBudget
 	resources := replset.Resources
-
-	if arbiter {
-		sfsName += "-arbiter"
-		containerName += "-arbiter"
-		size = replset.Arbiter.Size
-		matchLabels["app.kubernetes.io/component"] = "arbiter"
-		multiAZ = replset.Arbiter.MultiAZ
-		pdbspec = replset.Arbiter.PodDisruptionBudget
-		resources = replset.Arbiter.Resources
-	}
+	volumeSpec := replset.VolumeSpec
+	podSecurityContext := replset.PodSecurityContext
+	containerSecurityContext := replset.ContainerSecurityContext
+	livenessProbe := replset.LivenessProbe
+	readinessProbe := replset.ReadinessProbe
+	configuration := replset.Configuration
+	configName := psmdb.MongodCustomConfigName(cr.Name, replset.Name)
 
 	if replset.ClusterRole == api.ClusterRoleConfigSvr {
 		matchLabels["app.kubernetes.io/component"] = api.ConfigReplSetName
+	}
+
+	switch matchLabels["app.kubernetes.io/component"] {
+	case "arbiter":
+		sfsName += "-arbiter"
+		containerName += "-arbiter"
+		size = replset.Arbiter.Size
+		multiAZ = replset.Arbiter.MultiAZ
+		pdbspec = replset.Arbiter.PodDisruptionBudget
+		resources = replset.Arbiter.Resources
+	case "nonVoting":
+		sfsName += "-nv"
+		containerName += "-nv"
+		size = replset.NonVoting.Size
+		multiAZ = replset.NonVoting.MultiAZ
+		pdbspec = replset.NonVoting.PodDisruptionBudget
+		resources = replset.NonVoting.Resources
+		podSecurityContext = replset.NonVoting.PodSecurityContext
+		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
+		configuration = replset.NonVoting.Configuration
+		configName = psmdb.MongodCustomConfigName(cr.Name, replset.Name+"-nv")
+		livenessProbe = replset.NonVoting.LivenessProbe
+		readinessProbe = replset.NonVoting.ReadinessProbe
+		volumeSpec = replset.NonVoting.VolumeSpec
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -1069,13 +1159,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
 	}
 
-	customConfig, err := r.getCustomConfig(cr.Namespace, psmdb.MongodCustomConfigName(cr.Name, replset.Name))
+	customConfig, err := r.getCustomConfig(cr.Namespace, configName)
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, multiAZ, size, internalKeyName, inits,
-		log, customConfig, resources)
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels,
+		multiAZ, size, internalKeyName, inits, log, customConfig, resources,
+		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
+		configuration, configName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
@@ -1137,7 +1229,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			})
 	}
 
-	if arbiter {
+	if matchLabels["app.kubernetes.io/component"] == "arbiter" {
 		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 			corev1.Volume{
 				Name: psmdb.MongodDataVolClaimName,
@@ -1147,17 +1239,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			},
 		)
 	} else {
-		if replset.VolumeSpec.PersistentVolumeClaim != nil {
+		if volumeSpec.PersistentVolumeClaim != nil {
 			sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
-				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset.Labels, replset.VolumeSpec.PersistentVolumeClaim),
+				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset.Labels, volumeSpec.PersistentVolumeClaim),
 			}
 		} else {
 			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 				corev1.Volume{
 					Name: psmdb.MongodDataVolClaimName,
 					VolumeSource: corev1.VolumeSource{
-						HostPath: replset.VolumeSpec.HostPath,
-						EmptyDir: replset.VolumeSpec.EmptyDir,
+						HostPath: volumeSpec.HostPath,
+						EmptyDir: volumeSpec.EmptyDir,
 					},
 				},
 			)
@@ -1184,6 +1276,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(arbiter bool, cr *a
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, pmmC)
 		}
 	}
+
+	sfsSpec.Template.Spec.Volumes = multiAZ.WithSidecarVolumes(log, sfsSpec.Template.Spec.Volumes)
+	sfsSpec.VolumeClaimTemplates = multiAZ.WithSidecarPVCs(log, sfsSpec.VolumeClaimTemplates)
 
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
@@ -1348,9 +1443,17 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error
 
 	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
+	updateObject := false
 	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!isObjectMetaEqual(objectMeta, oldObjectMeta) {
+		!compareMaps(oldObjectMeta.GetLabels(), objectMeta.GetLabels()) {
+		updateObject = true
+	} else if _, ok := obj.(*corev1.Service); !ok {
+		// ignore annotations changes for Service object
+		// in case NodePort, to avoid port changing
+		updateObject = !compareMaps(oldObjectMeta.GetAnnotations(), objectMeta.GetAnnotations())
+	}
 
+	if updateObject {
 		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
@@ -1412,11 +1515,6 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 		UID:        ca.GetUID(),
 		Controller: &trueVar,
 	}, nil
-}
-
-func isObjectMetaEqual(old, new metav1.Object) bool {
-	return compareMaps(old.GetAnnotations(), new.GetAnnotations()) &&
-		compareMaps(old.GetLabels(), new.GetLabels())
 }
 
 func compareMaps(x, y map[string]string) bool {

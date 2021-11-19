@@ -7,7 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
@@ -15,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -24,9 +26,11 @@ import (
 )
 
 const (
-	agentContainerName          = "backup-agent"
-	awsAccessKeySecretKey       = "AWS_ACCESS_KEY_ID"
-	awsSecretAccessKeySecretKey = "AWS_SECRET_ACCESS_KEY"
+	agentContainerName               = "backup-agent"
+	awsAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
+	awsSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
+	azureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
+	azureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 )
 
 type PBM struct {
@@ -40,20 +44,7 @@ type PBM struct {
 func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 	rs := cluster.Spec.Replsets[0]
 
-	pods := &corev1.PodList{}
-	err := c.List(context.TODO(),
-		pods,
-		&client.ListOptions{
-			Namespace: cluster.Namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   cluster.Name,
-				"app.kubernetes.io/replset":    rs.Name,
-				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-				"app.kubernetes.io/part-of":    "percona-server-mongodb",
-			}),
-		},
-	)
+	pods, err := psmdb.GetRSPods(c, cluster, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
@@ -134,9 +125,63 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 	}, nil
 }
 
+// GetPriorities returns priorities to be used in PBM config.
+func (b *PBM) GetPriorities(k8sclient client.Client, cluster *api.PerconaServerMongoDB) (map[string]float64, error) {
+	priorities := make(map[string]float64)
+
+	usersSecret := corev1.Secret{}
+	err := k8sclient.Get(
+		context.TODO(),
+		types.NamespacedName{Name: cluster.Spec.Secrets.Users, Namespace: cluster.Namespace},
+		&usersSecret,
+	)
+	if err != nil {
+		return priorities, errors.Wrap(err, "get users secret")
+	}
+
+	c := psmdb.Credentials{
+		Username: string(usersSecret.Data["MONGODB_BACKUP_USER"]),
+		Password: string(usersSecret.Data["MONGODB_BACKUP_PASSWORD"]),
+	}
+
+	for _, rs := range cluster.Spec.Replsets {
+		// PBM selects nodes with higher priority, so we're assigning 0.5 to
+		// external nodes to run backups on nodes in the cluster.
+		for _, extNode := range rs.ExternalNodes {
+			priorities[extNode.HostPort()] = 0.5
+		}
+
+		cli, err := psmdb.MongoClient(k8sclient, cluster, *rs, c)
+		if err != nil {
+			return priorities, errors.Wrap(err, "get mongo client")
+		}
+
+		// If you explicitly set a subset of the replset nodes in the config,
+		// the remaining nodes will be automatically assigned priority 1.0,
+		// including the primary. That's why, we need to get primary nodes and
+		// set them in the config.
+		primary, err := psmdb.GetPrimaryPod(cli)
+		if err != nil {
+			return priorities, errors.Wrap(err, "get primary pod")
+		}
+		priorities[primary] = 0.5
+	}
+
+	return priorities, nil
+}
+
 // SetConfig sets the pbm config with storage defined in the cluster CR
 // by given storageName
-func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec) error {
+func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority map[string]float64) error {
+	conf := pbm.Config{
+		PITR: pbm.PITRConf{
+			Enabled: pitr.Enabled,
+		},
+		Backup: pbm.BackupConf{
+			Priority: priority,
+		},
+	}
+
 	switch stg.Type {
 	case api.BackupStorageS3:
 		if stg.S3.CredentialsSecret == "" {
@@ -146,33 +191,48 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec) error {
 		if err != nil {
 			return errors.Wrap(err, "getting s3 credentials secret name")
 		}
-		conf := pbm.Config{
-			PITR: pbm.PITRConf{
-				Enabled: pitr.Enabled,
-			},
-			Storage: pbm.StorageConf{
-				Type: pbm.StorageS3,
-				S3: s3.Conf{
-					Region:      stg.S3.Region,
-					EndpointURL: stg.S3.EndpointURL,
-					Bucket:      stg.S3.Bucket,
-					Prefix:      stg.S3.Prefix,
-					Credentials: s3.Credentials{
-						AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
-						SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
-					},
+		conf.Storage = pbm.StorageConf{
+			Type: pbm.StorageS3,
+			S3: s3.Conf{
+				Region:      stg.S3.Region,
+				EndpointURL: stg.S3.EndpointURL,
+				Bucket:      stg.S3.Bucket,
+				Prefix:      stg.S3.Prefix,
+				Credentials: s3.Credentials{
+					AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
+					SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
 				},
 			},
 		}
-		err = b.C.SetConfig(conf)
-		if err != nil {
-			return errors.Wrap(err, "write config")
-		}
 	case api.BackupStorageFilesystem:
 		return errors.New("filesystem backup storage not supported yet, skipping storage name")
+	case api.BackupStorageAzure:
+		if stg.Azure.CredentialsSecret == "" {
+			return errors.New("no credentials specified for the secret name")
+		}
+		azureSecret, err := secret(b.k8c, b.namespace, stg.Azure.CredentialsSecret)
+		if err != nil {
+			return errors.Wrap(err, "getting azure credentials secret name")
+		}
+		conf.Storage = pbm.StorageConf{
+			Type: pbm.StorageAzure,
+			Azure: azure.Conf{
+				Account:   string(azureSecret.Data[azureStorageAccountNameSecretKey]),
+				Container: stg.Azure.Container,
+				Prefix:    stg.Azure.Prefix,
+				Credentials: azure.Credentials{
+					Key: string(azureSecret.Data[azureStorageAccountKeySecretKey]),
+				},
+			},
+		}
 	default:
 		return errors.New("unsupported backup storage type")
 	}
+
+	if err := b.C.SetConfig(conf); err != nil {
+		return errors.Wrap(err, "write config")
+	}
+	time.Sleep(11 * time.Second) // give time to init new storage
 
 	return nil
 }
@@ -281,7 +341,7 @@ func (b *PBM) GetTimelinesPITR() ([]pbm.Timeline, error) {
 	}
 
 	for _, s := range shards {
-		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, now, nil)
+		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, primitive.Timestamp{T: uint32(now)}, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting timelines for %s", s.RS)
 		}
@@ -305,13 +365,33 @@ func (b *PBM) GetLatestTimelinePITR() (pbm.Timeline, error) {
 	return timelines[len(timelines)-1], nil
 }
 
+// PITRGetChunkContains returns a pitr slice chunk that belongs to the
+// given replica set and contains the given timestamp
+func (p *PBM) pitrGetChunkContains(rs string, ts primitive.Timestamp) (*pbm.PITRChunk, error) {
+	res := p.C.Conn.Database(pbm.DB).Collection(pbm.PITRChunksCollection).FindOne(
+		context.TODO(),
+		bson.D{
+			{"rs", rs},
+			{"start_ts", bson.M{"$lte": ts}},
+			{"end_ts", bson.M{"$gte": ts}},
+		},
+	)
+	if res.Err() != nil {
+		return nil, errors.Wrap(res.Err(), "get")
+	}
+
+	chnk := new(pbm.PITRChunk)
+	err := res.Decode(chnk)
+	return chnk, errors.Wrap(err, "decode")
+}
+
 func (b *PBM) GetPITRChunkContains(unixTS int64) (*pbm.PITRChunk, error) {
 	nodeInfo, err := b.C.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}
 
-	c, err := b.C.PITRGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
+	c, err := b.pitrGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errNoOplogsForPITR

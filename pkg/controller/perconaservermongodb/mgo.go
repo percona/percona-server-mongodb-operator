@@ -23,13 +23,27 @@ var sslDeprecatedVersion = v.Must(v.NewVersion("4.2"))
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
 	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
 
-	if replset.Size == 0 {
+	replsetSize := replset.Size
+
+	if replset.NonVoting.Enabled {
+		replsetSize += replset.NonVoting.Size
+	}
+
+	if replset.Arbiter.Enabled {
+		replsetSize += replset.Arbiter.Size
+	}
+
+	if replsetSize == 0 {
 		return api.AppStateReady, nil
 	}
 
 	// all pods needs to be scheduled to reconcile
-	if int(replset.Size) > len(pods.Items) {
+	if int(replsetSize) > len(pods.Items) {
 		return api.AppStateInit, nil
+	}
+
+	if cr.Spec.Unmanaged {
+		return api.AppStateReady, nil
 	}
 
 	cli, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
@@ -152,13 +166,46 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		case "arbiter":
 			member.ArbiterOnly = true
 			member.Priority = 0
-		case "mongod":
+		case "mongod", "cfg":
 			member.Tags = mongo.ReplsetTags{
 				"serviceName": cr.Name,
+			}
+		case "nonVoting":
+			member.Tags = mongo.ReplsetTags{
+				"serviceName": cr.Name,
+				"nonVoting":   "true",
 			}
 		}
 
 		members = append(members, member)
+	}
+
+	memberC := len(members)
+	for i, extNode := range replset.ExternalNodes {
+		if i+memberC >= mongo.MaxMembers {
+			log.Error(errReplsetLimit, "rs", replset.Name)
+			break
+		}
+
+		member := mongo.ConfigMember{
+			ID:           i + memberC,
+			Host:         extNode.HostPort(),
+			Votes:        extNode.Votes,
+			Priority:     extNode.Priority,
+			BuildIndexes: true,
+			Tags:         mongo.ReplsetTags{"external": "true"},
+		}
+
+		members = append(members, member)
+	}
+
+	if cnf.Members.FixTags(members) {
+		cnf.Members.SetVotes()
+
+		cnf.Version++
+		if err := mongo.WriteConfig(context.TODO(), cli, cnf); err != nil {
+			return api.AppStateError, errors.Wrap(err, "fix tags: write mongo config")
+		}
 	}
 
 	if cnf.Members.RemoveOld(members) {
@@ -171,7 +218,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		}
 	}
 
-	if cnf.Members.AddNew(members) {
+	if cnf.Members.AddNew(members) || cnf.Members.ExternalNodesChanged(members) {
 		cnf.Members.RemoveOld(members)
 		cnf.Members.SetVotes()
 
@@ -189,10 +236,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 	membersLive := 0
 	for _, member := range rsStatus.Members {
+		var tags mongo.ReplsetTags
+		for i := range cnf.Members {
+			if member.Id == cnf.Members[i].ID {
+				tags = cnf.Members[i].Tags
+				break
+			}
+		}
+		if _, ok := tags["external"]; ok {
+			continue
+		}
+
 		switch member.State {
 		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 			membersLive++
-		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback:
+		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback, mongo.MemberStateDown:
 			return api.AppStateInit, nil
 		default:
 			return api.AppStateError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)

@@ -1,0 +1,135 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+deploy_dir=$(realpath $(dirname $0)/../../deploy)
+. ${test_dir}/../functions
+
+# Since we've switched to 4 mongo pods as a safe configuration for arbiter
+# such a test requires more than 3 kubernetes nodes due to anti-affinity settings
+
+function stop_cluster() {
+	local cluster_name=$1
+	local max_wait_time=${2:-120}
+
+	local passed_time=0
+	local sleep_time=1
+	kubectl_bin patch psmdb ${cluster_name} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
+	set +x
+	echo -n 'Waiting for cluster stop'
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.mongos.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get deployment ${cluster_name}-mongos -o jsonpath='{.status.replicas}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.replsets.cfg.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.replsets.rs0.ready}') -le 0 ]]; do
+		echo -n .
+		let passed_time="${passed_time}+${sleep_time}"
+		sleep ${passed_time}
+		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
+			echo "We've been waiting for cluster stop for too long. Exiting..."
+			exit 1
+		fi
+	done
+	echo
+	set -x
+}
+
+function start_cluster() {
+	local cluster_name=$1
+
+	kubectl_bin patch psmdb ${cluster_name} --type json -p='[{"op":"add","path":"/spec/pause","value":false}]'
+	wait_cluster_consistency ${cluster_name}
+}
+
+function main() {
+	create_namespace $namespace
+	cluster="my-cluster-name"
+
+	desc 'startup default PSMDB cluster'
+	kubectl_bin apply -f $deploy_dir/secrets.yaml
+	kubectl_bin apply -f $deploy_dir/crd.yaml
+	kubectl_bin apply -f $deploy_dir/rbac.yaml
+	kubectl_bin apply -f $deploy_dir/operator.yaml
+	kubectl_bin apply -f $conf_dir/client.yml
+
+	yq w $deploy_dir/cr.yaml 'spec.upgradeOptions.versionServiceEndpoint' 'https://check-dev.percona.com' | kubectl_bin apply -f -
+	desc 'check if all 3 Pods started'
+	wait_cluster_consistency $cluster
+
+	compare_kubectl statefulset/$cluster-rs0
+	compare_kubectl statefulset/$cluster-cfg
+
+	compare_generation "1" "statefulset" "${cluster}-rs0"
+	compare_generation "1" "statefulset" "${cluster}-cfg"
+	compare_generation "1" "deployment" "${cluster}-mongos"
+	compare_generation "1" "psmdb" "${cluster}"
+
+	desc 'starting PMM up'
+	retry 10 60 helm install monitoring --set platform=kubernetes https://percona-charts.storage.googleapis.com/pmm-server-2.21.0.tgz
+	sleep 20
+	kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+			"spec": {"pmm":{"enabled":true}}
+		}'
+	sleep 120
+	# since psmdb cluster won't work without pmm server running consistency check would be enough
+	wait_cluster_consistency $cluster
+
+	kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+			"spec": {"pmm":{"enabled":false}}
+		}'
+	sleep 120
+	helm delete monitoring
+	wait_cluster_consistency $cluster
+
+	desc 'enabling arbiter'
+	kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/replsets/0/arbiter/enabled","value":true}]'
+	wait_cluster_consistency $cluster
+	wait_pod $cluster-rs0-arbiter-0
+
+	desc 'checking write/read'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+	sleep 2
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	simple_data_check "${cluster}" 4 1 "-mongos"
+
+	desc 'checking dev version service'
+	stop_cluster ${cluster}
+	start_cluster ${cluster}
+	simple_data_check "${cluster}" 4 1 "-mongos"
+
+	kubectl_bin delete -f deploy/cr.yaml
+
+	cluster="minimal-cluster"
+	yq w $deploy_dir/secrets.yaml 'metadata.name' "${cluster}" | kubectl_bin apply -f -
+
+	yq w $deploy_dir/cr-minimal.yaml 'spec.upgradeOptions.versionServiceEndpoint' 'https://check-dev.percona.com' | kubectl_bin apply -f -
+	desc 'check if all 3 Pods started'
+	wait_cluster_consistency "${cluster}"
+
+	compare_kubectl statefulset/"${cluster}"-rs0
+	compare_kubectl statefulset/"${cluster}"-cfg
+
+	compare_generation "1" "statefulset" "${cluster}-rs0"
+	compare_generation "1" "statefulset" "${cluster}-cfg"
+	compare_generation "1" "deployment" "${cluster}-mongos"
+	compare_generation "1" "psmdb" "${cluster}"
+
+	desc 'checking write/read'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+	sleep 2
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	simple_data_check "${cluster}" 4 1 "-mongos"
+
+	destroy $namespace
+}
+
+main

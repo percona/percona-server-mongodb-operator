@@ -29,7 +29,7 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 		return errors.Wrap(err, "init storage")
 	}
 
-	bcps, err := stg.Files(MetadataFileSuffix)
+	bcps, err := stg.List("", MetadataFileSuffix)
 	if err != nil {
 		return errors.Wrap(err, "get a backups list from the storage")
 	}
@@ -49,8 +49,14 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 
 	var ins []interface{}
 	for _, b := range bcps {
+		d, err := stg.SourceReader(b.Name)
+		if err != nil {
+			return errors.Wrapf(err, "read meta for %v", b.Name)
+		}
+
 		v := BackupMeta{}
-		err = json.Unmarshal(b, &v)
+		err = json.NewDecoder(d).Decode(&v)
+		d.Close()
 		if err != nil {
 			return errors.Wrap(err, "unmarshal backup meta")
 		}
@@ -66,7 +72,7 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 		return errors.Wrap(err, "insert retrieved backups meta")
 	}
 
-	pitrf, err := stg.List(PITRfsPrefix)
+	pitrf, err := stg.List(PITRfsPrefix, "")
 	if err != nil {
 		return errors.Wrap(err, "get list of pitr chunks")
 	}
@@ -78,7 +84,7 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 	for _, f := range pitrf {
 		_, err := stg.FileStat(PITRfsPrefix + "/" + f.Name)
 		if err != nil {
-			l.Warning("skip %s because of %v", f, err)
+			l.Warning("skip pitr chunk %s/%s because of %v", PITRfsPrefix, f.Name, err)
 			continue
 		}
 		chnk := PITRmetaFromFName(f.Name)

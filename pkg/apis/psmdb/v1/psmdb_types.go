@@ -2,8 +2,11 @@ package v1
 
 import (
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -49,6 +52,7 @@ const (
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
 	Pause                   bool                                 `json:"pause,omitempty"`
+	Unmanaged               bool                                 `json:"unmanaged,omitempty"`
 	CRVersion               string                               `json:"crVersion,omitempty"`
 	Platform                *version.Platform                    `json:"platform,omitempty"`
 	Image                   string                               `json:"image,omitempty"`
@@ -187,16 +191,18 @@ type PMMSpec struct {
 }
 
 type MultiAZ struct {
-	Affinity            *PodAffinity             `json:"affinity,omitempty"`
-	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
-	Tolerations         []corev1.Toleration      `json:"tolerations,omitempty"`
-	PriorityClassName   string                   `json:"priorityClassName,omitempty"`
-	ServiceAccountName  string                   `json:"serviceAccountName,omitempty"`
-	Annotations         map[string]string        `json:"annotations,omitempty"`
-	Labels              map[string]string        `json:"labels,omitempty"`
-	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
-	RuntimeClassName    *string                  `json:"runtimeClassName,omitempty"`
-	Sidecars            []corev1.Container       `json:"sidecars,omitempty"`
+	Affinity            *PodAffinity                   `json:"affinity,omitempty"`
+	NodeSelector        map[string]string              `json:"nodeSelector,omitempty"`
+	Tolerations         []corev1.Toleration            `json:"tolerations,omitempty"`
+	PriorityClassName   string                         `json:"priorityClassName,omitempty"`
+	ServiceAccountName  string                         `json:"serviceAccountName,omitempty"`
+	Annotations         map[string]string              `json:"annotations,omitempty"`
+	Labels              map[string]string              `json:"labels,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec       `json:"podDisruptionBudget,omitempty"`
+	RuntimeClassName    *string                        `json:"runtimeClassName,omitempty"`
+	Sidecars            []corev1.Container             `json:"sidecars,omitempty"`
+	SidecarVolumes      []corev1.Volume                `json:"sidecarVolumes,omitempty"`
+	SidecarPVCs         []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
 }
 
 func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Container, noSkips bool) {
@@ -214,6 +220,48 @@ func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Contai
 	return
 }
 
+func (m *MultiAZ) WithSidecarVolumes(logger logr.Logger, volumes []corev1.Volume) []corev1.Volume {
+	names := make(map[string]struct{}, len(volumes))
+	for i := range volumes {
+		names[volumes[i].Name] = struct{}{}
+	}
+
+	rv := make([]corev1.Volume, 0, len(volumes)+len(m.SidecarVolumes))
+	rv = append(rv, volumes...)
+
+	for _, v := range m.SidecarVolumes {
+		if _, ok := names[v.Name]; ok {
+			logger.Info(fmt.Sprintf("Sidecar volume name cannot be %s. It's skipped", v.Name))
+			continue
+		}
+
+		rv = append(rv, v)
+	}
+
+	return rv
+}
+
+func (m *MultiAZ) WithSidecarPVCs(logger logr.Logger, pvcs []corev1.PersistentVolumeClaim) []corev1.PersistentVolumeClaim {
+	names := make(map[string]struct{}, len(pvcs))
+	for i := range pvcs {
+		names[pvcs[i].Name] = struct{}{}
+	}
+
+	rv := make([]corev1.PersistentVolumeClaim, 0, len(pvcs)+len(m.SidecarPVCs))
+	rv = append(rv, pvcs...)
+
+	for _, p := range m.SidecarPVCs {
+		if _, ok := names[p.Name]; ok {
+			logger.Info(fmt.Sprintf("Sidecar PVC name cannot be %s. It's skipped", p.Name))
+			continue
+		}
+
+		rv = append(rv, p)
+	}
+
+	return rv
+}
+
 type PodDisruptionBudgetSpec struct {
 	MinAvailable   *intstr.IntOrString `json:"minAvailable,omitempty"`
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
@@ -222,6 +270,31 @@ type PodDisruptionBudgetSpec struct {
 type PodAffinity struct {
 	TopologyKey *string          `json:"antiAffinityTopologyKey,omitempty"`
 	Advanced    *corev1.Affinity `json:"advanced,omitempty"`
+}
+
+type ExternalNode struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port,omitempty"`
+	Priority int    `json:"priority"`
+	Votes    int    `json:"votes"`
+}
+
+func (e *ExternalNode) HostPort() string {
+	return e.Host + ":" + strconv.Itoa(e.Port)
+}
+
+type NonVotingSpec struct {
+	Enabled                  bool                       `json:"enabled"`
+	Size                     int32                      `json:"size"`
+	Resources                *ResourcesSpec             `json:"resources,omitempty"`
+	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Configuration            string                     `json:"configuration,omitempty"`
+
+	MultiAZ
 }
 
 type ReplsetSpec struct {
@@ -238,6 +311,8 @@ type ReplsetSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
 	Configuration            string                     `json:"configuration,omitempty"`
+	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
+	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
 	MultiAZ
 }
@@ -458,20 +533,29 @@ type BackupStorageS3Spec struct {
 	CredentialsSecret string `json:"credentialsSecret"`
 }
 
+type BackupStorageAzureSpec struct {
+	Container         string `json:"container,omitempty"`
+	Prefix            string `json:"prefix,omitempty"`
+	CredentialsSecret string `json:"credentialsSecret"`
+}
+
 type BackupStorageType string
 
 const (
 	BackupStorageFilesystem BackupStorageType = "filesystem"
 	BackupStorageS3         BackupStorageType = "s3"
+	BackupStorageAzure      BackupStorageType = "azure"
 )
 
 type BackupStorageSpec struct {
-	Type BackupStorageType   `json:"type"`
-	S3   BackupStorageS3Spec `json:"s3,omitempty"`
+	Type  BackupStorageType      `json:"type"`
+	S3    BackupStorageS3Spec    `json:"s3,omitempty"`
+	Azure BackupStorageAzureSpec `json:"azure,omitempty"`
 }
 
 type PITRSpec struct {
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled      bool    `json:"enabled,omitempty"`
+	OplogSpanMin float64 `json:"oplogSpanMin,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {
@@ -581,12 +665,14 @@ func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 		cr.setVersion()
 	}
 
-	//using Must because "version" must be right format
+	// using Must because "version" must be right format
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }
 
-const internalPrefix = "internal-"
-const userPostfix = "-users"
+const (
+	internalPrefix = "internal-"
+	userPostfix    = "-users"
+)
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
 	return internalPrefix + cr.Name + userPostfix
@@ -610,6 +696,10 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 }
 
 func (cr *PerconaServerMongoDB) CanBackup() error {
+	if cr.Spec.Unmanaged {
+		return errors.Errorf("backups are not allowed on unmanaged clusters")
+	}
+
 	if cr.Status.State == AppStateReady {
 		return nil
 	}
@@ -642,4 +732,15 @@ func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
 	if len(s.Conditions) > maxStatusesQuantity {
 		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
 	}
+}
+
+// GetExternalNodes returns all external nodes for all replsets
+func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
+	extNodes := make([]*ExternalNode, 0)
+
+	for _, replset := range cr.Spec.Replsets {
+		extNodes = append(extNodes, replset.ExternalNodes...)
+	}
+
+	return extNodes
 }
