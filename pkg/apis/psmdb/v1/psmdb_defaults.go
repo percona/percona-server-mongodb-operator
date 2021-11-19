@@ -16,8 +16,10 @@ import (
 const DefaultDNSSuffix = "svc.cluster.local"
 
 // ConfigReplSetName is the only possible name for config replica set
-const ConfigReplSetName = "cfg"
-const WorkloadSA = "default"
+const (
+	ConfigReplSetName = "cfg"
+	WorkloadSA        = "default"
+)
 
 var (
 	defaultRunUID                   int64 = 1001
@@ -112,15 +114,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
-	gte140 := cr.CompareVersion("1.4.0") >= 0
-
 	timeoutSecondsDefault := int32(5)
 	initialDelaySecondsDefault := int32(90)
-	periodSecondsDeafult := int32(10)
+	periodSecondsDefault := int32(10)
 	failureThresholdDefault := int32(12)
-	if gte140 {
+	if cr.CompareVersion("1.4.0") >= 0 {
 		initialDelaySecondsDefault = int32(60)
-		periodSecondsDeafult = int32(30)
+		periodSecondsDefault = int32(30)
 		failureThresholdDefault = int32(4)
 	}
 	if cr.CompareVersion("1.10.0") >= 0 {
@@ -167,72 +167,81 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe == nil {
 			cr.Spec.Sharding.Mongos.LivenessProbe = new(LivenessProbeExtended)
-			cr.Spec.Sharding.Mongos.LivenessProbe.Probe = corev1.Probe{
-				Handler: corev1.Handler{
-					Exec: &corev1.ExecAction{
-						Command: []string{
-							"/data/db/mongodb-healthcheck",
-							"k8s", "liveness",
-							"--component", "mongos",
-						},
-					},
+		}
+
+		if cr.Spec.Sharding.Mongos.LivenessProbe.Exec == nil {
+			cr.Spec.Sharding.Mongos.LivenessProbe.Exec = &corev1.ExecAction{
+				Command: []string{
+					"/data/db/mongodb-healthcheck",
+					"k8s", "liveness",
+					"--component", "mongos",
 				},
 			}
+
 			if cr.CompareVersion("1.7.0") >= 0 {
-				cr.Spec.Sharding.Mongos.LivenessProbe.Probe.Handler.Exec.Command =
-					append(cr.Spec.Sharding.Mongos.LivenessProbe.Probe.Handler.Exec.Command,
+				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command =
+					append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 						"--sslPEMKeyFile", "/tmp/tls.pem")
-			}
-			if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds == 0 {
-				cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
-			}
-			if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds == 0 {
-				cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
-			}
-			if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds == 0 {
-				cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDeafult
-			}
-			if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold == 0 {
-				cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
-			}
-			if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds == 0 {
-				cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
 			}
 		}
 
+		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds < 1 {
+			cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+		}
+		if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds < 1 {
+			cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+		}
+		if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds < 1 {
+			cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDefault
+		}
+		if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold < 1 {
+			cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
+		}
+		if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds < 1 {
+			cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
+		}
+
 		if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
-			cr.Spec.Sharding.Mongos.ReadinessProbe = &corev1.Probe{
-				Handler: corev1.Handler{
-					Exec: &corev1.ExecAction{
-						Command: []string{
-							"/data/db/mongodb-healthcheck",
-							"k8s", "readiness",
-							"--component", "mongos",
-						},
-					},
+			cr.Spec.Sharding.Mongos.ReadinessProbe = &corev1.Probe{}
+		}
+
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.Exec == nil {
+			cr.Spec.Sharding.Mongos.ReadinessProbe.Exec = &corev1.ExecAction{
+				Command: []string{
+					"/data/db/mongodb-healthcheck",
+					"k8s", "readiness",
+					"--component", "mongos",
 				},
 			}
+
 			if cr.CompareVersion("1.7.0") >= 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.Handler.Exec.Command =
-					append(cr.Spec.Sharding.Mongos.ReadinessProbe.Handler.Exec.Command,
+				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command =
+					append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 						"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
-			if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds == 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = int32(10)
-			}
-			if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds == 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = int32(2)
-			}
-			if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds == 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = int32(1)
-			}
-			if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold == 0 {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = int32(3)
-			}
+		}
+
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds < 1 {
+			cr.Spec.Sharding.Mongos.ReadinessProbe.InitialDelaySeconds = 10
+		}
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds < 1 {
+			cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = 2
+		}
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds < 1 {
+			cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = 1
+		}
+		if cr.CompareVersion("1.11.0") >= 0 && cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold == 0 {
+			cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold = 1
+		} else if cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold < 0 {
+			// skip "0" for compartibility but still not allow invalid value
+			cr.Spec.Sharding.Mongos.ReadinessProbe.SuccessThreshold = 1
+		}
+		if cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold < 1 {
+			cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = 3
 		}
 
 		cr.Spec.Sharding.Mongos.reconcileOpts()
@@ -253,6 +262,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				return errors.Errorf("replset %s must have externalNodes if ConfigsvrReplSet has", rs.Name)
 			}
 		}
+
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 
@@ -307,67 +317,73 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.LivenessProbe = new(LivenessProbeExtended)
 		}
 
-		if replset.LivenessProbe.InitialDelaySeconds == 0 {
-			replset.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
-		}
-		if replset.LivenessProbe.TimeoutSeconds == 0 {
-			replset.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
-		}
-		if replset.LivenessProbe.PeriodSeconds == 0 {
-			replset.LivenessProbe.PeriodSeconds = periodSecondsDeafult
-		}
-		if replset.LivenessProbe.FailureThreshold == 0 {
-			replset.LivenessProbe.FailureThreshold = failureThresholdDefault
-		}
 		if replset.LivenessProbe.StartupDelaySeconds == 0 {
 			replset.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
 		}
-		if replset.LivenessProbe.Handler.Exec == nil {
-			replset.LivenessProbe.Probe.Handler.Exec = &corev1.ExecAction{
-				Command: []string{
-					"mongodb-healthcheck",
-					"k8s",
-					"liveness",
-				},
+		if replset.LivenessProbe.Exec == nil {
+			replset.LivenessProbe.Exec = &corev1.ExecAction{
+				Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
 			}
+
 			if cr.CompareVersion("1.6.0") >= 0 {
-				replset.LivenessProbe.Probe.Handler.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+				replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 				if cr.CompareVersion("1.7.0") >= 0 {
-					replset.LivenessProbe.Probe.Handler.Exec.Command =
-						append(replset.LivenessProbe.Probe.Handler.Exec.Command,
+					replset.LivenessProbe.Probe.Exec.Command =
+						append(replset.LivenessProbe.Probe.Exec.Command,
 							"--ssl", "--sslInsecure",
 							"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 							"--sslPEMKeyFile", "/tmp/tls.pem")
 				}
 			}
+
+			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+				replset.LivenessProbe.Exec.Command = append(
+					replset.LivenessProbe.Exec.Command,
+					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
+			}
 		}
 
-		if gte140 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
-			replset.LivenessProbe.Handler.Exec.Command = append(
-				replset.LivenessProbe.Handler.Exec.Command,
-				startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
+		if replset.LivenessProbe.InitialDelaySeconds < 1 {
+			replset.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+		}
+		if replset.LivenessProbe.TimeoutSeconds < 1 {
+			replset.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+		}
+		if replset.LivenessProbe.PeriodSeconds < 1 {
+			replset.LivenessProbe.PeriodSeconds = periodSecondsDefault
+		}
+		if replset.LivenessProbe.FailureThreshold < 1 {
+			replset.LivenessProbe.FailureThreshold = failureThresholdDefault
 		}
 
 		if replset.ReadinessProbe == nil {
-			replset.ReadinessProbe = &corev1.Probe{
-				Handler: corev1.Handler{
-					TCPSocket: &corev1.TCPSocketAction{
-						Port: intstr.FromInt(int(cr.Spec.Mongod.Net.Port)),
-					},
-				},
+			replset.ReadinessProbe = &corev1.Probe{}
+		}
+
+		if replset.ReadinessProbe.TCPSocket == nil {
+			replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
+				Port: intstr.FromInt(int(cr.Spec.Mongod.Net.Port)),
 			}
 		}
-		if replset.ReadinessProbe.InitialDelaySeconds == 0 {
-			replset.ReadinessProbe.InitialDelaySeconds = int32(10)
+
+		if replset.ReadinessProbe.InitialDelaySeconds < 1 {
+			replset.ReadinessProbe.InitialDelaySeconds = 10
 		}
-		if replset.ReadinessProbe.TimeoutSeconds == 0 {
-			replset.ReadinessProbe.TimeoutSeconds = int32(2)
+		if replset.ReadinessProbe.TimeoutSeconds < 1 {
+			replset.ReadinessProbe.TimeoutSeconds = 2
 		}
-		if replset.ReadinessProbe.PeriodSeconds == 0 {
-			replset.ReadinessProbe.PeriodSeconds = int32(3)
+		if replset.ReadinessProbe.PeriodSeconds < 1 {
+			replset.ReadinessProbe.PeriodSeconds = 3
 		}
-		if replset.ReadinessProbe.FailureThreshold == 0 {
-			replset.ReadinessProbe.FailureThreshold = int32(8)
+		if replset.ReadinessProbe.SuccessThreshold < 1 {
+			replset.ReadinessProbe.SuccessThreshold = 1
+		}
+		if replset.ReadinessProbe.FailureThreshold < 1 {
+			if cr.CompareVersion("1.11.0") >= 0 && replset.Name == ConfigReplSetName {
+				replset.ReadinessProbe.FailureThreshold = 3
+			} else {
+				replset.ReadinessProbe.FailureThreshold = 8
+			}
 		}
 
 		if cr.CompareVersion("1.6.0") >= 0 && len(replset.ServiceAccountName) == 0 {
@@ -437,9 +453,15 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Backup.PITR.Enabled = false
 	}
 
-	if cr.Spec.Backup.PITR.Enabled && len(cr.Spec.Backup.Storages) != 1 {
-		cr.Spec.Backup.PITR.Enabled = false
-		log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
+	if cr.Spec.Backup.PITR.Enabled {
+		if len(cr.Spec.Backup.Storages) != 1 {
+			cr.Spec.Backup.PITR.Enabled = false
+			log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
+		}
+
+		if cr.Spec.Backup.PITR.OplogSpanMin == 0 {
+			cr.Spec.Backup.PITR.OplogSpanMin = 10
+		}
 	}
 
 	if cr.Status.Replsets == nil {
@@ -545,19 +567,19 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if nv.LivenessProbe == nil {
 		nv.LivenessProbe = new(LivenessProbeExtended)
 	}
-	if nv.LivenessProbe.InitialDelaySeconds == 0 {
+	if nv.LivenessProbe.InitialDelaySeconds < 1 {
 		nv.LivenessProbe.InitialDelaySeconds = rs.LivenessProbe.InitialDelaySeconds
 	}
-	if nv.LivenessProbe.TimeoutSeconds == 0 {
+	if nv.LivenessProbe.TimeoutSeconds < 1 {
 		nv.LivenessProbe.TimeoutSeconds = rs.LivenessProbe.TimeoutSeconds
 	}
-	if nv.LivenessProbe.PeriodSeconds == 0 {
+	if nv.LivenessProbe.PeriodSeconds < 1 {
 		nv.LivenessProbe.PeriodSeconds = rs.LivenessProbe.PeriodSeconds
 	}
-	if nv.LivenessProbe.FailureThreshold == 0 {
+	if nv.LivenessProbe.FailureThreshold < 1 {
 		nv.LivenessProbe.FailureThreshold = rs.LivenessProbe.FailureThreshold
 	}
-	if nv.LivenessProbe.StartupDelaySeconds == 0 {
+	if nv.LivenessProbe.StartupDelaySeconds < 1 {
 		nv.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
 	}
 	if nv.LivenessProbe.Handler.Exec == nil {
@@ -587,16 +609,16 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 			},
 		}
 	}
-	if nv.ReadinessProbe.InitialDelaySeconds == 0 {
+	if nv.ReadinessProbe.InitialDelaySeconds < 1 {
 		nv.ReadinessProbe.InitialDelaySeconds = rs.ReadinessProbe.InitialDelaySeconds
 	}
-	if nv.ReadinessProbe.TimeoutSeconds == 0 {
+	if nv.ReadinessProbe.TimeoutSeconds < 1 {
 		nv.ReadinessProbe.TimeoutSeconds = rs.ReadinessProbe.TimeoutSeconds
 	}
-	if nv.ReadinessProbe.PeriodSeconds == 0 {
+	if nv.ReadinessProbe.PeriodSeconds < 1 {
 		nv.ReadinessProbe.PeriodSeconds = rs.ReadinessProbe.PeriodSeconds
 	}
-	if nv.ReadinessProbe.FailureThreshold == 0 {
+	if nv.ReadinessProbe.FailureThreshold < 1 {
 		nv.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
 	}
 

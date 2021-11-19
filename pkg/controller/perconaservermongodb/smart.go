@@ -31,7 +31,30 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	if sfs.Status.UpdatedReplicas >= sfs.Status.Replicas {
+	matchLabels := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/replset":    replset.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	if sfs.Labels["app.kubernetes.io/component"] == "nonVoting" {
+		matchLabels["app.kubernetes.io/component"] = "nonVoting"
+	}
+
+	list := corev1.PodList{}
+	if err := r.client.List(context.TODO(),
+		&list,
+		&k8sclient.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(matchLabels),
+		},
+	); err != nil {
+		return fmt.Errorf("get pod list: %v", err)
+	}
+
+	if !isSfsChanged(sfs, &list) {
 		return nil
 	}
 
@@ -45,8 +68,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrapf(err, "get config statefulset %s/%s", cr.Namespace, cr.Name+"-"+api.ConfigReplSetName)
 		}
-
-		if cfgSfs.Status.UpdatedReplicas < cfgSfs.Status.Replicas {
+		cfgList, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
+		if err != nil {
+			return errors.Wrap(err, "get cfg pod list")
+		}
+		if isSfsChanged(&cfgSfs, &cfgList) {
 			log.Info("waiting for config RS update")
 			return nil
 		}
@@ -83,29 +109,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		if err != nil {
 			return errors.Wrap(err, "failed to stop balancer")
 		}
-	}
-
-	matchLabels := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/replset":    replset.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-
-	if sfs.Labels["app.kubernetes.io/component"] == "nonVoting" {
-		matchLabels["app.kubernetes.io/component"] = "nonVoting"
-	}
-
-	list := corev1.PodList{}
-	if err := r.client.List(context.TODO(),
-		&list,
-		&k8sclient.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(matchLabels),
-		},
-	); err != nil {
-		return fmt.Errorf("get pod list: %v", err)
 	}
 
 	client, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
@@ -257,4 +260,16 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMong
 	}
 
 	return errors.New("reach pod wait limit")
+}
+
+func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {
+	for _, pod := range podList.Items {
+		if pod.Labels["app.kubernetes.io/component"] != sfs.Labels["app.kubernetes.io/component"] {
+			continue
+		}
+		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
+			return true
+		}
+	}
+	return false
 }

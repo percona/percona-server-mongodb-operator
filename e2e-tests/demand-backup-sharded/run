@@ -68,21 +68,24 @@ wait_backup_agent $cluster-rs1-2
 backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
+backup_name_azure="backup-azure-blob"
 
 desc 'run backups'
 run_backup minio
-if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup aws-s3
 	run_backup gcp-cs
+	run_backup azure-blob
 
 	wait_backup "$backup_name_aws"
 	wait_backup "$backup_name_gcp"
+	wait_backup "$backup_name_azure"
 fi
 wait_backup "$backup_name_minio"
 
 sleep 5
 
-if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
 	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip >/dev/null
@@ -94,6 +97,12 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP" ]; then
 	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip >/dev/null
 	run_restore $backup_name_gcp 3 1 "-mongos"
 	wait_restore $backup_name_gcp 3 1 "-mongos"
+
+	desc 'check backup and restore -- azure-blob'
+	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
+	curl -s "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz" | gunzip >/dev/null
+	run_restore $backup_name_azure 3 1 "-mongos"
+	wait_restore $backup_name_azure 3 1 "-mongos"
 fi
 
 desc 'check backup and restore -- minio'
