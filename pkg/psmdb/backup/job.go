@@ -55,16 +55,18 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 			Kind:       "CronJob",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: namespace,
-			Labels:    NewBackupCronJobLabels(crName),
+			Name:        jobName,
+			Namespace:   namespace,
+			Labels:      NewBackupCronJobLabels(crName),
+			Annotations: backupSpec.Annotations,
 		},
 		Spec: batchv1b.CronJobSpec{
 			Schedule:          backup.Schedule,
 			ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 			JobTemplate: batchv1b.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: NewBackupCronJobLabels(crName),
+					Labels:      NewBackupCronJobLabels(crName),
+					Annotations: backupSpec.Annotations,
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
