@@ -5,7 +5,6 @@ metadata:
 #  finalizers:
 #    - delete-psmdb-pvc
 spec:
-  initImage: perconalab/percona-server-mongodb-operator:k8spsmdb-515
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
