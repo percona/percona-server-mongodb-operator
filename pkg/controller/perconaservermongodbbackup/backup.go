@@ -10,6 +10,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
+	pbmStartingDeadline       = time.Duration(40)
+	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
+)
+
 type Backup struct {
 	pbm  *backup.PBM
 	spec api.BackupSpec
@@ -107,6 +113,13 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
 	case pbm.StatusStarting:
+		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
+		if passed >= pbmStartingDeadline {
+			status.State = api.BackupStateError
+			status.Error = pbmStartingDeadlineErrMsg
+			break
+		}
+
 		status.State = api.BackupStateRequested
 	default:
 		status.State = api.BackupStateRunning
