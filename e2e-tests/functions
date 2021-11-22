@@ -504,6 +504,7 @@ compare_kubectl() {
 		| yq d - '**.storageClassName' \
 		| yq d - '**.finalizers' \
 		| yq d - '**."kubernetes.io/pvc-protection"' \
+		| yq d - '**."cloud.google.com/neg"' \
 		| yq d - '**.volumeName' \
 		| yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
 		| yq d - 'spec.volumeMode' \
