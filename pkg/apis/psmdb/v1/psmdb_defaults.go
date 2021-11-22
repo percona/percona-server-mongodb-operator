@@ -230,6 +230,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 		if cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = 2
+			if cr.CompareVersion("1.11.0") >= 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.TimeoutSeconds = 1
+			}
 		}
 		if cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds < 1 {
 			cr.Spec.Sharding.Mongos.ReadinessProbe.PeriodSeconds = 1
