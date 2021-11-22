@@ -20,10 +20,10 @@ setup_cluster() {
 
 fail_pod() {
 	local init_pod=$(get_operator_pod)
+	local restart_count_before=$(kubectl_bin get pod ${init_pod} -ojsonpath='{.status.containerStatuses[0].restartCount}')
 
 	cat $conf_dir/chaos-pod-failure.yml \
-		| yq w - "metadata.name" "chaos-operator-pod-failure-$RANDOM" \
-		| yq w - "metadata.namespace" "$namespace" \
+		| yq w - "metadata.name" "chaos-operator-pod-failure" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
 		| kubectl_bin apply -f -
@@ -36,8 +36,14 @@ fail_pod() {
 	sleep 60
 
 	local pod=$(get_operator_pod)
-	if [ "$init_pod" == "$pod" ]; then
-		echo "operator pod was not killed! something went wrong."
+	local restart_count_after=$(kubectl_bin get pod ${pod} -ojsonpath='{.status.containerStatuses[0].restartCount}')
+	if [ "$init_pod" != "$pod" ]; then
+		echo "Operator pod was killed, when it should have just been restarted."
+		echo "Pod name before: $init_pod , pod name after test: $pod"
+		return 1
+	elif [ $restart_count_before -eq $restart_count_after ]; then
+		echo "Seems operator pod was not restarted when it should have been."
+		echo "Pod: $pod , restarts before: $restart_count_before , restarts after test: $restart_count_after"
 		return 1
 	fi
 
@@ -53,8 +59,7 @@ kill_pod() {
 	local init_pod=$(get_operator_pod)
 
 	cat $conf_dir/chaos-pod-kill.yml \
-		| yq w - "metadata.name" "chaos-operator-pod-kill-$RANDOM" \
-		| yq w - "metadata.namespace" "$namespace" \
+		| yq w - "metadata.name" "chaos-operator-pod-kill" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
 		| kubectl_bin apply -f -
@@ -79,8 +84,7 @@ network_loss() {
 	local init_pod=$(get_operator_pod)
 
 	cat $conf_dir/chaos-network-loss.yml \
-		| yq w - "metadata.name" "chaos-operator-network-$RANDOM" \
-		| yq w - "metadata.namespace" "$namespace" \
+		| yq w - "metadata.name" "chaos-operator-network" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
 		| kubectl_bin apply -f -
@@ -113,7 +117,7 @@ main() {
 	desc 'emulate bad network for 60s'
 	network_loss
 
-	destroy_chaos_mesh $namespace
+	destroy_chaos_mesh
 	destroy $namespace
 }
 
