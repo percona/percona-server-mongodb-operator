@@ -56,8 +56,7 @@ kill_pod() {
 	local pod=$1
 
 	cat $conf_dir/chaos-pod-kill.yml \
-		| yq w - "metadata.name" "chaos-cluster-pod-kill-$RANDOM" \
-		| yq w - "metadata.namespace" "$namespace" \
+		| yq w - "metadata.name" "chaos-cluster-pod-kill" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
 		| kubectl_bin apply -f -
@@ -74,8 +73,7 @@ failure_pod() {
 	local pod=$1
 
 	cat $conf_dir/chaos-pod-failure.yml \
-		| yq w - "metadata.name" "chaos-cluster-pod-failure-$RANDOM" \
-		| yq w - "metadata.namespace" "$namespace" \
+		| yq w - "metadata.name" "chaos-cluster-pod-failure" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
 		| kubectl_bin apply -f -
@@ -97,8 +95,7 @@ network_loss() {
 	local pod=$1
 
 	cat $conf_dir/chaos-network-loss.yml \
-		| yq w - "metadata.name" "chaos-cluster-network-loss-$RANDOM" \
-		| yq w - "metadata.namespace" "$namespace" \
+		| yq w - "metadata.name" "chaos-cluster-network-loss" \
 		| yq d - "spec.selector.pods.test-namespace" \
 		| yq w - "spec.selector.pods.$namespace[0]" "$pod" \
 		| kubectl_bin apply -f -
@@ -137,7 +134,7 @@ main() {
 	desc 'emulate bad network node-0 pod'
 	network_loss "$cluster-0"
 
-	destroy_chaos_mesh $namespace
+	destroy_chaos_mesh
 	destroy $namespace
 }
 
