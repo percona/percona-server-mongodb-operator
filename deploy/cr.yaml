@@ -426,6 +426,8 @@ spec:
     restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:main-backup
     serviceAccountName: percona-server-mongodb-operator
+#    annotations:
+#      iam.amazonaws.com/role: role-arn
 #    resources:
 #      limits:
 #        cpu: "300m"
