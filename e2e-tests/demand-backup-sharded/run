@@ -33,8 +33,7 @@ sleep 10
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl statefulset/$cluster-rs1
-# TODO: Uncomment after fix for https://jira.percona.com/browse/PBM-725
-#compare_kubectl statefulset/$cluster-rs2
+compare_kubectl statefulset/$cluster-rs2
 compare_kubectl statefulset/$cluster-cfg
 compare_kubectl deployment/$cluster-mongos ""
 
@@ -61,10 +60,9 @@ wait_backup_agent $cluster-rs0-2
 wait_backup_agent $cluster-rs1-0
 wait_backup_agent $cluster-rs1-1
 wait_backup_agent $cluster-rs1-2
-# TODO: Uncomment after fix for https://jira.percona.com/browse/PBM-725
-#wait_backup_agent $cluster-rs2-0
-#wait_backup_agent $cluster-rs2-1
-#wait_backup_agent $cluster-rs2-2
+wait_backup_agent $cluster-rs2-0
+wait_backup_agent $cluster-rs2-1
+wait_backup_agent $cluster-rs2-2
 backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
