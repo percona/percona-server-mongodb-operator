@@ -118,6 +118,8 @@ func canUpgradeVersion(fcv, new string) bool {
 		return new == "4.2"
 	case "4.2":
 		return new == "4.4"
+	case "4.4":
+		return new == "5.0"
 	default:
 		return false
 	}
@@ -187,7 +189,7 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 
 	if newMM < mongoMM {
 		if newMM != fcv {
-			return UpgradeRequest{false, "", ""}, errors.Errorf("can't upgrade to %s wits FCV set to %s", ver, fcv)
+			return UpgradeRequest{false, "", ""}, errors.Errorf("can't upgrade to %s with FCV set to %s", ver, fcv)
 		}
 
 		return UpgradeRequest{true, apply, ver}, nil
@@ -310,7 +312,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
-
 	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
 		cr.Status.State != api.AppStateReady ||
 		cr.Status.MongoImage == cr.Spec.Image {
