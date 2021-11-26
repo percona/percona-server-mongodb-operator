@@ -3,5 +3,5 @@ kind: PerconaServerMongoDBBackup
 metadata:
   name: backup-minio
 spec:
-  psmdbCluster: one-pod
+  clusterName: one-pod
   storageName: minio
