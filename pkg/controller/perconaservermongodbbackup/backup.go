@@ -53,7 +53,7 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]f
 		Cmd: pbm.CmdBackup,
 		Backup: pbm.BackupCmd{
 			Name:        name,
-			Compression: cr.Spec.Comperssion,
+			Compression: cr.Spec.Compression,
 		},
 	})
 	if err != nil {

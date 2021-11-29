@@ -16,7 +16,7 @@ type PerconaServerMongoDBBackupSpec struct {
 	PSMDBCluster string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
 	ClusterName  string              `json:"clusterName,omitempty"`
 	StorageName  string              `json:"storageName,omitempty"`
-	Comperssion  pbm.CompressionType `json:"compressionType,omitempty"`
+	Compression  pbm.CompressionType `json:"compressionType,omitempty"`
 }
 
 type BackupState string
@@ -75,8 +75,8 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 	if len(p.Spec.GetClusterName()) == 0 {
 		return fmt.Errorf("spec clusterName and deprecated psmdbCluster fields are empty")
 	}
-	if string(p.Spec.Comperssion) == "" {
-		p.Spec.Comperssion = pbm.CompressionTypeGZIP
+	if string(p.Spec.Compression) == "" {
+		p.Spec.Compression = pbm.CompressionTypeGZIP
 	}
 	return nil
 }
