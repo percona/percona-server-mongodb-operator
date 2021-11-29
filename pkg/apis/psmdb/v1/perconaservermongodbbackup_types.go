@@ -13,9 +13,10 @@ import (
 type PerconaServerMongoDBBackupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	ClusterName string              `json:"clusterName,omitempty"`
-	StorageName string              `json:"storageName,omitempty"`
-	Comperssion pbm.CompressionType `json:"compressionType,omitempty"`
+	PSMDBCluster string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
+	ClusterName  string              `json:"clusterName,omitempty"`
+	StorageName  string              `json:"storageName,omitempty"`
+	Comperssion  pbm.CompressionType `json:"compressionType,omitempty"`
 }
 
 type BackupState string
@@ -71,11 +72,20 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 	if len(p.Spec.StorageName) == 0 {
 		return fmt.Errorf("spec storageName field is empty")
 	}
-	if len(p.Spec.ClusterName) == 0 {
-		return fmt.Errorf("spec clusterName field is empty")
+	if len(p.Spec.GetClusterName()) == 0 {
+		return fmt.Errorf("spec clusterName and deprecated psmdbCluster fields are empty")
 	}
 	if string(p.Spec.Comperssion) == "" {
 		p.Spec.Comperssion = pbm.CompressionTypeGZIP
 	}
 	return nil
+}
+
+// GetClusterName returns ClusterName if it's not empty. Otherwise, it will return PSMDBCluster.
+// TODO: Remove after v1.15
+func (p *PerconaServerMongoDBBackupSpec) GetClusterName() string {
+	if len(p.ClusterName) > 0 {
+		return p.ClusterName
+	}
+	return p.PSMDBCluster
 }
