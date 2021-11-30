@@ -233,6 +233,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, fmt.Errorf("reconcile users secret: %v", err)
 	}
 
+	err = r.deleteOrphanPVCs(cr)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to delete orphan PVCs: %v", err)
+	}
+
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
@@ -598,6 +603,40 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(cr *api.PerconaServerM
 	}
 
 	return created, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(cr *api.PerconaServerMongoDB) error {
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-psmdb-pvc":
+			// remove orphan pvc
+			mongodPVCs, err := r.getMongodPVCs(cr)
+			if err != nil {
+				return err
+			}
+			mongodPods, err := r.getMongodPods(cr)
+			if err != nil {
+				return err
+			}
+			mongodPodsMap := make(map[string]bool)
+			for _, pod := range mongodPods.Items {
+				mongodPodsMap[pod.Name] = true
+			}
+			for _, pvc := range mongodPVCs.Items {
+				if strings.HasPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-") {
+					podName := strings.TrimPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-")
+					if _, ok := mongodPodsMap[podName]; !ok {
+						// remove the orphan pvc
+						err := r.client.Delete(context.TODO(), &pvc)
+						if err != nil {
+							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerMongoDB) error {

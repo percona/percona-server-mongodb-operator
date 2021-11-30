@@ -38,6 +38,19 @@ func (r *ReconcilePerconaServerMongoDB) getRSPods(cr *api.PerconaServerMongoDB, 
 	return pods, err
 }
 
+func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+	mongosPods := corev1.PodList{}
+	err := r.client.List(context.TODO(),
+		&mongosPods,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+		},
+	)
+
+	return mongosPods, err
+}
+
 func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
 	list := appsv1.StatefulSetList{}
 
@@ -117,6 +130,20 @@ func (r *ReconcilePerconaServerMongoDB) getAllPVCs(cr *api.PerconaServerMongoDB)
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(clusterLabels(cr)),
+		},
+	)
+
+	return list, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getMongodPVCs(cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
+	list := corev1.PersistentVolumeClaimList{}
+
+	err := r.client.List(context.TODO(),
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
 		},
 	)
 
