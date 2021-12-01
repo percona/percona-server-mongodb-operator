@@ -2,6 +2,8 @@ apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
   name: version-service-unreachable
+  finalizers:
+    - delete-psmdb-pvc
 spec:
   image:
   initImage: #initImage
@@ -60,6 +62,10 @@ spec:
         resources:
           requests:
             storage: 1Gi
+    readinessProbe:
+      failureThreshold: 5
+    livenessProbe:
+      failureThreshold: 3
     size: 3
   secrets:
     key: some-key

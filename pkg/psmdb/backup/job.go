@@ -7,11 +7,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/pkg/errors"
 )
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) *batchv1b.CronJob {
+func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) (batchv1b.CronJob, error) {
 	jobName := crName + "-backup-" + backup.Name
-
+	resources, err := psmdb.CreateResources(backupSpec.Resources)
+	if err != nil {
+		return batchv1b.CronJob{}, errors.Wrap(err, "cannot parse Backup resources")
+	}
 	backupPod := corev1.PodSpec{
 		RestartPolicy:      corev1.RestartPolicyNever,
 		ImagePullSecrets:   imagePullSecrets,
@@ -37,28 +42,31 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				},
 				Args:            newBackupCronJobContainerArgs(backup, jobName),
 				SecurityContext: backupSpec.ContainerSecurityContext,
+				Resources:       resources,
 			},
 		},
 		SecurityContext:  backupSpec.PodSecurityContext,
 		RuntimeClassName: backupSpec.RuntimeClassName,
 	}
 
-	return &batchv1b.CronJob{
+	return batchv1b.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1beta1",
 			Kind:       "CronJob",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: namespace,
-			Labels:    NewBackupCronJobLabels(crName),
+			Name:        jobName,
+			Namespace:   namespace,
+			Labels:      NewBackupCronJobLabels(crName),
+			Annotations: backupSpec.Annotations,
 		},
 		Spec: batchv1b.CronJobSpec{
 			Schedule:          backup.Schedule,
 			ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 			JobTemplate: batchv1b.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: NewBackupCronJobLabels(crName),
+					Labels:      NewBackupCronJobLabels(crName),
+					Annotations: backupSpec.Annotations,
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
@@ -67,7 +75,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				},
 			},
 		},
-	}
+	}, nil
 }
 
 func NewBackupCronJobLabels(crName string) map[string]string {

@@ -57,6 +57,7 @@ spec:
             - --relaxPermChecks
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
+            - --config=/etc/mongos-config/mongos.conf
           command:
             - /data/db/ps-entry.sh
           env:
@@ -88,7 +89,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 30
             successThreshold: 1
-            timeoutSeconds: 5
+            timeoutSeconds: 10
           name: mongos
           ports:
             - containerPort: 27017
@@ -112,7 +113,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 1
             successThreshold: 1
-            timeoutSeconds: 2
+            timeoutSeconds: 1
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
@@ -127,6 +128,11 @@ spec:
               readOnly: true
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
+              readOnly: true
+            - mountPath: /etc/mongos-config
+              name: config
+            - mountPath: /etc/users-secret
+              name: users-secret-file
               readOnly: true
           workingDir: /data/db
         - args:
@@ -174,3 +180,12 @@ spec:
             secretName: some-name-ssl-internal
         - emptyDir: {}
           name: mongod-data
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-some-name-users
+        - configMap:
+            defaultMode: 420
+            name: some-name-mongos
+            optional: true
+          name: config

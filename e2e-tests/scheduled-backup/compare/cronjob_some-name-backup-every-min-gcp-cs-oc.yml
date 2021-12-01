@@ -1,6 +1,7 @@
-apiVersion: batch/v1beta1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
+  annotations: {}
   labels:
     app.kubernetes.io/component: backup-schedule
     app.kubernetes.io/instance: some-name
@@ -40,7 +41,10 @@ spec:
                   value: some-name
               imagePullPolicy: IfNotPresent
               name: backup
-              resources: {}
+              resources:
+                requests:
+                  cpu: 300m
+                  memory: 500M
               securityContext:
                 runAsNonRoot: true
               terminationMessagePath: /dev/termination-log

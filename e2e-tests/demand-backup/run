@@ -14,11 +14,10 @@ deploy_minio
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl_bin apply \
-    -f $conf_dir/cloud-secret.yml \
-    -f $conf_dir/minio-secret.yml \
-    -f $conf_dir/secrets.yml \
-    -f $conf_dir/client.yml
+	-f "$conf_dir/secrets.yml" \
+	-f "$conf_dir/client.yml"
 
+apply_s3_storage_secrets
 apply_cluster $test_dir/conf/$cluster.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
@@ -28,13 +27,13 @@ compare_kubectl statefulset/$cluster
 
 desc 'write data, read from all'
 run_mongo \
-    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-    "userAdmin:userAdmin123456@$cluster.$namespace"
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
 sleep 2
 run_mongo \
-    'use myApp\n db.test.insert({ x: 100500 })' \
-    "myApp:myPass@$cluster.$namespace"
-sleep 10            # for minikube
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@$cluster.$namespace"
+sleep 10 # for minikube
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
@@ -43,40 +42,67 @@ wait_backup_agent $cluster-0
 wait_backup_agent $cluster-1
 wait_backup_agent $cluster-2
 
-backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
-backup_name_gcp="backup-gcp-cs"
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	backup_name_aws="backup-aws-s3"
+	backup_name_gcp="backup-gcp-cs"
+	backup_name_azure="backup-azure-blob"
+fi
 
 desc 'run backups'
-run_backup aws-s3
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	run_backup aws-s3
+	run_backup gcp-cs
+	run_backup azure-blob
+fi
 run_backup minio
-run_backup gcp-cs
 
-wait_backup "$backup_name_aws"
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	wait_backup "$backup_name_aws"
+	wait_backup "$backup_name_gcp"
+	wait_backup "$backup_name_azure"
+fi
 wait_backup "$backup_name_minio"
-wait_backup "$backup_name_gcp"
 
 sleep 5
 
-desc 'check backup and restore -- aws-s3'
-backup_dest_aws=$(get_backup_dest   "$backup_name_aws")
-curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip > /dev/null
-run_restore $backup_name_aws 3
-wait_restore $backup_name_aws 3
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	desc 'check backup and restore -- aws-s3'
+	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" | gunzip >/dev/null
+	run_restore $backup_name_aws 3
+	wait_restore $backup_name_aws 3
+
+	desc 'check backup and restore -- gcp-cs'
+	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
+	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip >/dev/null
+	run_restore $backup_name_gcp 3
+	wait_restore $backup_name_gcp 3
+
+	desc 'check backup and restore -- azure-blob'
+	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
+	curl -s "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz" | gunzip >/dev/null
+	run_restore $backup_name_azure 3
+	wait_restore $backup_name_azure 3
+fi
 
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-    /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-    /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
-        | grep ${backup_dest_minio}_rs0.dump.gz
+	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
+	| grep ${backup_dest_minio}_rs0.dump.gz
 run_restore $backup_name_minio 3
 wait_restore $backup_name_minio 3
 
-desc 'check backup and restore -- gcp-cs'
-backup_dest_gcp=$(get_backup_dest   "$backup_name_gcp")
-curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" | gunzip > /dev/null
-run_restore $backup_name_gcp 3
-wait_restore $backup_name_gcp 3
+desc 'restore from backup source, with storageName -- minio'
+backup_dest_minio=$(get_backup_dest "$backup_name_minio")
+run_restore_backupsource "${backup_name_minio}-source-0" "$backup_dest_minio" "minio"
+wait_restore "$backup_name_minio" 3
+
+desc 'restore from backup source, no storageName -- minio'
+backup_dest_minio=$(get_backup_dest "$backup_name_minio")
+run_restore_backupsource "${backup_name_minio}-source-1" "$backup_dest_minio"
+wait_restore "$backup_name_minio" 3
 
 destroy $namespace

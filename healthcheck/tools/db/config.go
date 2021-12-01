@@ -15,14 +15,15 @@
 package db
 
 import (
+	"io/ioutil"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/alecthomas/kingpin"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/dcos"
-	"gopkg.in/mgo.v2"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -34,8 +35,8 @@ var (
 )
 
 type Config struct {
-	DialInfo *mgo.DialInfo
-	SSL      *SSLConfig
+	mongo.Config
+	SSL *SSLConfig
 }
 
 func getDefaultMongoDBAddress() string {
@@ -57,48 +58,38 @@ func getDefaultMongoDBAddress() string {
 	return hostname + ":" + DefaultMongoDBPort
 }
 
-func NewConfig(app *kingpin.Application, envUser string, envPassword string) *Config {
-	db := &Config{
-		DialInfo: &mgo.DialInfo{},
-	}
+func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*Config, error) {
+	conf := &Config{}
 	app.Flag(
 		"address",
 		"mongodb server address (hostname:port), defaults to '$TASK_NAME.$FRAMEWORK_HOST:$MONGODB_PORT' if the env vars are available and SSL is used, if not the default is '"+DefaultMongoDBHost+":"+DefaultMongoDBPort+"'",
-	).Default(getDefaultMongoDBAddress()).StringsVar(&db.DialInfo.Addrs)
+	).Default(getDefaultMongoDBAddress()).StringsVar(&conf.Hosts)
 	app.Flag(
 		"replset",
 		"mongodb replica set name, overridden by env var "+pkg.EnvMongoDBReplset,
-	).Envar(pkg.EnvMongoDBReplset).StringVar(&db.DialInfo.ReplicaSetName)
-	app.Flag(
-		"timeout",
-		"mongodb server timeout",
-	).Default(DefaultMongoDBTimeout).DurationVar(&db.DialInfo.Timeout)
+	).Envar(pkg.EnvMongoDBReplset).StringVar(&conf.ReplSetName)
 	app.Flag(
 		"username",
 		"mongodb auth username, this flag or env var "+envUser+" is required",
-	).Envar(envUser).Required().StringVar(&db.DialInfo.Username)
-	app.Flag(
-		"password",
-		"mongodb auth password, this flag or env var "+envPassword+" is required",
-	).Envar(envPassword).Required().StringVar(&db.DialInfo.Password)
-	app.Flag(
-		"authDb",
-		"mongodb auth database",
-	).Default(DefaultMongoDBAuthDB).StringVar(&db.DialInfo.Source)
-	app.Flag(
-		"useDirectConnection",
-		"enable direct connection",
-	).Default("true").BoolVar(&db.DialInfo.Direct)
-	app.Flag(
-		"useFailFastConnection",
-		"enable fail-fast connection",
-	).Default("true").BoolVar(&db.DialInfo.FailFast)
+	).Envar(envUser).Required().StringVar(&conf.Username)
 
-	db.SSL = NewSSLConfig(app)
-	return db
-}
+	pwdFile := "/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD"
+	if _, err := os.Stat(pwdFile); err == nil {
+		pass, err := ioutil.ReadFile(pwdFile)
+		if err != nil {
+			return nil, errors.Wrapf(err, "read %s", pwdFile)
+		}
 
-func NewSSLConfig(app *kingpin.Application) *SSLConfig {
+		conf.Password = string(pass)
+	} else if os.IsNotExist(err) {
+		app.Flag(
+			"password",
+			"mongodb auth password, this flag or env var "+envPassword+" is required",
+		).Envar(envPassword).Required().StringVar(&conf.Password)
+	} else {
+		return nil, errors.Wrap(err, "failed to get password")
+	}
+
 	ssl := &SSLConfig{}
 	app.Flag(
 		"ssl",
@@ -117,21 +108,10 @@ func NewSSLConfig(app *kingpin.Application) *SSLConfig {
 		"skip validation of the SSL certificate and hostname, overridden by env var "+pkg.EnvMongoDBNetSSLInsecure,
 	).Envar(pkg.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
 
-	return ssl
-}
+	conf.SSL = ssl
+	if err := conf.configureTLS(); err != nil {
+		return nil, errors.Wrap(err, "get TLS config")
+	}
 
-func (cnf *Config) Uri() string {
-	options := []string{}
-	if cnf.DialInfo.ReplicaSetName != "" {
-		options = append(options, "replicaSet="+cnf.DialInfo.ReplicaSetName)
-	}
-	if cnf.SSL.Enabled {
-		options = append(options, "ssl=true")
-	}
-	hosts := strings.Join(cnf.DialInfo.Addrs, ",")
-	uri := "mongodb://" + cnf.DialInfo.Username + ":" + cnf.DialInfo.Password + "@" + hosts
-	if len(options) > 0 {
-		uri = uri + "?" + strings.Join(options, "&")
-	}
-	return uri
+	return conf, nil
 }

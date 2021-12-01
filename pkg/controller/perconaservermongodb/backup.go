@@ -4,7 +4,9 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"strconv"
 
+	"go.mongodb.org/mongo-driver/mongo"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -20,24 +22,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	ls := backup.NewBackupCronJobLabels(cr.Name)
 
 	for _, task := range cr.Spec.Backup.Tasks {
-		cjob := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
+		cjob, err := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
+		if err != nil {
+			return errors.Wrap(err, "can't create job")
+		}
 		ls = cjob.ObjectMeta.Labels
 		if task.Enabled {
 			ctasks[cjob.Name] = task
 
-			err := setControllerReference(cr, cjob, r.scheme)
+			err := setControllerReference(cr, &cjob, r.scheme)
 			if err != nil {
-				return fmt.Errorf("set owner reference for backup task %s: %v", cjob.Name, err)
+				return errors.Wrap(err, "set owner reference for backup task "+cjob.Name)
 			}
 
-			err = r.client.Create(context.TODO(), cjob)
-			if err != nil && k8sErrors.IsAlreadyExists(err) {
-				err := r.client.Update(context.TODO(), cjob)
-				if err != nil {
-					return fmt.Errorf("update task %s: %v", task.Name, err)
-				}
-			} else if err != nil {
-				return fmt.Errorf("create task %s: %v", task.Name, err)
+			err = r.createOrUpdate(&cjob)
+			if err != nil {
+				return errors.Wrap(err, "create or update backup job")
 			}
 		}
 	}
@@ -158,7 +158,7 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(cr *api.PerconaServerMo
 
 	for _, rst := range restores.Items {
 		if rst.Status.State != api.RestoreStateReady &&
-			rst.Status.State != api.RestoreStateError && 
+			rst.Status.State != api.RestoreStateError &&
 			rst.Spec.ClusterName == cr.Name {
 			return true, nil
 		}
@@ -185,4 +185,100 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	}
 
 	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongoDB) (bool, error) {
+	backups := api.PerconaServerMongoDBBackupList{}
+	if err := r.client.List(context.TODO(), &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+		if k8sErrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "get backup list")
+	}
+
+	for _, b := range backups.Items {
+		if b.Status.State == api.BackupStateReady && b.Spec.PSMDBCluster == cr.Name {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	// pitr is disabled right before restore so it must not be re-enabled during restore
+	isRestoring, err := r.isRestoreRunning(cr)
+	if err != nil {
+		return errors.Wrap(err, "checking if restore running on pbm update")
+	}
+
+	if isRestoring || cr.Status.State != api.AppStateReady {
+		return nil
+	}
+
+	pbm, err := backup.NewPBM(r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "create pbm object")
+	}
+	defer pbm.Close()
+
+	if cr.Spec.Backup.PITR.Enabled {
+		hasFullBackup, err := r.hasFullBackup(cr)
+		if err != nil {
+			return errors.Wrap(err, "check full backup")
+		}
+
+		if !hasFullBackup {
+			log.Info("Point-in-time recovery will work only with full backup. Please create one manually or wait for scheduled backup to be created (if configured).")
+			return nil
+		}
+	}
+
+	val, err := pbm.C.GetConfigVar("pitr.enabled")
+	if err != nil {
+		if !errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.Wrap(err, "get pitr.enabled")
+		}
+
+		return nil
+	}
+
+	enabled, ok := val.(bool)
+	if !ok {
+		return errors.Wrap(err, "unexpected value of pitr.enabled")
+	}
+
+	if enabled != cr.Spec.Backup.PITR.Enabled {
+		val := strconv.FormatBool(cr.Spec.Backup.PITR.Enabled)
+		if err := pbm.C.SetConfigVar("pitr.enabled", val); err != nil {
+			return errors.Wrap(err, "update pitr.enabled")
+		}
+	}
+
+	val, err = pbm.C.GetConfigVar("pitr.oplogSpanMin")
+	if err != nil {
+		if !errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.Wrap(err, "get pitr.oplogSpanMin")
+		}
+
+		return nil
+	}
+
+	oplogSpanMin, ok := val.(float64)
+	if !ok {
+		return errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
+	}
+
+	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin {
+		val := strconv.FormatFloat(cr.Spec.Backup.PITR.OplogSpanMin, 'f', -1, 64)
+		if err := pbm.C.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
+			return errors.Wrap(err, "update pitr.oplogSpanMin")
+		}
+	}
+
+	return nil
 }

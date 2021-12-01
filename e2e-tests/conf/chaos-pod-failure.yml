@@ -1,0 +1,13 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-example
+spec:
+  action: pod-failure
+  mode: one
+  value: ""
+  duration: "60s"
+  selector:
+    pods:
+      test-namespace:
+        - pod-name

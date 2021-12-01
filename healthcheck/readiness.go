@@ -15,29 +15,35 @@
 package healthcheck
 
 import (
-	"errors"
-	"fmt"
+	"context"
 
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 // ReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
-func ReadinessCheck(session *mgo.Session) (State, error) {
-	err := session.Ping()
-
-	if err != nil {
-		return StateFailed, fmt.Errorf("failed to get successful ping: %s", err)
+func ReadinessCheck(client *mongo.Client) (State, error) {
+	if err := client.Ping(context.TODO(), readpref.Primary()); err != nil {
+		return StateFailed, errors.Wrap(err, "ping")
 	}
 
 	return StateOk, nil
 }
 
-func MongosReadinessCheck(session *mgo.Session) error {
+func MongosReadinessCheck(client *mongo.Client) error {
 	ss := ServerStatus{}
+	cur := client.Database("admin").RunCommand(context.TODO(), bson.D{
+		{Key: "listDatabases", Value: 1},
+		{Key: "filter", Value: bson.D{{Key: "name", Value: "admin"}}},
+		{Key: "nameOnly", Value: true}})
+	if cur.Err() != nil {
+		return errors.Wrap(cur.Err(), "run listDatabases")
+	}
 
-	if err := session.Run(bson.D{{Name: "listDatabases", Value: 1}}, &ss); err != nil {
-		return fmt.Errorf("listDatabases returned error %v", err)
+	if err := cur.Decode(&ss); err != nil {
+		return errors.Wrap(err, "decode listDatabases response")
 	}
 
 	if ss.Ok == 0 {

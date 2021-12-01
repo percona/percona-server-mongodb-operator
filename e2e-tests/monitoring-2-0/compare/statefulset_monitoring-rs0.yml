@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  annotations: {}
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
@@ -89,7 +90,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 30
             successThreshold: 1
-            timeoutSeconds: 5
+            timeoutSeconds: 10
           name: mongod
           ports:
             - containerPort: 27017
@@ -124,6 +125,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: monitoring-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
         - env:
             - name: PMM_SERVER
@@ -213,6 +216,10 @@ spec:
                 pmm-admin status --wait=10s;
                 pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT);
                 pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'
+            - name: PMM_AGENT_SIDECAR
+              value: "true"
+            - name: PMM_AGENT_SIDECAR_SLEEP
+              value: "5"
           imagePullPolicy: Always
           lifecycle:
             preStop:
@@ -290,6 +297,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: monitoring-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-monitoring-users
   updateStrategy:
     rollingUpdate:
       partition: 0

@@ -1,4 +1,4 @@
-FROM golang:1.14 AS go_builder
+FROM golang:1.17 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
 COPY . .
@@ -46,4 +46,4 @@ COPY build/ps-entry.sh /ps-entry.sh
 # Mozilla licensed source code should be included
 COPY vendor/github.com/hashicorp /lib
 
-USER nobody
+USER 2

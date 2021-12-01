@@ -6,26 +6,22 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/pkg/errors"
 	mongod "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-const internalPrefix = "internal-"
-
-func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) (sfsTemplateAnn, mongosTemplateAnn map[string]string, err error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	sysUsersSecretObj := corev1.Secret{}
-	err = r.client.Get(context.TODO(),
+	err := r.client.Get(context.TODO(),
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.Secrets.Users,
@@ -33,12 +29,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&sysUsersSecretObj,
 	)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return nil, nil, nil
+		return nil
 	} else if err != nil {
-		return nil, nil, errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
+		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
 	}
 
-	secretName := internalPrefix + cr.Name + "-users"
+	secretName := api.InternalUserSecretName(cr)
 	internalSysSecretObj := corev1.Secret{}
 
 	err = r.client.Get(context.TODO(),
@@ -49,7 +45,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&internalSysSecretObj,
 	)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return nil, nil, errors.Wrap(err, "get internal sys users secret")
+		return errors.Wrap(err, "get internal sys users secret")
 	}
 
 	if k8serrors.IsNotFound(err) {
@@ -60,52 +56,98 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		}
 		err = r.client.Create(context.TODO(), internalSysUsersSecret)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "create internal sys users secret")
+			return errors.Wrap(err, "create internal sys users secret")
 		}
-		return nil, nil, nil
+		return nil
 	}
 
 	// we do this check after work with secret objects because in case of upgrade cluster we need to be sure that internal secret exist
 	if cr.Status.State != api.AppStateReady {
-		return nil, nil, nil
+		return nil
 	}
 
 	newSysData, err := json.Marshal(sysUsersSecretObj.Data)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "marshal sys secret data")
+		return errors.Wrap(err, "marshal sys secret data")
 	}
+
 	newSecretDataHash := sha256Hash(newSysData)
 	dataChanged, err := sysUsersSecretDataChanged(newSecretDataHash, &internalSysSecretObj)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "check sys users data changes")
+		return errors.Wrap(err, "check sys users data changes")
 	}
 
-	if !dataChanged {
-		return nil, nil, nil
+	if !dataChanged || cr.Spec.Unmanaged {
+		return nil
 	}
 
-	restartSfs, restartMongos, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
+	containers, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "manage sys users")
+		return errors.Wrap(err, "manage sys users")
+	}
+
+	if len(containers) > 0 {
+		rsPodList, err := r.getMongodPods(cr)
+		if err != nil {
+			return errors.Wrap(err, "failed to get mongos pods")
+		}
+
+		pods := rsPodList.Items
+
+		if cr.Spec.Sharding.Enabled {
+			mongosList, err := r.getMongosPods(cr)
+			if err != nil {
+				return errors.Wrap(err, "failed to get mongos pods")
+			}
+
+			pods = append(pods, mongosList.Items...)
+
+			cfgPodlist, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
+			if err != nil {
+				return errors.Wrap(err, "failed to get mongos pods")
+			}
+
+			pods = append(pods, cfgPodlist.Items...)
+		}
+
+		for _, name := range containers {
+			err = r.killcontainer(pods, name)
+			if err != nil {
+				return errors.Wrapf(err, "failed to kill %s container", name)
+			}
+		}
 	}
 
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
 	err = r.client.Update(context.TODO(), &internalSysSecretObj)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "update internal sys users secret")
-	}
-	ann := map[string]string{
-		"last-applied-secret":    newSecretDataHash,
-		"last-applied-secret-ts": time.Now().UTC().String(),
-	}
-	if restartSfs {
-		sfsTemplateAnn = ann
-	}
-	if restartMongos {
-		mongosTemplateAnn = ann
+		return errors.Wrap(err, "update internal sys users secret")
 	}
 
-	return
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) killcontainer(pods []corev1.Pod, containerName string) error {
+	for _, pod := range pods {
+		for _, c := range pod.Spec.Containers {
+			if c.Name == containerName {
+				log.Info("restart container", "pod", pod.Name, "container", c.Name)
+
+				stderrBuf := &bytes.Buffer{}
+
+				err := r.clientcmd.Exec(&pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
+				if err != nil {
+					return errors.Wrap(err, "exec command in pod")
+				}
+
+				if stderrBuf.Len() != 0 {
+					return errors.Errorf("exec command return error: %s", stderrBuf.String())
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 type systemUser struct {
@@ -150,47 +192,46 @@ func (su *systemUsers) len() int {
 	return len(su.users)
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret, repls []*api.ReplsetSpec) (restartSfs, restartMongos bool, err error) {
+func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret,
+	repls []*api.ReplsetSpec) ([]string, error) {
 	su := systemUsers{
 		currData: currUsersSec.Data,
 		newData:  newUsersSec.Data,
 	}
 
+	containers := []string{}
+
 	type user struct {
-		nameKey, passKey  string
-		needRestartSfs    bool
-		needRestartMongos bool
+		nameKey, passKey string
 	}
 	users := []user{
 		{
-			nameKey:           envMongoDBClusterAdminUser,
-			passKey:           envMongoDBClusterAdminPassword,
-			needRestartMongos: true, // in mgo.go:handleRsAddToShard() we use envs with this user credentials, so we need restart for update this envs
+			nameKey: envMongoDBClusterAdminUser,
+			passKey: envMongoDBClusterAdminPassword,
 		},
+
 		{
-			nameKey:        envMongoDBClusterMonitorUser,
-			passKey:        envMongoDBClusterMonitorPassword,
-			needRestartSfs: true, //need for liveness/readiness ckeck
+			nameKey: envMongoDBClusterMonitorUser,
+			passKey: envMongoDBClusterMonitorPassword,
 		},
+
 		{
-			nameKey:        envMongoDBBackupUser,
-			passKey:        envMongoDBBackupPassword,
-			needRestartSfs: true,
+			nameKey: envMongoDBBackupUser,
+			passKey: envMongoDBBackupPassword,
 		},
+
 		// !!! UserAdmin always must be the last to update since we're using it for the mongo connection
 		{
-			nameKey:        envMongoDBUserAdminUser,
-			passKey:        envMongoDBUserAdminPassword,
-			needRestartSfs: true,
+			nameKey: envMongoDBUserAdminUser,
+			passKey: envMongoDBUserAdminPassword,
 		},
 	}
 	if cr.Spec.PMM.Enabled {
 		// insert in front
 		users = append([]user{
 			{
-				nameKey:        envPMMServerUser,
-				passKey:        envPMMServerPassword,
-				needRestartSfs: true,
+				nameKey: envPMMServerUser,
+				passKey: envPMMServerPassword,
 			},
 		}, users...)
 	}
@@ -198,49 +239,31 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 	for _, u := range users {
 		changed, err := su.add(u.nameKey, u.passKey)
 		if err != nil {
-			return false, false, err
+			return nil, err
 		}
-		if u.needRestartSfs && changed {
-			restartSfs = true
-		}
-		if u.needRestartMongos && changed {
-			restartMongos = true
+
+		if changed {
+			switch u.nameKey {
+			case envMongoDBBackupUser:
+				containers = append(containers, "backup-agent")
+			case envPMMServerUser:
+				containers = append(containers, "pmm-client")
+			}
 		}
 	}
 
 	if su.len() == 0 {
-		return false, false, nil
+		return containers, nil
 	}
 
-	err = r.updateUsers(cr, su.users, repls)
+	err := r.updateUsers(cr, su.users, repls)
 
-	return restartSfs, restartMongos, errors.Wrap(err, "mongo: update system users")
+	return containers, errors.Wrap(err, "mongo: update system users")
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, repls []*api.ReplsetSpec) error {
 	for _, replset := range repls {
-		matchLabels := map[string]string{
-			"app.kubernetes.io/name":       "percona-server-mongodb",
-			"app.kubernetes.io/instance":   cr.Name,
-			"app.kubernetes.io/replset":    replset.Name,
-			"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-			"app.kubernetes.io/part-of":    "percona-server-mongodb",
-		}
-
-		pods := corev1.PodList{}
-		err := r.client.List(context.TODO(),
-			&pods,
-			&client.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(matchLabels),
-			},
-		)
-
-		if err != nil {
-			return errors.Wrap(err, "failed to get pods for RS")
-		}
-
-		client, err := r.mongoClientWithRole(cr, replset.Name, replset.Expose.Enabled, pods, roleUserAdmin)
+		client, err := r.mongoClientWithRole(cr, *replset, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "dial:")
 		}

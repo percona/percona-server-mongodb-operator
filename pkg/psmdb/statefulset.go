@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"fmt"
+
 	"github.com/go-logr/logr"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,12 +32,15 @@ var secretFileMode int32 = 288
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
-	initContainers []corev1.Container, log logr.Logger) (appsv1.StatefulSetSpec, error) {
+	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
+	resourcesSpec *api.ResourcesSpec, podSecurityContext *corev1.PodSecurityContext,
+	containerSecurityContext *corev1.SecurityContext, livenessProbe *api.LivenessProbeExtended,
+	readinessProbe *corev1.Probe, configuration string, configName string) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
 
 	// TODO: do as the backup - serialize resources straight via cr.yaml
-	resources, err := CreateResources(replset.Resources)
+	resources, err := CreateResources(resourcesSpec)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
 	}
@@ -65,6 +69,13 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
+	if customConf.Type.IsUsable() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         "config",
+			VolumeSource: customConf.Type.VolumeSource(configName),
+		})
+	}
+
 	if *m.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.Volume{
@@ -80,7 +91,8 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		)
 	}
 
-	c, err := container(m, replset, containerName, resources, ikeyName)
+	c, err := container(m, replset, containerName, resources, ikeyName, customConf.Type.IsUsable(),
+		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -95,6 +107,15 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
 	}
 
+	annotations := multiAZ.Annotations
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	if customConf.Type.IsUsable() {
+		annotations["percona.com/configuration-hash"] = customConf.HashHex
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: m.Name + "-" + replset.Name,
 		Replicas:    &size,
@@ -104,10 +125,10 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      customLabels,
-				Annotations: multiAZ.Annotations,
+				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				SecurityContext:    replset.PodSecurityContext,
+				SecurityContext:    podSecurityContext,
 				Affinity:           PodAffinity(m, multiAZ.Affinity, customLabels),
 				NodeSelector:       multiAZ.NodeSelector,
 				Tolerations:        multiAZ.Tolerations,
@@ -125,8 +146,16 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	}, nil
 }
 
+func MongodCustomConfigName(clusterName, replicaSetName string) string {
+	return fmt.Sprintf("%s-%s-mongod", clusterName, replicaSetName)
+}
+
+func MongosCustomConfigName(clusterName string) string {
+	return clusterName + "-mongos"
+}
+
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
-func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
+func PersistentVolumeClaim(name, namespace string, labels map[string]string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -135,6 +164,7 @@ func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolume
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			Labels:    labels,
 		},
 		Spec: *spec,
 	}

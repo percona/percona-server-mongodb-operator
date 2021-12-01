@@ -14,35 +14,26 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const maxStatusesQuantity = 20
-
-type mongoClusterState int
-
-const (
-	clusterReady mongoClusterState = iota
-	clusterInit
-	clusterError
-)
-
-func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState mongoClusterState) error {
+func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
 	clusterCondition := api.ClusterCondition{
 		Status:             api.ConditionTrue,
-		Type:               api.ClusterInit,
+		Type:               api.AppStateInit,
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	}
 	if reconcileErr != nil {
 		if cr.Status.State != api.AppStateError {
 			clusterCondition = api.ClusterCondition{
 				Status:             api.ConditionTrue,
-				Type:               api.ClusterError,
+				Type:               api.AppStateError,
 				Message:            reconcileErr.Error(),
 				Reason:             "ErrorReconcile",
 				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+			cr.Status.AddCondition(clusterCondition)
 		}
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
@@ -54,6 +45,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.Message = ""
 
 	replsetsReady := 0
+	replsetsStopping := 0
+	replsetsPaused := 0
 	inProgress := false
 
 	repls := cr.Spec.Replsets
@@ -74,7 +67,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	cr.Status.Replsets = leftRsStatuses
-
+	cr.Status.Size = 0
+	cr.Status.Ready = 0
 	for _, rs := range repls {
 		status, err := r.rsStatus(cr, rs)
 		if err != nil {
@@ -89,31 +83,46 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		status.Initialized = currentRSstatus.Initialized
 		status.AddedAsShard = currentRSstatus.AddedAsShard
 
-		if status.Status == api.AppStateReady {
+		switch status.Status {
+		case api.AppStateReady:
 			replsetsReady++
+		case api.AppStateStopping:
+			replsetsStopping++
+		case api.AppStatePaused:
+			replsetsPaused++
 		}
 
 		if status.Status != currentRSstatus.Status {
-			if status.Status == api.AppStateReady && currentRSstatus.Initialized {
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Type:               api.ClusterRSReady,
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
+			rsCondition := api.ClusterCondition{
+				Type:               status.Status,
+				Status:             api.ConditionTrue,
+				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
 
-			if status.Status == api.AppStateError {
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Message:            rs.Name + ": " + status.Message,
-					Reason:             "ErrorRS",
-					Type:               api.ClusterError,
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
+			switch status.Status {
+			case api.AppStateReady:
+				rsCondition.Reason = "RSReady"
+				rsCondition.Message = rs.Name + ": ready"
+			case api.AppStateStopping:
+				rsCondition.Reason = "RSStopping"
+				rsCondition.Message = rs.Name + ": stopping"
+			case api.AppStatePaused:
+				rsCondition.Reason = "RSPaused"
+				rsCondition.Message = rs.Name + ": paused"
 			}
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+
+			cr.Status.AddCondition(rsCondition)
 		}
+
+		// Ready count can be greater than total size in case of downscale
+		if status.Ready > status.Size {
+			status.Ready = status.Size
+		}
+
 		cr.Status.Replsets[rs.Name] = &status
+		cr.Status.Size += status.Size
+		cr.Status.Ready += status.Ready
+
 		if !inProgress {
 			inProgress, err = r.upgradeInProgress(cr, rs.Name)
 			if err != nil {
@@ -133,88 +142,62 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		}
 
 		if mongosStatus.Status != cr.Status.Mongos.Status {
-			if mongosStatus.Status == api.AppStateReady {
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Type:               api.ClusterMongosReady,
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
+			mongosCondition := api.ClusterCondition{
+				Type:               mongosStatus.Status,
+				Status:             api.ConditionTrue,
+				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
 
-			if mongosStatus.Status == api.AppStateError {
-				clusterCondition = api.ClusterCondition{
-					Status:             api.ConditionTrue,
-					Message:            mongosStatus.Message,
-					Reason:             "ErrorMongos",
-					Type:               api.ClusterError,
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				}
+			switch mongosStatus.Status {
+			case api.AppStateReady:
+				mongosCondition.Reason = "MongosReady"
+			case api.AppStateStopping:
+				mongosCondition.Reason = "MongosStopping"
+			case api.AppStatePaused:
+				mongosCondition.Reason = "MongosPaused"
 			}
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
+
+			cr.Status.AddCondition(mongosCondition)
+		}
+
+		// Ready count can be greater than total size in case of downscale
+		if mongosStatus.Ready > mongosStatus.Size {
+			mongosStatus.Ready = mongosStatus.Size
 		}
 
 		cr.Status.Mongos = &mongosStatus
+		cr.Status.Size += int32(mongosStatus.Size)
+		cr.Status.Ready += int32(mongosStatus.Ready)
 	} else {
 		cr.Status.Mongos = nil
 	}
-
-	cr.Status.State = api.AppStateInit
-	if replsetsReady == len(repls) && clusterState == clusterReady {
-		clusterCondition = api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterReady,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-		cr.Status.State = api.AppStateReady
-	} else if cr.Status.Conditions[len(cr.Status.Conditions)-1].Type != api.ClusterReady &&
-		clusterState == clusterInit {
-		clusterCondition = api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterInit,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-		cr.Status.State = api.AppStateInit
-	} else {
-		clusterCondition = api.ClusterCondition{
-			Status:             api.ConditionTrue,
-			Type:               api.ClusterError,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		}
-		cr.Status.State = api.AppStateError
-	}
-
-	if cr.Status.State != api.AppStateError &&
-		cr.Status.Mongos != nil && cr.Status.Mongos.Status != api.AppStateReady {
-		cr.Status.State = cr.Status.Mongos.Status
-	}
-
-	if len(cr.Status.Conditions) == 0 {
-		cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
-	} else {
-		lastClusterCondition := cr.Status.Conditions[len(cr.Status.Conditions)-1]
-		switch {
-		case lastClusterCondition.Type != clusterCondition.Type:
-			cr.Status.Conditions = append(cr.Status.Conditions, clusterCondition)
-		default:
-			cr.Status.Conditions[len(cr.Status.Conditions)-1] = lastClusterCondition
-		}
-	}
-
-	if len(cr.Status.Conditions) > maxStatusesQuantity {
-		cr.Status.Conditions = cr.Status.Conditions[len(cr.Status.Conditions)-maxStatusesQuantity:]
-	}
-
-	if inProgress {
-		cr.Status.State = api.AppStateInit
-	}
-
-	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
 	host, err := r.connectionEndpoint(cr)
 	if err != nil {
 		log.Error(err, "get psmdb connection endpoint")
 	}
 	cr.Status.Host = host
+
+	switch {
+	case replsetsStopping > 0 || (cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status == api.AppStateStopping) || cr.ObjectMeta.DeletionTimestamp != nil:
+		cr.Status.State = api.AppStateStopping
+	case replsetsPaused == len(repls):
+		cr.Status.State = api.AppStatePaused
+		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStatePaused {
+			cr.Status.State = api.AppStateStopping
+		}
+	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
+		cr.Status.State = api.AppStateReady
+		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
+			cr.Status.State = cr.Status.Mongos.Status
+		}
+	default:
+		cr.Status.State = api.AppStateInit
+	}
+	clusterCondition.Type = cr.Status.State
+	cr.Status.AddCondition(clusterCondition)
+
+	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
 	return r.writeStatus(cr)
 }
@@ -230,21 +213,24 @@ func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(cr *api.PerconaServerM
 }
 
 func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB) error {
-	err := r.client.Status().Update(context.TODO(), cr)
-	if err != nil {
-		// may be it's k8s v1.10 and erlier (e.g. oc3.9) that doesn't support status updates
-		// so try to update whole CR
-		err := r.client.Update(context.TODO(), cr)
-		if err != nil {
-			return errors.Wrap(err, "send update")
-		}
-	}
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		c := &api.PerconaServerMongoDB{}
 
-	return nil
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		if err != nil {
+			return err
+		}
+
+		c.Status = cr.Status
+
+		return r.client.Status().Update(context.TODO(), c)
+	})
+
+	return errors.Wrap(err, "write status")
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
-	list, err := r.getRSPods(cr, rsSpec.Name)
+	list, err := psmdb.GetRSPods(r.client, cr, rsSpec.Name)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)
 	}
@@ -258,18 +244,21 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, r
 		status.Size += rsSpec.Arbiter.Size
 	}
 
+	if rsSpec.NonVoting.Enabled {
+		status.Size += rsSpec.NonVoting.Size
+	}
+
 	for _, pod := range list.Items {
+		for _, cntr := range pod.Status.ContainerStatuses {
+			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
+				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
+			}
+		}
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
 				if cond.Status == corev1.ConditionTrue {
 					status.Ready++
-				} else if cond.Status == corev1.ConditionFalse {
-					for _, cntr := range pod.Status.ContainerStatuses {
-						if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
-							status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
-						}
-					}
 				}
 			case corev1.PodScheduled:
 				if cond.Reason == corev1.PodReasonUnschedulable &&
@@ -281,7 +270,12 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, r
 		}
 	}
 
-	if status.Size == status.Ready {
+	switch {
+	case cr.Spec.Pause && status.Ready > 0:
+		status.Status = api.AppStateStopping
+	case cr.Spec.Pause:
+		status.Status = api.AppStatePaused
+	case status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 
@@ -300,29 +294,33 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 	}
 
 	for _, pod := range list.Items {
+		for _, cntr := range pod.Status.ContainerStatuses {
+			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
+				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
+			}
+		}
+
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
 				if cond.Status == corev1.ConditionTrue {
 					status.Ready++
-				} else if cond.Status == corev1.ConditionFalse {
-					for _, cntr := range pod.Status.ContainerStatuses {
-						if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
-							status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
-						}
-					}
 				}
 			case corev1.PodScheduled:
 				if cond.Reason == corev1.PodReasonUnschedulable &&
 					cond.LastTransitionTime.Time.Before(time.Now().Add(-1*time.Minute)) {
-					status.Status = api.AppStateError
 					status.Message = cond.Message
 				}
 			}
 		}
 	}
 
-	if status.Size == status.Ready {
+	switch {
+	case cr.Spec.Pause && status.Ready > 0:
+		status.Status = api.AppStateStopping
+	case cr.Spec.Pause:
+		status.Status = api.AppStatePaused
+	case status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 
@@ -331,8 +329,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.Enabled &&
-			mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 			return loadBalancerServiceEndpoint(r.client, cr.Name+"-mongos", cr.Namespace)
 		}
 		return cr.Name + "-mongos." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
@@ -359,7 +356,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServer
 		}
 		addrs, err := psmdb.GetReplsetAddrs(r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
 		if err != nil {
-			return "", err
+			return "", errors.Wrap(err, "get replset addresses")
 		}
 		return strings.Join(addrs, ","), nil
 	}

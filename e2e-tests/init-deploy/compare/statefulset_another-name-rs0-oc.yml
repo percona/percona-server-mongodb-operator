@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  annotations: {}
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
@@ -97,7 +98,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 30
             successThreshold: 1
-            timeoutSeconds: 5
+            timeoutSeconds: 10
           name: mongod
           ports:
             - containerPort: 27017
@@ -137,6 +138,8 @@ spec:
             - mountPath: /etc/mongodb-encryption
               name: another-name-mongodb-encryption-key
               readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
           workingDir: /data/db
         - args:
             - -c
@@ -203,6 +206,10 @@ spec:
             defaultMode: 288
             optional: true
             secretName: another-name-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-another-name-users
   updateStrategy:
     rollingUpdate:
       partition: 0

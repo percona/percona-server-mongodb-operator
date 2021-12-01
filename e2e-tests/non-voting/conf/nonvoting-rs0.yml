@@ -1,0 +1,59 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: nonvoting
+spec:
+  #platform: openshift
+  image:
+  mongod:
+    security:
+      enableEncryption: true
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    nonvoting:
+      enabled: true
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+        advanced:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: nonVoting
+                    app.kubernetes.io/instance: nonvoting
+                    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                    app.kubernetes.io/name: percona-server-mongodb
+                    app.kubernetes.io/part-of: percona-server-mongodb
+                    app.kubernetes.io/replset: rs0
+                topologyKey: kubernetes.io/hostname
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "200m"
+          memory: "0.3G"
+      livenessProbe:
+        failureThreshold: 3
+        initialDelaySeconds: 70
+        periodSeconds: 31
+        successThreshold: 1
+        timeoutSeconds: 10
+        startupDelaySeconds: 7201
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 2Gi
+      schedulerName: default-scheduler
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  secrets:
+    users: some-users

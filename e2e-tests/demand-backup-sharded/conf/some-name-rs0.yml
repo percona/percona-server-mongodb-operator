@@ -34,6 +34,13 @@ spec:
           bucket: operator-testing
           prefix: psmdb
           endpointUrl: https://storage.googleapis.com
+      azure-blob:
+        type: azure
+        azure:
+          container: operator-testing
+          prefix: psmdb
+          credentialsSecret: azure-secret
+
     tasks:
     - name: weekly
       enabled: true
@@ -60,6 +67,9 @@ spec:
 
     mongos:
       size: 3
+      configuration: |
+        replication:
+          localPingThresholdMs: 15
       expose:
         enabled: false
         exposeType: ClusterIP

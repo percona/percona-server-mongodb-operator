@@ -2,38 +2,30 @@ package perconaservermongodb
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/pkg/errors"
 )
 
 func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
 	services := make([]corev1.Service, 0)
 
 	for _, pod := range podList.Items {
-		service := &corev1.Service{}
-		if err := r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: cr.Namespace}, service); err != nil {
-			if errors.IsNotFound(err) {
-				service = psmdb.ExternalService(cr, replset, pod.Name)
-				err = setControllerReference(cr, service, r.scheme)
-				if err != nil {
-					return nil, fmt.Errorf("set owner ref for Service %s: %v", service.Name, err)
-				}
+		service := psmdb.ExternalService(cr, replset, pod.Name)
+		err := setControllerReference(cr, service, r.scheme)
+		if err != nil {
+			return nil, errors.Wrap(err, "set owner ref for Service "+service.Name)
+		}
 
-				err = r.client.Create(context.TODO(), service)
-				if err != nil && !errors.IsAlreadyExists(err) {
-					return nil, fmt.Errorf("failed to create external service for replset %s: %v", replset.Name, err)
-				}
-			} else {
-				return nil, fmt.Errorf("failed to fetch service for replset %s: %v", replset.Name, err)
-			}
+		err = r.createOrUpdate(service)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create external service for replset "+replset.Name)
 		}
 
 		services = append(services, *service)
@@ -42,20 +34,29 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 	return services, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	podList *corev1.PodList) error {
-
-	if len(podList.Items) == 0 {
+func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	if cr.Spec.Pause {
 		return nil
 	}
 
-	podNames := make(map[string]struct{}, len(podList.Items))
-
 	// needed just for labels
-	service := psmdb.ExternalService(cr, replset, podList.Items[0].Name)
+	service := psmdb.ExternalService(cr, replset, cr.Name+"-"+replset.Name)
 
-	for _, pod := range podList.Items {
-		podNames[pod.Name] = struct{}{}
+	svcNames := make(map[string]struct{}, replset.Size)
+	for i := 0; i < int(replset.Size); i++ {
+		svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
+	}
+
+	if replset.NonVoting.Enabled {
+		for i := 0; i < int(replset.NonVoting.Size); i++ {
+			svcNames[service.Name+"-nv-"+strconv.Itoa(i)] = struct{}{}
+		}
+	}
+
+	if replset.Arbiter.Enabled {
+		for i := 0; i < int(replset.Arbiter.Size); i++ {
+			svcNames[service.Name+"-arbiter-"+strconv.Itoa(i)] = struct{}{}
+		}
 	}
 
 	// clear old services
@@ -68,14 +69,13 @@ func (r *ReconcilePerconaServerMongoDB) removeOudatedServices(cr *api.PerconaSer
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("get current services: %v", err)
+		return errors.Wrap(err, "get current services")
 	}
 
 	for _, svc := range svcList.Items {
-		if _, ok := podNames[svc.Name]; !ok {
-			err := r.client.Delete(context.TODO(), &svc)
-			if err != nil {
-				return fmt.Errorf("delete service %s: %v", svc.Name, err)
+		if _, ok := svcNames[svc.Name]; !ok {
+			if err := r.client.Delete(context.TODO(), &svc); err != nil {
+				return errors.Wrapf(err, "delete service %s", svc.Name)
 			}
 		}
 	}
