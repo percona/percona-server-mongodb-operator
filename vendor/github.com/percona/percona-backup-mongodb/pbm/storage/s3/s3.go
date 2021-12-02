@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -475,14 +477,27 @@ func (s *S3) s3session() (*s3.S3, error) {
 }
 
 func (s *S3) session() (*session.Session, error) {
+	var providers []credentials.Provider
+
+	// if we have credentials, set them first in the providers list
+	if s.opts.Credentials.AccessKeyID != "" && s.opts.Credentials.SecretAccessKey != "" {
+		providers = append(providers, &credentials.StaticProvider{Value: credentials.Value{
+			AccessKeyID:     s.opts.Credentials.AccessKeyID,
+			SecretAccessKey: s.opts.Credentials.SecretAccessKey,
+			SessionToken:    "",
+		}})
+	}
+
+	// allow fetching credentials from env variables and ec2 metadata endpoint
+	providers = append(providers, &credentials.EnvProvider{})
+	providers = append(providers, &ec2rolecreds.EC2RoleProvider{
+		Client: ec2metadata.New(session.New()),
+	})
+
 	return session.NewSession(&aws.Config{
-		Region:   aws.String(s.opts.Region),
-		Endpoint: aws.String(s.opts.EndpointURL),
-		Credentials: credentials.NewStaticCredentials(
-			s.opts.Credentials.AccessKeyID,
-			s.opts.Credentials.SecretAccessKey,
-			"",
-		),
+		Region:           aws.String(s.opts.Region),
+		Endpoint:         aws.String(s.opts.EndpointURL),
+		Credentials:      credentials.NewChainCredentials(providers),
 		S3ForcePathStyle: aws.Bool(true),
 	})
 }
