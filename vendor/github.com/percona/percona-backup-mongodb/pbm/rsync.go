@@ -33,6 +33,7 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 	if err != nil {
 		return errors.Wrap(err, "get a backups list from the storage")
 	}
+	l.Debug("got backups list: %v", len(bcps))
 
 	err = p.moveCollection(BcpCollection, BcpOldCollection)
 	if err != nil {
@@ -49,6 +50,8 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 
 	var ins []interface{}
 	for _, b := range bcps {
+		l.Debug("bcp: %v", b.Name)
+
 		d, err := stg.SourceReader(b.Name)
 		if err != nil {
 			return errors.Wrapf(err, "read meta for %v", b.Name)
@@ -58,7 +61,7 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 		err = json.NewDecoder(d).Decode(&v)
 		d.Close()
 		if err != nil {
-			return errors.Wrap(err, "unmarshal backup meta")
+			return errors.Wrapf(err, "unmarshal backup meta [%s]", b.Name)
 		}
 		err = checkBackupFiles(&v, stg)
 		if err != nil {
