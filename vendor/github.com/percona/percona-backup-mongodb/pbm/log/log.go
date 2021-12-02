@@ -26,8 +26,7 @@ type Logger struct {
 
 type Entry struct {
 	ObjID   primitive.ObjectID `bson:"-" json:"-"` // to get sense of mgs total ordering while reading logs
-	Time    string             `bson:"-" json:"t"`
-	TS      int64              `bson:"ts" json:"-"`
+	TS      int64              `bson:"ts" json:"ts"`
 	Tns     int                `bson:"ns" json:"-"`
 	TZone   int                `bson:"tz" json:"-"`
 	LogKeys `bson:",inline" json:",inline"`
@@ -56,16 +55,16 @@ func tsUTC(ts int64) string {
 }
 
 func (e *Entry) String() (s string) {
-	return e.string(tsLocal, false)
+	return e.string(tsLocal, false, false)
 }
 
 func (e *Entry) StringNode() (s string) {
-	return e.string(tsLocal, true)
+	return e.string(tsLocal, true, false)
 }
 
 type tsformatf func(ts int64) string
 
-func (e *Entry) string(f tsformatf, showNode bool) (s string) {
+func (e *Entry) string(f tsformatf, showNode, extr bool) (s string) {
 	node := ""
 	if showNode {
 		node = " [" + e.RS + "/" + e.Node + "]"
@@ -78,6 +77,9 @@ func (e *Entry) string(f tsformatf, showNode bool) (s string) {
 		}
 		if e.ObjName != "" {
 			id = append(id, e.ObjName)
+		}
+		if extr {
+			id = append(id, e.OPID)
 		}
 		s = fmt.Sprintf("%s %s%s [%s] %s", f(e.TS), e.Severity, node, strings.Join(id, "/"), e.Msg)
 	} else {
@@ -253,6 +255,7 @@ type LogRequest struct {
 type Entries struct {
 	Data     []Entry `json:"data"`
 	ShowNode bool    `json:"-"`
+	Extr     bool    `json:"-"`
 }
 
 func (e Entries) MarshalJSON() ([]byte, error) {
@@ -261,7 +264,7 @@ func (e Entries) MarshalJSON() ([]byte, error) {
 
 func (e Entries) String() (s string) {
 	for _, entry := range e.Data {
-		s += entry.string(tsUTC, e.ShowNode) + "\n"
+		s += entry.string(tsUTC, e.ShowNode, e.Extr) + "\n"
 	}
 
 	return s

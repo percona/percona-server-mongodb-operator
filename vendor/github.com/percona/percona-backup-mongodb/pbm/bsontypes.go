@@ -199,6 +199,17 @@ const (
 	BalancerModeOff BalancerMode = "off"
 )
 
+func (m BalancerMode) String() string {
+	switch m {
+	case BalancerModeOn:
+		return "on"
+	case BalancerModeOff:
+		return "off"
+	default:
+		return "unknown"
+	}
+}
+
 type BalancerStatus struct {
 	Mode              BalancerMode `bson:"mode" json:"mode"`
 	InBalancerRound   bool         `bson:"inBalancerRound" json:"inBalancerRound"`
