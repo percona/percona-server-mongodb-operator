@@ -66,7 +66,7 @@ function main() {
 	compare_generation "1" "psmdb" "${cluster}"
 
 	desc 'starting PMM up'
-	retry 10 60 helm install monitoring --set platform=kubernetes https://percona-charts.storage.googleapis.com/pmm-server-2.21.0.tgz
+	retry 10 60 helm install monitoring --set platform=kubernetes https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VER}.tgz
 	sleep 20
 	kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 			"spec": {"pmm":{"enabled":true}}
