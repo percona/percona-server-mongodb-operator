@@ -89,7 +89,6 @@ spec:
 #      failureThreshold: 4
 #      initialDelaySeconds: 60
 #      periodSeconds: 30
-#      successThreshold: 1
 #      timeoutSeconds: 10
 #      startupDelaySeconds: 7200
 #    readinessProbe:
@@ -273,7 +272,6 @@ spec:
 #        failureThreshold: 4
 #        initialDelaySeconds: 60
 #        periodSeconds: 30
-#        successThreshold: 1
 #        timeoutSeconds: 10
 #        startupDelaySeconds: 7200
 #      readinessProbe:
@@ -350,7 +348,6 @@ spec:
 #        failureThreshold: 4
 #        initialDelaySeconds: 60
 #        periodSeconds: 30
-#        successThreshold: 1
 #        timeoutSeconds: 10
 #        startupDelaySeconds: 7200
 #      readinessProbe:
