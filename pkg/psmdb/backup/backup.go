@@ -59,7 +59,7 @@ func HasActiveJobs(cl client.Client, cluster *api.PerconaServerMongoDB, current 
 		if b.Name == current.Name && current.Type == TypeBackup {
 			continue
 		}
-		if b.Spec.PSMDBCluster == cluster.Name &&
+		if b.Spec.GetClusterName() == cluster.Name &&
 			b.Status.State != api.BackupStateReady &&
 			b.Status.State != api.BackupStateError &&
 			b.Status.State != api.BackupStateWaiting {
