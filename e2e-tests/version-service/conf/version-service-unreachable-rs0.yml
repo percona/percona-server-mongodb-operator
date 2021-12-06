@@ -12,7 +12,7 @@ spec:
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://wrong-check.percona.com
-    apply: 4.2.7-7
+    apply: 4.2.14-15
     schedule: "0 2 * * *"
   mongod:
     net:
