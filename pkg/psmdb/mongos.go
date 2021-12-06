@@ -7,12 +7,13 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
@@ -330,6 +331,21 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 				},
 			},
 		})
+	}
+
+	if cr.CompareVersion("1.11.0") >= 0 && cr.Spec.Sharding.Mongos != nil {
+		volumes = append(volumes, cr.Spec.Sharding.Mongos.SidecarVolumes...)
+
+		for _, v := range cr.Spec.Sharding.Mongos.SidecarPVCs {
+			volumes = append(volumes, corev1.Volume{
+				Name: v.Name,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: v.Name,
+					},
+				},
+			})
+		}
 	}
 
 	if configSource.IsUsable() {
