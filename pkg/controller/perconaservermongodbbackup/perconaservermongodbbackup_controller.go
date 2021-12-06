@@ -131,9 +131,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	}
 
 	cluster := &psmdbv1.PerconaServerMongoDB{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.PSMDBCluster, Namespace: cr.Namespace}, cluster)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.GetClusterName(), Namespace: cr.Namespace}, cluster)
 	if err != nil {
-		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.PSMDBCluster)
+		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.GetClusterName())
 	}
 
 	svr, err := version.Server()

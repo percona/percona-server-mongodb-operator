@@ -12,7 +12,7 @@ spec:
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: http://version-service:11000
-    apply: 4.0-latest
+    apply: 4.2-latest
     schedule: "0 2 * * *"
   mongod:
     net:

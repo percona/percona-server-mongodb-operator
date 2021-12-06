@@ -28,7 +28,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				Command: []string{"sh"},
 				Env: []corev1.EnvVar{
 					{
-						Name:  "psmdbCluster",
+						Name:  "clusterName",
 						Value: crName,
 					},
 					{
@@ -103,15 +103,15 @@ func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) [
 				\"apiVersion\":\"psmdb.percona.com/v1\",
 				\"metadata\":{
 					\"finalizers\":  [\"delete-backup\"],
-					\"generateName\":\"cron-${psmdbCluster:0:16}-$(date -u "+%Y%m%d%H%M%S")-\",
+					\"generateName\":\"cron-${clusterName:0:16}-$(date -u "+%Y%m%d%H%M%S")-\",
 					\"labels\":{
 						\"ancestor\":\"` + jobName + `\",
-						\"cluster\":\"${psmdbCluster}\",
+						\"cluster\":\"${clusterName}\",
 						\"type\":\"cron\"
 					}
 				},
 				\"spec\":{
-					\"psmdbCluster\":\"${psmdbCluster}\",
+					\"clusterName\":\"${clusterName}\",
 					\"storageName\":\"` + backup.StorageName + `\"
 				}
 			}" \
