@@ -1075,7 +1075,7 @@ func ensurePVCs(
 		// ignore pvc namespace
 		pvc.Namespace = namespace
 
-		err := cl.Get(context.Background(),
+		err := cl.Get(ctx,
 			types.NamespacedName{Namespace: pvc.Namespace, Name: pvc.Name},
 			&corev1.PersistentVolumeClaim{})
 		if err == nil {
