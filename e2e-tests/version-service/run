@@ -20,7 +20,7 @@ sleep 10
 deploy_operator
 
 cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-major" "version-service-unreachable")
-expected_images=("percona/percona-server-mongodb:4.2.7-7" "percona/percona-server-mongodb:4.0.20-13" "percona/percona-server-mongodb:4.2.8-8" "percona/percona-server-mongodb:4.0.20-13" "$IMAGE_MONGOD")
+expected_images=("percona/percona-server-mongodb:4.4.6-8" "percona/percona-server-mongodb:4.2.15-16" "percona/percona-server-mongodb:4.4.8-9" "percona/percona-server-mongodb:4.2.15-16" "$IMAGE_MONGOD")
 
 for i in "${!cases[@]}"; do
 	desc "test ${cases[$i]}"
@@ -55,7 +55,7 @@ for i in "${!cases[@]}"; do
 	compare_kubectl "statefulset/${cluster}-rs0"
 
 	pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
-	if ${#pods[@]} == 0; then
+	if [ ${#pods[@]} -eq 0 ]; then
 		echo "pods not found"
 		exit 1
 	fi
