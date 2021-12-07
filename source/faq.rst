@@ -95,6 +95,9 @@ You can add ``sidecars`` subsection to ``replsets``,
 .. note::  Custom sidecar containers `can easily access other components of your cluster <https://kubernetes.io/docs/concepts/workloads/pods/#resource-sharing-and-communication>`_. Therefore
    they should be used carefully and by experienced users only.
 
+Find more information on sidecar containers in the appropriate
+:ref:`documentation page<operator-sidecar>`.
+
 How to provoke the initial sync of a Pod
 ========================================
 

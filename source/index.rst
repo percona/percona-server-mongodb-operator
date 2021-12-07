@@ -65,6 +65,7 @@ Management
    scaling
    replication
    monitoring
+   sidecar
    debug
 
 Reference
