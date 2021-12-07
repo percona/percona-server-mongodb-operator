@@ -169,6 +169,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.LivenessProbe = new(LivenessProbeExtended)
 		}
 
+		if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds < 1 {
+			cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
+		}
+
 		if cr.Spec.Sharding.Mongos.LivenessProbe.Exec == nil {
 			cr.Spec.Sharding.Mongos.LivenessProbe.Exec = &corev1.ExecAction{
 				Command: []string{
@@ -185,6 +189,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 						"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
+
+			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(
+					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
+					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
+			}
 		}
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds < 1 {
@@ -198,9 +208,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 		if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold < 1 {
 			cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
-		}
-		if cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds < 1 {
-			cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds = 10
 		}
 
 		if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
