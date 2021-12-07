@@ -1793,10 +1793,10 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _sharding-mongos-loadbalancersourceranges:						|
+|                 | .. _sharding-mongos-expose-loadbalancersourceranges:						|
 |                 |												|
-| **Key**         | `sharding.mongos.loadBalancerSourceRanges							|
-|                 | <operator.html#sharding-mongos-loadbalancersourceranges>`_					|
+| **Key**         | `sharding.mongos.expose.loadBalancerSourceRanges							|
+|                 | <operator.html#sharding-mongos-expose-loadbalancersourceranges>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1807,9 +1807,9 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _sharding-mongos-serviceannotations:							|
+|                 | .. _sharding-mongos-expose-serviceannotations:							|
 |                 |												|
-| **Key**         | `sharding.mongos.serviceAnnotations <operator.html#sharding-mongos-serviceannotations>`_	|
+| **Key**         | `sharding.mongos.expose.serviceAnnotations <operator.html#sharding-mongos-expose-serviceannotations>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
