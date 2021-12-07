@@ -244,7 +244,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	}
 
 	meta, err := pbmc.C.GetRestoreMeta(cr.Status.PBMname)
-	if err != nil {
+	if err != nil && !errors.Is(err, pbm.ErrNotFound) {
 		return status, errors.Wrap(err, "get pbm metadata")
 	}
 
