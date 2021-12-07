@@ -190,7 +190,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 						"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
 
-			if cr.CompareVersion("1.4.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(
 					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
