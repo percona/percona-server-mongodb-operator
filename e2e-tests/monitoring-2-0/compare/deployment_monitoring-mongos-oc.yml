@@ -84,6 +84,8 @@ spec:
                 - /etc/mongodb-ssl/ca.crt
                 - --sslPEMKeyFile
                 - /tmp/tls.pem
+                - --startupDelaySeconds
+                - "10"
             failureThreshold: 4
             initialDelaySeconds: 60
             periodSeconds: 30
