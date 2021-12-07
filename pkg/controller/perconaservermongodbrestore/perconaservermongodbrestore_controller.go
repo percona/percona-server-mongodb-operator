@@ -353,10 +353,20 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaSer
 		}
 		return storage, nil
 	}
+	var azure psmdbv1.BackupStorageAzureSpec
+	var s3 psmdbv1.BackupStorageS3Spec
+	storageType := psmdbv1.BackupStorageS3
 
+	if cr.Spec.BackupSource.Azure != nil {
+		storageType = psmdbv1.BackupStorageAzure
+		azure = *cr.Spec.BackupSource.Azure
+	} else if cr.Spec.BackupSource.S3 != nil {
+		s3 = *cr.Spec.BackupSource.S3
+	}
 	return psmdbv1.BackupStorageSpec{
-		Type: psmdbv1.BackupStorageS3,
-		S3:   *cr.Spec.BackupSource.S3,
+		Type:  storageType,
+		S3:    s3,
+		Azure: azure,
 	}, nil
 }
 
