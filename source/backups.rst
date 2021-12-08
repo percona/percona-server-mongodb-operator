@@ -1,7 +1,8 @@
 Providing Backups
 =================
 
-The Operator usually stores Server for MongoDB backups on `Amazon S3 or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_ outside the Kubernetes cluster:
+The Operator usually stores Server for MongoDB backups outside the Kubernetes cluster: on `Amazon S3 or S3-compatible
+storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_, or on `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`_.
 
 .. figure:: assets/images/backup-s3.*
    :align: center
@@ -22,6 +23,11 @@ Backup for MongoDB <https://github.com/percona/percona-backup-mongodb>`_ tool.
 
 Making scheduled backups
 ------------------------
+
+.. _backups.scheduled-s3:
+
+Backups on Amazon S3 or S3-compatible storage
+*********************************************
 
 Since backups are stored separately on the Amazon S3, a secret with
 ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY`` should be present on
@@ -105,6 +111,90 @@ secret <https://kubernetes.io/docs/concepts/configuration/secret/>`_
 for backups. Value of this key should be the same as the name used to
 create the secret object (``my-cluster-name-backup-s3`` in the last
 example).
+
+The schedule is specified in crontab format as explained in
+:ref:`Operator Custom Resource options<operator.backup-section>`.
+
+.. _backups.scheduled-azure:
+
+Backups on Microsoft Azure Blob storage
+***************************************
+
+Since backups are stored separately on `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`_,
+a secret with ``AZURE_STORAGE_ACCOUNT_NAME`` and ``AZURE_STORAGE_ACCOUNT_KEY`` should be present on
+the Kubernetes cluster. The secrets file with these base64-encoded keys should
+be created: for example ``deploy/backup-azure.yaml`` file with the following
+contents.
+
+.. code:: yaml
+
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: my-cluster-azure-secret
+   type: Opaque
+   data:
+     AZURE_STORAGE_ACCOUNT_NAME: UkVQTEFDRS1XSVRILUFXUy1BQ0NFU1MtS0VZ
+     AZURE_STORAGE_ACCOUNT_KEY: UkVQTEFDRS1XSVRILUFXUy1TRUNSRVQtS0VZ
+
+.. note:: The following command can be used to get a base64-encoded string from
+   a plain text one: ``$ echo -n 'plain-text-string' | base64``
+
+The ``name`` value is the `Kubernetes
+secret <https://kubernetes.io/docs/concepts/configuration/secret/>`_
+name which will be used further, and ``AZURE_STORAGE_ACCOUNT_NAME`` and
+``AZURE_STORAGE_ACCOUNT_KEY`` credentials will be used to access the storage
+(and obviously they should contain proper values to make this access
+possible). To have effect secrets file should be applied with the appropriate
+command to create the secret object, e.g.
+``kubectl apply -f deploy/backup-azure.yaml`` (for Kubernetes).
+
+Backups schedule is defined in the ``backup`` section of the
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
+file. This section contains following subsections:
+
+* ``storages`` subsection contains data needed to access the Azure Blob storage
+  to store backups.
+* ``tasks`` subsection allows to actually schedule backups (the schedule is
+  specified in crontab format).
+
+Here is an example of `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__ which uses Azure Blob storage for backups:
+
+.. code:: yaml
+
+   ...
+   backup:
+     enabled: true
+     ...
+     storages:
+       azure-blob:
+         type: azure
+         azure:
+           container: <your-container-name>
+           prefix: psmdb
+           credentialsSecret: my-cluster-azure-secret
+
+     ...
+     tasks:
+      - name: "sat-night-backup"
+        schedule: "0 0 * * 6"
+        keep: 3
+        storageName: azure-blob
+     ...
+
+The options within these three subsections are further explained in the
+:ref:`Operator Custom Resource options<operator.backup-section>`.
+
+One option which should be mentioned separately is
+``credentialsSecret`` which is a `Kubernetes
+secret <https://kubernetes.io/docs/concepts/configuration/secret/>`_
+for backups. Value of this key should be the same as the name used to
+create the secret object (``my-cluster-name-backup-s3`` in the last
+example).
+
+You can use :ref:`prefix<backup-storages-azure-prefix>` option to specify the
+path (sub-folder) to the backups inside the container. If prefix is not set,
+backups will be stored in the root directory of the container.
 
 The schedule is specified in crontab format as explained in
 :ref:`Operator Custom Resource options<operator.backup-section>`.

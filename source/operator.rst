@@ -2480,7 +2480,7 @@ Percona Server for MongoDB backups.
 | **Example**     | ``my-cluster-azure-secret``									|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes secret <https://kubernetes.io/docs/concepts/configuration/secret/>`_ for	|
-|                 | backups. It should contain ``AZURE_ACCOUNT`` and ``AZURE_KEY`` keys.			|
+|                 | backups. It should contain ``AZURE_STORAGE_ACCOUNT_NAME`` and ``AZURE_STORAGE_ACCOUNT_KEY``.|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
