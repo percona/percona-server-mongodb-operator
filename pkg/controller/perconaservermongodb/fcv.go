@@ -16,7 +16,12 @@ func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (st
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get connection")
 	}
-	defer c.Disconnect(context.Background())
+
+	defer func() {
+		if err := c.Disconnect(context.Background()); err != nil {
+			log.Error(err, "close client connection")
+		}
+	}()
 
 	return mongo.GetFCV(context.TODO(), c)
 }
@@ -39,7 +44,11 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 	} else {
 		cli, connErr = r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
 	}
-	defer cli.Disconnect(context.Background())
+	defer func() {
+		if err := cli.Disconnect(context.Background()); err != nil {
+			log.Error(err, "close client connection")
+		}
+	}()
 
 	if connErr != nil {
 		return errors.Wrap(connErr, "failed to get connection")
