@@ -11,6 +11,7 @@ require (
 	github.com/go-openapi/strfmt v0.19.5
 	github.com/go-openapi/swag v0.19.9
 	github.com/go-openapi/validate v0.19.10
+	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/hashicorp/go-version v1.2.0
 	github.com/jetstack/cert-manager v0.15.1
 	github.com/mitchellh/go-ps v1.0.0
@@ -35,6 +36,7 @@ require (
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.1.0
 	k8s.io/api => k8s.io/api v0.17.4 // Required by client-go
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.4 // Required by client-go
 	k8s.io/client-go => k8s.io/client-go v0.17.4 // Required by prometheus-operator
