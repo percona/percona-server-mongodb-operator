@@ -1,6 +1,6 @@
 module github.com/percona/percona-server-mongodb-operator
 
-go 1.13
+go 1.16
 
 require (
 	github.com/Percona-Lab/percona-version-service/api v0.0.0-20200714141734-e9fed619b55c
@@ -35,6 +35,7 @@ require (
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.2.0
 	k8s.io/api => k8s.io/api v0.17.4 // Required by client-go
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.4 // Required by client-go
 	k8s.io/client-go => k8s.io/client-go v0.17.4 // Required by prometheus-operator
