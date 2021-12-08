@@ -4,10 +4,11 @@ import (
 	"context"
 
 	v "github.com/hashicorp/go-version"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (string, error) {
@@ -15,9 +16,9 @@ func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (st
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get connection")
 	}
+	defer c.Disconnect(context.Background())
 
 	return mongo.GetFCV(context.TODO(), c)
-
 }
 
 func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, version string) error {
@@ -38,6 +39,7 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 	} else {
 		cli, connErr = r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
 	}
+	defer cli.Disconnect(context.Background())
 
 	if connErr != nil {
 		return errors.Wrap(connErr, "failed to get connection")
