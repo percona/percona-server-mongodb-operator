@@ -102,7 +102,7 @@ function main() {
 	start_cluster ${cluster}
 	simple_data_check "${cluster}" 4 1 "-mongos"
 
-	kubectl_bin delete -f deploy/cr.yaml
+	kubectl_bin delete -f $deploy_dir/cr.yaml
 
 	cluster="minimal-cluster"
 	yq w $deploy_dir/secrets.yaml 'metadata.name' "${cluster}" | kubectl_bin apply -f -
