@@ -92,6 +92,10 @@ is specific to the cloud provider. For example, using `Google Cloud <https://clo
 
    endpointUrl: https://storage.googleapis.com
 
+Also you can use :ref:`prefix<backup-storages-s3-prefix>` option to specify the
+path (sub-folder) to the backups inside the S3 bucket. If prefix is not set,
+backups are stored in the root directory.
+
 The options within these three subsections are further explained in the
 :ref:`Operator Custom Resource options<operator.backup-section>`.
 
