@@ -218,7 +218,7 @@ github.com/operator-framework/operator-sdk/pkg/k8sutil
 github.com/operator-framework/operator-sdk/pkg/leader
 github.com/operator-framework/operator-sdk/pkg/ready
 github.com/operator-framework/operator-sdk/version
-# github.com/percona/percona-backup-mongodb v1.6.1
+# github.com/percona/percona-backup-mongodb v1.6.1-0.20211208103648-66bc6bfdc9ff
 ## explicit
 github.com/percona/percona-backup-mongodb/pbm
 github.com/percona/percona-backup-mongodb/pbm/log

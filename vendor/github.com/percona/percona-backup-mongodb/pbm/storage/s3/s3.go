@@ -45,6 +45,8 @@ type Conf struct {
 	Credentials          Credentials `bson:"credentials" json:"-" yaml:"credentials"`
 	ServerSideEncryption *AWSsse     `bson:"serverSideEncryption,omitempty" json:"serverSideEncryption,omitempty" yaml:"serverSideEncryption,omitempty"`
 	UploadPartSize       int         `bson:"uploadPartSize,omitempty" json:"uploadPartSize,omitempty" yaml:"uploadPartSize,omitempty"`
+	MaxUploadParts       int         `bson:"maxUploadParts,omitempty" json:"maxUploadParts,omitempty" yaml:"maxUploadParts,omitempty"`
+	StorageClass         string      `bson:"storageClass,omitempty" json:"storageClass,omitempty" yaml:"storageClass,omitempty"`
 }
 
 type AWSsse struct {
@@ -67,6 +69,12 @@ func (c *Conf) Cast() error {
 				c.Provider = S3ProviderGCS
 			}
 		}
+	}
+	if c.MaxUploadParts <= 0 {
+		c.MaxUploadParts = s3manager.MaxUploadParts
+	}
+	if c.StorageClass == "" {
+		c.StorageClass = s3.StorageClassStandard
 	}
 
 	return nil
@@ -130,9 +138,10 @@ func (s *S3) Save(name string, data io.Reader, sizeb int) error {
 		}
 
 		uplInput := &s3manager.UploadInput{
-			Bucket: aws.String(s.opts.Bucket),
-			Key:    aws.String(path.Join(s.opts.Prefix, name)),
-			Body:   data,
+			Bucket:       aws.String(s.opts.Bucket),
+			Key:          aws.String(path.Join(s.opts.Prefix, name)),
+			Body:         data,
+			StorageClass: &s.opts.StorageClass,
 		}
 
 		sse := s.opts.ServerSideEncryption
@@ -158,7 +167,7 @@ func (s *S3) Save(name string, data io.Reader, sizeb int) error {
 			partSize = s.opts.UploadPartSize
 		}
 		if sizeb > 0 {
-			ps := sizeb / s3manager.MaxUploadParts * 9 / 10 // shed 10% just in case
+			ps := sizeb / s.opts.MaxUploadParts * 9 / 10 // shed 10% just in case
 			if ps > partSize {
 				partSize = ps
 			}
@@ -166,10 +175,11 @@ func (s *S3) Save(name string, data io.Reader, sizeb int) error {
 
 		if s.log != nil {
 			s.log.Info("s3.uploadPartSize is set to %d (~%dMb)", partSize, partSize>>20)
+			s.log.Info("s3.maxUploadParts is set to %d", s.opts.MaxUploadParts)
 		}
 
 		_, err = s3manager.NewUploader(awsSession, func(u *s3manager.Uploader) {
-			u.MaxUploadParts = s3manager.MaxUploadParts
+			u.MaxUploadParts = s.opts.MaxUploadParts
 			u.PartSize = int64(partSize) // 10MB part size
 			u.LeavePartsOnError = true   // Don't delete the parts if the upload fails.
 			u.Concurrency = cc
@@ -182,7 +192,9 @@ func (s *S3) Save(name string, data io.Reader, sizeb int) error {
 		if err != nil {
 			return errors.Wrap(err, "NewWithRegion")
 		}
-		_, err = mc.PutObject(s.opts.Bucket, path.Join(s.opts.Prefix, name), data, -1, minio.PutObjectOptions{})
+		_, err = mc.PutObject(s.opts.Bucket, path.Join(s.opts.Prefix, name), data, -1, minio.PutObjectOptions{
+			StorageClass: s.opts.StorageClass,
+		})
 		return errors.Wrap(err, "upload to GCS")
 	}
 }
