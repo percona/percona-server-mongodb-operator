@@ -328,7 +328,7 @@ deploy_operator() {
 
 deploy_minio() {
 	desc 'install Minio'
-	helm del minio-service || :
+	helm uninstall minio-service || :
 	helm repo remove minio || :
 	helm repo add minio https://helm.min.io/
 	# kubectl_bin delete pvc minio-service --force
