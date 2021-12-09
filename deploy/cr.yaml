@@ -10,7 +10,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.11.0
-  image: percona/percona-server-mongodb:4.4.9-10
+  image: percona/percona-server-mongodb:4.4.10-11
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -26,7 +26,7 @@ spec:
     users: my-cluster-name-secrets
   pmm:
     enabled: false
-    image: percona/pmm-client:2.21.0
+    image: percona/pmm-client:2.24.0
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -421,7 +421,7 @@ spec:
   backup:
     enabled: true
     restartOnFailure: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-server-mongodb-operator:1.11.0-backup
     serviceAccountName: percona-server-mongodb-operator
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
