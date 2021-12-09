@@ -79,7 +79,7 @@ function main() {
 			"spec": {"pmm":{"enabled":false}}
 		}'
 	sleep 120
-	helm delete monitoring
+	helm uninstall monitoring
 	wait_cluster_consistency $cluster
 
 	desc 'enabling arbiter'
