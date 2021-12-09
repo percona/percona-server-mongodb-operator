@@ -715,7 +715,6 @@ destroy() {
 	kubectl_bin delete psmdb-backup --all || :
 	kubectl_bin delete psmdb-restore --all || :
 
-	destroy_chaos_mesh
 	kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v1.5.2/cert-manager.yaml 2>/dev/null || :
 	if [ -n "$OPENSHIFT" ]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &
