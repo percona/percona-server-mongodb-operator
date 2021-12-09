@@ -4,10 +4,11 @@ import (
 	"context"
 
 	v "github.com/hashicorp/go-version"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (string, error) {
@@ -16,8 +17,13 @@ func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (st
 		return "", errors.Wrap(err, "failed to get connection")
 	}
 
-	return mongo.GetFCV(context.TODO(), c)
+	defer func() {
+		if err := c.Disconnect(context.Background()); err != nil {
+			log.Error(err, "close client connection")
+		}
+	}()
 
+	return mongo.GetFCV(context.TODO(), c)
 }
 
 func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, version string) error {
@@ -42,6 +48,12 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 	if connErr != nil {
 		return errors.Wrap(connErr, "failed to get connection")
 	}
+
+	defer func() {
+		if err := cli.Disconnect(context.Background()); err != nil {
+			log.Error(err, "close client connection")
+		}
+	}()
 
 	return mongo.SetFCV(context.TODO(), cli, MajorMinor(v))
 }
