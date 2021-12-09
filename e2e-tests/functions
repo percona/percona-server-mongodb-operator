@@ -528,6 +528,7 @@ compare_kubectl() {
 
 	if version_gt "1.22"; then
 		yq d -i ${new_result} 'spec.internalTrafficPolicy'
+		yq d -i ${new_result} 'spec.allocateLoadBalancerNodePorts'
 		if [[ $expected_result == */cronjob* ]]; then
 			yq d -i ${new_result} 'metadata.generation'
 		fi
