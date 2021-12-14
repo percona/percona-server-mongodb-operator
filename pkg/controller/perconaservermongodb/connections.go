@@ -1,10 +1,11 @@
 package perconaservermongodb
 
 import (
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(cr *api.PerconaServerMongoDB, rs api.ReplsetSpec,

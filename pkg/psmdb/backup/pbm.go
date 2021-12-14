@@ -159,6 +159,9 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 					AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
 					SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
 				},
+				UploadPartSize: stg.S3.UploadPartSize,
+				MaxUploadParts: stg.S3.MaxUploadParts,
+				StorageClass:   stg.S3.StorageClass,
 			},
 		}
 	case api.BackupStorageFilesystem:
