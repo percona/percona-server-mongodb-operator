@@ -119,6 +119,11 @@ PersistentVolumeClaim, and mounts the correspondent Persistent Volume to the
        accessModes:
          - ReadWriteOnce 
 
+.. note:: Sidecar containers for *mongos* Pods have limited Persistent volumes
+   support: ``sharding.mongos.sidecarPVCs`` option can be used if there is a
+   single mongos in deployment or when ``ReadWriteMany/ReadOnlyMany``
+   access modes are used (but these modes are available not in every storage).
+
 Secret
 ------
 
