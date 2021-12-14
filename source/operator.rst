@@ -490,22 +490,6 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-livenessprobe-successthreshold:						|
-|                 |												|
-| **Key**         | `replsets.livenessProbe.successThreshold							|
-|                 | <operator.html#replsets-livenessprobe-successthreshold>`_					|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | int												|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``1``											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Minimum consecutive successes for the `liveness probe 					|
-|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
-|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be considered 		|
-|                 | successful after having failed.								|
-+-----------------+---------------------------------------------------------------------------------------------+
-|														|
-+-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-livenessprobe-timeoutseconds:							|
 |                 |												|
 | **Key**         | `replsets.livenessProbe.timeoutSeconds							|
@@ -513,7 +497,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``5``											|
+| **Example**     | ``10``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Number of seconds after which the `liveness probe 						|
 |                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
@@ -532,6 +516,83 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Time after which the liveness probe is failed if the MongoDB instance didn't finish its 	|
 |                 | full startup yet										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-readinessprobe-failurethreshold:						|
+|                 |												|
+| **Key**         | `replsets.readinessProbe.failureThreshold							|
+|                 | <operator.html#replsets-readinessprobe-failurethreshold>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``8``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of consecutive unsuccessful tries of the 						|
+|                 | `readiness probe <https://kubernetes.io/docs/tasks/configure-pod-container/			|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be undertaken		|
+|                 | before giving up.										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-readinessprobe-initialdelayseconds:						|
+|                 |												|
+| **Key**         | `replsets.readinessProbe.initialDelaySeconds						|
+|                 | <operator.html#replsets-readinessprobe-initialdelayseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``10``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds to wait after the container start before initiating the `readiness probe	|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_.				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-readinessprobe-periodseconds:							|
+|                 |												|
+| **Key**         | `replsets.readinessProbe.periodSeconds							|
+|                 | <operator.html#replsets-readinessprobe-periodseconds>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``3``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | How often to perform a `readiness probe 							|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ (in seconds).		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-readinessprobe-successthreshold:						|
+|                 |												|
+| **Key**         | `replsets.readinessProbe.successThreshold							|
+|                 | <operator.html#replsets-readinessprobe-successthreshold>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Minimum consecutive successes for the `readiness probe 					|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be considered 		|
+|                 | successful after having failed.								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-readinessprobe-timeoutseconds:							|
+|                 |												|
+| **Key**         | `replsets.readinessProbe.timeoutSeconds							|
+|                 | <operator.html#replsets-readinessprobe-timeoutseconds>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``2``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds after which the `readiness probe 						|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ times out.			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1301,6 +1362,158 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-livenessprobe-failurethreshold:				|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.livenessProbe.failureThreshold					|
+|                 | <operator.html#sharding-configsvrreplset-livenessprobe-failurethreshold>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``4``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of consecutive unsuccessful tries of the 						|
+|                 | `liveness probe <https://kubernetes.io/docs/tasks/configure-pod-container/			|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be undertaken		|
+|                 | before giving up.										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-livenessprobe-initialdelayseconds:				|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.livenessProbe.initialDelaySeconds				|
+|                 | <operator.html#sharding-configsvrreplset-livenessprobe-initialdelayseconds>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``60``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds to wait after the container start before initiating the `liveness probe	|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_.				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-livenessprobe-periodseconds:					|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.livenessProbe.periodSeconds					|
+|                 | <operator.html#sharding-configsvrreplset-livenessprobe-periodseconds>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``30``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | How often to perform a `liveness probe 							|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ (in seconds).		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-livenessprobe-timeoutseconds:					|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.livenessProbe.timeoutSeconds					|
+|                 | <operator.html#sharding-configsvrreplset-livenessprobe-timeoutseconds>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``10``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds after which the `liveness probe 						|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ times out.			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-livenessprobe-startupdelayseconds:				|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.livenessProbe.startupDelaySeconds				|
+|                 | <operator.html#sharding-configsvrreplset-livenessprobe-startupdelayseconds>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``7200``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Time after which the liveness probe is failed if the MongoDB instance didn't finish its 	|
+|                 | full startup yet										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-readinessprobe-failurethreshold:				|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.readinessProbe.failureThreshold					|
+|                 | <operator.html#sharding-configsvrreplset-readinessprobe-failurethreshold>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``3``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of consecutive unsuccessful tries of the 						|
+|                 | `readiness probe <https://kubernetes.io/docs/tasks/configure-pod-container/			|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be undertaken		|
+|                 | before giving up.										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-readinessprobe-initialdelayseconds:				|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.readinessProbe.initialDelaySeconds				|
+|                 | <operator.html#sharding-configsvrreplset-readinessprobe-initialdelayseconds>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``10``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds to wait after the container start before initiating the `readiness probe	|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_.				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-readinessprobe-periodseconds:					|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.readinessProbe.periodSeconds					|
+|                 | <operator.html#sharding-configsvrreplset-readinessprobe-periodseconds>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``3``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | How often to perform a `readiness probe 							|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ (in seconds).		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-readinessprobe-successthreshold:				|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.readinessProbe.successThreshold					|
+|                 | <operator.html#sharding-configsvrreplset-readinessprobe-successthreshold>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Minimum consecutive successes for the `readiness probe 					|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be considered 		|
+|                 | successful after having failed.								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-configsvrreplset-readinessprobe-timeoutseconds:				|
+|                 |												|
+| **Key**         | `sharding.configsvrReplSet.readinessProbe.timeoutSeconds					|
+|                 | <operator.html#sharding-configsvrreplset-readinessprobe-timeoutseconds>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``2``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds after which the `readiness probe 						|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ times out.			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _sharding-configsvrreplset-runtimeclassname:						|
 |                 |												|
 | **Key**         | `sharding.configsvrReplSet.runtimeClassName							|
@@ -1644,6 +1857,158 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | The `Kubernetes nodeSelector								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/				|
 |                 | #nodeselector>`_ affinity constraint for mongos instances					|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-livenessprobe-failurethreshold:						|
+|                 |												|
+| **Key**         | `sharding.mongos.livenessProbe.failureThreshold						|
+|                 | <operator.html#sharding-mongos-livenessprobe-failurethreshold>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``4``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of consecutive unsuccessful tries of the 						|
+|                 | `liveness probe <https://kubernetes.io/docs/tasks/configure-pod-container/			|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be undertaken		|
+|                 | before giving up.										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-livenessprobe-initialdelayseconds:					|
+|                 |												|
+| **Key**         | `sharding.mongos.livenessProbe.initialDelaySeconds						|
+|                 | <operator.html#sharding-mongos-livenessprobe-initialdelayseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``60``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds to wait after the container start before initiating the `liveness probe	|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_.				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-livenessprobe-periodseconds:						|
+|                 |												|
+| **Key**         | `sharding.mongos.livenessProbe.periodSeconds						|
+|                 | <operator.html#sharding-mongos-livenessprobe-periodseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``30``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | How often to perform a `liveness probe 							|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ (in seconds).		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-livenessprobe-timeoutseconds:						|
+|                 |												|
+| **Key**         | `sharding.mongos.livenessProbe.timeoutSeconds						|
+|                 | <operator.html#sharding-mongos-livenessprobe-timeoutseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``10``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds after which the `liveness probe 						|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ times out.			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-livenessprobe-startupdelayseconds:					|
+|                 |												|
+| **Key**         | `sharding.mongos.livenessProbe.startupDelaySeconds						|
+|                 | <operator.html#sharding-mongos-livenessprobe-startupdelayseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``7200``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Time after which the liveness probe is failed if the MongoDB instance didn't finish its 	|
+|                 | full startup yet										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-readinessprobe-failurethreshold:					|
+|                 |												|
+| **Key**         | `sharding.mongos.readinessProbe.failureThreshold						|
+|                 | <operator.html#sharding-mongos-readinessprobe-failurethreshold>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``3``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of consecutive unsuccessful tries of the 						|
+|                 | `readiness probe <https://kubernetes.io/docs/tasks/configure-pod-container/			|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be undertaken		|
+|                 | before giving up.										|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-readinessprobe-initialdelayseconds:					|
+|                 |												|
+| **Key**         | `sharding.mongos.readinessProbe.initialDelaySeconds						|
+|                 | <operator.html#sharding-mongos-readinessprobe-initialdelayseconds>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``10``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds to wait after the container start before initiating the `readiness probe	|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_.				|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-readinessprobe-periodseconds:						|
+|                 |												|
+| **Key**         | `sharding.mongos.readinessProbe.periodSeconds						|
+|                 | <operator.html#sharding-mongos-readinessprobe-periodseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``3``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | How often to perform a `readiness probe 							|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ (in seconds).		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-readinessprobe-successthreshold:					|
+|                 |												|
+| **Key**         | `sharding.mongos.readinessProbe.successThreshold						|
+|                 | <operator.html#sharding-mongos-readinessprobe-successthreshold>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``1``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Minimum consecutive successes for the `readiness probe 					|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ to be considered 		|
+|                 | successful after having failed.								|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-readinessprobe-timeoutseconds:						|
+|                 |												|
+| **Key**         | `sharding.mongos.readinessProbe.timeoutSeconds						|
+|                 | <operator.html#sharding-mongos-readinessprobe-timeoutseconds>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``2``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of seconds after which the `readiness probe 						|
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/					|
+|                 | configure-liveness-readiness-startup-probes/#configure-probes>`_ times out.			|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2330,7 +2695,21 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``percona-server-mongodb-operator``								|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Nname of the separate privileged service account used by the Operator			|
+| **Description** | Name of the separate privileged service account used by the Operator			|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _backup-annotations:									|
+|                 |												|
+| **Key**         | `backup.annotations <operator.html#backup-annotations?>`_					|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``sidecar.istio.io/inject: "false"``							|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes annotations									|
+|                 | <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/>`_		|
+|                 | metadata for the backup job									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2466,6 +2845,18 @@ Percona Server for MongoDB backups.
 | **Example**     | ``false``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Enables or disables :ref:`point-in-time-recovery functionality<backups-pitr-oplog>`		|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _backup-pitr-oplogspanmin:								|
+|                 |												|
+| **Key**         | `backup.pitr.oplogSpanMin <operator.html#backup-pitr-oplogspanmin>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value**       | int												|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``10``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Number of minutes between the uploads of oplogs						|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
