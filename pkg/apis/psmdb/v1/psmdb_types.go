@@ -73,6 +73,20 @@ type PerconaServerMongoDBSpec struct {
 	InitImage               string                               `json:"initImage,omitempty"`
 }
 
+// EncryptionKeySecretName returns spec.Secrets.EncryptionKey.
+// If it's empty, spec.Mongod.Security.EncryptionKeySecret is returned.
+//
+// TODO: Remove after 1.14
+func (spec *PerconaServerMongoDBSpec) EncryptionKeySecretName() string {
+	if spec.Secrets != nil && spec.Secrets.EncryptionKey != "" {
+		return spec.Secrets.EncryptionKey
+	}
+	if spec.Mongod != nil && spec.Mongod.Security != nil {
+		return spec.Mongod.Security.EncryptionKeySecret
+	}
+	return ""
+}
+
 const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 )
@@ -361,9 +375,10 @@ type ResourcesSpec struct {
 }
 
 type SecretsSpec struct {
-	Users       string `json:"users,omitempty"`
-	SSL         string `json:"ssl,omitempty"`
-	SSLInternal string `json:"sslInternal,omitempty"`
+	Users         string `json:"users,omitempty"`
+	SSL           string `json:"ssl,omitempty"`
+	SSLInternal   string `json:"sslInternal,omitempty"`
+	EncryptionKey string `json:"encryptionKey,omitempty"`
 }
 
 type MongosSpec struct {

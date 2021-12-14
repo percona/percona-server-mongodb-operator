@@ -24,6 +24,7 @@ spec:
     setFCV: false
   secrets:
     users: my-cluster-name-secrets
+    encryptionKey: my-cluster-name-mongodb-encryption-key
   pmm:
     enabled: false
     image: percona/pmm-client:2.21.0
@@ -389,7 +390,6 @@ spec:
     security:
       redactClientLogData: false
       enableEncryption: true
-      encryptionKeySecret: my-cluster-name-mongodb-encryption-key
       encryptionCipherMode: AES256-CBC
     setParameter:
       ttlMonitorSleepSecs: 60
