@@ -15,7 +15,7 @@ Adding a sidecar container
 ==========================
 
 You can add sidecar containers to Percona Distribution for MongoDB Replica Set,
-Config Servers, and mongos Pods. Just use ``sidecars`` subsection ing the
+Config Servers, and mongos Pods. Just use ``sidecars`` subsection in the
 ``replsets``, ``sharding.configsvrReplSet``, and ``sharding.mongos`` of the
 ``deploy/cr.yaml`` configuration file. In this subsection, you should specify
 the name and image of your container and possibly a command to run:
