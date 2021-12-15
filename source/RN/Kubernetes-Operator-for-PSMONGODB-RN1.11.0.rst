@@ -48,9 +48,9 @@ Supported Platforms
 
 The following platforms were tested and are officially supported by the Operator 1.11.0:
 
-* OpenShift 4.6 - 4.8
-* Google Kubernetes Engine (GKE) 1.17 - 1.21
-* Amazon Elastic Container Service for Kubernetes (EKS) 1.16 - 1.21
+* OpenShift 4.7 - 4.9
+* Google Kubernetes Engine (GKE) 1.19 - 1.22
+* Amazon Elastic Container Service for Kubernetes (EKS) 1.18 - 1.22
 * Minikube 1.22
 
 This list only includes the platforms that the Percona Operators are specifically tested on as part of the release process. Other Kubernetes flavors and versions depend on the backward compatibility offered by Kubernetes itself.
