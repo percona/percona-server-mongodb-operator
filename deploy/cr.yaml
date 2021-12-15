@@ -103,6 +103,32 @@ spec:
 #      command: ["/bin/sh"]
 #      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
 #      name: rs-sidecar-1
+#      volumeMounts:
+#        - mountPath: /volume1
+#          name: sidecar-volume-claim
+#        - mountPath: /secret
+#          name: sidecar-secret
+#        - mountPath: /configmap
+#          name: sidecar-config
+#    sidecarVolumes:
+#    - name: sidecar-secret
+#      secret:
+#        secretName: mysecret
+#    - name: sidecar-config
+#      configMap:
+#        name: myconfigmap
+#    sidecarPVCs:
+#    - apiVersion: v1
+#      kind: PersistentVolumeClaim
+#      metadata:
+#        name: sidecar-volume-claim
+#      spec:
+#        resources:
+#          requests:
+#            storage: 1Gi
+#        volumeMode: Filesystem
+#        accessModes:
+#          - ReadWriteOnce
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
