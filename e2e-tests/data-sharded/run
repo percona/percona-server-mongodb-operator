@@ -6,14 +6,20 @@ set -o xtrace
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 
+if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+else
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+fi
+
 create_namespace "$namespace"
 deploy_operator
 
 desc 'create PSMDB cluster'
 cluster="some-name"
 kubectl_bin apply \
-    -f "$conf_dir/secrets.yml" \
-    -f "$conf_dir/client.yml"
+	-f "$conf_dir/secrets.yml" \
+	-f "$conf_dir/client.yml"
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'
@@ -23,14 +29,14 @@ wait_for_running $cluster-cfg 3 "false"
 desc 'create user'
 
 run_mongos \
-    'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
-    "userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+	'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 sleep 2
 
 desc 'set chunk size to 32 MB'
 run_mongos \
-    "use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
-    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+	"use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
+	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
 sleep 2
 
 desc 'write data'
@@ -38,34 +44,45 @@ run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace"
 
 desc 'shard collection'
 run_mongos \
-    'sh.enableSharding("app")' \
-    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+	'sh.enableSharding("app")' \
+	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
 sleep 2
 
 run_mongos \
-    'sh.shardCollection("app.city", { _id: 1 } )' \
-    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+	'sh.shardCollection("app.city", { _id: 1 } )' \
+	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
 
 sleep 120
 desc 'check chunks'
 
+chunks_param1="ns"
+chunks_param2="\"app.city\""
+
+if [[ ${MONGO_VER} == "5.0" ]]; then
+	chunks_param1="uuid"
+	chunks_param2=$(run_mongos \
+		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
+		"user:pass@$cluster-mongos.$namespace" \
+		| grep "switched to db app" -A 1 | grep -v "switched to db app")
+fi
+
 shards=0
 for i in "rs0" "rs1" "rs2"; do
-    out=$(run_mongos \
-        "use config\n db.chunks.count({\"ns\" : \"app.city\", \"shard\": \"$i\"})" \
-        "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" |
-        grep "switched to db config" -A 1 | grep -v "switched to db config")
+	out=$(run_mongos \
+		"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
+		| grep "switched to db config" -A 1 | grep -v "switched to db config")
 
-    desc "$i has $out chunks"
+	desc "$i has $out chunks"
 
-    if [[ "$out" -ne 0 ]]; then
-        ((shards = shards + 1))
-    fi
+	if [[ $out -ne 0 ]]; then
+		((shards = shards + 1))
+	fi
 done
 
-if [[ "$shards" -lt 3 ]]; then
-    echo "data is only on some of the shards, maybe sharding is not working"
-    exit 1
+if [[ $shards -lt 3 ]]; then
+	echo "data is only on some of the shards, maybe sharding is not working"
+	exit 1
 fi
 
 destroy "$namespace"
