@@ -10,7 +10,7 @@
 Release Highlights
 ================================================================================
 
-* In addition to Amazon S3 and S3-compatible cloud storages, you can now configure backups to use Microsoft Azure Blob storage. This feature makes the Operator fully compatibile with Azure Cloud.
+* In addition to Amazon S3 and S3-compatible cloud storages, you can now configure backups to use Microsoft Azure Blob storage. This feature makes the Operator fully compatible with Azure Cloud.
 
 New Features
 ================================================================================
