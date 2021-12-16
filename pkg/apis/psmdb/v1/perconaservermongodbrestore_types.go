@@ -1,22 +1,15 @@
 package v1
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // PerconaServerMongoDBRestoreSpec defines the desired state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	ClusterName  string                            `json:"clusterName,omitempty"`
 	Replset      string                            `json:"replset,omitempty"`
 	BackupName   string                            `json:"backupName,omitempty"`
@@ -40,7 +33,6 @@ const (
 
 // PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreStatus struct {
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	State          RestoreState `json:"state,omitempty"`
 	PBMname        string       `json:"pbmName,omitempty"`
 	Error          string       `json:"error,omitempty"`
@@ -52,6 +44,7 @@ type PerconaServerMongoDBRestoreStatus struct {
 
 // PerconaServerMongoDBRestore is the Schema for the perconaservermongodbrestores API
 // +k8s:openapi-gen=true
+// +kubebuilder:resource:shortName="psmdb-restore"
 type PerconaServerMongoDBRestore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -111,8 +104,8 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 }
 
 type PITRestoreSpec struct {
-	Type PITRestoreType  `json:"type,omitempty"`
-	Date *PITRestoreDate `json:"date,omitempty"`
+	Type PITRestoreType `json:"type,omitempty"`
+	Date *metav1.Time   `json:"date,omitempty"`
 }
 
 type PITRestoreType string
@@ -121,28 +114,3 @@ var (
 	PITRestoreTypeDate   PITRestoreType = "date"
 	PITRestoreTypeLatest PITRestoreType = "latest"
 )
-
-type PITRestoreDate struct {
-	metav1.Time
-}
-
-func (t *PITRestoreDate) UnmarshalJSON(b []byte) (err error) {
-	if len(b) == 4 && string(b) == "null" {
-		t.Time = metav1.NewTime(time.Time{})
-		return nil
-	}
-
-	var str string
-
-	if err = json.Unmarshal(b, &str); err != nil {
-		return err
-	}
-
-	pt, err := time.Parse("2006-01-02 15:04:05", str)
-	if err != nil {
-		return
-	}
-
-	t.Time = metav1.NewTime(pt.Local())
-	return nil
-}

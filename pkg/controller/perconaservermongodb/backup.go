@@ -271,8 +271,8 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		return errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
 	}
 
-	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin {
-		val := strconv.FormatFloat(cr.Spec.Backup.PITR.OplogSpanMin, 'f', -1, 64)
+	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin.Float64() {
+		val := cr.Spec.Backup.PITR.OplogSpanMin.String()
 		if err := pbm.C.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
 			return errors.Wrap(err, "update pitr.oplogSpanMin")
 		}

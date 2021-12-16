@@ -6,10 +6,12 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
@@ -28,8 +30,8 @@ var (
 	defaultReplsetName                    = "rs"
 	defaultStorageEngine                  = StorageEngineWiredTiger
 	defaultMongodPort               int32 = 27017
-	defaultWiredTigerCacheSizeRatio       = 0.5
-	defaultInMemorySizeRatio              = 0.9
+	defaultWiredTigerCacheSizeRatio       = numstr.MustParse("0.5")
+	defaultInMemorySizeRatio              = numstr.MustParse("0.9")
 	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
 	defaultImagePullPolicy                = corev1.PullAlways
 )
@@ -108,9 +110,15 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if len(cr.Spec.Replsets) == 0 {
 		cr.Spec.Replsets = []*ReplsetSpec{
 			{
-				Name: defaultReplsetName,
+				Name: defaultReplsetName + "0",
 				Size: defaultMongodSize,
 			},
+		}
+	} else {
+		for i := 0; i != len(cr.Spec.Replsets); i++ {
+			if rs := cr.Spec.Replsets[i]; rs.Name == "" {
+				rs.Name = defaultReplsetName + strconv.Itoa(i)
+			}
 		}
 	}
 
@@ -293,7 +301,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			if replset.Storage.InMemory.EngineConfig == nil {
 				replset.Storage.InMemory.EngineConfig = &MongodSpecInMemoryEngineConfig{}
 			}
-			if replset.Storage.InMemory.EngineConfig.InMemorySizeRatio == 0 {
+			if replset.Storage.InMemory.EngineConfig.InMemorySizeRatio.Float64() == 0 {
 				replset.Storage.InMemory.EngineConfig.InMemorySizeRatio = defaultInMemorySizeRatio
 			}
 		case StorageEngineWiredTiger:
@@ -306,7 +314,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			if replset.Storage.WiredTiger.EngineConfig == nil {
 				replset.Storage.WiredTiger.EngineConfig = &MongodSpecWiredTigerEngineConfig{}
 			}
-			if replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio == 0 {
+			if replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio.Float64() == 0 {
 				replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio = defaultWiredTigerCacheSizeRatio
 			}
 			if replset.Storage.WiredTiger.IndexConfig == nil {
@@ -469,13 +477,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
 		}
 
-		if cr.Spec.Backup.PITR.OplogSpanMin == 0 {
-			cr.Spec.Backup.PITR.OplogSpanMin = 10
+		if cr.Spec.Backup.PITR.OplogSpanMin.Float64() == 0 {
+			cr.Spec.Backup.PITR.OplogSpanMin = numstr.MustParse("10")
 		}
 	}
 
 	if cr.Status.Replsets == nil {
-		cr.Status.Replsets = make(map[string]*ReplsetStatus)
+		cr.Status.Replsets = make(map[string]ReplsetStatus)
 	}
 
 	if len(cr.Spec.ClusterServiceDNSSuffix) == 0 {

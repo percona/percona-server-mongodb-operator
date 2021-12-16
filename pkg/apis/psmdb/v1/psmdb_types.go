@@ -9,7 +9,6 @@ import (
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,12 +18,19 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDB is the Schema for the perconaservermongodbs API
 // +k8s:openapi-gen=true
+// +kubebuilder:resource:shortName="psmdb"
+// +kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaServerMongoDB struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -466,7 +472,7 @@ var (
 )
 
 type MongodSpecWiredTigerEngineConfig struct {
-	CacheSizeRatio      float64               `json:"cacheSizeRatio,omitempty"`
+	CacheSizeRatio      numstr.NumberString   `json:"cacheSizeRatio,omitempty"`
 	DirectoryForIndexes bool                  `json:"directoryForIndexes,omitempty"`
 	JournalCompressor   *WiredTigerCompressor `json:"journalCompressor,omitempty"`
 }
@@ -486,7 +492,7 @@ type MongodSpecWiredTiger struct {
 }
 
 type MongodSpecInMemoryEngineConfig struct {
-	InMemorySizeRatio float64 `json:"inMemorySizeRatio,omitempty"`
+	InMemorySizeRatio numstr.NumberString `json:"inMemorySizeRatio,omitempty"`
 }
 
 type MongodSpecInMemory struct {
@@ -564,8 +570,8 @@ type BackupStorageSpec struct {
 }
 
 type PITRSpec struct {
-	Enabled      bool    `json:"enabled,omitempty"`
-	OplogSpanMin float64 `json:"oplogSpanMin,omitempty"`
+	Enabled      bool                `json:"enabled,omitempty"`
+	OplogSpanMin numstr.NumberString `json:"oplogSpanMin,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {
