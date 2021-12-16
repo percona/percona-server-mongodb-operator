@@ -27,7 +27,7 @@ fi
 if [[ $originalArgOne == mongo* ]]; then
 	numa='numactl --interleave=all'
 	if $numa true &>/dev/null; then
-		set -- $numa "$@"
+		set -- "$numa" "$@"
 	fi
 fi
 
