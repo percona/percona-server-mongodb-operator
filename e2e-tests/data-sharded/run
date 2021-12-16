@@ -56,7 +56,7 @@ sleep 120
 desc 'check chunks'
 
 chunks_param1="ns"
-chunks_param2="\"app.city\""
+chunks_param2='"app.city"'
 
 if [[ ${MONGO_VER} == "5.0" ]]; then
 	chunks_param1="uuid"
