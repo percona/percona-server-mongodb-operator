@@ -314,7 +314,7 @@ wait_restore_object() {
 deploy_operator() {
 	desc 'start operator'
 
-	kubectl_bin apply -f ${test_dir}/conf/crd.yaml || kubectl_bin apply -f ${src_dir}/deploy/crd.yaml || :
+	kubectl_bin create -f ${test_dir}/conf/crd.yaml || kubectl_bin create -f ${src_dir}/deploy/crd.yaml || :
 	kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
 
 	cat ${src_dir}/deploy/operator.yaml \

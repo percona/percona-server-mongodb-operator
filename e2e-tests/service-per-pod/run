@@ -7,56 +7,56 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
 check_cr_config() {
-    local cluster="$1"
+	local cluster="$1"
 
-    # apply cr config
-    apply_cluster $test_dir/conf/$cluster.yml
+	# apply cr config
+	apply_cluster $test_dir/conf/$cluster.yml
 
-    # check if at least 1 Pod started
-    wait_for_running $cluster 3 "false"
+	# check if at least 1 Pod started
+	wait_for_running $cluster 3 "false"
 
-    # check if statefulset created with expected config
-    compare_kubectl statefulset/$cluster
-    compare_kubectl service/$cluster-0
+	# check if statefulset created with expected config
+	compare_kubectl statefulset/$cluster
+	compare_kubectl service/$cluster-0
 
-    local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"
-    sleep 20
+	local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"
+	sleep 20
 
-    # check read and write
-    run_mongo \
-        'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-        "userAdmin:userAdmin123456@$URI" \
-        "mongodb" ":27017"
-    sleep 10
-    run_mongo \
-        'use myApp\n db.test.insert({ x: 100500 })' \
-        "myApp:myPass@$URI" \
-        "mongodb" ":27017"
-    sleep 10
-    compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
-    compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
-    compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
+	# check read and write
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$URI" \
+		"mongodb" ":27017"
+	sleep 10
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$URI" \
+		"mongodb" ":27017"
+	sleep 10
+	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
+	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
+	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
 
-    # delete cluster
-    kubectl_bin delete \
-        -f $test_dir/conf/$cluster.yml
+	# delete cluster
+	kubectl_bin delete \
+		-f $test_dir/conf/$cluster.yml
 }
 
 main() {
-    deploy_cert_manager
-    create_namespace $namespace
-    deploy_operator
-    kubectl_bin apply \
-        -f $conf_dir/client.yml \
-        -f $conf_dir/secrets.yml
+	deploy_cert_manager
+	create_namespace $namespace
+	deploy_operator
+	kubectl_bin apply \
+		-f $conf_dir/client.yml \
+		-f $conf_dir/secrets.yml
 
-    desc 'check ClusterIP'
-    check_cr_config "cluster-ip-rs0"
+	desc 'check ClusterIP'
+	check_cr_config "cluster-ip-rs0"
 
-    desc 'check LoadBalancer'
-    check_cr_config "local-balancer-rs0"
+	desc 'check LoadBalancer'
+	check_cr_config "local-balancer-rs0"
 
-    destroy $namespace
+	destroy $namespace
 }
 
 main

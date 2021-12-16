@@ -60,7 +60,7 @@ function compare_generation() {
 }
 
 function wait_cluster_consistency() {
-	until [[ "$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.state}')" == "ready" && \
+	until [[ "$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.state}')" == "ready" &&
 	"$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" ]]; do
 		echo 'waiting for cluster readyness'
 		sleep 20
@@ -72,9 +72,9 @@ function check_applied_images() {
 
 	case "${updated_image}" in
 		"operator")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
-			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') && \
-			${IMAGE_PMM} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') && \
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') &&
+			${IMAGE_PMM} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') &&
 			${IMAGE_MONGOD} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
 				: Operator image has been updated correctly
 			else
@@ -83,9 +83,9 @@ function check_applied_images() {
 			fi
 			;;
 		"all")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
-			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') && \
-			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') && \
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') &&
+			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') &&
 			${TARGET_IMAGE_MONGOD} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
 				: Cluster images have been updated correctly
 			else
@@ -154,7 +154,7 @@ function main() {
 	compare_generation "1" "psmdb" "${CLUSTER}"
 
 	desc 'upgrade operator'
-	kubectl_bin apply -f "${src_dir}/deploy/crd.yaml"
+	kubectl_bin create -f "${src_dir}/deploy/crd.yaml"
 	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 	kubectl_bin patch deployment "${OPERATOR_NAME}" \
 		-p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${TARGET_IMAGE}"'"}]}}}}'
@@ -195,7 +195,7 @@ function main() {
 	desc 'cleanup'
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
-#	kubectl_bin delete pvc --all
+	#	kubectl_bin delete pvc --all
 	destroy "${namespace}"
 }
 
