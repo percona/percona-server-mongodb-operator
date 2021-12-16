@@ -175,3 +175,4 @@ fabric.properties
 .idea/httpRequests
 
 e2e-tests/init-deploy/smallrun
+deploy/crds/

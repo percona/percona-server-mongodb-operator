@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+# https://v0-19-x.sdk.operatorframework.io/docs/install-operator-sdk/
+#operator-sdk generate k8s
+operator-sdk generate crds
+
+sed -i '' '/.*- protocol/d; s/.*- containerPort/&\n&/; s/- containerPort/- protocol/' \
+	deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml
