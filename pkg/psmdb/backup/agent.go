@@ -3,20 +3,13 @@ package backup
 import (
 	"strconv"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 // AgentContainer creates the container object for a backup agent
-func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSize int32) (corev1.Container, error) {
-	res, err := psmdb.CreateResources(cr.Spec.Backup.Resources)
-	if err != nil {
-		return corev1.Container{}, errors.Wrap(err, "create resources")
-	}
-
+func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
@@ -59,12 +52,12 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSiz
 			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
-		Resources:       res,
+		Resources:       cr.Spec.Backup.Resources,
 	}
 
 	if cr.Spec.Sharding.Enabled {
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
 	}
 
-	return c, nil
+	return c
 }

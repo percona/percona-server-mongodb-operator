@@ -5,7 +5,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -14,7 +13,7 @@ const (
 )
 
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v160OrGreater bool, customAdminParams string) corev1.Container {
+func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater, v160OrGreater bool, customAdminParams string) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 
 	for i := 30100; i <= 30105; i++ {
@@ -162,7 +161,7 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 	return pmm
 }
 
-func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets string, customAdminParams string) []corev1.EnvVar {
+func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets, customAdminParams string) []corev1.EnvVar {
 	pmmAgentEnvs := []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -285,11 +284,7 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmse
 
 	pmmC := PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0, customAdminParams)
 	if is120 {
-		res, err := CreateResources(cr.Spec.PMM.Resources)
-		if err != nil {
-			return corev1.Container{}, errors.Wrap(err, "create resources")
-		}
-		pmmC.Resources = res
+		pmmC.Resources = cr.Spec.PMM.Resources
 	}
 	if cr.CompareVersion("1.6.0") >= 0 {
 		pmmC.Lifecycle = &corev1.Lifecycle{

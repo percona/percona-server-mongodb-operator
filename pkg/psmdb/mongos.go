@@ -51,8 +51,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 
 	initContainers := InitContainers(cr, operatorPod)
 	for i := range initContainers {
-		initContainers[i].Resources.Limits = c.Resources.Limits
-		initContainers[i].Resources.Requests = c.Resources.Requests
+		initContainers[i].Resources = c.Resources
 	}
 
 	containers, ok := cr.Spec.Sharding.Mongos.MultiAZ.WithSidecars(c)
@@ -119,11 +118,6 @@ func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []core
 func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) (corev1.Container, error) {
 	fvar := false
 
-	resources, err := CreateResources(cr.Spec.Sharding.Mongos.ResourcesSpec)
-	if err != nil {
-		return corev1.Container{}, fmt.Errorf("resource creation: %v", err)
-	}
-
 	volumes := []corev1.VolumeMount{
 		{
 			Name:      MongodDataVolClaimName,
@@ -165,7 +159,12 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args:            mongosContainerArgs(cr, resources, useConfigFile, cfgInstances),
+		Args: mongosContainerArgs(
+			cr,
+			cr.Spec.Sharding.Mongos.Resources,
+			useConfigFile,
+			cfgInstances,
+		),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongosPortName,
@@ -201,7 +200,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		LivenessProbe:   &cr.Spec.Sharding.Mongos.LivenessProbe.Probe,
 		ReadinessProbe:  cr.Spec.Sharding.Mongos.ReadinessProbe,
 		SecurityContext: cr.Spec.Sharding.Mongos.ContainerSecurityContext,
-		Resources:       resources,
+		Resources:       cr.Spec.Sharding.Mongos.Resources,
 		VolumeMounts:    volumes,
 		Command:         []string{"/data/db/ps-entry.sh"},
 	}

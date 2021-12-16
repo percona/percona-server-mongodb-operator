@@ -162,21 +162,21 @@ const (
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                  `json:"state,omitempty"`
-	MongoVersion       string                    `json:"mongoVersion,omitempty"`
-	MongoImage         string                    `json:"mongoImage,omitempty"`
-	Message            string                    `json:"message,omitempty"`
-	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
-	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`
-	Mongos             *MongosStatus             `json:"mongos,omitempty"`
-	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
-	BackupStatus       AppState                  `json:"backup,omitempty"`
-	BackupVersion      string                    `json:"backupVersion,omitempty"`
-	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
-	PMMVersion         string                    `json:"pmmVersion,omitempty"`
-	Host               string                    `json:"host,omitempty"`
-	Size               int32                     `json:"size"`
-	Ready              int32                     `json:"ready"`
+	State              AppState                 `json:"state,omitempty"`
+	MongoVersion       string                   `json:"mongoVersion,omitempty"`
+	MongoImage         string                   `json:"mongoImage,omitempty"`
+	Message            string                   `json:"message,omitempty"`
+	Conditions         []ClusterCondition       `json:"conditions,omitempty"`
+	Replsets           map[string]ReplsetStatus `json:"replsets,omitempty"`
+	Mongos             *MongosStatus            `json:"mongos,omitempty"`
+	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
+	BackupStatus       AppState                 `json:"backup,omitempty"`
+	BackupVersion      string                   `json:"backupVersion,omitempty"`
+	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
+	PMMVersion         string                   `json:"pmmVersion,omitempty"`
+	Host               string                   `json:"host,omitempty"`
+	Size               int32                    `json:"size"`
+	Ready              int32                    `json:"ready"`
 }
 
 type ConditionStatus string
@@ -196,27 +196,31 @@ type ClusterCondition struct {
 }
 
 type PMMSpec struct {
-	Enabled      bool           `json:"enabled,omitempty"`
-	ServerHost   string         `json:"serverHost,omitempty"`
-	Image        string         `json:"image,omitempty"`
-	MongodParams string         `json:"mongodParams,omitempty"`
-	MongosParams string         `json:"mongosParams,omitempty"`
-	Resources    *ResourcesSpec `json:"resources,omitempty"`
+	Enabled      bool   `json:"enabled,omitempty"`
+	ServerHost   string `json:"serverHost,omitempty"`
+	Image        string `json:"image,omitempty"`
+	MongodParams string `json:"mongodParams,omitempty"`
+	MongosParams string `json:"mongosParams,omitempty"`
+
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type MultiAZ struct {
-	Affinity            *PodAffinity                   `json:"affinity,omitempty"`
-	NodeSelector        map[string]string              `json:"nodeSelector,omitempty"`
-	Tolerations         []corev1.Toleration            `json:"tolerations,omitempty"`
-	PriorityClassName   string                         `json:"priorityClassName,omitempty"`
-	ServiceAccountName  string                         `json:"serviceAccountName,omitempty"`
-	Annotations         map[string]string              `json:"annotations,omitempty"`
-	Labels              map[string]string              `json:"labels,omitempty"`
-	PodDisruptionBudget *PodDisruptionBudgetSpec       `json:"podDisruptionBudget,omitempty"`
-	RuntimeClassName    *string                        `json:"runtimeClassName,omitempty"`
-	Sidecars            []corev1.Container             `json:"sidecars,omitempty"`
-	SidecarVolumes      []corev1.Volume                `json:"sidecarVolumes,omitempty"`
-	SidecarPVCs         []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
+	Affinity            *PodAffinity             `json:"affinity,omitempty"`
+	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
+	Tolerations         []corev1.Toleration      `json:"tolerations,omitempty"`
+	PriorityClassName   string                   `json:"priorityClassName,omitempty"`
+	ServiceAccountName  string                   `json:"serviceAccountName,omitempty"`
+	Annotations         map[string]string        `json:"annotations,omitempty"`
+	Labels              map[string]string        `json:"labels,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	RuntimeClassName    *string                  `json:"runtimeClassName,omitempty"`
+
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	Sidecars       []corev1.Container             `json:"sidecars,omitempty"`
+	SidecarVolumes []corev1.Volume                `json:"sidecarVolumes,omitempty"`
+	SidecarPVCs    []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
 }
 
 func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Container, noSkips bool) {
@@ -298,22 +302,22 @@ func (e *ExternalNode) HostPort() string {
 }
 
 type NonVotingSpec struct {
+	MultiAZ `json:",inline"`
+
 	Enabled                  bool                       `json:"enabled"`
 	Size                     int32                      `json:"size"`
-	Resources                *ResourcesSpec             `json:"resources,omitempty"`
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            string                     `json:"configuration,omitempty"`
-
-	MultiAZ
 }
 
 type ReplsetSpec struct {
-	Resources                *ResourcesSpec             `json:"resources,omitempty"`
-	Name                     string                     `json:"name"`
+	MultiAZ `json:",inline"`
+
+	Name                     string                     `json:"name,omitempty"`
 	Size                     int32                      `json:"size"`
 	ClusterRole              ClusterRole                `json:"clusterRole,omitempty"`
 	Arbiter                  Arbiter                    `json:"arbiter,omitempty"`
@@ -327,8 +331,6 @@ type ReplsetSpec struct {
 	Configuration            string                     `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
-
-	MultiAZ
 }
 
 type LivenessProbeExtended struct {
@@ -364,16 +366,6 @@ type VolumeSpec struct {
 	PersistentVolumeClaim *corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
 }
 
-type ResourceSpecRequirements struct {
-	CPU    string `json:"cpu,omitempty"`
-	Memory string `json:"memory,omitempty"`
-}
-
-type ResourcesSpec struct {
-	Limits   *ResourceSpecRequirements `json:"limits,omitempty"`
-	Requests *ResourceSpecRequirements `json:"requests,omitempty"`
-}
-
 type SecretsSpec struct {
 	Users         string `json:"users,omitempty"`
 	SSL           string `json:"ssl,omitempty"`
@@ -382,7 +374,8 @@ type SecretsSpec struct {
 }
 
 type MongosSpec struct {
-	MultiAZ
+	MultiAZ `json:",inline"`
+
 	Port                     int32                      `json:"port,omitempty"`
 	HostPort                 int32                      `json:"hostPort,omitempty"`
 	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
@@ -394,7 +387,6 @@ type MongosSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            string                     `json:"configuration,omitempty"`
-	*ResourcesSpec           `json:"resources,omitempty"`
 }
 
 type MongodSpec struct {
@@ -583,6 +575,7 @@ func (p PITRSpec) Disabled() PITRSpec {
 
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
+	RestartOnFailure         bool                         `json:"restartOnFailure,omitempty"`
 	Annotations              map[string]string            `json:"annotations,omitempty"`
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
 	Image                    string                       `json:"image,omitempty"`
@@ -590,7 +583,7 @@ type BackupSpec struct {
 	ServiceAccountName       string                       `json:"serviceAccountName,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
-	Resources                *ResourcesSpec               `json:"resources,omitempty"`
+	Resources                corev1.ResourceRequirements  `json:"resources,omitempty"`
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 }
@@ -606,10 +599,10 @@ func (b BackupSpec) IsEnabledPITR() bool {
 }
 
 type Arbiter struct {
-	Enabled   bool           `json:"enabled"`
-	Size      int32          `json:"size"`
-	Resources *ResourcesSpec `json:"resources,omitempty"`
-	MultiAZ
+	MultiAZ `json:",inline"`
+
+	Enabled bool  `json:"enabled"`
+	Size    int32 `json:"size"`
 }
 
 type MongosExpose struct {

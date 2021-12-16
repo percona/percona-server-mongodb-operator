@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
@@ -55,11 +56,13 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	} else {
 		delete(cr.Status.Replsets, api.ConfigReplSetName)
 		for i := range cr.Status.Replsets {
-			cr.Status.Replsets[i].AddedAsShard = nil
+			rs := cr.Status.Replsets[i]
+			rs.AddedAsShard = nil
+			cr.Status.Replsets[i] = rs
 		}
 	}
 
-	leftRsStatuses := make(map[string]*api.ReplsetStatus)
+	leftRsStatuses := make(map[string]api.ReplsetStatus)
 	for _, repl := range repls {
 		if v, ok := cr.Status.Replsets[repl.Name]; ok {
 			leftRsStatuses[repl.Name] = v
@@ -77,7 +80,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 
 		currentRSstatus, ok := cr.Status.Replsets[rs.Name]
 		if !ok {
-			currentRSstatus = &api.ReplsetStatus{}
+			currentRSstatus = api.ReplsetStatus{}
 		}
 
 		status.Initialized = currentRSstatus.Initialized
@@ -119,7 +122,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 			status.Ready = status.Size
 		}
 
-		cr.Status.Replsets[rs.Name] = &status
+		cr.Status.Replsets[rs.Name] = status
 		cr.Status.Size += status.Size
 		cr.Status.Ready += status.Ready
 

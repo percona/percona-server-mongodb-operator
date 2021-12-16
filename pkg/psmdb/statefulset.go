@@ -33,17 +33,11 @@ var secretFileMode int32 = 288
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
 	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
-	resourcesSpec *api.ResourcesSpec, podSecurityContext *corev1.PodSecurityContext,
+	resources corev1.ResourceRequirements, podSecurityContext *corev1.PodSecurityContext,
 	containerSecurityContext *corev1.SecurityContext, livenessProbe *api.LivenessProbeExtended,
-	readinessProbe *corev1.Probe, configuration string, configName string) (appsv1.StatefulSetSpec, error) {
-
+	readinessProbe *corev1.Probe, configuration, configName string) (appsv1.StatefulSetSpec, error,
+) {
 	fvar := false
-
-	// TODO: do as the backup - serialize resources straight via cr.yaml
-	resources, err := CreateResources(resourcesSpec)
-	if err != nil {
-		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
-	}
 
 	customLabels := make(map[string]string, len(ls))
 	for k, v := range ls {
@@ -98,8 +92,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	}
 
 	for i := range initContainers {
-		initContainers[i].Resources.Limits = c.Resources.Limits
-		initContainers[i].Resources.Requests = c.Resources.Requests
+		initContainers[i].Resources = c.Resources
 	}
 
 	containers, ok := multiAZ.WithSidecars(c)

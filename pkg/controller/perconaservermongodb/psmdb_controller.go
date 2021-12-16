@@ -446,7 +446,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 		_, ok := cr.Status.Replsets[replset.Name]
 		if !ok {
-			cr.Status.Replsets[replset.Name] = &api.ReplsetStatus{}
+			cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
 		}
 
 		clusterStatus, err = r.reconcileCluster(cr, replset, pods, mongosPods.Items)
@@ -1297,10 +1297,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		}
 
 		if cr.Spec.Backup.Enabled {
-			agentC, err := backup.AgentContainer(cr, replset.Name, replset.Size)
-			if err != nil {
-				return nil, errors.Wrap(err, "create a backup container")
-			}
+			agentC := backup.AgentContainer(cr, replset.Name)
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
 
