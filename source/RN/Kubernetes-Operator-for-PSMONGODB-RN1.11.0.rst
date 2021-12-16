@@ -22,7 +22,6 @@ Improvements
 ================================================================================
 
 * :jirabug:`K8SPSMDB-422`: It is now possible to set annotations to backup cron jobs (Thanks to Aliaksandr Karavai for contribution)
-* :jirabug:`K8SPSMDB-574`: Set certificate duration for external certificates to 100 years instead of 90 days
 * :jirabug:`K8SPSMDB-534`: mongos readiness probe now avoids running listDatabases command for all databases in the cluster to avoid unneeded delays on clusters with an extremely large amount of databases
 * :jirabug:`K8SPSMDB-527`: Timeout parameters for liveness and readiness probes can be customized to avoid false-positives for heavy-loaded clusters
 * :jirabug:`K8SPSMDB-520`: Mount volumes into sidecar containers to enable customization
