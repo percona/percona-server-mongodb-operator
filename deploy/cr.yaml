@@ -1,4 +1,4 @@
-apiVersion: psmdb.percona.com/v1-11-0
+apiVersion: psmdb.percona.com/v1-12-0
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
@@ -9,7 +9,7 @@ spec:
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.11.0
+  crVersion: 1.12.0
   image: percona/percona-server-mongodb:4.4.9-10
   imagePullPolicy: Always
 #  imagePullSecrets:
