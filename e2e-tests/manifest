@@ -1,8 +1,28 @@
 #!/usr/bin/env bash
 
+set -x
+
+sed=$(which sed || which gsed)
+
 # https://v0-19-x.sdk.operatorframework.io/docs/install-operator-sdk/
 #operator-sdk generate k8s
 operator-sdk generate crds
 
 sed -i '' '/.*- protocol/d; s/.*- containerPort/&\n&/; s/- containerPort/- protocol/' \
 	deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml
+
+lastest_available_version=$(yq r -d0 deploy/crd.yaml 'spec.versions[*].name' | sort -V | tail -n1)
+next_version="v1-$(($(echo ${lastest_available_version} | $sed -r 's/v[0-9]-([0-9]+)-[0-9]+/\1/')+1))-0"
+
+yq r -d0 deploy/crd.yaml | yq w - 'spec.versions(name=='${lastest_available_version}').storage' false > /tmp/crds_prepared.yaml
+
+yq r deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml 'spec.versions' \
+	| yq w - '*.name' ${next_version} \
+	| gsed 's/^/    /g' \
+	>>/tmp/crds_prepared.yaml
+
+echo '---' >> /tmp/crds_prepared.yaml
+yq r -d1 deploy/crd.yaml >> /tmp/crds_prepared.yaml
+echo '---' >> /tmp/crds_prepared.yaml
+yq r -d2 deploy/crd.yaml >> /tmp/crds_prepared.yaml
+mv /tmp/crds_prepared.yaml deploy/crd.yaml
