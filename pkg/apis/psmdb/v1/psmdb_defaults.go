@@ -292,6 +292,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if replset.Storage == nil {
 			replset.Storage = cr.Spec.Mongod.Storage
 		}
+		if replset.Storage.Engine == "" {
+			replset.Storage.Engine = defaultStorageEngine
+		}
 
 		switch replset.Storage.Engine {
 		case StorageEngineInMemory:
