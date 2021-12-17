@@ -21,8 +21,8 @@ yq r deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml 'spec.versions
 	| gsed 's/^/    /g' \
 		>>/tmp/crds_prepared.yaml
 
-echo '---' >> /tmp/crds_prepared.yaml
-yq r -d1 deploy/crd.yaml >> /tmp/crds_prepared.yaml
-echo '---' >> /tmp/crds_prepared.yaml
-yq r -d2 deploy/crd.yaml >> /tmp/crds_prepared.yaml
+echo '---' >>/tmp/crds_prepared.yaml
+yq r -d1 deploy/crd.yaml >>/tmp/crds_prepared.yaml
+echo '---' >>/tmp/crds_prepared.yaml
+yq r -d2 deploy/crd.yaml >>/tmp/crds_prepared.yaml
 mv /tmp/crds_prepared.yaml deploy/crd.yaml
