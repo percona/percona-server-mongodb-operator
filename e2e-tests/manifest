@@ -19,7 +19,7 @@ yq r -d0 deploy/crd.yaml | yq w - 'spec.versions(name=='${lastest_available_vers
 yq r deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml 'spec.versions' \
 	| yq w - '*.name' ${next_version} \
 	| gsed 's/^/    /g' \
-	>>/tmp/crds_prepared.yaml
+		>>/tmp/crds_prepared.yaml
 
 echo '---' >> /tmp/crds_prepared.yaml
 yq r -d1 deploy/crd.yaml >> /tmp/crds_prepared.yaml
