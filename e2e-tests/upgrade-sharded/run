@@ -97,7 +97,7 @@ function check_applied_images() {
 
 function deploy_operator_gh() {
 	desc 'start operator'
-	kubectl_bin create -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
+	kubectl_bin replace --force -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
 	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/rbac.yaml"
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/operator.yaml" >"${tmp_dir}/operator_${GIT_TAG}.yaml"
 	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/operator_${GIT_TAG}.yaml"
@@ -170,7 +170,7 @@ function main() {
 	compare_generation "1" "psmdb" "${cluster}"
 
 	desc 'upgrade operator'
-	kubectl_bin create -f "${src_dir}/deploy/crd.yaml"
+	kubectl_bin replace --force -f "${src_dir}/deploy/crd.yaml"
 	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 	kubectl_bin patch deployment "${OPERATOR_NAME}" \
 		-p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${TARGET_IMAGE}"'"}]}}}}'

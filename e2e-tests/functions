@@ -314,8 +314,15 @@ wait_restore_object() {
 deploy_operator() {
 	desc 'start operator'
 
-	kubectl_bin create -f ${test_dir}/conf/crd.yaml || kubectl_bin create -f ${src_dir}/deploy/crd.yaml || :
-	kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
+	local cr_file
+	if [ -f "${test_dir}/conf/crd.yaml" ]; then
+		cr_file="${test_dir}/conf/crd.yaml"
+	else
+		cr_file="${src_dir}/deploy/crd.yaml"
+	fi
+
+	kubectl_bin replace --force -f "${cr_file}"
+	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 
 	cat ${src_dir}/deploy/operator.yaml \
 		| sed -e "s^image: .*^image: ${IMAGE}^" \

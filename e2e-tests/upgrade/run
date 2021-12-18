@@ -154,7 +154,7 @@ function main() {
 	compare_generation "1" "psmdb" "${CLUSTER}"
 
 	desc 'upgrade operator'
-	kubectl_bin create -f "${src_dir}/deploy/crd.yaml"
+	kubectl_bin replace --force -f "${src_dir}/deploy/crd.yaml"
 	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 	kubectl_bin patch deployment "${OPERATOR_NAME}" \
 		-p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${TARGET_IMAGE}"'"}]}}}}'
