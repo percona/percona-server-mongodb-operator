@@ -63,6 +63,9 @@ election process. This feature is required to have more than 7 nodes, or if
 there is a `node in the edge location <https://en.wikipedia.org/wiki/Edge_computing>`_,
 which obviously should not participate in the voting process.
 
+.. note:: Non-voting nodes support has technical preview status and is not
+   recommended for production environments.
+
 .. note:: It is possible to add a non-voting node in the edge location through the ``externalNodes`` option. Please see :ref:`cross-site replication documentation<operator-replication>` for details.
 
 Percona Distribution for MongoDB Operator has the ability to configure non-voting

@@ -14,8 +14,8 @@ This feature can be useful in several cases:
 - simplify the migration of the MongoDB cluster to and from Kubernetes
 - add remote nodes to the replica set for disaster recovery 
 
-.. Describe how to stop/start replication
-   Describe how to perform a failover
+.. note:: Cross-site replication has technical preview status and is not
+   recommended for production environments.
 
 Configuring the cross-site replication for the cluster controlled by the Operator is explained in the following subsections.
 
