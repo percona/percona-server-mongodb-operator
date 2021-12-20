@@ -9,8 +9,6 @@ spec:
   allowUnsafeConfigurations: false
   backup:
     enabled: false
-    debug: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:0.4.0-backup
   mongod:
     net:
@@ -64,5 +62,4 @@ spec:
             storage: 1Gi
     size: 3
   secrets:
-    key: some-key
     users: some-users

@@ -479,11 +479,15 @@ spec:
                               description: GMSACredentialSpec is where the GMSA admission
                                 webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                 inlines the contents of the GMSA credential spec named
-                                by the GMSACredentialSpecName field.
+                                by the GMSACredentialSpecName field. This field is alpha-level
+                                and is only honored by servers that enable the WindowsGMSA
+                                feature flag.
                               type: string
                             gmsaCredentialSpecName:
                               description: GMSACredentialSpecName is the name of the
-                                GMSA credential spec to use.
+                                GMSA credential spec to use. This field is alpha-level
+                                and is only honored by servers that enable the WindowsGMSA
+                                feature flag.
                               type: string
                             runAsUserName:
                               description: The UserName in Windows to run the entrypoint
@@ -491,7 +495,8 @@ spec:
                                 in image metadata if unspecified. May also be set in
                                 PodSecurityContext. If set in both SecurityContext and
                                 PodSecurityContext, the value specified in SecurityContext
-                                takes precedence.
+                                takes precedence. This field is beta-level and may be
+                                disabled with the WindowsRunAsUserName feature flag.
                               type: string
                           type: object
                       type: object
@@ -523,15 +528,6 @@ spec:
                             permissions of any volume."
                           format: int64
                           type: integer
-                        fsGroupChangePolicy:
-                          description: 'fsGroupChangePolicy defines behavior of changing
-                            ownership and permission of the volume before being exposed
-                            inside Pod. This field will only apply to volume types which
-                            support fsGroup based ownership(and permissions). It will
-                            have no effect on ephemeral volume types such as: secret,
-                            configmaps and emptydir. Valid values are "OnRootMismatch"
-                            and "Always". If not specified defaults to "Always".'
-                          type: string
                         runAsGroup:
                           description: The GID to run the entrypoint of the container
                             process. Uses runtime default if unset. May also be set
@@ -619,11 +615,15 @@ spec:
                               description: GMSACredentialSpec is where the GMSA admission
                                 webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                 inlines the contents of the GMSA credential spec named
-                                by the GMSACredentialSpecName field.
+                                by the GMSACredentialSpecName field. This field is alpha-level
+                                and is only honored by servers that enable the WindowsGMSA
+                                feature flag.
                               type: string
                             gmsaCredentialSpecName:
                               description: GMSACredentialSpecName is the name of the
-                                GMSA credential spec to use.
+                                GMSA credential spec to use. This field is alpha-level
+                                and is only honored by servers that enable the WindowsGMSA
+                                feature flag.
                               type: string
                             runAsUserName:
                               description: The UserName in Windows to run the entrypoint
@@ -631,7 +631,8 @@ spec:
                                 in image metadata if unspecified. May also be set in
                                 PodSecurityContext. If set in both SecurityContext and
                                 PodSecurityContext, the value specified in SecurityContext
-                                takes precedence.
+                                takes precedence. This field is beta-level and may be
+                                disabled with the WindowsRunAsUserName feature flag.
                               type: string
                           type: object
                       type: object
@@ -662,8 +663,6 @@ spec:
                             to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
                           type: object
                       type: object
-                    restartOnFailure:
-                      type: boolean
                     runtimeClassName:
                       type: string
                     serviceAccountName:
@@ -2376,23 +2375,18 @@ spec:
                                         type: string
                                       type: array
                                     dataSource:
-                                      description: 'This field can be used to specify
-                                        either: * An existing VolumeSnapshot object
-                                        (snapshot.storage.k8s.io/VolumeSnapshot - Beta)
-                                        * An existing PVC (PersistentVolumeClaim) *
-                                        An existing custom resource/object that implements
-                                        data population (Alpha) In order to use VolumeSnapshot
-                                        object types, the appropriate feature gate must
-                                        be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                        If the provisioner or an external controller
-                                        can support the specified data source, it will
-                                        create a new volume based on the contents of
-                                        the specified data source. If the specified
-                                        data source is not supported, the volume will
-                                        not be created and the failure will be reported
-                                        as an event. In the future, we plan to support
-                                        more data source types and the behavior of the
-                                        provisioner may change.'
+                                      description: This field requires the VolumeSnapshotDataSource
+                                        alpha feature gate to be enabled and currently
+                                        VolumeSnapshot is the only supported data source.
+                                        If the provisioner can support VolumeSnapshot
+                                        data source, it will create a new volume and
+                                        data will be restored to the volume at the same
+                                        time. If the provisioner does not support VolumeSnapshot
+                                        data source, volume will not be created and
+                                        the failure will be reported as an event. In
+                                        the future, we plan to support more data source
+                                        types and the behavior of the provisioner may
+                                        change.
                                       properties:
                                         apiGroup:
                                           description: APIGroup is the group for the
@@ -2503,6 +2497,7 @@ spec:
                                       description: volumeMode defines what type of volume
                                         is required by the claim. Value of Filesystem
                                         is implied when not included in claim spec.
+                                        This is a beta feature.
                                       type: string
                                     volumeName:
                                       description: VolumeName is the binding reference
@@ -4788,11 +4783,16 @@ spec:
                                             GMSA admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                             inlines the contents of the GMSA credential
                                             spec named by the GMSACredentialSpecName
-                                            field.
+                                            field. This field is alpha-level and is
+                                            only honored by servers that enable the
+                                            WindowsGMSA feature flag.
                                           type: string
                                         gmsaCredentialSpecName:
                                           description: GMSACredentialSpecName is the
                                             name of the GMSA credential spec to use.
+                                            This field is alpha-level and is only honored
+                                            by servers that enable the WindowsGMSA feature
+                                            flag.
                                           type: string
                                         runAsUserName:
                                           description: The UserName in Windows to run
@@ -4801,7 +4801,9 @@ spec:
                                             metadata if unspecified. May also be set
                                             in PodSecurityContext. If set in both SecurityContext
                                             and PodSecurityContext, the value specified
-                                            in SecurityContext takes precedence.
+                                            in SecurityContext takes precedence. This
+                                            field is beta-level and may be disabled
+                                            with the WindowsRunAsUserName feature flag.
                                           type: string
                                       type: object
                                   type: object
@@ -4815,7 +4817,7 @@ spec:
                                     beginning of a Pod''s lifecycle, when it might take
                                     a long time to load data or warm a cache, than during
                                     steady-state operation. This cannot be updated.
-                                    This is a beta feature enabled by the StartupProbe
+                                    This is an alpha feature enabled by the StartupProbe
                                     feature flag. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
                                   properties:
                                     exec:
@@ -4986,7 +4988,7 @@ spec:
                                   type: boolean
                                 volumeDevices:
                                   description: volumeDevices is the list of block devices
-                                    to be used by the container.
+                                    to be used by the container. This is a beta feature.
                                   items:
                                     description: volumeDevice describes a mapping of
                                       a raw block device within a container.
@@ -5224,11 +5226,15 @@ spec:
                                 description: GMSACredentialSpec is where the GMSA admission
                                   webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                   inlines the contents of the GMSA credential spec named
-                                  by the GMSACredentialSpecName field.
+                                  by the GMSACredentialSpecName field. This field is
+                                  alpha-level and is only honored by servers that enable
+                                  the WindowsGMSA feature flag.
                                 type: string
                               gmsaCredentialSpecName:
                                 description: GMSACredentialSpecName is the name of the
-                                  GMSA credential spec to use.
+                                  GMSA credential spec to use. This field is alpha-level
+                                  and is only honored by servers that enable the WindowsGMSA
+                                  feature flag.
                                 type: string
                               runAsUserName:
                                 description: The UserName in Windows to run the entrypoint
@@ -5236,7 +5242,9 @@ spec:
                                   in image metadata if unspecified. May also be set
                                   in PodSecurityContext. If set in both SecurityContext
                                   and PodSecurityContext, the value specified in SecurityContext
-                                  takes precedence.
+                                  takes precedence. This field is beta-level and may
+                                  be disabled with the WindowsRunAsUserName feature
+                                  flag.
                                 type: string
                             type: object
                         type: object
@@ -6224,11 +6232,15 @@ spec:
                                     description: GMSACredentialSpec is where the GMSA
                                       admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                       inlines the contents of the GMSA credential spec
-                                      named by the GMSACredentialSpecName field.
+                                      named by the GMSACredentialSpecName field. This
+                                      field is alpha-level and is only honored by servers
+                                      that enable the WindowsGMSA feature flag.
                                     type: string
                                   gmsaCredentialSpecName:
                                     description: GMSACredentialSpecName is the name
-                                      of the GMSA credential spec to use.
+                                      of the GMSA credential spec to use. This field
+                                      is alpha-level and is only honored by servers
+                                      that enable the WindowsGMSA feature flag.
                                     type: string
                                   runAsUserName:
                                     description: The UserName in Windows to run the
@@ -6237,6 +6249,8 @@ spec:
                                       May also be set in PodSecurityContext. If set
                                       in both SecurityContext and PodSecurityContext,
                                       the value specified in SecurityContext takes precedence.
+                                      This field is beta-level and may be disabled with
+                                      the WindowsRunAsUserName feature flag.
                                     type: string
                                 type: object
                             type: object
@@ -6399,16 +6413,6 @@ spec:
                                   permissions of any volume."
                                 format: int64
                                 type: integer
-                              fsGroupChangePolicy:
-                                description: 'fsGroupChangePolicy defines behavior of
-                                  changing ownership and permission of the volume before
-                                  being exposed inside Pod. This field will only apply
-                                  to volume types which support fsGroup based ownership(and
-                                  permissions). It will have no effect on ephemeral
-                                  volume types such as: secret, configmaps and emptydir.
-                                  Valid values are "OnRootMismatch" and "Always". If
-                                  not specified defaults to "Always".'
-                                type: string
                               runAsGroup:
                                 description: The GID to run the entrypoint of the container
                                   process. Uses runtime default if unset. May also be
@@ -6500,11 +6504,15 @@ spec:
                                     description: GMSACredentialSpec is where the GMSA
                                       admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                       inlines the contents of the GMSA credential spec
-                                      named by the GMSACredentialSpecName field.
+                                      named by the GMSACredentialSpecName field. This
+                                      field is alpha-level and is only honored by servers
+                                      that enable the WindowsGMSA feature flag.
                                     type: string
                                   gmsaCredentialSpecName:
                                     description: GMSACredentialSpecName is the name
-                                      of the GMSA credential spec to use.
+                                      of the GMSA credential spec to use. This field
+                                      is alpha-level and is only honored by servers
+                                      that enable the WindowsGMSA feature flag.
                                     type: string
                                   runAsUserName:
                                     description: The UserName in Windows to run the
@@ -6513,6 +6521,8 @@ spec:
                                       May also be set in PodSecurityContext. If set
                                       in both SecurityContext and PodSecurityContext,
                                       the value specified in SecurityContext takes precedence.
+                                      This field is beta-level and may be disabled with
+                                      the WindowsRunAsUserName feature flag.
                                     type: string
                                 type: object
                             type: object
@@ -6704,23 +6714,18 @@ spec:
                                         type: string
                                       type: array
                                     dataSource:
-                                      description: 'This field can be used to specify
-                                        either: * An existing VolumeSnapshot object
-                                        (snapshot.storage.k8s.io/VolumeSnapshot - Beta)
-                                        * An existing PVC (PersistentVolumeClaim) *
-                                        An existing custom resource/object that implements
-                                        data population (Alpha) In order to use VolumeSnapshot
-                                        object types, the appropriate feature gate must
-                                        be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                        If the provisioner or an external controller
-                                        can support the specified data source, it will
-                                        create a new volume based on the contents of
-                                        the specified data source. If the specified
-                                        data source is not supported, the volume will
-                                        not be created and the failure will be reported
-                                        as an event. In the future, we plan to support
-                                        more data source types and the behavior of the
-                                        provisioner may change.'
+                                      description: This field requires the VolumeSnapshotDataSource
+                                        alpha feature gate to be enabled and currently
+                                        VolumeSnapshot is the only supported data source.
+                                        If the provisioner can support VolumeSnapshot
+                                        data source, it will create a new volume and
+                                        data will be restored to the volume at the same
+                                        time. If the provisioner does not support VolumeSnapshot
+                                        data source, volume will not be created and
+                                        the failure will be reported as an event. In
+                                        the future, we plan to support more data source
+                                        types and the behavior of the provisioner may
+                                        change.
                                       properties:
                                         apiGroup:
                                           description: APIGroup is the group for the
@@ -6831,6 +6836,7 @@ spec:
                                       description: volumeMode defines what type of volume
                                         is required by the claim. Value of Filesystem
                                         is implied when not included in claim spec.
+                                        This is a beta feature.
                                       type: string
                                     volumeName:
                                       description: VolumeName is the binding reference
@@ -9116,11 +9122,16 @@ spec:
                                             GMSA admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                             inlines the contents of the GMSA credential
                                             spec named by the GMSACredentialSpecName
-                                            field.
+                                            field. This field is alpha-level and is
+                                            only honored by servers that enable the
+                                            WindowsGMSA feature flag.
                                           type: string
                                         gmsaCredentialSpecName:
                                           description: GMSACredentialSpecName is the
                                             name of the GMSA credential spec to use.
+                                            This field is alpha-level and is only honored
+                                            by servers that enable the WindowsGMSA feature
+                                            flag.
                                           type: string
                                         runAsUserName:
                                           description: The UserName in Windows to run
@@ -9129,7 +9140,9 @@ spec:
                                             metadata if unspecified. May also be set
                                             in PodSecurityContext. If set in both SecurityContext
                                             and PodSecurityContext, the value specified
-                                            in SecurityContext takes precedence.
+                                            in SecurityContext takes precedence. This
+                                            field is beta-level and may be disabled
+                                            with the WindowsRunAsUserName feature flag.
                                           type: string
                                       type: object
                                   type: object
@@ -9143,7 +9156,7 @@ spec:
                                     beginning of a Pod''s lifecycle, when it might take
                                     a long time to load data or warm a cache, than during
                                     steady-state operation. This cannot be updated.
-                                    This is a beta feature enabled by the StartupProbe
+                                    This is an alpha feature enabled by the StartupProbe
                                     feature flag. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
                                   properties:
                                     exec:
@@ -9314,7 +9327,7 @@ spec:
                                   type: boolean
                                 volumeDevices:
                                   description: volumeDevices is the list of block devices
-                                    to be used by the container.
+                                    to be used by the container. This is a beta feature.
                                   items:
                                     description: volumeDevice describes a mapping of
                                       a raw block device within a container.
@@ -9490,21 +9503,17 @@ spec:
                                       type: string
                                     type: array
                                   dataSource:
-                                    description: 'This field can be used to specify
-                                      either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot
-                                      - Beta) * An existing PVC (PersistentVolumeClaim)
-                                      * An existing custom resource/object that implements
-                                      data population (Alpha) In order to use VolumeSnapshot
-                                      object types, the appropriate feature gate must
-                                      be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                      If the provisioner or an external controller can
-                                      support the specified data source, it will create
-                                      a new volume based on the contents of the specified
-                                      data source. If the specified data source is not
-                                      supported, the volume will not be created and
-                                      the failure will be reported as an event. In the
-                                      future, we plan to support more data source types
-                                      and the behavior of the provisioner may change.'
+                                    description: This field requires the VolumeSnapshotDataSource
+                                      alpha feature gate to be enabled and currently
+                                      VolumeSnapshot is the only supported data source.
+                                      If the provisioner can support VolumeSnapshot
+                                      data source, it will create a new volume and data
+                                      will be restored to the volume at the same time.
+                                      If the provisioner does not support VolumeSnapshot
+                                      data source, volume will not be created and the
+                                      failure will be reported as an event. In the future,
+                                      we plan to support more data source types and
+                                      the behavior of the provisioner may change.
                                     properties:
                                       apiGroup:
                                         description: APIGroup is the group for the resource
@@ -9612,7 +9621,8 @@ spec:
                                   volumeMode:
                                     description: volumeMode defines what type of volume
                                       is required by the claim. Value of Filesystem
-                                      is implied when not included in claim spec.
+                                      is implied when not included in claim spec. This
+                                      is a beta feature.
                                     type: string
                                   volumeName:
                                     description: VolumeName is the binding reference
@@ -9654,16 +9664,6 @@ spec:
                               the ownership and permissions of any volume."
                             format: int64
                             type: integer
-                          fsGroupChangePolicy:
-                            description: 'fsGroupChangePolicy defines behavior of changing
-                              ownership and permission of the volume before being exposed
-                              inside Pod. This field will only apply to volume types
-                              which support fsGroup based ownership(and permissions).
-                              It will have no effect on ephemeral volume types such
-                              as: secret, configmaps and emptydir. Valid values are
-                              "OnRootMismatch" and "Always". If not specified defaults
-                              to "Always".'
-                            type: string
                           runAsGroup:
                             description: The GID to run the entrypoint of the container
                               process. Uses runtime default if unset. May also be set
@@ -9754,11 +9754,15 @@ spec:
                                 description: GMSACredentialSpec is where the GMSA admission
                                   webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                   inlines the contents of the GMSA credential spec named
-                                  by the GMSACredentialSpecName field.
+                                  by the GMSACredentialSpecName field. This field is
+                                  alpha-level and is only honored by servers that enable
+                                  the WindowsGMSA feature flag.
                                 type: string
                               gmsaCredentialSpecName:
                                 description: GMSACredentialSpecName is the name of the
-                                  GMSA credential spec to use.
+                                  GMSA credential spec to use. This field is alpha-level
+                                  and is only honored by servers that enable the WindowsGMSA
+                                  feature flag.
                                 type: string
                               runAsUserName:
                                 description: The UserName in Windows to run the entrypoint
@@ -9766,7 +9770,9 @@ spec:
                                   in image metadata if unspecified. May also be set
                                   in PodSecurityContext. If set in both SecurityContext
                                   and PodSecurityContext, the value specified in SecurityContext
-                                  takes precedence.
+                                  takes precedence. This field is beta-level and may
+                                  be disabled with the WindowsRunAsUserName feature
+                                  flag.
                                 type: string
                             type: object
                         type: object
@@ -9953,21 +9959,17 @@ spec:
                                     type: string
                                   type: array
                                 dataSource:
-                                  description: 'This field can be used to specify either:
-                                    * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot
-                                    - Beta) * An existing PVC (PersistentVolumeClaim)
-                                    * An existing custom resource/object that implements
-                                    data population (Alpha) In order to use VolumeSnapshot
-                                    object types, the appropriate feature gate must
-                                    be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                    If the provisioner or an external controller can
-                                    support the specified data source, it will create
-                                    a new volume based on the contents of the specified
-                                    data source. If the specified data source is not
-                                    supported, the volume will not be created and the
-                                    failure will be reported as an event. In the future,
-                                    we plan to support more data source types and the
-                                    behavior of the provisioner may change.'
+                                  description: This field requires the VolumeSnapshotDataSource
+                                    alpha feature gate to be enabled and currently VolumeSnapshot
+                                    is the only supported data source. If the provisioner
+                                    can support VolumeSnapshot data source, it will
+                                    create a new volume and data will be restored to
+                                    the volume at the same time. If the provisioner
+                                    does not support VolumeSnapshot data source, volume
+                                    will not be created and the failure will be reported
+                                    as an event. In the future, we plan to support more
+                                    data source types and the behavior of the provisioner
+                                    may change.
                                   properties:
                                     apiGroup:
                                       description: APIGroup is the group for the resource
@@ -10072,7 +10074,8 @@ spec:
                                 volumeMode:
                                   description: volumeMode defines what type of volume
                                     is required by the claim. Value of Filesystem is
-                                    implied when not included in claim spec.
+                                    implied when not included in claim spec. This is
+                                    a beta feature.
                                   type: string
                                 volumeName:
                                   description: VolumeName is the binding reference to
@@ -12263,10 +12266,15 @@ spec:
                                         admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                         inlines the contents of the GMSA credential
                                         spec named by the GMSACredentialSpecName field.
+                                        This field is alpha-level and is only honored
+                                        by servers that enable the WindowsGMSA feature
+                                        flag.
                                       type: string
                                     gmsaCredentialSpecName:
                                       description: GMSACredentialSpecName is the name
-                                        of the GMSA credential spec to use.
+                                        of the GMSA credential spec to use. This field
+                                        is alpha-level and is only honored by servers
+                                        that enable the WindowsGMSA feature flag.
                                       type: string
                                     runAsUserName:
                                       description: The UserName in Windows to run the
@@ -12275,7 +12283,9 @@ spec:
                                         May also be set in PodSecurityContext. If set
                                         in both SecurityContext and PodSecurityContext,
                                         the value specified in SecurityContext takes
-                                        precedence.
+                                        precedence. This field is beta-level and may
+                                        be disabled with the WindowsRunAsUserName feature
+                                        flag.
                                       type: string
                                   type: object
                               type: object
@@ -12288,8 +12298,8 @@ spec:
                                 probe parameters at the beginning of a Pod''s lifecycle,
                                 when it might take a long time to load data or warm
                                 a cache, than during steady-state operation. This cannot
-                                be updated. This is a beta feature enabled by the StartupProbe
-                                feature flag. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
+                                be updated. This is an alpha feature enabled by the
+                                StartupProbe feature flag. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
                               properties:
                                 exec:
                                   description: One and only one of the following should
@@ -12451,7 +12461,7 @@ spec:
                               type: boolean
                             volumeDevices:
                               description: volumeDevices is the list of block devices
-                                to be used by the container.
+                                to be used by the container. This is a beta feature.
                               items:
                                 description: volumeDevice describes a mapping of a raw
                                   block device within a container.
@@ -12669,21 +12679,16 @@ spec:
                                   type: string
                                 type: array
                               dataSource:
-                                description: 'This field can be used to specify either:
-                                  * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot
-                                  - Beta) * An existing PVC (PersistentVolumeClaim)
-                                  * An existing custom resource/object that implements
-                                  data population (Alpha) In order to use VolumeSnapshot
-                                  object types, the appropriate feature gate must be
-                                  enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                  If the provisioner or an external controller can support
-                                  the specified data source, it will create a new volume
-                                  based on the contents of the specified data source.
-                                  If the specified data source is not supported, the
-                                  volume will not be created and the failure will be
-                                  reported as an event. In the future, we plan to support
-                                  more data source types and the behavior of the provisioner
-                                  may change.'
+                                description: This field requires the VolumeSnapshotDataSource
+                                  alpha feature gate to be enabled and currently VolumeSnapshot
+                                  is the only supported data source. If the provisioner
+                                  can support VolumeSnapshot data source, it will create
+                                  a new volume and data will be restored to the volume
+                                  at the same time. If the provisioner does not support
+                                  VolumeSnapshot data source, volume will not be created
+                                  and the failure will be reported as an event. In the
+                                  future, we plan to support more data source types
+                                  and the behavior of the provisioner may change.
                                 properties:
                                   apiGroup:
                                     description: APIGroup is the group for the resource
@@ -12785,7 +12790,7 @@ spec:
                               volumeMode:
                                 description: volumeMode defines what type of volume
                                   is required by the claim. Value of Filesystem is implied
-                                  when not included in claim spec.
+                                  when not included in claim spec. This is a beta feature.
                                 type: string
                               volumeName:
                                 description: VolumeName is the binding reference to
@@ -14343,24 +14348,18 @@ spec:
                                           type: string
                                         type: array
                                       dataSource:
-                                        description: 'This field can be used to specify
-                                          either: * An existing VolumeSnapshot object
-                                          (snapshot.storage.k8s.io/VolumeSnapshot -
-                                          Beta) * An existing PVC (PersistentVolumeClaim)
-                                          * An existing custom resource/object that
-                                          implements data population (Alpha) In order
-                                          to use VolumeSnapshot object types, the appropriate
-                                          feature gate must be enabled (VolumeSnapshotDataSource
-                                          or AnyVolumeDataSource) If the provisioner
-                                          or an external controller can support the
-                                          specified data source, it will create a new
-                                          volume based on the contents of the specified
-                                          data source. If the specified data source
-                                          is not supported, the volume will not be created
-                                          and the failure will be reported as an event.
-                                          In the future, we plan to support more data
-                                          source types and the behavior of the provisioner
-                                          may change.'
+                                        description: This field requires the VolumeSnapshotDataSource
+                                          alpha feature gate to be enabled and currently
+                                          VolumeSnapshot is the only supported data
+                                          source. If the provisioner can support VolumeSnapshot
+                                          data source, it will create a new volume and
+                                          data will be restored to the volume at the
+                                          same time. If the provisioner does not support
+                                          VolumeSnapshot data source, volume will not
+                                          be created and the failure will be reported
+                                          as an event. In the future, we plan to support
+                                          more data source types and the behavior of
+                                          the provisioner may change.
                                         properties:
                                           apiGroup:
                                             description: APIGroup is the group for the
@@ -14472,7 +14471,7 @@ spec:
                                         description: volumeMode defines what type of
                                           volume is required by the claim. Value of
                                           Filesystem is implied when not included in
-                                          claim spec.
+                                          claim spec. This is a beta feature.
                                         type: string
                                       volumeName:
                                         description: VolumeName is the binding reference
@@ -16813,11 +16812,16 @@ spec:
                                               the GMSA admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                               inlines the contents of the GMSA credential
                                               spec named by the GMSACredentialSpecName
-                                              field.
+                                              field. This field is alpha-level and is
+                                              only honored by servers that enable the
+                                              WindowsGMSA feature flag.
                                             type: string
                                           gmsaCredentialSpecName:
                                             description: GMSACredentialSpecName is the
                                               name of the GMSA credential spec to use.
+                                              This field is alpha-level and is only
+                                              honored by servers that enable the WindowsGMSA
+                                              feature flag.
                                             type: string
                                           runAsUserName:
                                             description: The UserName in Windows to
@@ -16827,7 +16831,9 @@ spec:
                                               in PodSecurityContext. If set in both
                                               SecurityContext and PodSecurityContext,
                                               the value specified in SecurityContext
-                                              takes precedence.
+                                              takes precedence. This field is beta-level
+                                              and may be disabled with the WindowsRunAsUserName
+                                              feature flag.
                                             type: string
                                         type: object
                                     type: object
@@ -16841,7 +16847,7 @@ spec:
                                       at the beginning of a Pod''s lifecycle, when it
                                       might take a long time to load data or warm a
                                       cache, than during steady-state operation. This
-                                      cannot be updated. This is a beta feature enabled
+                                      cannot be updated. This is an alpha feature enabled
                                       by the StartupProbe feature flag. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
                                     properties:
                                       exec:
@@ -17015,7 +17021,8 @@ spec:
                                     type: boolean
                                   volumeDevices:
                                     description: volumeDevices is the list of block
-                                      devices to be used by the container.
+                                      devices to be used by the container. This is a
+                                      beta feature.
                                     items:
                                       description: volumeDevice describes a mapping
                                         of a raw block device within a container.
@@ -17257,11 +17264,15 @@ spec:
                                   description: GMSACredentialSpec is where the GMSA
                                     admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                     inlines the contents of the GMSA credential spec
-                                    named by the GMSACredentialSpecName field.
+                                    named by the GMSACredentialSpecName field. This
+                                    field is alpha-level and is only honored by servers
+                                    that enable the WindowsGMSA feature flag.
                                   type: string
                                 gmsaCredentialSpecName:
                                   description: GMSACredentialSpecName is the name of
-                                    the GMSA credential spec to use.
+                                    the GMSA credential spec to use. This field is alpha-level
+                                    and is only honored by servers that enable the WindowsGMSA
+                                    feature flag.
                                   type: string
                                 runAsUserName:
                                   description: The UserName in Windows to run the entrypoint
@@ -17269,7 +17280,9 @@ spec:
                                     in image metadata if unspecified. May also be set
                                     in PodSecurityContext. If set in both SecurityContext
                                     and PodSecurityContext, the value specified in SecurityContext
-                                    takes precedence.
+                                    takes precedence. This field is beta-level and may
+                                    be disabled with the WindowsRunAsUserName feature
+                                    flag.
                                   type: string
                               type: object
                           type: object
@@ -18293,10 +18306,15 @@ spec:
                                         admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                         inlines the contents of the GMSA credential
                                         spec named by the GMSACredentialSpecName field.
+                                        This field is alpha-level and is only honored
+                                        by servers that enable the WindowsGMSA feature
+                                        flag.
                                       type: string
                                     gmsaCredentialSpecName:
                                       description: GMSACredentialSpecName is the name
-                                        of the GMSA credential spec to use.
+                                        of the GMSA credential spec to use. This field
+                                        is alpha-level and is only honored by servers
+                                        that enable the WindowsGMSA feature flag.
                                       type: string
                                     runAsUserName:
                                       description: The UserName in Windows to run the
@@ -18305,7 +18323,9 @@ spec:
                                         May also be set in PodSecurityContext. If set
                                         in both SecurityContext and PodSecurityContext,
                                         the value specified in SecurityContext takes
-                                        precedence.
+                                        precedence. This field is beta-level and may
+                                        be disabled with the WindowsRunAsUserName feature
+                                        flag.
                                       type: string
                                   type: object
                               type: object
@@ -18469,16 +18489,6 @@ spec:
                                     and permissions of any volume."
                                   format: int64
                                   type: integer
-                                fsGroupChangePolicy:
-                                  description: 'fsGroupChangePolicy defines behavior
-                                    of changing ownership and permission of the volume
-                                    before being exposed inside Pod. This field will
-                                    only apply to volume types which support fsGroup
-                                    based ownership(and permissions). It will have no
-                                    effect on ephemeral volume types such as: secret,
-                                    configmaps and emptydir. Valid values are "OnRootMismatch"
-                                    and "Always". If not specified defaults to "Always".'
-                                  type: string
                                 runAsGroup:
                                   description: The GID to run the entrypoint of the
                                     container process. Uses runtime default if unset.
@@ -18573,10 +18583,15 @@ spec:
                                         admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                         inlines the contents of the GMSA credential
                                         spec named by the GMSACredentialSpecName field.
+                                        This field is alpha-level and is only honored
+                                        by servers that enable the WindowsGMSA feature
+                                        flag.
                                       type: string
                                     gmsaCredentialSpecName:
                                       description: GMSACredentialSpecName is the name
-                                        of the GMSA credential spec to use.
+                                        of the GMSA credential spec to use. This field
+                                        is alpha-level and is only honored by servers
+                                        that enable the WindowsGMSA feature flag.
                                       type: string
                                     runAsUserName:
                                       description: The UserName in Windows to run the
@@ -18585,7 +18600,9 @@ spec:
                                         May also be set in PodSecurityContext. If set
                                         in both SecurityContext and PodSecurityContext,
                                         the value specified in SecurityContext takes
-                                        precedence.
+                                        precedence. This field is beta-level and may
+                                        be disabled with the WindowsRunAsUserName feature
+                                        flag.
                                       type: string
                                   type: object
                               type: object
@@ -18778,24 +18795,18 @@ spec:
                                           type: string
                                         type: array
                                       dataSource:
-                                        description: 'This field can be used to specify
-                                          either: * An existing VolumeSnapshot object
-                                          (snapshot.storage.k8s.io/VolumeSnapshot -
-                                          Beta) * An existing PVC (PersistentVolumeClaim)
-                                          * An existing custom resource/object that
-                                          implements data population (Alpha) In order
-                                          to use VolumeSnapshot object types, the appropriate
-                                          feature gate must be enabled (VolumeSnapshotDataSource
-                                          or AnyVolumeDataSource) If the provisioner
-                                          or an external controller can support the
-                                          specified data source, it will create a new
-                                          volume based on the contents of the specified
-                                          data source. If the specified data source
-                                          is not supported, the volume will not be created
-                                          and the failure will be reported as an event.
-                                          In the future, we plan to support more data
-                                          source types and the behavior of the provisioner
-                                          may change.'
+                                        description: This field requires the VolumeSnapshotDataSource
+                                          alpha feature gate to be enabled and currently
+                                          VolumeSnapshot is the only supported data
+                                          source. If the provisioner can support VolumeSnapshot
+                                          data source, it will create a new volume and
+                                          data will be restored to the volume at the
+                                          same time. If the provisioner does not support
+                                          VolumeSnapshot data source, volume will not
+                                          be created and the failure will be reported
+                                          as an event. In the future, we plan to support
+                                          more data source types and the behavior of
+                                          the provisioner may change.
                                         properties:
                                           apiGroup:
                                             description: APIGroup is the group for the
@@ -18907,7 +18918,7 @@ spec:
                                         description: volumeMode defines what type of
                                           volume is required by the claim. Value of
                                           Filesystem is implied when not included in
-                                          claim spec.
+                                          claim spec. This is a beta feature.
                                         type: string
                                       volumeName:
                                         description: VolumeName is the binding reference
@@ -21248,11 +21259,16 @@ spec:
                                               the GMSA admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                               inlines the contents of the GMSA credential
                                               spec named by the GMSACredentialSpecName
-                                              field.
+                                              field. This field is alpha-level and is
+                                              only honored by servers that enable the
+                                              WindowsGMSA feature flag.
                                             type: string
                                           gmsaCredentialSpecName:
                                             description: GMSACredentialSpecName is the
                                               name of the GMSA credential spec to use.
+                                              This field is alpha-level and is only
+                                              honored by servers that enable the WindowsGMSA
+                                              feature flag.
                                             type: string
                                           runAsUserName:
                                             description: The UserName in Windows to
@@ -21262,7 +21278,9 @@ spec:
                                               in PodSecurityContext. If set in both
                                               SecurityContext and PodSecurityContext,
                                               the value specified in SecurityContext
-                                              takes precedence.
+                                              takes precedence. This field is beta-level
+                                              and may be disabled with the WindowsRunAsUserName
+                                              feature flag.
                                             type: string
                                         type: object
                                     type: object
@@ -21276,7 +21294,7 @@ spec:
                                       at the beginning of a Pod''s lifecycle, when it
                                       might take a long time to load data or warm a
                                       cache, than during steady-state operation. This
-                                      cannot be updated. This is a beta feature enabled
+                                      cannot be updated. This is an alpha feature enabled
                                       by the StartupProbe feature flag. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
                                     properties:
                                       exec:
@@ -21450,7 +21468,8 @@ spec:
                                     type: boolean
                                   volumeDevices:
                                     description: volumeDevices is the list of block
-                                      devices to be used by the container.
+                                      devices to be used by the container. This is a
+                                      beta feature.
                                     items:
                                       description: volumeDevice describes a mapping
                                         of a raw block device within a container.
@@ -21631,23 +21650,18 @@ spec:
                                         type: string
                                       type: array
                                     dataSource:
-                                      description: 'This field can be used to specify
-                                        either: * An existing VolumeSnapshot object
-                                        (snapshot.storage.k8s.io/VolumeSnapshot - Beta)
-                                        * An existing PVC (PersistentVolumeClaim) *
-                                        An existing custom resource/object that implements
-                                        data population (Alpha) In order to use VolumeSnapshot
-                                        object types, the appropriate feature gate must
-                                        be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                        If the provisioner or an external controller
-                                        can support the specified data source, it will
-                                        create a new volume based on the contents of
-                                        the specified data source. If the specified
-                                        data source is not supported, the volume will
-                                        not be created and the failure will be reported
-                                        as an event. In the future, we plan to support
-                                        more data source types and the behavior of the
-                                        provisioner may change.'
+                                      description: This field requires the VolumeSnapshotDataSource
+                                        alpha feature gate to be enabled and currently
+                                        VolumeSnapshot is the only supported data source.
+                                        If the provisioner can support VolumeSnapshot
+                                        data source, it will create a new volume and
+                                        data will be restored to the volume at the same
+                                        time. If the provisioner does not support VolumeSnapshot
+                                        data source, volume will not be created and
+                                        the failure will be reported as an event. In
+                                        the future, we plan to support more data source
+                                        types and the behavior of the provisioner may
+                                        change.
                                       properties:
                                         apiGroup:
                                           description: APIGroup is the group for the
@@ -21758,6 +21772,7 @@ spec:
                                       description: volumeMode defines what type of volume
                                         is required by the claim. Value of Filesystem
                                         is implied when not included in claim spec.
+                                        This is a beta feature.
                                       type: string
                                     volumeName:
                                       description: VolumeName is the binding reference
@@ -21800,16 +21815,6 @@ spec:
                                 volume."
                               format: int64
                               type: integer
-                            fsGroupChangePolicy:
-                              description: 'fsGroupChangePolicy defines behavior of
-                                changing ownership and permission of the volume before
-                                being exposed inside Pod. This field will only apply
-                                to volume types which support fsGroup based ownership(and
-                                permissions). It will have no effect on ephemeral volume
-                                types such as: secret, configmaps and emptydir. Valid
-                                values are "OnRootMismatch" and "Always". If not specified
-                                defaults to "Always".'
-                              type: string
                             runAsGroup:
                               description: The GID to run the entrypoint of the container
                                 process. Uses runtime default if unset. May also be
@@ -21901,11 +21906,15 @@ spec:
                                   description: GMSACredentialSpec is where the GMSA
                                     admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                     inlines the contents of the GMSA credential spec
-                                    named by the GMSACredentialSpecName field.
+                                    named by the GMSACredentialSpecName field. This
+                                    field is alpha-level and is only honored by servers
+                                    that enable the WindowsGMSA feature flag.
                                   type: string
                                 gmsaCredentialSpecName:
                                   description: GMSACredentialSpecName is the name of
-                                    the GMSA credential spec to use.
+                                    the GMSA credential spec to use. This field is alpha-level
+                                    and is only honored by servers that enable the WindowsGMSA
+                                    feature flag.
                                   type: string
                                 runAsUserName:
                                   description: The UserName in Windows to run the entrypoint
@@ -21913,7 +21922,9 @@ spec:
                                     in image metadata if unspecified. May also be set
                                     in PodSecurityContext. If set in both SecurityContext
                                     and PodSecurityContext, the value specified in SecurityContext
-                                    takes precedence.
+                                    takes precedence. This field is beta-level and may
+                                    be disabled with the WindowsRunAsUserName feature
+                                    flag.
                                   type: string
                               type: object
                           type: object
@@ -22102,21 +22113,17 @@ spec:
                                       type: string
                                     type: array
                                   dataSource:
-                                    description: 'This field can be used to specify
-                                      either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot
-                                      - Beta) * An existing PVC (PersistentVolumeClaim)
-                                      * An existing custom resource/object that implements
-                                      data population (Alpha) In order to use VolumeSnapshot
-                                      object types, the appropriate feature gate must
-                                      be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                      If the provisioner or an external controller can
-                                      support the specified data source, it will create
-                                      a new volume based on the contents of the specified
-                                      data source. If the specified data source is not
-                                      supported, the volume will not be created and
-                                      the failure will be reported as an event. In the
-                                      future, we plan to support more data source types
-                                      and the behavior of the provisioner may change.'
+                                    description: This field requires the VolumeSnapshotDataSource
+                                      alpha feature gate to be enabled and currently
+                                      VolumeSnapshot is the only supported data source.
+                                      If the provisioner can support VolumeSnapshot
+                                      data source, it will create a new volume and data
+                                      will be restored to the volume at the same time.
+                                      If the provisioner does not support VolumeSnapshot
+                                      data source, volume will not be created and the
+                                      failure will be reported as an event. In the future,
+                                      we plan to support more data source types and
+                                      the behavior of the provisioner may change.
                                     properties:
                                       apiGroup:
                                         description: APIGroup is the group for the resource
@@ -22224,7 +22231,8 @@ spec:
                                   volumeMode:
                                     description: volumeMode defines what type of volume
                                       is required by the claim. Value of Filesystem
-                                      is implied when not included in claim spec.
+                                      is implied when not included in claim spec. This
+                                      is a beta feature.
                                     type: string
                                   volumeName:
                                     description: VolumeName is the binding reference
@@ -24464,10 +24472,15 @@ spec:
                                           GMSA admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                           inlines the contents of the GMSA credential
                                           spec named by the GMSACredentialSpecName field.
+                                          This field is alpha-level and is only honored
+                                          by servers that enable the WindowsGMSA feature
+                                          flag.
                                         type: string
                                       gmsaCredentialSpecName:
                                         description: GMSACredentialSpecName is the name
-                                          of the GMSA credential spec to use.
+                                          of the GMSA credential spec to use. This field
+                                          is alpha-level and is only honored by servers
+                                          that enable the WindowsGMSA feature flag.
                                         type: string
                                       runAsUserName:
                                         description: The UserName in Windows to run
@@ -24476,7 +24489,9 @@ spec:
                                           unspecified. May also be set in PodSecurityContext.
                                           If set in both SecurityContext and PodSecurityContext,
                                           the value specified in SecurityContext takes
-                                          precedence.
+                                          precedence. This field is beta-level and may
+                                          be disabled with the WindowsRunAsUserName
+                                          feature flag.
                                         type: string
                                     type: object
                                 type: object
@@ -24489,7 +24504,7 @@ spec:
                                   provide different probe parameters at the beginning
                                   of a Pod''s lifecycle, when it might take a long time
                                   to load data or warm a cache, than during steady-state
-                                  operation. This cannot be updated. This is a beta
+                                  operation. This cannot be updated. This is an alpha
                                   feature enabled by the StartupProbe feature flag.
                                   More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
                                 properties:
@@ -24656,7 +24671,7 @@ spec:
                                 type: boolean
                               volumeDevices:
                                 description: volumeDevices is the list of block devices
-                                  to be used by the container.
+                                  to be used by the container. This is a beta feature.
                                 items:
                                   description: volumeDevice describes a mapping of a
                                     raw block device within a container.
@@ -24877,21 +24892,17 @@ spec:
                                     type: string
                                   type: array
                                 dataSource:
-                                  description: 'This field can be used to specify either:
-                                    * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot
-                                    - Beta) * An existing PVC (PersistentVolumeClaim)
-                                    * An existing custom resource/object that implements
-                                    data population (Alpha) In order to use VolumeSnapshot
-                                    object types, the appropriate feature gate must
-                                    be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                    If the provisioner or an external controller can
-                                    support the specified data source, it will create
-                                    a new volume based on the contents of the specified
-                                    data source. If the specified data source is not
-                                    supported, the volume will not be created and the
-                                    failure will be reported as an event. In the future,
-                                    we plan to support more data source types and the
-                                    behavior of the provisioner may change.'
+                                  description: This field requires the VolumeSnapshotDataSource
+                                    alpha feature gate to be enabled and currently VolumeSnapshot
+                                    is the only supported data source. If the provisioner
+                                    can support VolumeSnapshot data source, it will
+                                    create a new volume and data will be restored to
+                                    the volume at the same time. If the provisioner
+                                    does not support VolumeSnapshot data source, volume
+                                    will not be created and the failure will be reported
+                                    as an event. In the future, we plan to support more
+                                    data source types and the behavior of the provisioner
+                                    may change.
                                   properties:
                                     apiGroup:
                                       description: APIGroup is the group for the resource
@@ -24996,7 +25007,8 @@ spec:
                                 volumeMode:
                                   description: volumeMode defines what type of volume
                                     is required by the claim. Value of Filesystem is
-                                    implied when not included in claim spec.
+                                    implied when not included in claim spec. This is
+                                    a beta feature.
                                   type: string
                                 volumeName:
                                   description: VolumeName is the binding reference to
@@ -25825,11 +25837,15 @@ spec:
                                   description: GMSACredentialSpec is where the GMSA
                                     admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                     inlines the contents of the GMSA credential spec
-                                    named by the GMSACredentialSpecName field.
+                                    named by the GMSACredentialSpecName field. This
+                                    field is alpha-level and is only honored by servers
+                                    that enable the WindowsGMSA feature flag.
                                   type: string
                                 gmsaCredentialSpecName:
                                   description: GMSACredentialSpecName is the name of
-                                    the GMSA credential spec to use.
+                                    the GMSA credential spec to use. This field is alpha-level
+                                    and is only honored by servers that enable the WindowsGMSA
+                                    feature flag.
                                   type: string
                                 runAsUserName:
                                   description: The UserName in Windows to run the entrypoint
@@ -25837,7 +25853,9 @@ spec:
                                     in image metadata if unspecified. May also be set
                                     in PodSecurityContext. If set in both SecurityContext
                                     and PodSecurityContext, the value specified in SecurityContext
-                                    takes precedence.
+                                    takes precedence. This field is beta-level and may
+                                    be disabled with the WindowsRunAsUserName feature
+                                    flag.
                                   type: string
                               type: object
                           type: object
@@ -26014,16 +26032,6 @@ spec:
                                 volume."
                               format: int64
                               type: integer
-                            fsGroupChangePolicy:
-                              description: 'fsGroupChangePolicy defines behavior of
-                                changing ownership and permission of the volume before
-                                being exposed inside Pod. This field will only apply
-                                to volume types which support fsGroup based ownership(and
-                                permissions). It will have no effect on ephemeral volume
-                                types such as: secret, configmaps and emptydir. Valid
-                                values are "OnRootMismatch" and "Always". If not specified
-                                defaults to "Always".'
-                              type: string
                             runAsGroup:
                               description: The GID to run the entrypoint of the container
                                 process. Uses runtime default if unset. May also be
@@ -26115,11 +26123,15 @@ spec:
                                   description: GMSACredentialSpec is where the GMSA
                                     admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                     inlines the contents of the GMSA credential spec
-                                    named by the GMSACredentialSpecName field.
+                                    named by the GMSACredentialSpecName field. This
+                                    field is alpha-level and is only honored by servers
+                                    that enable the WindowsGMSA feature flag.
                                   type: string
                                 gmsaCredentialSpecName:
                                   description: GMSACredentialSpecName is the name of
-                                    the GMSA credential spec to use.
+                                    the GMSA credential spec to use. This field is alpha-level
+                                    and is only honored by servers that enable the WindowsGMSA
+                                    feature flag.
                                   type: string
                                 runAsUserName:
                                   description: The UserName in Windows to run the entrypoint
@@ -26127,7 +26139,9 @@ spec:
                                     in image metadata if unspecified. May also be set
                                     in PodSecurityContext. If set in both SecurityContext
                                     and PodSecurityContext, the value specified in SecurityContext
-                                    takes precedence.
+                                    takes precedence. This field is beta-level and may
+                                    be disabled with the WindowsRunAsUserName feature
+                                    flag.
                                   type: string
                               type: object
                           type: object
@@ -26324,21 +26338,17 @@ spec:
                                       type: string
                                     type: array
                                   dataSource:
-                                    description: 'This field can be used to specify
-                                      either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot
-                                      - Beta) * An existing PVC (PersistentVolumeClaim)
-                                      * An existing custom resource/object that implements
-                                      data population (Alpha) In order to use VolumeSnapshot
-                                      object types, the appropriate feature gate must
-                                      be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource)
-                                      If the provisioner or an external controller can
-                                      support the specified data source, it will create
-                                      a new volume based on the contents of the specified
-                                      data source. If the specified data source is not
-                                      supported, the volume will not be created and
-                                      the failure will be reported as an event. In the
-                                      future, we plan to support more data source types
-                                      and the behavior of the provisioner may change.'
+                                    description: This field requires the VolumeSnapshotDataSource
+                                      alpha feature gate to be enabled and currently
+                                      VolumeSnapshot is the only supported data source.
+                                      If the provisioner can support VolumeSnapshot
+                                      data source, it will create a new volume and data
+                                      will be restored to the volume at the same time.
+                                      If the provisioner does not support VolumeSnapshot
+                                      data source, volume will not be created and the
+                                      failure will be reported as an event. In the future,
+                                      we plan to support more data source types and
+                                      the behavior of the provisioner may change.
                                     properties:
                                       apiGroup:
                                         description: APIGroup is the group for the resource
@@ -26446,7 +26456,8 @@ spec:
                                   volumeMode:
                                     description: volumeMode defines what type of volume
                                       is required by the claim. Value of Filesystem
-                                      is implied when not included in claim spec.
+                                      is implied when not included in claim spec. This
+                                      is a beta feature.
                                     type: string
                                   volumeName:
                                     description: VolumeName is the binding reference
@@ -28686,10 +28697,15 @@ spec:
                                           GMSA admission webhook (https://github.com/kubernetes-sigs/windows-gmsa)
                                           inlines the contents of the GMSA credential
                                           spec named by the GMSACredentialSpecName field.
+                                          This field is alpha-level and is only honored
+                                          by servers that enable the WindowsGMSA feature
+                                          flag.
                                         type: string
                                       gmsaCredentialSpecName:
                                         description: GMSACredentialSpecName is the name
-                                          of the GMSA credential spec to use.
+                                          of the GMSA credential spec to use. This field
+                                          is alpha-level and is only honored by servers
+                                          that enable the WindowsGMSA feature flag.
                                         type: string
                                       runAsUserName:
                                         description: The UserName in Windows to run
@@ -28698,7 +28714,9 @@ spec:
                                           unspecified. May also be set in PodSecurityContext.
                                           If set in both SecurityContext and PodSecurityContext,
                                           the value specified in SecurityContext takes
-                                          precedence.
+                                          precedence. This field is beta-level and may
+                                          be disabled with the WindowsRunAsUserName
+                                          feature flag.
                                         type: string
                                     type: object
                                 type: object
@@ -28711,7 +28729,7 @@ spec:
                                   provide different probe parameters at the beginning
                                   of a Pod''s lifecycle, when it might take a long time
                                   to load data or warm a cache, than during steady-state
-                                  operation. This cannot be updated. This is a beta
+                                  operation. This cannot be updated. This is an alpha
                                   feature enabled by the StartupProbe feature flag.
                                   More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
                                 properties:
@@ -28878,7 +28896,7 @@ spec:
                                 type: boolean
                               volumeDevices:
                                 description: volumeDevices is the list of block devices
-                                  to be used by the container.
+                                  to be used by the container. This is a beta feature.
                                 items:
                                   description: volumeDevice describes a mapping of a
                                     raw block device within a container.

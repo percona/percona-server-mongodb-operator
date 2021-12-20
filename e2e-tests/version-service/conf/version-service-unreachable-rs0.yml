@@ -68,5 +68,4 @@ spec:
       failureThreshold: 3
     size: 3
   secrets:
-    key: some-key
     users: some-users

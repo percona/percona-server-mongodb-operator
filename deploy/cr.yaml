@@ -420,7 +420,6 @@ spec:
 
   backup:
     enabled: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:main-backup
     serviceAccountName: percona-server-mongodb-operator
 #    annotations:

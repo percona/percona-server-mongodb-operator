@@ -119,5 +119,4 @@ spec:
     size: 3
 
   secrets:
-    key: some-key
     users: some-users

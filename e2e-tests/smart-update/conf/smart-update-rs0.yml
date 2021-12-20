@@ -71,5 +71,4 @@ spec:
       affinity:
         antiAffinityTopologyKey: none
   secrets:
-    key: some-key
     users: some-users

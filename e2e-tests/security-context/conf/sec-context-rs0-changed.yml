@@ -64,7 +64,6 @@ spec:
       fsGroup: 1001
       supplementalGroups: [1001, 1003]
   secrets:
-    key: some-key
     users: some-users
   backup:
     containerSecurityContext:
@@ -75,8 +74,6 @@ spec:
       fsGroup: 1001
       supplementalGroups: [1001, 1002, 1003]
     enabled: true
-    debug: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.2.0-backup
     storages:
       minio:

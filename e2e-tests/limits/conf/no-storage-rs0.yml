@@ -52,6 +52,5 @@ spec:
         memory: 1G
     size: 3
   secrets:
-    key: some-key
     users: some-users
     ssl: some-name-ssl

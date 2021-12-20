@@ -51,6 +51,5 @@ spec:
             storage: 1Gi
     size: 3
   secrets:
-    key: some-key
     users: some-users
     ssl: some-name-ssl

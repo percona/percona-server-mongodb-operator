@@ -663,8 +663,6 @@ spec:
                             to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
                           type: object
                       type: object
-                    restartOnFailure:
-                      type: boolean
                     runtimeClassName:
                       type: string
                     serviceAccountName:
@@ -12811,6 +12809,8 @@ spec:
                   type: string
                 secrets:
                   properties:
+                    encryptionKey:
+                      type: string
                     ssl:
                       type: string
                     sslInternal:

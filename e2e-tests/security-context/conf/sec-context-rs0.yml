@@ -64,5 +64,4 @@ spec:
       fsGroup: 1001
       supplementalGroups: [1001, 1002, 1003]
   secrets:
-    key: some-key
     users: some-users
