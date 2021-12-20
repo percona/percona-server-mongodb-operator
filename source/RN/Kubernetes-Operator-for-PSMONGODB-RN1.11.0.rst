@@ -4,7 +4,7 @@
 *Percona Distribution for MongoDB Operator* 1.11.0
 ================================================================================
 
-:Date: December 20, 2021
+:Date: December 21, 2021
 :Installation: For installation please refer to `the documentation page <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
 
 Release Highlights
