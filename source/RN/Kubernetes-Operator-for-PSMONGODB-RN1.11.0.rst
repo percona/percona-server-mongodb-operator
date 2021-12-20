@@ -11,7 +11,7 @@ Release Highlights
 ================================================================================
 
 * In addition to S3-compatible storage, you can now configure backups :ref:`to use Microsoft Azure Blob storage<backups.scheduled-azure>`. This feature makes the Operator fully compatible with Azure Cloud.
-* :ref:`Custom sidecar containers<operator-sidecar>` allow users to customize Percona XtraDB Cluster and other Operator components without changing the container images. In this release, we enable even more customization, by allowing users to mount volumes into the sidecar containers.
+* :ref:`Custom sidecar containers<operator-sidecar>` allow users to customize Percona Distribution for MongoDB and other Operator components without changing the container images. In this release, we enable even more customization, by allowing users to mount volumes into the sidecar containers.
 
 New Features
 ================================================================================
