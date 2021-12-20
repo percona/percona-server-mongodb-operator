@@ -61,7 +61,7 @@ Kubernetes Secrets to be deployed before the Operator is started. The name of th
 required secrets can be set in ``deploy/cr.yaml`` under the
 ``spec.secrets`` section.
 
-*Default Secret name:* ``my-cluster-name-secrets``
+*Default Secret name:* ``my-cluster-name-mongodb-users``
 
 *Secret name field:* ``spec.secrets.users``
 
@@ -110,7 +110,7 @@ YAML Object Format
 ******************
 
 The default name of the Secrets object for these users is
-``my-cluster-name-secrets`` and can be set in the CR for your cluster in
+``my-cluster-name-mongodb-users`` and can be set in the CR for your cluster in
 ``spec.secrets.users`` to something different. When you create the object
 yourself, the corresponding YAML file should match the following simple format:
 
@@ -146,20 +146,20 @@ object contains passwords stored as ``data`` - i.e., base64-encoded strings.
 If you want to update any field, you'll need to encode the value into base64
 format. To do this, you can run ``echo -n "password" | base64`` in your local
 shell to get valid values. For example, setting the PMM Server user's password
-to ``new_password`` in the ``my-cluster-name-secrets`` object can be done
+to ``new_password`` in the ``my-cluster-name-mongodb-users`` object can be done
 with the following command:
 
 .. code:: bash
 
-   kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_PASSWORD": "'$(echo -n new_password | base64)'"}}'
+   kubectl patch secret/my-cluster-name-mongodb-users -p '{"data":{"PMM_SERVER_PASSWORD": "'$(echo -n new_password | base64)'"}}'
 
 .. note:: The operator creates and updates an additional Secrets object named
    based on the cluster name, like ``internal-my-cluster-name-users``. It is
    used only by the Operator and should undergo no manual changes by the user.
    This object contains secrets with the same passwords as the one specified
-   in ``spec.secrets.users`` (e.g. ``my-cluster-name-secrets``). When the user
-   updates ``my-cluster-name-secrets``, the Operator propagates these changes to
-   the internal ``internal-my-cluster-name-users`` Secrets object.
+   in ``spec.secrets.users`` (e.g. ``my-cluster-name-mongodb-users``). When the
+   user updates ``my-cluster-name-mongodb-users``, the Operator propagates these
+   changes to the internal ``internal-my-cluster-name-users`` Secrets object.
 
 Password Rotation Policies and Timing
 *************************************

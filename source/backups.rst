@@ -192,7 +192,9 @@ also on any Kubernetes-based environment with the installed Operator.
 
 .. note:: When restoring to a new Kubernetes-based environment, make sure it
    has a Secrets object with the same user passwords as in the original cluster.
-   More details about secrets can be found in :ref:`users.system-users`.
+   More details about secrets can be found in :ref:`users.system-users`. The
+   name of the required Secrets object can be found out from the spec.secrets
+   key in the ``deploy/cr.yaml`` (``my-cluster-name-mongodb-users`` by default).
 
 Following things are needed to restore a previously saved backup:
 
@@ -233,8 +235,7 @@ restoration can be done in the following way.
      from one you have used to save this backup, set ``spec.backupSource``
      subsection instead of ``spec.backupName`` field to point on the appropriate
      S3-compatible storage. This ``backupSource`` subsection should contain
-     a ``destination`` key equal to the s3 bucket with a special ``s3://``
-     prefix, followed by necessary S3 configuration keys, same as in
+     a ``destination`` key, followed by necessary S3 configuration keys, same as in
      ``deploy/cr.yaml`` file:
 
      .. code-block:: yaml
@@ -246,6 +247,12 @@ restoration can be done in the following way.
             credentialsSecret: my-cluster-name-backup-s3
             region: us-west-2
             endpointUrl: https://URL-OF-THE-S3-COMPATIBLE-STORAGE
+
+     As you have noticed, ``destination`` value is composed of three parts:
+     the ``s3://`` prefix, the s3 bucket name, and the actual backup name,
+     which you have already found out using the ``kubectl get psmdb-backup``
+     command).
+
    * you can also use a ``storageName`` key to specify the exact name of the
      storage (the actual storage should be already defined in the
      ``backup.storages`` subsection of the ``deploy/cr.yaml`` file):
