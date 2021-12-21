@@ -194,7 +194,7 @@ also on any Kubernetes-based environment with the installed Operator.
    has a Secrets object with the same user passwords as in the original cluster.
    More details about secrets can be found in :ref:`users.system-users`. The
    name of the required Secrets object can be found out from the spec.secrets
-   key in the ``deploy/cr.yaml`` (``my-cluster-name-mongodb-users`` by default).
+   key in the ``deploy/cr.yaml`` (``my-cluster-name-secrets`` by default).
 
 Following things are needed to restore a previously saved backup:
 
