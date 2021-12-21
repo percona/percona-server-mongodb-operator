@@ -13,14 +13,18 @@ Percona Operator for Percona Server for MongoDB:
 
          * - Image
            - Digest
-         * - percona/percona-server-mongodb-operator:1.10.0
-           - 1b6b5dda3c9ec50128f8e4fd0a9e07feb16bb262b92f8d31f09fe19df51b069a
-         * - percona/pmm-client:2.21.0
-           - 66ea004a3796a05db84559c6f7017506071dd5a2d8c0a0fe6149ca004a650f09
-         * - percona/percona-server-mongodb-operator:1.10.0-backup
-           - c0911e7f8645b3d13aed242607ee6cc2467178f71599cfbd4a5daf47563bda49
+         * - percona/percona-server-mongodb-operator:1.11.0
+           - 662a64a539a23a8bbad653c71af3bee3dd1038ea575e1d67293b9e2ad4a1d3f1
+         * - percona/pmm-client:2.24.0
+           - eaf61293416f5a516c6fdc954a80800bdefb7d36c3c988251e9833cfde8212ce
+         * - percona/percona-server-mongodb-operator:1.11.0-backup
+           - 071ac076bdd1ddec2754f4a8e784b09dc1ab457ce1aaf29ba292df993005abff
+         * - percona/percona-server-mongodb:5.0.4-3
+           - 4ac4cff1dac52ea109e9a68a61de44c75b62292bb4676cf8efd1e00000d8adf3
          * - percona/percona-server-mongodb:5.0.2-1
            - 7a79ea5b6fb3cbf59a623ebe7e54172d80ee0301a99119238421cb21d97cc460
+         * - percona/percona-server-mongodb:4.4.10-11
+           - ea73a506fa02604660e3ef7d452d142a89587bb5daca15d3cc1b539a9b1000c5
          * - percona/percona-server-mongodb:4.4.8-9
            - 4d29b3557c949f95009eaccf7a8f56215ac609406d230be87b6eaa072e0c1f69
          * - percona/percona-server-mongodb:4.4.6-8
@@ -31,6 +35,8 @@ Percona Operator for Percona Server for MongoDB:
            - 28c137c87dc0ed3530398ee281b6998a902ca5bc39bf766f42de03b1dfc1fc57
          * - percona/percona-server-mongodb:4.4.2-4
            - 991d6049059e5eb1a74981290d829a5fb4ab0554993748fde1e67b2f46f26bf0
+         * - percona/percona-server-mongodb:4.2.17-17
+           - dde894b50568e088b28767ff18cfbdfe6b2496f12eddb14743d3d33c105e3f01
          * - percona/percona-server-mongodb:4.2.15-16
            - c78c007a55b74bea9c4eda5d97a814ffa360857e15f7a19dce9d0a313e2e2285
          * - percona/percona-server-mongodb:4.2.14-15
@@ -45,6 +51,8 @@ Percona Operator for Percona Server for MongoDB:
            - a66e889d3e986413e41083a9c887f33173da05a41c8bd107cf50eede4588a505
          * - percona/percona-server-mongodb:4.2.7-7
            - 1d8a0859b48a3e9cadf9ad7308ec5aa4b278a64ca32ff5d887156b1b46146b13
+         * - percona/percona-server-mongodb:4.0.27-22
+           - b49649a40927fbf7cea3e322a63163488b3ffdccdf904344268edcc04f405a2a
          * - percona/percona-server-mongodb:4.0.26-21
            - 577a89a907938276cfc153ef91ac1effaae60c6b495bd797cd012c93d69c765c
          * - percona/percona-server-mongodb:4.0.25-20
