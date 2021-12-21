@@ -37,6 +37,7 @@ require (
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.2.0
+	github.com/percona/percona-backup-mongodb => ../percona-backup-mongodb
 	k8s.io/api => k8s.io/api v0.17.4 // Required by client-go
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.4 // Required by client-go
 	k8s.io/client-go => k8s.io/client-go v0.17.4 // Required by prometheus-operator
