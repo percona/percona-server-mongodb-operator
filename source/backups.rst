@@ -215,8 +215,7 @@ the following contents:
 * **Percona Server for MongoDB Cluster name** in the ``spec.psmdbCluster`` key,
 * **storage name** from ``deploy/cr.yaml`` in the ``spec.storageName`` key.
 
- The example of such file is
-`deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/backup.yaml>`_.
+The example of such file is `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/backup.yaml>`_.
 
 When the backup destination is configured and applied with `kubectl apply -f deploy/cr.yaml` command, the actual backup command is executed:
 

@@ -826,7 +826,8 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``false``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enable or disable creation of `Replica Set non-voting nodes within the cluster		|
+| **Description** | Enable or disable creation of :ref:`Replica Set non-voting instances<arbiter-nonvoting>`	|
+|                 | within the cluster										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -838,7 +839,7 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``1``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The number of `Replica Set non-voting instances						|
+| **Description** | The number of :ref:`Replica Set non-voting instances<arbiter-nonvoting>`			|
 |                 | within the cluster										|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2249,10 +2250,10 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _sharding-mongos-expose-loadbalancersourceranges:						|
+|                 | .. _sharding-mongos-expose-loadbalancersourceranges:					|
 |                 |												|
-| **Key**         | `sharding.mongos.expose.loadBalancerSourceRanges							|
-|                 | <operator.html#sharding-mongos-expose-loadbalancersourceranges>`_					|
+| **Key**         | `sharding.mongos.expose.loadBalancerSourceRanges						|
+|                 | <operator.html#sharding-mongos-expose-loadbalancersourceranges>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2263,9 +2264,10 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _sharding-mongos-expose-serviceannotations:							|
+|                 | .. _sharding-mongos-expose-serviceannotations:						|
 |                 |												|
-| **Key**         | `sharding.mongos.expose.serviceAnnotations <operator.html#sharding-mongos-expose-serviceannotations>`_	|
+| **Key**         | `sharding.mongos.expose.serviceAnnotations 							|
+|                 | <operator.html#sharding-mongos-expose-serviceannotations>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+

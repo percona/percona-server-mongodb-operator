@@ -1,4 +1,5 @@
 .. _arbiter:
+
 Using Replica Set Arbiter nodes and non-voting nodes
 ====================================================
 
