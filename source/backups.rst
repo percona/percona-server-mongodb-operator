@@ -235,7 +235,7 @@ restoration can be done in the following way.
      from one you have used to save this backup, set ``spec.backupSource``
      subsection instead of ``spec.backupName`` field to point on the appropriate
      S3-compatible storage. This ``backupSource`` subsection should contain
-     a ``destination`` key, followed by necessary S3 configuration keys, same as in
+     a ``destination`` key, followed by necessary storage configuration keys, same as in
      ``deploy/cr.yaml`` file:
 
      .. code-block:: yaml
@@ -248,10 +248,12 @@ restoration can be done in the following way.
             region: us-west-2
             endpointUrl: https://URL-OF-THE-S3-COMPATIBLE-STORAGE
 
-     As you have noticed, ``destination`` value is composed of three parts:
+     As you have noticed, ``destination`` value is composed of three parts
+     in case of S3-compatible storage:
      the ``s3://`` prefix, the s3 bucket name, and the actual backup name,
      which you have already found out using the ``kubectl get psmdb-backup``
-     command).
+     command). For Azure Blob storage, you don't put the prefix, and use
+     your container name as an equivalent of a bucket.
 
    * you can also use a ``storageName`` key to specify the exact name of the
      storage (the actual storage should be already defined in the
