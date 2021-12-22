@@ -315,13 +315,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption {
-		created, err := r.ensureSecurityKey(cr, cr.Spec.Mongod.Security.EncryptionKeySecret, psmdb.EncryptionKeyName, 32, false)
+		created, err := r.ensureSecurityKey(cr, cr.Spec.EncryptionKeySecretName(), psmdb.EncryptionKeyName, 32, false)
 		if err != nil {
-			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Mongod.Security.EncryptionKeySecret)
+			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.EncryptionKeySecretName())
 			return reconcile.Result{}, err
 		}
 		if created {
-			logger.Info("Created a new mongo key", "KeyName", cr.Spec.Mongod.Security.EncryptionKeySecret)
+			logger.Info("Created a new mongo key", "KeyName", cr.Spec.EncryptionKeySecretName())
 		}
 	}
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	mongod "go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -262,28 +263,32 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(cr *api.PerconaServerMong
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsers(cr *api.PerconaServerMongoDB, users []systemUser, repls []*api.ReplsetSpec) error {
-	for _, replset := range repls {
-		client, err := r.mongoClientWithRole(cr, *replset, roleUserAdmin)
-		if err != nil {
-			return errors.Wrap(err, "dial:")
-		}
+	grp, _ := errgroup.WithContext(context.TODO())
 
-		defer func() {
-			err := client.Disconnect(context.TODO())
+	for i := range repls {
+		replset := repls[i]
+		grp.Go(func() error {
+			client, err := r.mongoClientWithRole(cr, *replset, roleUserAdmin)
 			if err != nil {
-				log.Error(err, "failed to close connection")
+				return errors.Wrap(err, "dial:")
 			}
-		}()
 
-		for _, user := range users {
-			err := user.updateMongo(client)
-			if err != nil {
-				return errors.Wrapf(err, "update users in mongo for replset %s", replset.Name)
+			defer func() {
+				if err := client.Disconnect(context.TODO()); err != nil {
+					log.Error(err, "failed to close connection")
+				}
+			}()
+
+			for _, user := range users {
+				if err := user.updateMongo(client); err != nil {
+					return errors.Wrapf(err, "update users in mongo for replset %s", replset.Name)
+				}
 			}
-		}
+			return nil
+		})
 	}
 
-	return nil
+	return grp.Wait()
 }
 
 func (u *systemUser) updateMongo(c *mongod.Client) error {

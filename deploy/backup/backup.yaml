@@ -5,5 +5,5 @@ metadata:
   - delete-backup
   name: backup1
 spec:
-  psmdbCluster: my-cluster-name
+  clusterName: my-cluster-name
   storageName: s3-us-west

@@ -88,8 +88,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption &&
-		cr.Spec.Mongod.Security.EncryptionKeySecret == "" {
-		cr.Spec.Mongod.Security.EncryptionKeySecret = cr.Name + "-mongodb-encryption-key"
+		cr.Spec.EncryptionKeySecretName() == "" {
+		cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
 	}
 
 	if cr.Spec.Secrets.SSL == "" {

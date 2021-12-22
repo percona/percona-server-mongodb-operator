@@ -24,6 +24,7 @@ spec:
     setFCV: false
   secrets:
     users: my-cluster-name-secrets
+    encryptionKey: my-cluster-name-mongodb-encryption-key
   pmm:
     enabled: false
     image: percona/pmm-client:2.24.0
@@ -415,7 +416,6 @@ spec:
     security:
       redactClientLogData: false
       enableEncryption: true
-      encryptionKeySecret: my-cluster-name-mongodb-encryption-key
       encryptionCipherMode: AES256-CBC
     setParameter:
       ttlMonitorSleepSecs: 60
@@ -466,6 +466,9 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-s3
 #          region: us-west-2
 #          prefix: ""
+#          uploadPartSize: 10485760
+#          maxUploadParts: 10000
+#          storageClass: STANDARD
 #      minio:
 #        type: s3
 #        s3:

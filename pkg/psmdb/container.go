@@ -47,7 +47,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 	if *cr.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.VolumeMount{
-				Name:      cr.Spec.Mongod.Security.EncryptionKeySecret,
+				Name:      cr.Spec.EncryptionKeySecretName(),
 				MountPath: mongodRESTencryptDir,
 				ReadOnly:  true,
 			},

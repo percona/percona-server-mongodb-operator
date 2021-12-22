@@ -371,7 +371,7 @@ spec:
         - name: Cluster
           type: string
           description: Cluster name
-          jsonPath: .spec.psmdbCluster
+          jsonPath: .spec.clusterName
         - name: Storage
           type: string
           description: Storage name from pxc spec
