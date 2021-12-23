@@ -1,8 +1,88 @@
 #!/usr/bin/env bash
 
+set -ex
+
 # https://v0-19-x.sdk.operatorframework.io/docs/install-operator-sdk/
 #operator-sdk generate k8s
 operator-sdk generate crds
 
-sed -i '' '/.*- protocol/d; s/.*- containerPort/&\n&/; s/- containerPort/- protocol/' \
-	deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml
+crd_ver=${1}
+if [ "${crd_ver}" == "" ]; then
+	crd_ver=$(yq r -d0 "deploy/crd.yaml" "spec.versions[-1].name")
+fi
+
+wip_crd=$(mktemp)
+yq r -d0 "deploy/crd.yaml" \
+	| yq d - "spec.versions(name==${crd_ver})" \
+	| yq w - "spec.versions[*].storage" false \
+		>"$wip_crd"
+
+yq w -i "$wip_crd" "spec.versions[+].name" "${crd_ver}"
+
+sed '/.*- protocol/d; s/.*- containerPort/&\n&/; s/- containerPort/- protocol/' \
+	deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml \
+	| yq r - "spec.versions[0]" \
+	| yq w - "subresources.status.0" | yq d - "subresources.status.0" \
+	| yq d - "name" \
+	| sed 's/^/      /g' \
+		>>"$wip_crd"
+
+# deploy/crd.yaml
+crd_file=$(mktemp)
+yq r "$wip_crd" >"$crd_file"
+
+echo "---" >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbbackups_crd.yaml" >>"$crd_file"
+echo "---" >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbrestores_crd.yaml" >>"$crd_file"
+
+mv "$crd_file" "deploy/crd.yaml"
+
+# deploy/bundle.yaml
+bundle_file=$(mktemp)
+
+yq r "deploy/crd.yaml" >"$bundle_file"
+echo "---" >>"$bundle_file"
+yq r "deploy/rbac.yaml" >>"$bundle_file"
+echo "---" >>"$bundle_file"
+yq r "deploy/operator.yaml" >>"$bundle_file"
+
+mv "$bundle_file" "deploy/bundle.yaml"
+
+# e2e-tests/version-service/conf/crd.yaml
+crd_file=$(mktemp)
+cp "$wip_crd" "$crd_file"
+cat <<EOF >>"$crd_file"
+    - name: v9-9-9
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
+EOF
+
+echo '---' >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbbackups_crd.yaml" >>"$crd_file"
+echo '---' >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbrestores_crd.yaml" >>"$crd_file"
+
+mv "$crd_file" "e2e-tests/version-service/conf/crd.yaml"
