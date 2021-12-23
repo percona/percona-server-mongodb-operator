@@ -469,6 +469,7 @@ spec:
 #          uploadPartSize: 10485760
 #          maxUploadParts: 10000
 #          storageClass: STANDARD
+#          insecureSkipTLSVerify: false
 #      minio:
 #        type: s3
 #        s3:
