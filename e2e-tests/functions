@@ -321,7 +321,7 @@ deploy_operator() {
 		cr_file="${src_dir}/deploy/crd.yaml"
 	fi
 
-	kubectl_bin replace --force -f "${cr_file}"
+	kubectl_bin apply --server-side -f "${cr_file}"
 	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 
 	cat ${src_dir}/deploy/operator.yaml \

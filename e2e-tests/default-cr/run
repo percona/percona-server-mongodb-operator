@@ -48,7 +48,7 @@ function main() {
 
 	desc 'startup default PSMDB cluster'
 	kubectl_bin apply -f $deploy_dir/secrets.yaml
-	kubectl_bin replace --force -f $deploy_dir/crd.yaml
+	kubectl_bin apply --server-side -f $deploy_dir/crd.yaml
 	kubectl_bin apply -f $deploy_dir/rbac.yaml
 	kubectl_bin apply -f $deploy_dir/operator.yaml
 	kubectl_bin apply -f $conf_dir/client.yml
