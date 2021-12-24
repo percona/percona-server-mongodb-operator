@@ -6,6 +6,12 @@ set -o xtrace
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 
+if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+else
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+fi
+
 create_namespace "$namespace"
 deploy_operator
 
@@ -49,10 +55,21 @@ run_mongos \
 sleep 120
 desc 'check chunks'
 
+chunks_param1="ns"
+chunks_param2='"app.city"'
+
+if [[ ${MONGO_VER} == "5.0" ]]; then
+	chunks_param1="uuid"
+	chunks_param2=$(run_mongos \
+		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
+		"user:pass@$cluster-mongos.$namespace" \
+		| grep "switched to db app" -A 1 | grep -v "switched to db app")
+fi
+
 shards=0
 for i in "rs0" "rs1" "rs2"; do
 	out=$(run_mongos \
-		"use config\n db.chunks.count({\"ns\" : \"app.city\", \"shard\": \"$i\"})" \
+		"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
 		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
 		| grep "switched to db config" -A 1 | grep -v "switched to db config")
 

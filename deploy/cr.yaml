@@ -10,7 +10,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.12.0
-  image: percona/percona-server-mongodb:4.4.9-10
+  image: percona/percona-server-mongodb:4.4.10-11
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -27,7 +27,7 @@ spec:
     encryptionKey: my-cluster-name-mongodb-encryption-key
   pmm:
     enabled: false
-    image: percona/pmm-client:2.21.0
+    image: percona/pmm-client:2.24.0
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -104,6 +104,32 @@ spec:
 #      command: ["/bin/sh"]
 #      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
 #      name: rs-sidecar-1
+#      volumeMounts:
+#        - mountPath: /volume1
+#          name: sidecar-volume-claim
+#        - mountPath: /secret
+#          name: sidecar-secret
+#        - mountPath: /configmap
+#          name: sidecar-config
+#    sidecarVolumes:
+#    - name: sidecar-secret
+#      secret:
+#        secretName: mysecret
+#    - name: sidecar-config
+#      configMap:
+#        name: myconfigmap
+#    sidecarPVCs:
+#    - apiVersion: v1
+#      kind: PersistentVolumeClaim
+#      metadata:
+#        name: sidecar-volume-claim
+#      spec:
+#        resources:
+#          requests:
+#            storage: 1Gi
+#        volumeMode: Filesystem
+#        accessModes:
+#          - ReadWriteOnce
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
@@ -442,6 +468,7 @@ spec:
 #          uploadPartSize: 10485760
 #          maxUploadParts: 10000
 #          storageClass: STANDARD
+#          insecureSkipTLSVerify: false
 #      minio:
 #        type: s3
 #        s3:
@@ -450,6 +477,12 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-minio
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
 #          prefix: ""
+#      azure-blob:
+#        type: azure
+#        azure:
+#          container: CONTAINER-NAME
+#          prefix: PREFIX-NAME
+#          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false
 #      oplogSpanMin: 10

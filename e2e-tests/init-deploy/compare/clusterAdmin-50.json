@@ -211,6 +211,7 @@
           "listShards",
           "logRotate",
           "netstat",
+          "oidReset",
           "operationMetrics",
           "removeShard",
           "replSetConfigure",

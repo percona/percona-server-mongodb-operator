@@ -16,3 +16,7 @@ spec:
 #      bucket: S3-BACKUP-BUCKET-NAME-HERE
 #      endpointUrl: https://s3.us-west-2.amazonaws.com/
 #      prefix: ""
+#    azure:
+#      credentialsSecret: SECRET-NAME
+#      prefix: PREFIX-NAME
+#      container: CONTAINER-NAME
