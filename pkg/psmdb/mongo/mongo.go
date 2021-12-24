@@ -480,8 +480,8 @@ func (m *ConfigMembers) FixTags(compareWith ConfigMembers) (changes bool) {
 
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
-		if c, ok := cm[member.Host]; ok && len(member.Tags) > 0 {
-			changes = !reflect.DeepEqual(member.Tags, c)
+		if c, ok := cm[member.Host]; ok && !reflect.DeepEqual(member.Tags, c) {
+			changes = true
 			[]ConfigMember(*m)[i].Tags = c
 		}
 	}
