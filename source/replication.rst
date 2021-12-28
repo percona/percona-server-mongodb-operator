@@ -14,8 +14,8 @@ This feature can be useful in several cases:
 - simplify the migration of the MongoDB cluster to and from Kubernetes
 - add remote nodes to the replica set for disaster recovery 
 
-.. Describe how to stop/start replication
-   Describe how to perform a failover
+.. note:: Cross-site replication has technical preview status and is not
+   recommended for production environments.
 
 Configuring the cross-site replication for the cluster controlled by the Operator is explained in the following subsections.
 
@@ -86,7 +86,7 @@ Optionaly you can set the following additional keys:
 * ``priority`` key sets the `priority <https://docs.mongodb.com/manual/reference/replica-configuration/#mongodb-rsconf-rsconf.members-n-.priority>`_
   of the external node (``2`` by default for all local members of the cluster;
   external nodes should have lower priority to avoid unmanaged node being elected
-  as a primary; ``0`` adds the node as a :ref:`non-voting member<nonvoting>`),
+  as a primary; ``0`` adds the node as a :ref:`non-voting member<arbiter-nonvoting>`),
 * ``votes`` key sets the number of `votes <https://docs.mongodb.com/manual/reference/replica-configuration/#mongodb-rsconf-rsconf.members-n-.votes>`_
   an external node can cast in a replica set election (``0`` by default, and
   ``0`` for non-voting members of the cluster). 

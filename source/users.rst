@@ -157,9 +157,9 @@ with the following command:
    based on the cluster name, like ``internal-my-cluster-name-users``. It is
    used only by the Operator and should undergo no manual changes by the user.
    This object contains secrets with the same passwords as the one specified
-   in ``spec.secrets.users`` (e.g. ``my-cluster-name-secrets``). When the user
-   updates ``my-cluster-name-secrets``, the Operator propagates these changes to
-   the internal ``internal-my-cluster-name-users`` Secrets object.
+   in ``spec.secrets.users`` (e.g. ``my-cluster-name-secrets``). When the
+   user updates ``my-cluster-name-secrets``, the Operator propagates these
+   changes to the internal ``internal-my-cluster-name-users`` Secrets object.
 
 Password Rotation Policies and Timing
 *************************************
