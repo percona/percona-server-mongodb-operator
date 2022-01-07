@@ -84,12 +84,3 @@ Kubernetes-based environment:
       $ kubectl get pods
       $ kubectl logs my-cluster-name-rs0-0 -c pmm-client
 
-#. Run the following command:
-
-   ``kubectl get service/monitoring-service -o wide``
-
-   In the results, locate the the ``EXTERNAL-IP`` field. The external-ip address
-   can be used to access PMM via *https* in a web browser, with the
-   login/password authentication, and the browser is configured to show
-   Percona Server for MongoDB metrics.
-
