@@ -788,8 +788,6 @@ github.com/pborman/uuid v1.2.0/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtP
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/pelletier/go-toml v1.4.0/go.mod h1:PN7xzY2wHTK0K9p34ErDQMlFxa51Fk0OUruD3k1mMwo=
 github.com/pelletier/go-toml v1.7.0/go.mod h1:vwGMzjaWMwyfHwgIBhI2YUM4fB6nL6lVAvS1LBMMhTE=
-github.com/percona/percona-backup-mongodb v1.6.1-0.20211222114057-f56cfb0b6756 h1:Fv5zkRk5eeOV2vL8X0P2xwjxJluvl2Kz9C6Ae0glFII=
-github.com/percona/percona-backup-mongodb v1.6.1-0.20211222114057-f56cfb0b6756/go.mod h1:pY9ZC/+N6MxjohnghbOK+dfOAin4yXd3Hja9O8BK7rk=
 github.com/percona/percona-backup-mongodb v1.6.1-0.20220110120847-2c3b83a6d7b4 h1:0y085/8/hCXBymDmMiWjJq1dL8tgwW2GewDxo1XQreM=
 github.com/percona/percona-backup-mongodb v1.6.1-0.20220110120847-2c3b83a6d7b4/go.mod h1:pY9ZC/+N6MxjohnghbOK+dfOAin4yXd3Hja9O8BK7rk=
 github.com/peterbourgon/diskv v2.0.1+incompatible/go.mod h1:uqqh8zWWbv1HBMNONnaR/tNboyR3/BZd58JJSHlUSCU=
