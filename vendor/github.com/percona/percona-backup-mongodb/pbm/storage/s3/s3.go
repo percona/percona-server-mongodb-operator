@@ -52,6 +52,9 @@ type Conf struct {
 	// InsecureSkipTLSVerify disables client verification of the server's
 	// certificate chain and host name
 	InsecureSkipTLSVerify bool `bson:"insecureSkipTLSVerify" json:"insecureSkipTLSVerify" yaml:"insecureSkipTLSVerify"`
+
+	// DebugLog enables debug logs from S3 client
+	DebugLog bool `bson:"debugLog,omitempty" json:"debugLog,omitempty" yaml:"debugLog,omitempty"`
 }
 
 type AWSsse struct {
@@ -517,11 +520,37 @@ func (s *S3) session() (*session.Session, error) {
 		}
 	}
 
+	logLevel := aws.LogOff
+	if s.opts.DebugLog {
+		logLevel = aws.LogDebug
+	}
+
 	return session.NewSession(&aws.Config{
 		Region:           aws.String(s.opts.Region),
 		Endpoint:         aws.String(s.opts.EndpointURL),
 		Credentials:      credentials.NewChainCredentials(providers),
 		S3ForcePathStyle: aws.Bool(true),
 		HTTPClient:       httpClient,
+		LogLevel:         &logLevel,
+		Logger:           awsLogger(s.log),
+	})
+}
+
+func awsLogger(l *log.Event) aws.Logger {
+	if l == nil {
+		return aws.NewDefaultLogger()
+	}
+
+	return aws.LoggerFunc(func(xs ...interface{}) {
+		if len(xs) == 0 {
+			return
+		}
+
+		msg := "%v"
+		for i := len(xs) - 1; i != 0; i++ {
+			msg += " %v"
+		}
+
+		l.Debug(msg, xs...)
 	})
 }
