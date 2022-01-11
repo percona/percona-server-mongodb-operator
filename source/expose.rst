@@ -7,7 +7,7 @@ Using single entry point vs. accessing MongoDB Instances
 Percona Distribution for MongoDB Operator provides two scenarios for
 accessing the database.
 
-#. If :ref:`operator.sharding` mode is turned **on** (default bahaviour), then
+#. If :ref:`operator.sharding` mode is turned **on** (default behavior), then
    database cluster runs special ``mongos`` Pods - query routers, which acts as
    an entry point for client applications,
    
