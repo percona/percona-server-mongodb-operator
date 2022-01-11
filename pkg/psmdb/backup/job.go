@@ -113,9 +113,10 @@ func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) (
 			},
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
-			ClusterName: "${clusterName}",
-			StorageName: backup.StorageName,
-			Compression: backup.CompressionType,
+			ClusterName:      "${clusterName}",
+			StorageName:      backup.StorageName,
+			Compression:      backup.CompressionType,
+			CompressionLevel: backup.CompressionLevel,
 		},
 	}
 
