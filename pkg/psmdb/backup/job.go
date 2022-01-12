@@ -1,6 +1,8 @@
 package backup
 
 import (
+	"strconv"
+
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1b "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -90,6 +92,11 @@ func NewBackupCronJobLabels(crName string) map[string]string {
 }
 
 func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) []string {
+	compressionLevel := "null"
+	if backup.CompressionLevel != nil {
+		compressionLevel = strconv.FormatInt(*backup.CompressionLevel, 10)
+	}
+
 	return []string{
 		"-c",
 		`curl \
@@ -112,7 +119,9 @@ func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) [
 				},
 				\"spec\":{
 					\"clusterName\":\"${clusterName}\",
-					\"storageName\":\"` + backup.StorageName + `\"
+					\"storageName\":\"` + backup.StorageName + `\",
+					\"compressionType\":\"` + string(backup.CompressionType) + `\",
+					\"compressionLevel\":\"` + compressionLevel + `\"
 				}
 			}" \
 			https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/apis/psmdb.percona.com/v1/namespaces/${NAMESPACE}/perconaservermongodbbackups`,
