@@ -49,11 +49,18 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]f
 
 	name := time.Now().UTC().Format(time.RFC3339)
 
+	var compLevel *int
+	if cr.Spec.CompressionLevel != nil {
+		l := int(*cr.Spec.CompressionLevel)
+		compLevel = &l
+	}
+
 	err = b.pbm.C.SendCmd(pbm.Cmd{
 		Cmd: pbm.CmdBackup,
 		Backup: pbm.BackupCmd{
-			Name:        name,
-			Compression: cr.Spec.Compression,
+			Name:             name,
+			Compression:      cr.Spec.Compression,
+			CompressionLevel: compLevel,
 		},
 	})
 	if err != nil {
