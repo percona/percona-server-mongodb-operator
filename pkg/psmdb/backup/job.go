@@ -92,7 +92,7 @@ func NewBackupCronJobLabels(crName string) map[string]string {
 }
 
 func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) []string {
-	compressionLevel := "null"
+	compressionLevel := ""
 	if backup.CompressionLevel != nil {
 		compressionLevel = strconv.FormatInt(*backup.CompressionLevel, 10)
 	}
