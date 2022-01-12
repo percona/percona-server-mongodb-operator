@@ -13,10 +13,11 @@ import (
 type PerconaServerMongoDBBackupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	PSMDBCluster string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
-	ClusterName  string              `json:"clusterName,omitempty"`
-	StorageName  string              `json:"storageName,omitempty"`
-	Compression  pbm.CompressionType `json:"compressionType,omitempty"`
+	PSMDBCluster     string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
+	ClusterName      string              `json:"clusterName,omitempty"`
+	StorageName      string              `json:"storageName,omitempty"`
+	Compression      pbm.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int64              `json:"compressionLevel,omitempty"`
 }
 
 type BackupState string
