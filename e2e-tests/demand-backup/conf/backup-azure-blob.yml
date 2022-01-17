@@ -3,5 +3,5 @@ kind: PerconaServerMongoDBBackup
 metadata:
   name: backup-azure-blob
 spec:
-  psmdbCluster: some-name
+  clusterName: some-name
   storageName: azure-blob

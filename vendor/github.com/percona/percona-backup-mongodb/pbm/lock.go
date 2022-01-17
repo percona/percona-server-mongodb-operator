@@ -82,6 +82,16 @@ func (e ErrWasStaleLock) Error() string {
 	return fmt.Sprintf("was stale lock: %s '%s'", e.Lock.Type, e.Lock.OPID)
 }
 
+// Rewrite tries to acquire the lock instead the `old` one.
+// It returns true in case of success and false if
+// a lock already acquired by another process or some error happened.
+// In case of concurrent lock exists is stale it will be deleted and
+// ErrWasStaleLock gonna be returned. A client shell mark respective operation
+// as stale and retry if it needs to
+func (l *Lock) Rewrite(old *LockHeader) (bool, error) {
+	return l.try(old)
+}
+
 // Acquire tries to acquire the lock.
 // It returns true in case of success and false if
 // a lock already acquired by another process or some error happened.
@@ -89,7 +99,15 @@ func (e ErrWasStaleLock) Error() string {
 // ErrWasStaleLock gonna be returned. A client shell mark respective operation
 // as stale and retry if it needs to
 func (l *Lock) Acquire() (bool, error) {
-	got, err := l.acquire()
+	return l.try(nil)
+}
+
+func (l *Lock) try(old *LockHeader) (got bool, err error) {
+	if old != nil {
+		got, err = l.rewrite(old)
+	} else {
+		got, err = l.acquire()
+	}
 
 	if err != nil {
 		return false, err
@@ -212,6 +230,36 @@ func (l *Lock) acquire() (bool, error) {
 	}
 
 	_, err = l.c.InsertOne(l.p.Context(), l.LockData)
+	if err != nil && !strings.Contains(err.Error(), "E11000 duplicate key error") {
+		return false, errors.Wrap(err, "acquire lock")
+	}
+
+	// if there is no duplicate key error, we got the lock
+	if err == nil {
+		l.hb()
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// rewrite tries to rewrite the given lock with itself
+// it will transactionally delete the `old` lock
+// and aquire an istance of itself
+func (l *Lock) rewrite(old *LockHeader) (bool, error) {
+	var err error
+	l.Heartbeat, err = l.p.ClusterTime()
+	if err != nil {
+		return false, errors.Wrap(err, "read cluster time")
+	}
+
+	_, err = l.c.DeleteOne(l.p.Context(), old)
+	if err != nil {
+		return false, errors.Wrap(err, "rewrite: delete old")
+	}
+
+	_, err = l.c.InsertOne(l.p.Context(), l.LockData)
+
 	if err != nil && !strings.Contains(err.Error(), "E11000 duplicate key error") {
 		return false, errors.Wrap(err, "acquire lock")
 	}

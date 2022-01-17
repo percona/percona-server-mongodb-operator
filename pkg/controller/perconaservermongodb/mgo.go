@@ -6,20 +6,21 @@ import (
 	"fmt"
 	"time"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
-
+	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error,
+) {
 	replsetSize := replset.Size
 
 	if replset.NonVoting.Enabled {
@@ -70,6 +71,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return api.AppStateInit, nil
 	}
 
+	defer func() {
+		if err := cli.Disconnect(context.Background()); err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
 	// this can happen if cluster is initialized but status update failed
 	if !cr.Status.Replsets[replset.Name].Initialized {
 		cr.Status.Replsets[replset.Name].Initialized = true
@@ -82,13 +89,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 
 		return api.AppStateInit, nil
 	}
-
-	defer func() {
-		err := cli.Disconnect(context.TODO())
-		if err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
 
 	rstRunning, err := r.isRestoreRunning(cr)
 	if err != nil {
@@ -325,7 +325,6 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerM
 
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPod corev1.Pod) error {
-
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
 		return errors.Errorf("rsPod %s is not ready", rspod.Name)
 	}

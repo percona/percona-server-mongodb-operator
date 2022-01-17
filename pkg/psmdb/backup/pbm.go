@@ -3,9 +3,10 @@ package backup
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"strings"
 	"time"
+
+	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"go.mongodb.org/mongo-driver/bson"
@@ -159,6 +160,10 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 					AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
 					SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
 				},
+				UploadPartSize:        stg.S3.UploadPartSize,
+				MaxUploadParts:        stg.S3.MaxUploadParts,
+				StorageClass:          stg.S3.StorageClass,
+				InsecureSkipTLSVerify: stg.S3.InsecureSkipTLSVerify,
 			},
 		}
 	case api.BackupStorageFilesystem:

@@ -650,11 +650,6 @@ func (p *PBM) getBackupMeta(clause bson.D) (*BackupMeta, error) {
 	return b, errors.Wrap(err, "decode")
 }
 
-// GetFirstBackup returns first successfully finished backup
-func (p *PBM) GetFirstBackup() (*BackupMeta, error) {
-	return p.getRecentBackup(nil, 1)
-}
-
 // GetLastBackup returns last successfully finished backup
 // or nil if there is no such backup yet. If ts isn't nil it will
 // search for the most recent backup that finished before specified timestamp
@@ -675,7 +670,7 @@ func (p *PBM) getRecentBackup(before *primitive.Timestamp, sort int) (*BackupMet
 	)
 	if res.Err() != nil {
 		if res.Err() == mongo.ErrNoDocuments {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, errors.Wrap(res.Err(), "get")
 	}
