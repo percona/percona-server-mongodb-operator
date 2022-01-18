@@ -43,21 +43,8 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(cr *api.PerconaServerMongoD
 		return fmt.Errorf("get internal secret: %v", errInternalSecret)
 	}
 	// don't create secret ssl-internal if secret ssl is not created by operator
-	if errSecret == nil {
-		ownedByCr := false
-		ownerCr, err := OwnerRef(cr, r.scheme)
-		if err != nil {
-			return err
-		}
-		for _, owner := range secretObj.OwnerReferences {
-			if owner.UID == ownerCr.UID {
-				ownedByCr = true
-				break
-			}
-		}
-		if !ownedByCr {
-			return nil
-		}
+	if errSecret == nil && !metav1.IsControlledBy(&secretObj, cr)  {
+		return nil
 	}
 	err := r.createSSLByCertManager(cr)
 	if err != nil {
