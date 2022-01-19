@@ -43,11 +43,11 @@ const (
 	RestoresCollection = "pbmRestores"
 	// CmdStreamCollection is the name of the mongo collection that contains backup/restore commands stream
 	CmdStreamCollection = "pbmCmd"
-	//PITRChunksCollection contains index metadata of PITR chunks
+	// PITRChunksCollection contains index metadata of PITR chunks
 	PITRChunksCollection = "pbmPITRChunks"
-	//PITRChunksOldCollection contains archived index metadata of PITR chunks
+	// PITRChunksOldCollection contains archived index metadata of PITR chunks
 	PITRChunksOldCollection = "pbmPITRChunks.old"
-	// PBMOpLogCollection contains log of aquired locks (hence run ops)
+	// PBMOpLogCollection contains log of acquired locks (hence run ops)
 	PBMOpLogCollection = "pbmOpLog"
 	// AgentsStatusCollection is an agents registry with its status/health checks
 	AgentsStatusCollection = "pbmAgents"
@@ -153,12 +153,19 @@ func (c Cmd) String() string {
 }
 
 type BackupCmd struct {
-	Name        string          `bson:"name"`
-	Compression CompressionType `bson:"compression"`
+	Name             string          `bson:"name"`
+	Compression      CompressionType `bson:"compression"`
+	CompressionLevel *int            `bson:"level,omitempty"`
 }
 
 func (b BackupCmd) String() string {
-	return fmt.Sprintf("name: %s, compression: %s", b.Name, b.Compression)
+	var level string
+	if b.CompressionLevel == nil {
+		level = "default"
+	} else {
+		level = strconv.Itoa(*b.CompressionLevel)
+	}
+	return fmt.Sprintf("name: %s, compression: %s (level: %s)", b.Name, b.Compression, level)
 }
 
 type RestoreCmd struct {
@@ -525,9 +532,11 @@ func (b *BackupMeta) RS(name string) *BackupReplset {
 func (p *PBM) ChangeBackupStateOPID(opid string, s Status, msg string) error {
 	return p.changeBackupState(bson.D{{"opid", opid}}, s, msg)
 }
+
 func (p *PBM) ChangeBackupState(bcpName string, s Status, msg string) error {
 	return p.changeBackupState(bson.D{{"name", bcpName}}, s, msg)
 }
+
 func (p *PBM) changeBackupState(clause bson.D, s Status, msg string) error {
 	ts := time.Now().UTC().Unix()
 	_, err := p.Conn.Database(DB).Collection(BcpCollection).UpdateOne(
