@@ -283,7 +283,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 
 	err = r.client.Patch(context.Background(), cr, patch)
 	if err != nil {
-		return fmt.Errorf("failed to update CR: %v", err)
+		return errors.Wrap(err, "failed to update CR")
 	}
 
 	cr.Status.PMMVersion = newVersion.PMMVersion
