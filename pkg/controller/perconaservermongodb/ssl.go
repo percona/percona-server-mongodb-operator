@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha2"
+	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -80,11 +80,13 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
-			Organization: []string{"PSMDB"},
-			CommonName:   cr.Name,
-			SecretName:   cr.Spec.Secrets.SSL,
-			DNSNames:     certificateDNSNames,
-			IsCA:         true,
+			Subject: &cm.X509Subject{
+				Organizations: []string{"PSMDB"},
+			},
+			CommonName: cr.Name,
+			SecretName: cr.Spec.Secrets.SSL,
+			DNSNames:   certificateDNSNames,
+			IsCA:       true,
 			IssuerRef: cmmeta.ObjectReference{
 				Name: issuerName,
 				Kind: issuerKind,
@@ -105,7 +107,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 			OwnerReferences: ownerReferences,
 		},
 		Spec: cm.CertificateSpec{
-			Organization: []string{"PSMDB"},
+			Subject: &cm.X509Subject{
+				Organizations: []string{"PSMDB"},
+			},
 			CommonName:   cr.Name,
 			SecretName:   cr.Spec.Secrets.SSLInternal,
 			DNSNames:     certificateDNSNames,

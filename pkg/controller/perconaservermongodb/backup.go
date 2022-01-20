@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"go.mongodb.org/mongo-driver/mongo"
-	batchv1b "k8s.io/api/batch/v1beta1"
+	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,7 +43,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	}
 
 	// Remove old/unused tasks
-	tasksList := &batchv1b.CronJobList{}
+	tasksList := &batchv1beta1.CronJobList{}
 	err := r.client.List(context.TODO(),
 		tasksList,
 		&client.ListOptions{

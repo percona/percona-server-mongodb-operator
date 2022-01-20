@@ -174,7 +174,7 @@ const (
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	logger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	rr := reconcile.Result{
@@ -1407,7 +1407,7 @@ func (r *ReconcilePerconaServerMongoDB) getTLSHash(cr *api.PerconaServerMongoDB,
 	return hash, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner runtime.Object) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner client.Object) error {
 	if spec == nil {
 		return nil
 	}
@@ -1438,7 +1438,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(spec *api.PodDisruptionBudg
 	return r.createOrUpdate(pdb)
 }
 
-func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error {
+func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj client.Object) error {
 	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return errors.New("can't convert object to ObjectMetaAccessor")
@@ -1467,7 +1467,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error
 	if val.Kind() == reflect.Ptr {
 		val = reflect.Indirect(val)
 	}
-	oldObject := reflect.New(val.Type()).Interface().(runtime.Object)
+	oldObject := reflect.New(val.Type()).Interface().(client.Object)
 
 	err = r.client.Get(context.Background(), types.NamespacedName{
 		Name:      objectMeta.GetName(),
@@ -1507,7 +1507,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(obj runtime.Object) error
 	return nil
 }
 
-func getObjectHash(obj runtime.Object) (string, error) {
+func getObjectHash(obj client.Object) (string, error) {
 	var dataToMarshall interface{}
 	switch object := obj.(type) {
 	case *appsv1.StatefulSet:
@@ -1526,7 +1526,7 @@ func getObjectHash(obj runtime.Object) (string, error) {
 	return base64.StdEncoding.EncodeToString(data), nil
 }
 
-func setControllerReference(owner runtime.Object, obj metav1.Object, scheme *runtime.Scheme) error {
+func setControllerReference(owner client.Object, obj metav1.Object, scheme *runtime.Scheme) error {
 	ownerRef, err := OwnerRef(owner, scheme)
 	if err != nil {
 		return err
@@ -1536,7 +1536,7 @@ func setControllerReference(owner runtime.Object, obj metav1.Object, scheme *run
 }
 
 // OwnerRef returns OwnerReference to object
-func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference, error) {
+func OwnerRef(ro client.Object, scheme *runtime.Scheme) (metav1.OwnerReference, error) {
 	gvk, err := apiutil.GVKForObject(ro, scheme)
 	if err != nil {
 		return metav1.OwnerReference{}, err
@@ -1573,14 +1573,11 @@ func compareMaps(x, y map[string]string) bool {
 	return true
 }
 
-func (r *ReconcilePerconaServerMongoDB) createOrUpdateDeploymentLegacy(currentObj runtime.Object, name, namespace string) error {
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateDeploymentLegacy(currentObj client.Object, name, namespace string) error {
 	ctx := context.TODO()
 
-	foundObj := currentObj.DeepCopyObject()
-	err := r.client.Get(ctx,
-		types.NamespacedName{Name: name, Namespace: namespace},
-		foundObj)
-
+	foundObj := currentObj.DeepCopyObject().(client.Object)
+	err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, foundObj)
 	if err != nil && k8serrors.IsNotFound(err) {
 		err := r.client.Create(ctx, currentObj)
 		if err != nil {
@@ -1638,7 +1635,7 @@ func (r *ReconcilePerconaServerMongoDB) getCustomConfig(namespace, name string) 
 	return psmdb.CustomConfig{}, nil
 }
 
-func getObjectByName(c client.Client, n types.NamespacedName, obj runtime.Object) (bool, error) {
+func getObjectByName(c client.Client, n types.NamespacedName, obj client.Object) (bool, error) {
 	err := c.Get(context.Background(), n, obj)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return false, err
