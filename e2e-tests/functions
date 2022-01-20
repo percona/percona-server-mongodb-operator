@@ -5,7 +5,7 @@ BASH_XTRACEFD="5"
 
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-API="psmdb.percona.com/v1-11-0"
+API="psmdb.percona.com/v1-12-0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
@@ -333,7 +333,7 @@ deploy_operator() {
 
 deploy_minio() {
 	desc 'install Minio'
-	helm del minio-service || :
+	helm uninstall minio-service || :
 	helm repo remove minio || :
 	helm repo add minio https://helm.min.io/
 	# kubectl_bin delete pvc minio-service --force
@@ -376,14 +376,14 @@ destroy_chaos_mesh() {
 	local chaos_mesh_ns=$(helm list --all-namespaces --filter chaos-mesh | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
 
 	desc 'destroy chaos-mesh'
-	kubectl delete podchaos --all --all-namespaces || :
-	kubectl delete networkchaos --all --all-namespaces || :
+	timeout 30 kubectl delete podchaos --all --all-namespaces || :
+	timeout 30 kubectl delete networkchaos --all --all-namespaces || :
 	if [ -n "${chaos_mesh_ns}" ]; then
 		helm uninstall chaos-mesh --namespace ${chaos_mesh_ns} || :
 	fi
-	kubectl delete crd awschaos.chaos-mesh.org dnschaos.chaos-mesh.org gcpchaos.chaos-mesh.org httpchaos.chaos-mesh.org iochaos.chaos-mesh.org jvmchaos.chaos-mesh.org kernelchaos.chaos-mesh.org networkchaos.chaos-mesh.org podchaos.chaos-mesh.org podhttpchaos.chaos-mesh.org podiochaos.chaos-mesh.org podnetworkchaos.chaos-mesh.org schedules.chaos-mesh.org stresschaos.chaos-mesh.org timechaos.chaos-mesh.org workflownodes.chaos-mesh.org workflows.chaos-mesh.org || :
-	kubectl delete clusterrolebinding chaos-mesh-chaos-controller-manager-cluster-level || :
-	kubectl delete clusterrole chaos-mesh-chaos-controller-manager-cluster-level chaos-mesh-chaos-controller-manager-target-namespace || :
+	timeout 30 kubectl delete crd awschaos.chaos-mesh.org dnschaos.chaos-mesh.org gcpchaos.chaos-mesh.org httpchaos.chaos-mesh.org iochaos.chaos-mesh.org jvmchaos.chaos-mesh.org kernelchaos.chaos-mesh.org networkchaos.chaos-mesh.org podchaos.chaos-mesh.org podhttpchaos.chaos-mesh.org podiochaos.chaos-mesh.org podnetworkchaos.chaos-mesh.org schedules.chaos-mesh.org stresschaos.chaos-mesh.org timechaos.chaos-mesh.org workflownodes.chaos-mesh.org workflows.chaos-mesh.org || :
+	timeout 30 kubectl delete clusterrolebinding chaos-mesh-chaos-controller-manager-cluster-level || :
+	timeout 30 kubectl delete clusterrole chaos-mesh-chaos-controller-manager-cluster-level chaos-mesh-chaos-controller-manager-target-namespace || :
 }
 
 retry() {
@@ -533,6 +533,7 @@ compare_kubectl() {
 
 	if version_gt "1.22"; then
 		yq d -i ${new_result} 'spec.internalTrafficPolicy'
+		yq d -i ${new_result} 'spec.allocateLoadBalancerNodePorts'
 		if [[ $expected_result == */cronjob* ]]; then
 			yq d -i ${new_result} 'metadata.generation'
 		fi
@@ -606,7 +607,7 @@ compare_mongo_cmd() {
 	local suffix="$4"
 
 	run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}
 	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
@@ -720,7 +721,6 @@ destroy() {
 	kubectl_bin delete psmdb-backup --all || :
 	kubectl_bin delete psmdb-restore --all || :
 
-	destroy_chaos_mesh
 	kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v1.5.2/cert-manager.yaml 2>/dev/null || :
 	if [ -n "$OPENSHIFT" ]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &

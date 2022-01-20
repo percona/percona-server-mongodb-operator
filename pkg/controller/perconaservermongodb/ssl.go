@@ -81,7 +81,6 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(cr *api.PerconaSe
 		},
 		Spec: cm.CertificateSpec{
 			Organization: []string{"PSMDB"},
-			Duration:     &metav1.Duration{Duration: 876000 * time.Hour}, // 100 years
 			CommonName:   cr.Name,
 			SecretName:   cr.Spec.Secrets.SSL,
 			DNSNames:     certificateDNSNames,

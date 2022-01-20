@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,6 +48,13 @@ type Conf struct {
 	UploadPartSize       int         `bson:"uploadPartSize,omitempty" json:"uploadPartSize,omitempty" yaml:"uploadPartSize,omitempty"`
 	MaxUploadParts       int         `bson:"maxUploadParts,omitempty" json:"maxUploadParts,omitempty" yaml:"maxUploadParts,omitempty"`
 	StorageClass         string      `bson:"storageClass,omitempty" json:"storageClass,omitempty" yaml:"storageClass,omitempty"`
+
+	// InsecureSkipTLSVerify disables client verification of the server's
+	// certificate chain and host name
+	InsecureSkipTLSVerify bool `bson:"insecureSkipTLSVerify" json:"insecureSkipTLSVerify" yaml:"insecureSkipTLSVerify"`
+
+	// DebugLog enables debug logs from S3 client
+	DebugLog bool `bson:"debugLog,omitempty" json:"debugLog,omitempty" yaml:"debugLog,omitempty"`
 }
 
 type AWSsse struct {
@@ -236,7 +244,6 @@ func (s *S3) List(prefix, suffix string) ([]storage.FileInfo, error) {
 			}
 			return true
 		})
-
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup list")
 	}
@@ -334,7 +341,6 @@ func (pr *partReader) writeNext(w io.Writer) (n int64, err error) {
 		Key:    aws.String(path.Join(pr.opts.Prefix, pr.fname)),
 		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", pr.n, pr.n+downloadChuckSize-1)),
 	})
-
 	if err != nil {
 		// if object size is undefined, we would read
 		// until HTTP code 416 (Requested Range Not Satisfiable)
@@ -465,7 +471,6 @@ func (s *S3) Delete(name string) error {
 		Bucket: aws.String(s.opts.Bucket),
 		Key:    aws.String(path.Join(s.opts.Prefix, name)),
 	})
-
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -506,10 +511,46 @@ func (s *S3) session() (*session.Session, error) {
 		Client: ec2metadata.New(session.New()),
 	})
 
+	httpClient := http.DefaultClient
+	if s.opts.InsecureSkipTLSVerify {
+		httpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		}
+	}
+
+	logLevel := aws.LogOff
+	if s.opts.DebugLog {
+		logLevel = aws.LogDebug
+	}
+
 	return session.NewSession(&aws.Config{
 		Region:           aws.String(s.opts.Region),
 		Endpoint:         aws.String(s.opts.EndpointURL),
 		Credentials:      credentials.NewChainCredentials(providers),
 		S3ForcePathStyle: aws.Bool(true),
+		HTTPClient:       httpClient,
+		LogLevel:         &logLevel,
+		Logger:           awsLogger(s.log),
+	})
+}
+
+func awsLogger(l *log.Event) aws.Logger {
+	if l == nil {
+		return aws.NewDefaultLogger()
+	}
+
+	return aws.LoggerFunc(func(xs ...interface{}) {
+		if len(xs) == 0 {
+			return
+		}
+
+		msg := "%v"
+		for i := len(xs) - 1; i != 0; i++ {
+			msg += " %v"
+		}
+
+		l.Debug(msg, xs...)
 	})
 }

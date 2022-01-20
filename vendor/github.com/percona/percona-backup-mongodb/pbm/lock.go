@@ -64,7 +64,7 @@ func (p *PBM) newLock(h LockHeader, col string) *Lock {
 	}
 }
 
-// ErrConcurrentOp means lock was already aquired by another node
+// ErrConcurrentOp means lock was already acquired by another node
 type ErrConcurrentOp struct {
 	Lock LockHeader
 }
@@ -245,7 +245,7 @@ func (l *Lock) acquire() (bool, error) {
 
 // rewrite tries to rewrite the given lock with itself
 // it will transactionally delete the `old` lock
-// and aquire an istance of itself
+// and acquire an istance of itself
 func (l *Lock) rewrite(old *LockHeader) (bool, error) {
 	var err error
 	l.Heartbeat, err = l.p.ClusterTime()

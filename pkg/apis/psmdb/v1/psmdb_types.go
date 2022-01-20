@@ -9,7 +9,6 @@ import (
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -532,23 +533,25 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupTaskSpec struct {
-	Name            string              `json:"name"`
-	Enabled         bool                `json:"enabled"`
-	Keep            int                 `json:"keep,omitempty"`
-	Schedule        string              `json:"schedule,omitempty"`
-	StorageName     string              `json:"storageName,omitempty"`
-	CompressionType pbm.CompressionType `json:"compressionType,omitempty"`
+	Name             string              `json:"name"`
+	Enabled          bool                `json:"enabled"`
+	Keep             int                 `json:"keep,omitempty"`
+	Schedule         string              `json:"schedule,omitempty"`
+	StorageName      string              `json:"storageName,omitempty"`
+	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 }
 
 type BackupStorageS3Spec struct {
-	Bucket            string `json:"bucket"`
-	Prefix            string `json:"prefix,omitempty"`
-	Region            string `json:"region,omitempty"`
-	EndpointURL       string `json:"endpointUrl,omitempty"`
-	CredentialsSecret string `json:"credentialsSecret"`
-	UploadPartSize    int    `json:"uploadPartSize,omitempty"`
-	MaxUploadParts    int    `json:"maxUploadParts,omitempty"`
-	StorageClass      string `json:"storageClass,omitempty"`
+	Bucket                string `json:"bucket"`
+	Prefix                string `json:"prefix,omitempty"`
+	Region                string `json:"region,omitempty"`
+	EndpointURL           string `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string `json:"credentialsSecret"`
+	UploadPartSize        int    `json:"uploadPartSize,omitempty"`
+	MaxUploadParts        int    `json:"maxUploadParts,omitempty"`
+	StorageClass          string `json:"storageClass,omitempty"`
+	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify"`
 }
 
 type BackupStorageAzureSpec struct {
