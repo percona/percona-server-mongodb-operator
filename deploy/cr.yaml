@@ -495,9 +495,11 @@ spec:
 #        keep: 3
 #        storageName: s3-us-west
 #        compressionType: gzip
+#        compressionLevel: 6
 #      - name: weekly-s3-us-west
 #        enabled: false
 #        schedule: "0 0 * * 0"
 #        keep: 5
 #        storageName: s3-us-west
 #        compressionType: gzip
+#        compressionLevel: 6
