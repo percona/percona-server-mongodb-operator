@@ -28,9 +28,9 @@ func rsLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
 	return lbls
 }
 
-func GetRSPods(k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
+func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	pods := corev1.PodList{}
-	err := k8sclient.List(context.TODO(),
+	err := k8sclient.List(ctx,
 		&pods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,

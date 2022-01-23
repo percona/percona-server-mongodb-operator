@@ -4,11 +4,11 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -88,7 +88,7 @@ func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
 }
 
 type HashableObject interface {
-	GetRuntimeObject() runtime.Object
+	GetRuntimeObject() client.Object
 	GetHashHex() (string, error)
 }
 
@@ -107,7 +107,7 @@ type hashableConfigMap struct {
 	corev1.ConfigMap
 }
 
-func (cm *hashableConfigMap) GetRuntimeObject() runtime.Object {
+func (cm *hashableConfigMap) GetRuntimeObject() client.Object {
 	return &cm.ConfigMap
 }
 
@@ -119,7 +119,7 @@ type hashableSecret struct {
 	corev1.Secret
 }
 
-func (s *hashableSecret) GetRuntimeObject() runtime.Object {
+func (s *hashableSecret) GetRuntimeObject() client.Object {
 	return &s.Secret
 }
 

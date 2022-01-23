@@ -83,14 +83,14 @@ type ReconcilePerconaServerMongoDBRestore struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
 	}
 
 	// Fetch the PerconaSMDBBackupRestore instance
 	cr := &psmdbv1.PerconaServerMongoDBRestore{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, cr)
+	err := r.client.Get(ctx, request.NamespacedName, cr)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -112,7 +112,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		}
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
 			cr.Status = status
-			uerr := r.updateStatus(cr)
+			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
 				log.Error(uerr, "failed to updated restore status", "restore", cr.Name, "backup", cr.Spec.BackupName)
 			}
@@ -129,7 +129,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 		return rr, nil
 	}
 
-	status, err = r.reconcileRestore(cr)
+	status, err = r.reconcileRestore(ctx, cr)
 	if err != nil {
 		return rr, fmt.Errorf("reconcile: %v", err)
 	}
@@ -137,11 +137,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.PerconaServerMongoDBRestore) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	status := cr.Status
 
 	cluster := &psmdbv1.PerconaServerMongoDB{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
+	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
 	if err != nil {
 		return status, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
@@ -159,7 +159,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
-	cjobs, err := backup.HasActiveJobs(r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
+	cjobs, err := backup.HasActiveJobs(ctx, r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
@@ -177,7 +177,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 	)
 
 	if backupName == "" || storageName == "" {
-		bcp, err := r.getBackup(cr)
+		bcp, err := r.getBackup(ctx, cr)
 		if err != nil {
 			return status, errors.Wrap(err, "get backup")
 		}
@@ -204,7 +204,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 		}
 	}
 
-	pbmc, errPBM := backup.NewPBM(r.client, cluster)
+	pbmc, errPBM := backup.NewPBM(ctx, r.client, cluster)
 	if errPBM != nil {
 		log.Info("Waiting for pbm-agent.")
 		status.State = psmdbv1.RestoreStateWaiting
@@ -218,12 +218,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(cr *psmdbv1.Perc
 			return status, errors.Wrap(err, "get storage")
 		}
 
-		priorities, err := pbmc.GetPriorities(r.client, cluster)
+		priorities, err := pbmc.GetPriorities(ctx, r.client, cluster)
 		if err != nil {
 			return status, errors.Wrap(err, "get pbm priorities")
 		}
 
-		err = pbmc.SetConfig(storage, cluster.Spec.Backup.PITR.Disabled(), priorities)
+		err = pbmc.SetConfig(ctx, storage, cluster.Spec.Backup.PITR.Disabled(), priorities)
 		if err != nil {
 			return status, errors.Wrap(err, "set pbm config")
 		}
@@ -371,7 +371,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaSer
 	}, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServerMongoDBRestore) (*psmdbv1.PerconaServerMongoDBBackup, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) (*psmdbv1.PerconaServerMongoDBBackup, error) {
 	if len(cr.Spec.BackupName) == 0 && cr.Spec.BackupSource != nil {
 		s := strings.Split(cr.Spec.BackupSource.Destination, "/")
 		backupName := s[len(s)-1]
@@ -398,7 +398,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServ
 	}
 
 	backup := &psmdbv1.PerconaServerMongoDBBackup{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
+	err := r.client.Get(ctx, types.NamespacedName{
 		Name:      cr.Spec.BackupName,
 		Namespace: cr.Namespace,
 	}, backup)
@@ -406,18 +406,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServ
 	return backup, err
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1.PerconaServerMongoDBRestore) error {
+func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		c := &psmdbv1.PerconaServerMongoDBRestore{}
 
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
 			return err
 		}
 
 		c.Status = cr.Status
 
-		return r.client.Status().Update(context.TODO(), c)
+		return r.client.Status().Update(ctx, c)
 	})
 
 	return errors.Wrap(err, "write status")

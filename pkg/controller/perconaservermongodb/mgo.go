@@ -18,7 +18,7 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
 	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error,
 ) {
 	replsetSize := replset.Size
@@ -44,18 +44,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return api.AppStateReady, nil
 	}
 
-	cli, err := r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
+	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 	if err != nil {
 		if cr.Status.Replsets[replset.Name].Initialized {
 			return api.AppStateError, errors.Wrap(err, "dial:")
 		}
 
-		err := r.handleReplsetInit(cr, replset, pods.Items)
+		err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
 		if err != nil {
 			return api.AppStateInit, errors.Wrap(err, "handleReplsetInit")
 		}
 
-		err = r.createSystemUsers(cr, replset)
+		err = r.createSystemUsers(ctx, cr, replset)
 		if err != nil {
 			return api.AppStateInit, errors.Wrap(err, "create system users")
 		}
@@ -90,7 +90,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		return api.AppStateInit, nil
 	}
 
-	rstRunning, err := r.isRestoreRunning(cr)
+	rstRunning, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
 		return api.AppStateInit, errors.Wrap(err, "failed to check running restore")
 	}
@@ -104,7 +104,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 {
 
-		mongosSession, err := r.mongosClientWithRole(cr, roleClusterAdmin)
+		mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "failed to get mongos connection")
 		}
@@ -124,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 		if !in {
 			log.Info("adding rs to shard", "rs", replset.Name)
 
-			err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods[0])
+			err := r.handleRsAddToShard(ctx, cr, replset, pods.Items[0], mongosPods[0])
 			if err != nil {
 				return api.AppStateError, errors.Wrap(err, "add shard")
 			}
@@ -148,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			break
 		}
 
-		host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return api.AppStateError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -288,12 +288,12 @@ func mongoInitAdminUser(user, pwd string) string {
 	)`, user, pwd)
 }
 
-func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerMongoDB, rsName string) error {
+func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
 
-	cli, err := r.mongosClientWithRole(cr, roleClusterAdmin)
+	cli, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Errorf("failed to get mongos connection: %v", err)
 	}
@@ -323,7 +323,7 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(cr *api.PerconaServerM
 	}
 }
 
-func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
+func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPod corev1.Pod) error {
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
 		return errors.Errorf("rsPod %s is not ready", rspod.Name)
@@ -332,12 +332,12 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 		return errors.New("mongos pod is not ready")
 	}
 
-	host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, rspod)
+	host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, rspod)
 	if err != nil {
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
 
-	cli, err := r.mongosClientWithRole(m, roleClusterAdmin)
+	cli, err := r.mongosClientWithRole(ctx, m, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos client")
 	}
@@ -362,7 +362,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 //
 // See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
 //
-func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
+func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
 			continue
@@ -370,7 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
@@ -401,7 +401,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		time.Sleep(time.Second * 5)
 
-		userAdmin, err := r.getInternalCredentials(m, roleUserAdmin)
+		userAdmin, err := r.getInternalCredentials(ctx, m, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
@@ -425,8 +425,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 	return errNoRunningMongodContainers
 }
 
-func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
-	cli, err := r.mongoClientWithRole(cr, *replset, roleUserAdmin)
+func (r *ReconcilePerconaServerMongoDB) createSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleUserAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
 	}
@@ -438,7 +438,7 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerM
 		}
 	}()
 
-	clusterAdmin, err := r.getInternalCredentials(cr, roleClusterAdmin)
+	clusterAdmin, err := r.getInternalCredentials(ctx, cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get cluster admin")
 	}
@@ -448,7 +448,7 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerM
 		return errors.Wrap(err, "failed to create clusterAdmin")
 	}
 
-	monitorUser, err := r.getInternalCredentials(cr, roleClusterMonitor)
+	monitorUser, err := r.getInternalCredentials(ctx, cr, roleClusterMonitor)
 	if err != nil {
 		return errors.Wrap(err, "failed to get cluster admin")
 	}
@@ -469,7 +469,7 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerM
 		return errors.Wrap(err, "failed to create role")
 	}
 
-	backupUser, err := r.getInternalCredentials(cr, roleBackup)
+	backupUser, err := r.getInternalCredentials(ctx, cr, roleBackup)
 	if err != nil {
 		return errors.Wrap(err, "failed to get cluster admin")
 	}

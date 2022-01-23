@@ -4,16 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/operator-framework/operator-lib/leader"
 	"os"
 	"runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	_ "github.com/Percona-Lab/percona-version-service/api"
 	certmgrscheme "github.com/jetstack/cert-manager/pkg/client/clientset/versioned/scheme"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
-	"github.com/operator-framework/operator-sdk/pkg/leader"
-	"github.com/operator-framework/operator-sdk/pkg/ready"
-	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -34,7 +31,17 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Git commit: %s Git branch: %s", GitCommit, GitBranch))
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
-	log.Info(fmt.Sprintf("operator-sdk Version: %v", sdkVersion.Version))
+	//log.Info(fmt.Sprintf("operator-sdk Version: %v", sdkVersion.Version))
+}
+
+const watchNamespaceEnvVar = "WATCH_NAMESPACE"
+
+func getWatchNamespace() (string, error) {
+	ns, found := os.LookupEnv(watchNamespaceEnvVar)
+	if !found {
+		return "", fmt.Errorf("%s must be set", watchNamespaceEnvVar)
+	}
+	return ns, nil
 }
 
 func main() {
@@ -48,7 +55,7 @@ func main() {
 
 	printVersion()
 
-	namespace, err := k8sutil.GetWatchNamespace()
+	namespace, err := getWatchNamespace()
 	if err != nil {
 		log.Error(err, "failed to get watch namespace")
 		os.Exit(1)
@@ -64,13 +71,16 @@ func main() {
 	// Become the leader before proceeding
 	leader.Become(context.TODO(), "percona-server-mongodb-operator-lock")
 
-	r := ready.NewFileReady()
-	err = r.Set()
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-	defer r.Unset()
+	// TODO: use new mechanics
+	// https://sdk.operatorframework.io/docs/upgrading-sdk-version/v1.0.0/#removed-package-pkgready
+	// https://github.com/operator-framework/operator-sdk/pull/3476
+	//r := ready.NewFileReady()
+	//err = r.Set()
+	//if err != nil {
+	//	log.Error(err, "")
+	//	os.Exit(1)
+	//}
+	//defer r.Unset()
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})

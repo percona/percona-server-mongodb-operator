@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 
@@ -8,22 +9,22 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
-func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(cr *api.PerconaServerMongoDB, rs api.ReplsetSpec,
+func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec,
 	role UserRole) (*mgo.Client, error) {
 
-	c, err := r.getInternalCredentials(cr, role)
+	c, err := r.getInternalCredentials(ctx, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.MongoClient(r.client, cr, rs, c)
+	return psmdb.MongoClient(ctx, r.client, cr, rs, c)
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(cr *api.PerconaServerMongoDB, role UserRole) (*mgo.Client, error) {
-	c, err := r.getInternalCredentials(cr, role)
+func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, role UserRole) (*mgo.Client, error) {
+	c, err := r.getInternalCredentials(ctx, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.MongosClient(r.client, cr, c)
+	return psmdb.MongosClient(ctx, r.client, cr, c)
 }
