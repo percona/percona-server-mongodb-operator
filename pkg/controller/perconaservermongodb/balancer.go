@@ -13,17 +13,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Unmanaged {
 		return nil
 	}
 
-	uptodate, err := r.isAllSfsUpToDate(cr)
+	uptodate, err := r.isAllSfsUpToDate(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
 	}
 
-	rstRunning, err := r.isRestoreRunning(cr)
+	rstRunning, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check running restores")
 	}
@@ -35,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 	msDepl := psmdb.MongosDeployment(cr)
 
 	for {
-		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+		err = r.client.Get(ctx, types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
 		if err != nil && !k8sErrors.IsNotFound(err) {
 			return errors.Wrapf(err, "get deployment %s", msDepl.Name)
 		}
@@ -52,7 +52,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 		return nil
 	}
 
-	mongosPods, err := r.getMongosPods(cr)
+	mongosPods, err := r.getMongosPods(ctx, cr)
 	if err != nil && !k8sErrors.IsNotFound(err) {
 		return errors.Wrap(err, "get pods list for mongos")
 	}
@@ -71,7 +71,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 		}
 	}
 
-	mongosSession, err := r.mongosClientWithRole(cr, roleClusterAdmin)
+	mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}
@@ -100,14 +100,14 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) disableBalancer(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Unmanaged {
 		return nil
 	}
 
 	msDepl := psmdb.MongosDeployment(cr)
 
-	err := r.client.Get(context.TODO(), cr.MongosNamespacedName(), msDepl)
+	err := r.client.Get(ctx, cr.MongosNamespacedName(), msDepl)
 	if k8sErrors.IsNotFound(err) {
 		return nil
 	}
@@ -115,7 +115,7 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(cr *api.PerconaServerMon
 		return errors.Wrapf(err, "get mongos deployment %s", msDepl.Name)
 	}
 
-	mongosSession, err := r.mongosClientWithRole(cr, roleClusterAdmin)
+	mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}

@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"testing"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -37,7 +38,7 @@ func TestUpdateStatus(t *testing.T) {
 
 	r := buildFakeClient([]runtime.Object{cr, rs0, rs1})
 
-	if err := r.updateStatus(cr, nil, api.AppStateInit); err != nil {
+	if err := r.updateStatus(context.TODO(), cr, nil, api.AppStateInit); err != nil {
 		t.Error(err)
 	}
 

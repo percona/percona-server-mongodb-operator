@@ -1,6 +1,7 @@
 package perconaservermongodbbackup
 
 import (
+	"context"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -22,10 +23,11 @@ type Backup struct {
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) newBackup(
+	ctx context.Context,
 	cluster *api.PerconaServerMongoDB,
 	cr *api.PerconaServerMongoDBBackup,
 ) (*Backup, error) {
-	cn, err := backup.NewPBM(r.client, cluster)
+	cn, err := backup.NewPBM(ctx, r.client, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "create pbm object")
 	}
@@ -34,7 +36,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(
 }
 
 // Start requests backup on PBM
-func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]float64) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Start(ctx context.Context, cr *api.PerconaServerMongoDBBackup, priority map[string]float64) (api.PerconaServerMongoDBBackupStatus, error) {
 	var status api.PerconaServerMongoDBBackupStatus
 
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
@@ -42,7 +44,7 @@ func (b *Backup) Start(cr *api.PerconaServerMongoDBBackup, priority map[string]f
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
-	err := b.pbm.SetConfig(stg, b.spec.PITR, priority)
+	err := b.pbm.SetConfig(ctx, stg, b.spec.PITR, priority)
 	if err != nil {
 		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}

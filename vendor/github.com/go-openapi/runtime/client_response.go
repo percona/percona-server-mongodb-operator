@@ -17,6 +17,8 @@ package runtime
 import (
 	"fmt"
 	"io"
+
+	"encoding/json"
 )
 
 // A ClientResponse represents a client response
@@ -25,6 +27,7 @@ type ClientResponse interface {
 	Code() int
 	Message() string
 	GetHeader(string) string
+	GetHeaders(string) []string
 	Body() io.ReadCloser
 }
 
@@ -59,5 +62,10 @@ type APIError struct {
 }
 
 func (a *APIError) Error() string {
-	return fmt.Sprintf("%s (status %d): %+v ", a.OperationName, a.Code, a.Response)
+	resp, _ := json.Marshal(a.Response)
+	return fmt.Sprintf("%s (status %d): %s", a.OperationName, a.Code, resp)
+}
+
+func (a *APIError) String() string {
+	return a.Error()
 }
