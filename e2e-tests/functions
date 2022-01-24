@@ -278,6 +278,7 @@ simple_data_check() {
 	local cluster_pfx=$4
 
 	if [ $isSharded -eq 1 ]; then
+		sleep 10 # give time for start mongos
 		wait_deployment "$cluster_name-mongos"
 		sleep 10
 		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
@@ -314,7 +315,11 @@ wait_restore_object() {
 deploy_operator() {
 	desc 'start operator'
 
-	kubectl_bin apply -f ${test_dir}/conf/crd.yaml || kubectl_bin apply -f ${src_dir}/deploy/crd.yaml || :
+	if [ -f ${test_dir}/conf/crd.yaml ]; then
+		kubectl_bin apply -f ${test_dir}/conf/crd.yaml
+	else
+		kubectl_bin apply -f ${src_dir}/deploy/crd.yaml
+	fi
 	kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
 
 	cat ${src_dir}/deploy/operator.yaml \
