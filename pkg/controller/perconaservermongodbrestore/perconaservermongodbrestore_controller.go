@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -406,15 +407,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(cr *psmdbv1.PerconaServ
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(cr *psmdbv1.PerconaServerMongoDBRestore) error {
-	err := r.client.Status().Update(context.TODO(), cr)
-	if err != nil {
-		// maybe it's k8s v1.10 and earlier (e.g. oc3.9) that doesn't support status updates
-		// so try to update whole CR
-		// TODO: Update will not return error if user have no rights to update Status. Do we need to do something?
-		err := r.client.Update(context.TODO(), cr)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		c := &psmdbv1.PerconaServerMongoDBRestore{}
+
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
-			return fmt.Errorf("send update: %v", err)
+			return err
 		}
-	}
-	return nil
+
+		c.Status = cr.Status
+
+		return r.client.Status().Update(context.TODO(), c)
+	})
+
+	return errors.Wrap(err, "write status")
 }
