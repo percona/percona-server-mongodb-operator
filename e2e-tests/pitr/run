@@ -61,7 +61,7 @@ check_recovery() {
 		"myApp:myPass@$cluster.$namespace"
 
 	desc 'waiting for chunks to be uploaded'
-	sleep 600
+	sleep 120
 
 	desc "check restore by $restore_type"
 	if [ -z "$backupSource" ]; then
