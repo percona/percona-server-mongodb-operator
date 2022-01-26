@@ -68,7 +68,7 @@ To specify your own repository for the Percona Server for MongoDB Operator docke
 ```
 export IMAGE=bob/my_repository_for_test_images:K8SPSMDB-372-fix-feature-X
 ```
-If you use Apple Silicon (or another ARM64 based architecture) please specify docker platform:
+If you use Apple Silicon (or another ARM64 based architecture) and plan to start operator on amd64 (e.g. AWS EC2, ECS, etc.)  please specify docker platform:
 ```
  export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
