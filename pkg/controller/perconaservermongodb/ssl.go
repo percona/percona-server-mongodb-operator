@@ -212,7 +212,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(cr *api.PerconaServerMo
 }
 
 func getShardingSans(cr *api.PerconaServerMongoDB) []string {
-	return []string{
+	sans := []string{
 		cr.Name + "-mongos",
 		cr.Name + "-mongos" + "." + cr.Namespace,
 		cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
@@ -226,10 +226,19 @@ func getShardingSans(cr *api.PerconaServerMongoDB) []string {
 		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace,
 		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
 	}
+	if cr.Spec.MultiCluster.Enabled {
+		sans = append(sans, []string{
+			cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+			"*." + cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+			cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+			"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		}...)
+	}
+	return sans
 }
 
 func getCertificateSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) []string {
-	return []string{
+	sans := []string{
 		cr.Name + "-" + replset.Name,
 		cr.Name + "-" + replset.Name + "." + cr.Namespace,
 		cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
@@ -237,4 +246,11 @@ func getCertificateSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) 
 		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace,
 		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
 	}
+	if cr.Spec.MultiCluster.Enabled {
+		sans = append(sans, []string{
+			cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+			"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		}...)
+	}
+	return sans
 }

@@ -28,10 +28,11 @@ require (
 	golang.org/x/tools v0.0.0-20201028153306-37f0764111ff // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
-	k8s.io/api v0.18.0
-	k8s.io/apimachinery v0.18.0
+	k8s.io/api v0.18.4
+	k8s.io/apimachinery v0.18.4
 	k8s.io/client-go v12.0.0+incompatible
-	sigs.k8s.io/controller-runtime v0.5.2
+	sigs.k8s.io/controller-runtime v0.6.1
+	sigs.k8s.io/mcs-api v0.1.0
 )
 
 replace (
@@ -40,4 +41,5 @@ replace (
 	k8s.io/api => k8s.io/api v0.17.4 // Required by client-go
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.4 // Required by client-go
 	k8s.io/client-go => k8s.io/client-go v0.17.4 // Required by prometheus-operator
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.5.2
 )

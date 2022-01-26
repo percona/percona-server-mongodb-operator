@@ -359,6 +359,13 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 }
 
 func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
+	ls := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+		"app.kubernetes.io/component":  "mongos",
+	}
 	svc := corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -367,6 +374,7 @@ func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Name + "-" + "mongos",
 			Namespace: cr.Namespace,
+			Labels:    ls,
 		},
 	}
 

@@ -17,6 +17,8 @@ spec:
 #  runUid: 1001
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+  #multiCluster:
+  #  enabled: true
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: 4.4-recommended

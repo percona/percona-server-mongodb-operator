@@ -469,6 +469,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
 
+	err = r.exportServices(cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "export services")
+	}
+
 	if err := r.enableBalancerIfNeeded(cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
