@@ -133,8 +133,11 @@ func loadConfig(context string) (*rest.Config, error) {
 		}
 		loadingRules.Precedence = append(loadingRules.Precedence, path.Join(u.HomeDir, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName))
 	}
+	if c, err := loadConfigWithContext(apiServerURL, loadingRules, context); err == nil {
+		return c, nil
+	}
 
-	return loadConfigWithContext(apiServerURL, loadingRules, context)
+	return nil, fmt.Errorf("could not locate a kubeconfig")
 }
 
 func loadConfigWithContext(apiServerURL string, loader clientcmd.ClientConfigLoader, context string) (*rest.Config, error) {

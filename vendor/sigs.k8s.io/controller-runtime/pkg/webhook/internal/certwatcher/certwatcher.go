@@ -20,7 +20,7 @@ import (
 	"crypto/tls"
 	"sync"
 
-	"github.com/fsnotify/fsnotify"
+	"gopkg.in/fsnotify.v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/internal/log"
 )
 

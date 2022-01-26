@@ -22,7 +22,6 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/internal/controller"
-	"sigs.k8s.io/controller-runtime/pkg/internal/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
@@ -68,18 +67,6 @@ type Controller interface {
 // New returns a new Controller registered with the Manager.  The Manager will ensure that shared Caches have
 // been synced before the Controller is Started.
 func New(name string, mgr manager.Manager, options Options) (Controller, error) {
-	c, err := NewUnmanaged(name, mgr, options)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add the controller as a Manager components
-	return c, mgr.Add(c)
-}
-
-// NewUnmanaged returns a new controller without adding it to the manager. The
-// caller is responsible for starting the returned controller.
-func NewUnmanaged(name string, mgr manager.Manager, options Options) (Controller, error) {
 	if options.Reconciler == nil {
 		return nil, fmt.Errorf("must specify Reconciler")
 	}
@@ -103,15 +90,19 @@ func NewUnmanaged(name string, mgr manager.Manager, options Options) (Controller
 
 	// Create controller with dependencies set
 	c := &controller.Controller{
-		Do: options.Reconciler,
+		Do:       options.Reconciler,
+		Cache:    mgr.GetCache(),
+		Config:   mgr.GetConfig(),
+		Scheme:   mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Recorder: mgr.GetEventRecorderFor(name),
 		MakeQueue: func() workqueue.RateLimitingInterface {
 			return workqueue.NewNamedRateLimitingQueue(options.RateLimiter, name)
 		},
 		MaxConcurrentReconciles: options.MaxConcurrentReconciles,
-		SetFields:               mgr.SetFields,
 		Name:                    name,
-		Log:                     log.RuntimeLog.WithName("controller").WithValues("controller", name),
 	}
 
-	return c, nil
+	// Add the controller as a Manager components
+	return c, mgr.Add(c)
 }

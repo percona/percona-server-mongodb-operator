@@ -19,18 +19,15 @@ package fake
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/testing"
 
@@ -82,58 +79,28 @@ func NewFakeClientWithScheme(clientScheme *runtime.Scheme, initObjs ...runtime.O
 }
 
 func (t versionedTracker) Create(gvr schema.GroupVersionResource, obj runtime.Object, ns string) error {
-	accessor, err := meta.Accessor(obj)
-	if err != nil {
+	if accessor, err := meta.Accessor(obj); err == nil {
+		if accessor.GetResourceVersion() == "" {
+			accessor.SetResourceVersion("1")
+		}
+	} else {
 		return err
 	}
-	if accessor.GetName() == "" {
-		return apierrors.NewInvalid(
-			obj.GetObjectKind().GroupVersionKind().GroupKind(),
-			accessor.GetName(),
-			field.ErrorList{field.Required(field.NewPath("metadata.name"), "name is required")})
-	}
-	if accessor.GetResourceVersion() != "" {
-		return apierrors.NewBadRequest("resourceVersion can not be set for Create requests")
-	}
-	accessor.SetResourceVersion("1")
-	if err := t.ObjectTracker.Create(gvr, obj, ns); err != nil {
-		accessor.SetResourceVersion("")
-		return err
-	}
-	return nil
+	return t.ObjectTracker.Create(gvr, obj, ns)
 }
 
 func (t versionedTracker) Update(gvr schema.GroupVersionResource, obj runtime.Object, ns string) error {
-	accessor, err := meta.Accessor(obj)
-	if err != nil {
-		return fmt.Errorf("failed to get accessor for object: %v", err)
-	}
-	if accessor.GetName() == "" {
-		return apierrors.NewInvalid(
-			obj.GetObjectKind().GroupVersionKind().GroupKind(),
-			accessor.GetName(),
-			field.ErrorList{field.Required(field.NewPath("metadata.name"), "name is required")})
-	}
-	oldObject, err := t.ObjectTracker.Get(gvr, ns, accessor.GetName())
-	if err != nil {
+	if accessor, err := meta.Accessor(obj); err == nil {
+		version := 0
+		if rv := accessor.GetResourceVersion(); rv != "" {
+			version, err = strconv.Atoi(rv)
+		}
+		if err == nil {
+			accessor.SetResourceVersion(strconv.Itoa(version + 1))
+		}
+	} else {
 		return err
 	}
-	oldAccessor, err := meta.Accessor(oldObject)
-	if err != nil {
-		return err
-	}
-	if accessor.GetResourceVersion() != oldAccessor.GetResourceVersion() {
-		return apierrors.NewConflict(gvr.GroupResource(), accessor.GetName(), errors.New("object was modified"))
-	}
-	if oldAccessor.GetResourceVersion() == "" {
-		oldAccessor.SetResourceVersion("0")
-	}
-	intResourceVersion, err := strconv.ParseUint(oldAccessor.GetResourceVersion(), 10, 64)
-	if err != nil {
-		return fmt.Errorf("can not convert resourceVersion %q to int: %v", oldAccessor.GetResourceVersion(), err)
-	}
-	intResourceVersion++
-	accessor.SetResourceVersion(strconv.FormatUint(intResourceVersion, 10))
 	return t.ObjectTracker.Update(gvr, obj, ns)
 }
 
@@ -271,7 +238,7 @@ func (c *fakeClient) Delete(ctx context.Context, obj runtime.Object, opts ...cli
 }
 
 func (c *fakeClient) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ...client.DeleteAllOfOption) error {
-	gvk, err := apiutil.GVKForObject(obj, c.scheme)
+	gvk, err := apiutil.GVKForObject(obj, scheme.Scheme)
 	if err != nil {
 		return err
 	}

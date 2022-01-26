@@ -130,10 +130,7 @@ func registerClientMetrics() {
 	Registry.MustRegister(requestResult)
 
 	// register the metrics with client-go
-	clientmetrics.Register(clientmetrics.RegisterOpts{
-		RequestLatency: &latencyAdapter{metric: requestLatency},
-		RequestResult:  &resultAdapter{metric: requestResult},
-	})
+	clientmetrics.Register(&latencyAdapter{metric: requestLatency}, &resultAdapter{metric: requestResult})
 }
 
 // registerReflectorMetrics sets up reflector (reconcile) loop metrics
