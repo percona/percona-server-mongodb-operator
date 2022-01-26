@@ -34,6 +34,37 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 	return services, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.MultiCluster.Enabled {
+		return nil
+	}
+	ls := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+	svcList := &corev1.ServiceList{}
+	err := r.client.List(context.TODO(),
+		svcList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(ls),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get service list")
+	}
+
+	for _, svc := range svcList.Items {
+		se := psmdb.ServiceExport(cr, &svc)
+		if err := r.createOrUpdate(se); err != nil {
+			return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
+		}
+	}
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	if cr.Spec.Pause {
 		return nil
