@@ -6,7 +6,6 @@ set -o xtrace
 test_dir="$(dirname $0)"
 . $(dirname $0)/functions
 src_dir="$(realpath ${test_dir}/..)"
-export DOCKER_DEFAULT_PLATFORM=linux/amd64
 IMAGE=$(echo "$IMAGE" | sed -e 's#percona/#perconalab/#')
 
 if [[ ${DOCKER_NOCACHE:-1} == 1 ]]; then
@@ -20,7 +19,7 @@ build_operator() {
 	if [ "${RELEASE:-1}" = 0 ]; then
 		GO_LDFLAGS="-race"
 	fi
-
+  export DOCKER_DEFAULT_PLATFORM=linux/amd64
 	export IMAGE
 	export GO_LDFLAGS="-w -s -trimpath $GO_LDFLAGS"
 	pushd ${src_dir}
