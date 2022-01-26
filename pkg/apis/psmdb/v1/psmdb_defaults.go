@@ -16,6 +16,9 @@ import (
 // DefaultDNSSuffix is a default dns suffix for the cluster service
 const DefaultDNSSuffix = "svc.cluster.local"
 
+// MultiClusterDefaultDNSSuffix is a default dns suffix for multi-cluster service
+const MultiClusterDefaultDNSSuffix = "svc.clusterset.local"
+
 // ConfigReplSetName is the only possible name for config replica set
 const (
 	ConfigReplSetName = "cfg"
@@ -489,6 +492,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 	if cr.Spec.Unmanaged && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
 		return errors.New("SmartUpdate is not allowed on unmanaged clusters, set updateStrategy to RollingUpdate or OnDelete")
+	}
+
+	if cr.Spec.MultiCluster.Enabled && len(cr.Spec.MultiCluster.DNSSuffix) == 0 {
+		cr.Spec.MultiCluster.DNSSuffix = MultiClusterDefaultDNSSuffix
 	}
 
 	return nil
