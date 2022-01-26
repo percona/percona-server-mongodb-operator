@@ -78,7 +78,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		}
 	}
 
-	log.Info("statefullSet was changed, start smart update", "name", sfs.Name)
+	log.Info("StatefulSet is changed, starting smart update", "name", sfs.Name)
 
 	if sfs.Status.ReadyReplicas < sfs.Status.Replicas {
 		log.Info("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
@@ -263,6 +263,10 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMong
 }
 
 func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {
+	if sfs.Status.UpdateRevision == "" {
+		return false
+	}
+
 	for _, pod := range podList.Items {
 		if pod.Labels["app.kubernetes.io/component"] != sfs.Labels["app.kubernetes.io/component"] {
 			continue
