@@ -38,7 +38,7 @@ void pushArtifactFile(String FILE_NAME) {
 }
 
 void pushLogFile(String FILE_NAME) {
-    echo "Push $FILE_NAME file to S3!"
+    echo "Push logfile $FILE_NAME file to S3!"
 
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
@@ -80,10 +80,11 @@ void setTestsresults() {
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     echo "Get testUrl"
-    sh """
-        S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
-        testUrl=\$S3_URL/${TEST_NAME}.log
-    """
+//     sh """
+//         S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
+//         testUrl=\$S3_URL/${TEST_NAME}.log
+//     """
+    def testUrl="TEST_TEST"
     echo "#######################################################"
     echo "testUrl: $testUrl"
     waitUntil {
@@ -106,9 +107,9 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         source $HOME/google-cloud-sdk/path.bash.inc
                         ./e2e-tests/$TEST_NAME/run |& tee "\$TEST_NAME.log"
                     fi
-                    echo "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
-                    cat "\$TEST_NAME.log"
-                    echo "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
+//                     echo "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
+//                     cat "\$TEST_NAME.log"
+//                     echo "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
                 """
             }
 
@@ -126,7 +127,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
         }
 
     }
-    pushLogFile("$TEST_NAME.log")
+//     pushLogFile("$TEST_NAME.log")
     echo "The $TEST_NAME test was finished!"
 }
 
