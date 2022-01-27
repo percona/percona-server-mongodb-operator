@@ -63,20 +63,18 @@ void setTestsresults() {
         pushArtifactFile("${file.key}")
     }
 }
-void enableLogging(String TEST_FILE_NAME)
-{
+// void enableLogging(String TEST_FILE_NAME) {
+//     sh """
+//     BASH_VER=$(echo "$BASH_VERSION" | cut -d . -f 1,2)
+//     	if (($(echo "$BASH_VER >= 4.1" | bc -l))); then
+//     		exec 5>"$TEST_FILE_NAME"
+//     		BASH_XTRACEFD=5
+//     		set -o xtrace
+//     		echo "Log: $TEST_FILE_NAME"
+//     	fi
+//     """
+// }
 
-    sh """
-    BASH_VER=$(echo "$BASH_VERSION" | cut -d . -f 1,2)
-    	if (($(echo "$BASH_VER >= 4.1" | bc -l))); then
-    		exec 5>"$TEST_FILE_NAME"
-    		BASH_XTRACEFD=5
-    		set -o xtrace
-    		echo "Log: $TEST_FILE_NAME"
-    	fi
-    """
-
-}
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     waitUntil {
@@ -86,7 +84,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
         testUrl="https://test-percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/\${TEST_NAME}.log"
         try {
             echo "The $TEST_NAME test was started!"
-            enableLogging(TEST_NAME)
+//             enableLogging(TEST_NAME)
 
             testsReportMap[TEST_NAME] = ['failed', "$testUrl"]
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
