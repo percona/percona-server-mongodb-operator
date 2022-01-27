@@ -38,13 +38,13 @@ void pushArtifactFile(String FILE_NAME) {
 }
 
 void pushLogFile(String FILE_NAME) {
-    echo "Push logfile $FILE_NAME file to S3!"
-
+     LOG_FILE_NAME="$FILE_NAME.log"
+    echo "Push logfile $LOG_FILE_NAME file to S3!"
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            aws s3 ls \$S3_PATH/${FILE_NAME} || :
-            aws s3 cp --quiet ${FILE_NAME} \$S3_PATH/${FILE_NAME} || :
+            aws s3 ls \$S3_PATH/${LOG_FILE_NAME}.log || :
+            aws s3 cp --quiet ${LOG_FILE_NAME}.log \$S3_PATH/${LOG_FILE_NAME} || :
         """
     }
 }
@@ -82,9 +82,10 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     echo "Get testUrl"
     waitUntil {
         def testUrl = sh( returnStdout: true, script: '''
-        S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
-        testUrl="${S3_URL}/${TEST_NAME}.log"
-        echo "$testUrl" ''').trim()
+            S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            testUrl="${S3_URL}/${TEST_NAME}.log"
+            echo "$testUrl" '''
+        ).trim()
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
     // add public access to the bucket
