@@ -54,7 +54,7 @@ testsResultsMap = [:]
 
 void makeReport() {
     for ( test in testsReportMap ) {
-        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
+        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value[0]} | ${test.value[1]:-'  '}"
     }
 }
 
@@ -63,13 +63,32 @@ void setTestsresults() {
         pushArtifactFile("${file.key}")
     }
 }
+void enableLogging(String TEST_FILE_NAME)
+{
 
+    sh """
+    BASH_VER=$(echo "$BASH_VERSION" | cut -d . -f 1,2)
+    	if (($(echo "$BASH_VER >= 4.1" | bc -l))); then
+    		exec 5>"$TEST_FILE_NAME"
+    		BASH_XTRACEFD=5
+    		set -o xtrace
+    		echo "Log: $TEST_FILE_NAME"
+    	fi
+    """
+
+}
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     waitUntil {
+    // TODO
+    // https://percona-jenkins-artifactory.s3.amazonaws.com/pgo-operator-gke-version-test/a8a07b92/main-a8a07b92-upgrade-1.19-main-ppg13
+    // add public access to the bucket
+        testUrl="https://test-percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/\${TEST_NAME}.log"
         try {
             echo "The $TEST_NAME test was started!"
-            testsReportMap[TEST_NAME] = 'failed'
+            enableLogging(TEST_NAME)
+
+            testsReportMap[TEST_NAME] = ['failed', "$testUrl"]
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -79,11 +98,12 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        ./e2e-tests/$TEST_NAME/run
+                        ./e2e-tests/$TEST_NAME/run |& tee "$TEST_NAME.log"
                     fi
                 """
             }
-            testsReportMap[TEST_NAME] = 'passed'
+
+            testsReportMap[TEST_NAME] = ['passed']
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
         }
@@ -95,8 +115,9 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             retryCount++
             return false
         }
-    }
 
+    }
+    pushArtifactFile("$TEST_NAME.log")
     echo "The $TEST_NAME test was finished!"
 }
 
