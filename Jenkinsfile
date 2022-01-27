@@ -37,6 +37,19 @@ void pushArtifactFile(String FILE_NAME) {
     }
 }
 
+void pushLogFile(String FILE_NAME) {
+    echo "Push $FILE_NAME file to S3!"
+
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            aws s3 ls \$S3_PATH/${FILE_NAME} || :
+            aws s3 cp --quiet ${FILE_NAME} \$S3_PATH/${FILE_NAME} || :
+        """
+    }
+}
+
+
 void popArtifactFile(String FILE_NAME) {
     echo "Try to get $FILE_NAME file from S3!"
 
@@ -67,10 +80,10 @@ void setTestsresults() {
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     sh """
-        testUrl="https://test-percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/\$TEST_NAME.log"
-        echo "#######################################################"
-        echo "$testUrl"
+        testUrl=https://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)/${TEST_NAME}.log
     """
+    echo "#######################################################"
+    echo "testUrl: $testUrl"
     waitUntil {
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/pgo-operator-gke-version-test/a8a07b92/main-a8a07b92-upgrade-1.19-main-ppg13
@@ -111,7 +124,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
         }
 
     }
-    pushArtifactFile("$TEST_NAME.log")
+    pushLogFile("$TEST_NAME.log")
     echo "The $TEST_NAME test was finished!"
 }
 
