@@ -81,16 +81,6 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     echo "Get testUrl"
     waitUntil {
-
-    def commit = sh (returnStdout: true, script: '''echo hi
-        echo bye | grep -o "e"
-        date
-        echo lol''').split()
-
-
-        echo "${commit[-1]} "
-
-        }
         def testUrl = sh( returnStdout: true, script: '''
         S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
         testUrl=\$S3_URL/${TEST_NAME}
