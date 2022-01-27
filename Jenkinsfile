@@ -81,15 +81,14 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     echo "Get testUrl"
     waitUntil {
-        def testUrl = sh( returnStdout: true, script: '''
+        def S3_URL = sh( returnStdout: true, script: '''
             S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            testUrl="${S3_URL}/${TEST_NAME}.log"
-            echo "$testUrl" '''
+            echo "$S3_URL" '''
         ).trim()
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
     // add public access to the bucket
-
+        def testUrl = "$S3_URL/${FILE_NAME}.log"
         echo "testUrl: $testUrl"
         try {
             echo "The $TEST_NAME test was started!"
