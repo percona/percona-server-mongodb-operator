@@ -83,7 +83,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     waitUntil {
         def testUrl = sh( returnStdout: true, script: '''
         S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
-        testUrl=\$S3_URL/\$TEST_NAME
+        testUrl="${S3_URL}/${TEST_NAME}.log"
         echo "$testUrl" ''').trim()
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
@@ -104,11 +104,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
                         ./e2e-tests/$TEST_NAME/run
-//                         |& tee "\$TEST_NAME.log"
                     fi
-//                  echo "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
-//                  cat "\$TEST_NAME.log"
-//                  echo "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&"
                 """
             }
 
