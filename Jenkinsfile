@@ -48,7 +48,7 @@ void popArtifactFile(String FILE_NAME) {
     }
 }
 
-TestsReport = '| Test name  | Status | Test url |\r\n| ------------- | ------------- |'
+TestsReport = '| Test name       | Status | Test url |\r\n| ------------- | ------------- |'
 testsReportMap  = [:]
 testsResultsMap = [:]
 
@@ -70,7 +70,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/pgo-operator-gke-version-test/a8a07b92/main-a8a07b92-upgrade-1.19-main-ppg13
     // add public access to the bucket
-        testUrl="https://test-percona-jenkins-artifactory/$JOB_NAME/\$(git rev-parse --short HEAD)/$TEST_NAME.log"
+        testUrl="https://test-percona-jenkins-artifactory/$JOB_NAME/$(git rev-parse --short HEAD)/$TEST_NAME.log"
         try {
             echo "The $TEST_NAME test was started!"
 
