@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
@@ -89,6 +90,11 @@ func main() {
 
 	// Setup Scheme for cert-manager resources
 	if err := certmgrscheme.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	if err := mcs.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

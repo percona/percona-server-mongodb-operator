@@ -58,6 +58,10 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 
 	for _, svc := range svcList.Items {
 		se := psmdb.ServiceExport(cr, &svc)
+		//err = setControllerReference(cr, se, r.scheme)
+		//if err != nil {
+		//	return errors.Wrap(err, "set owner ref for serviceexport "+se.Name)
+		//}
 		if err := r.createOrUpdate(se); err != nil {
 			return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
 		}

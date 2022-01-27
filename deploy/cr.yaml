@@ -17,6 +17,8 @@ spec:
 #  runUid: 1001
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+  multiCluster:
+    enabled: true
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: 4.4-recommended
@@ -34,7 +36,7 @@ spec:
   replsets:
 
   - name: rs0
-    size: 3
+    size: 1
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -246,7 +248,7 @@ spec:
     enabled: true
 
     configsvrReplSet:
-      size: 3
+      size: 1
 #      externalNodes:
 #      - host: 34.124.76.93
 #      - host: 34.124.76.94
@@ -316,7 +318,7 @@ spec:
       podDisruptionBudget:
         maxUnavailable: 1
       expose:
-        enabled: false
+        enabled: true
         exposeType: ClusterIP
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
