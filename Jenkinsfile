@@ -79,14 +79,16 @@ void setTestsresults() {
 
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
+    echo "Get testUrl"
     sh """
-        testUrl=https://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)/${TEST_NAME}.log
+        S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
+        testUrl=\$S3_URL/${TEST_NAME}.log
     """
     echo "#######################################################"
     echo "testUrl: $testUrl"
     waitUntil {
     // TODO
-    // https://percona-jenkins-artifactory.s3.amazonaws.com/pgo-operator-gke-version-test/a8a07b92/main-a8a07b92-upgrade-1.19-main-ppg13
+    // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
     // add public access to the bucket
 
         try {
