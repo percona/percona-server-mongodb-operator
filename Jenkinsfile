@@ -81,7 +81,13 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     echo "Get testUrl"
     waitUntil {
-
+        def S3_URL = sh( returnStdout: true, script: '''
+                    S3_URL=https://percona-jenkins-artifactory-public.s3.amazonaws.com/\$JOB_NAME/\$(git rev-parse --short HEAD)
+                    echo "$S3_URL" '''
+                    ).trim()
+        def testUrlOne = "$S3_URL/$FILE_NAME.log"
+        echo "testUrlOne: $testUrlOne"
+        
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/${env.JOB_NAME}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
@@ -100,7 +106,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        ./e2e-tests/$TEST_NAME/run |& tee "$TEST_NAME.log"
+                        ./e2e-tests/$TEST_NAME/run
                     fi
                 """
             }
@@ -110,6 +116,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             return true
         }
         catch (exc) {
+            echo "Exception: $exc"
             if (retryCount >= 2) {
                 currentBuild.result = 'FAILURE'
                 return true
@@ -119,7 +126,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
         }
 
     }
-    pushLogFile(TEST_NAME)
+//     pushLogFile(TEST_NAME)
     echo "The $TEST_NAME test was finished!"
 }
 
