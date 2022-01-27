@@ -83,10 +83,15 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     waitUntil {
 
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/${env.JOB_NAME}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
+        def testUrlt = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
+        echo "${env.JOB_NAME}"
+        echo "${env.GIT_BRANCH}"
+        echo "${env.GIT_SHORT_COMMIT}"
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
     // add public access to the bucket
         echo "testUrl: $testUrl"
+        echo "testUrlt: $testUrlt"
         try {
             echo "The $TEST_NAME test was started!"
 
