@@ -98,7 +98,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        ./e2e-tests/$TEST_NAME/run | & tee -a "$TEST_NAME.log"
+                        ./e2e-tests/$TEST_NAME/run |& tee -a "$TEST_NAME.log"
                     fi
                 """
             }
@@ -109,11 +109,11 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
         }
         catch (exc) {
             echo "Exception: $exc" & tee -a "$TEST_NAME.log"
-            
+
             if (retryCount >= 2) {
                 currentBuild.result = 'FAILURE'
                 sh """
-                    echo "$exc" | & tee -a "$TEST_NAME.log
+                    echo "$exc" |& tee -a "$TEST_NAME.log
                 """
                 return true
             }
