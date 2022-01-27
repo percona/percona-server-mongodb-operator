@@ -81,17 +81,10 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     echo "Get testUrl"
     waitUntil {
-
-        def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/${env.JOB_NAME}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
-        def testUrlt = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
-        echo "${env.JOB_NAME}"
-        echo "${env.GIT_BRANCH}"
-        echo "${env.GIT_SHORT_COMMIT}"
+        def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
     // add public access to the bucket
-        echo "testUrl: $testUrl"
-        echo "testUrlt: $testUrlt"
         try {
             echo "The $TEST_NAME test was started!"
 
@@ -105,7 +98,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        ./e2e-tests/$TEST_NAME/run
+                        ./e2e-tests/$TEST_NAME/run | & tee -a "$TEST_NAME.log"
                     fi
                 """
             }
@@ -115,9 +108,13 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             return true
         }
         catch (exc) {
-            echo "Exception: $exc"
+            echo "Exception: $exc" & tee -a "$TEST_NAME.log"
+            
             if (retryCount >= 2) {
                 currentBuild.result = 'FAILURE'
+                sh """
+                    echo "$exc" | & tee -a "$TEST_NAME.log
+                """
                 return true
             }
             retryCount++
@@ -125,7 +122,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
         }
 
     }
-//     pushLogFile(TEST_NAME)
+    pushLogFile(TEST_NAME)
     echo "The $TEST_NAME test was finished!"
 }
 
