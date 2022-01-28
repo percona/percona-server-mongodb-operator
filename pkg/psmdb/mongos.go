@@ -2,12 +2,12 @@ package psmdb
 
 import (
 	"fmt"
+	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -15,6 +15,19 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
+
+func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "apps/v1",
+			Kind:       "StatefulSet",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.MongosNamespacedName().Name,
+			Namespace: cr.MongosNamespacedName().Namespace,
+		},
+	}
+}
 
 func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	return &appsv1.Deployment{
@@ -29,7 +42,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (appsv1.DeploymentSpec, error) {
+func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (appsv1.StatefulSetSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -46,7 +59,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 
 	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances)
 	if err != nil {
-		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
+		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
 	initContainers := InitContainers(cr, operatorPod)
@@ -69,8 +82,8 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
-	zero := intstr.FromInt(0)
-	return appsv1.DeploymentSpec{
+	var zero int32 = 0
+	return appsv1.StatefulSetSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -95,10 +108,10 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 				RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 			},
 		},
-		Strategy: appsv1.DeploymentStrategy{
-			Type: appsv1.RollingUpdateDeploymentStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateDeployment{
-				MaxSurge: &zero,
+		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
 			},
 		},
 	}, nil
@@ -358,15 +371,22 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 	return volumes
 }
 
-func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
+func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 	svc := corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + "mongos",
+			Name:      name,
 			Namespace: cr.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "percona-server-mongodb",
+				"app.kubernetes.io/instance":   cr.Name,
+				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+				"app.kubernetes.io/part-of":    "percona-server-mongodb",
+				"app.kubernetes.io/component":  "mongos",
+			},
 		},
 	}
 
@@ -377,7 +397,7 @@ func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
 	return svc
 }
 
-func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
+func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.ServiceSpec {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -386,6 +406,9 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB) corev1.ServiceSpec {
 		"app.kubernetes.io/component":  "mongos",
 	}
 
+	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		ls["statefulset.kubernetes.io/pod-name"] = podName
+	}
 	spec := corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{

@@ -617,6 +617,7 @@ type Arbiter struct {
 
 type MongosExpose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
+	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 }

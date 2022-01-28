@@ -1,9 +1,6 @@
 package psmdb
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,9 +46,12 @@ func MongoClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.R
 }
 
 func MongosClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
+	hosts, err := GetMongosAddrs(k8sclient, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get mongos addrs")
+	}
 	conf := mongo.Config{
-		Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-			":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
+		Hosts:    hosts,
 		Username: c.Username,
 		Password: c.Password,
 	}

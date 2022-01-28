@@ -103,7 +103,7 @@ main() {
 	compare_kubectl statefulset/$cluster-rs1
 	compare_kubectl statefulset/$cluster-rs2
 	compare_kubectl statefulset/$cluster-cfg
-	compare_kubectl deployment/$cluster-mongos ""
+	compare_kubectl statefulset/$cluster-mongos ""
 
 	write_initial_data
 

@@ -32,22 +32,22 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 		return nil
 	}
 
-	msDepl := psmdb.MongosDeployment(cr)
+	msSts := psmdb.MongosStatefulset(cr)
 
 	for {
-		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
 		if err != nil && !k8sErrors.IsNotFound(err) {
-			return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+			return errors.Wrapf(err, "get statefulset %s", msSts.Name)
 		}
 
-		if msDepl.ObjectMeta.Generation == msDepl.Status.ObservedGeneration {
+		if msSts.ObjectMeta.Generation == msSts.Status.ObservedGeneration {
 			break
 		}
 
 		time.Sleep(1 * time.Second)
 	}
 
-	if msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
+	if msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
 		log.Info("waiting for mongos update")
 		return nil
 	}
@@ -105,14 +105,14 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(cr *api.PerconaServerMon
 		return nil
 	}
 
-	msDepl := psmdb.MongosDeployment(cr)
+	msSts := psmdb.MongosStatefulset(cr)
 
-	err := r.client.Get(context.TODO(), cr.MongosNamespacedName(), msDepl)
+	err := r.client.Get(context.TODO(), cr.MongosNamespacedName(), msSts)
 	if k8sErrors.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
-		return errors.Wrapf(err, "get mongos deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
 	mongosSession, err := r.mongosClientWithRole(cr, roleClusterAdmin)

@@ -68,7 +68,7 @@ function main() {
 
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
-	compare_generation "1" "deployment" "${cluster}-mongos"
+	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
 	desc 'starting PMM up'
@@ -131,7 +131,7 @@ function main() {
 
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
-	compare_generation "1" "deployment" "${cluster}-mongos"
+	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
 	desc 'checking write/read'

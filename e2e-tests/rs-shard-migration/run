@@ -34,7 +34,7 @@ function main() {
     wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
     wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
 
-    if [[ $(kubectl_bin get deployment/${cluster}-mongos -o jsonpath='{.status.readyReplicas}') -lt 1 ]]; then
+    if [[ $(kubectl_bin get statefulset/${cluster}-mongos -o jsonpath='{.status.readyReplicas}') -lt 1 ]]; then
         echo "Mongos hasn't been properly started. Exiting..."
         exit 1
     fi
@@ -63,7 +63,7 @@ function main() {
     simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
     if [[ ! -z "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
-       || [[ -n "$(kubectl_bin get deployments -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]] \
+       || [[ -n "$(kubectl_bin get statefulset -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]] \
        || [[ -n "$(kubectl_bin get service -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]] \
        || [[ -n "$(kubectl_bin get service -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-cfg"'")].metadata.name}')" ]] \
        || [[ -n "$(kubectl_bin get statefulset -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-cfg"'")].metadata.name}')" ]]; then

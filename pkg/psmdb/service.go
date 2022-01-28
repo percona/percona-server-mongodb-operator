@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/labels"
 	"strconv"
 	"strings"
 	"time"
@@ -194,6 +195,42 @@ func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, rsName strin
 		host, err := MongoHost(cl, m, rsName, rsExposed, pod)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
+		}
+		addrs = append(addrs, host)
+	}
+
+	return addrs, nil
+}
+
+// GetMongosAddrs returns a slice of mongos addresses
+func GetMongosAddrs(cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
+	// needed for labels
+	mongosSvc := MongosService(cr, "")
+
+	svcList := &corev1.ServiceList{}
+	err := cl.List(context.TODO(),
+		svcList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongosSvc.Labels),
+		},
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list mongos services")
+	}
+
+	addrs := make([]string, 0)
+	for _, svc := range svcList.Items {
+		var host string
+		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+			for _, i := range svc.Status.LoadBalancer.Ingress {
+				host = i.IP
+				if len(i.Hostname) > 0 {
+					host = i.Hostname
+				}
+			}
+		} else {
+			host = svc.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix
 		}
 		addrs = append(addrs, host)
 	}

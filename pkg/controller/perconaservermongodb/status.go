@@ -329,10 +329,11 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-			return loadBalancerServiceEndpoint(r.client, cr.Name+"-mongos", cr.Namespace)
+		addrs, err := psmdb.GetMongosAddrs(r.client, cr)
+		if err != nil {
+			return "", errors.Wrap(err, "get mongos addresses")
 		}
-		return cr.Name + "-mongos." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+		return strings.Join(addrs, ","), nil
 	}
 
 	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled &&
@@ -362,23 +363,4 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServer
 	}
 
 	return cr.Name + "-" + cr.Spec.Replsets[0].Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
-}
-
-func loadBalancerServiceEndpoint(client client.Client, serviceName, namespace string) (string, error) {
-	host := ""
-	srv := corev1.Service{}
-	err := client.Get(context.TODO(), types.NamespacedName{
-		Namespace: namespace,
-		Name:      serviceName,
-	}, &srv)
-	if err != nil {
-		return "", errors.Wrap(err, "get service")
-	}
-	for _, i := range srv.Status.LoadBalancer.Ingress {
-		host = i.IP
-		if len(i.Hostname) > 0 {
-			host = i.Hostname
-		}
-	}
-	return host, nil
 }
