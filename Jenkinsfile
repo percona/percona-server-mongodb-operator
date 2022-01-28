@@ -83,7 +83,7 @@ void enableLogging(String TEST_NAME) {
     sh """
         touch "${TEST_NAME}.log"
         echo "BASH_VERSION"
-        echo "${BASH_VERSION}"
+        echo "$BASH_VERSION"
         exec 5>"${TEST_NAME}.log"
         BASH_XTRACEFD=5
         set -o xtrace
