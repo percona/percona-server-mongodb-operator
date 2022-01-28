@@ -77,6 +77,18 @@ void setTestsresults() {
     }
 }
 
+void enableLogging(String TEST_NAME) {
+    LOG_FILE_NAME = "$TEST_NAME.log"
+    sh """
+        touch $LOG_FILE_NAME
+        BASH_VER=$(echo "$BASH_VERSION" | cut -d . -f 1,2)
+        echo "$BASH_VER"
+        exec 5>"$LOG_FILE_NAME"
+        BASH_XTRACEFD=5
+        set -o xtrace
+        echo "Log: $LOG_FILE_NAME"
+    """
+}
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     echo "Get testUrl"
