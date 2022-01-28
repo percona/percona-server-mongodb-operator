@@ -78,12 +78,15 @@ void setTestsresults() {
 }
 
 void enableLogging(String TEST_NAME) {
-    LOG_FILE_NAME = "$TEST_NAME.log"
-    echo "Logging"
+
+    echo "Logging test"
     sh """
-        touch $LOG_FILE_NAME
+        touch "${TEST_NAME}.log"
         echo "BASH_VERSION"
-        echo "$BASH_VERSION"
+        echo "${BASH_VERSION}"
+        exec 5>"${TEST_NAME}.log"
+        BASH_XTRACEFD=5
+        set -o xtrace
     """
 }
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
