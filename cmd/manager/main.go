@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	_ "github.com/Percona-Lab/percona-version-service/api"
@@ -14,15 +15,16 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/ready"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 )
 
 var (
@@ -78,6 +80,16 @@ func main() {
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
+	}
+
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	if err := mcs.Register(clientset.DiscoveryClient); err != nil {
+		log.Error(err, "Failed to register MCS scheme")
 	}
 
 	log.Info("Registering Components.")
