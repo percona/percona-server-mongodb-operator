@@ -90,7 +90,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     waitUntil {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
 
-        enableLogging(TEST_NAME)
+//         enableLogging(TEST_NAME)
 
     // add public access to the bucket
         try {
@@ -116,7 +116,6 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             return true
         }
         catch (exc) {
-            echo "Exception: $exc" & tee -a "$TEST_NAME.log"
 
             if (retryCount >= 2) {
                 currentBuild.result = 'FAILURE'
