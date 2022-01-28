@@ -28,7 +28,7 @@ if [[ ${ENABLE_LOGGING} == "true" ]]; then
         mkdir "${logs_dir}"
     fi
     exec &> >(tee ${logs_dir}/${test_name}.log)
-    echo "Log: ${logs_dir}/${test_name}.log"
+#    echo "Log: ${logs_dir}/${test_name}.log"
 fi
 
 if [ -f "$conf_dir/cloud-secret.yml" ]; then
