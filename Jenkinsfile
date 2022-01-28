@@ -81,7 +81,6 @@ void enableLogging(String TEST_NAME) {
     LOG_FILE_NAME = "$TEST_NAME.log"
     sh """
         touch $LOG_FILE_NAME
-//         BASH_VER="${echo "$BASH_VERSION" | cut -d . -f 1,2}"
         echo "$$BASH_VERSION"
         exec 5>"$LOG_FILE_NAME"
         BASH_XTRACEFD=5
