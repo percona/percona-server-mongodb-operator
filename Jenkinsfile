@@ -79,13 +79,11 @@ void setTestsresults() {
 
 void enableLogging(String TEST_NAME) {
     LOG_FILE_NAME = "$TEST_NAME.log"
+    echo "Logging"
     sh """
         touch $LOG_FILE_NAME
+        echo "BASH_VERSION"
         echo "$BASH_VERSION"
-        exec 5>"$LOG_FILE_NAME"
-        BASH_XTRACEFD=5
-        set -o xtrace
-        echo "Log: $LOG_FILE_NAME"
     """
 }
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
@@ -93,6 +91,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     echo "Get testUrl"
     waitUntil {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
+
         enable_logging(TEST_NAME)
     // TODO
     // https://percona-jenkins-artifactory.s3.amazonaws.com/cloud-psmdb-operator/PR-867/4cf448cf/PR-867-4cf448cf-arbiter
