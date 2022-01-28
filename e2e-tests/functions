@@ -513,6 +513,7 @@ compare_kubectl() {
 		| yq d - '**."cloud.google.com/neg"' \
 		| yq d - '**.volumeName' \
 		| yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
+		| yq d - '**."volume.kubernetes.io/storage-provisioner"' \
 		| yq d - 'spec.volumeMode' \
 		| yq d - '**."volume.kubernetes.io/selected-node"' \
 		| yq d - '**."percona.com/ssl*"' \
