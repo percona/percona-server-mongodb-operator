@@ -38,13 +38,14 @@ void pushArtifactFile(String FILE_NAME) {
 }
 
 void pushLogFile(String FILE_NAME) {
-     LOG_FILE_NAME="$FILE_NAME.log"
+    LOG_FILE_PATH="logs/\$FILE_NAME.log"
+    LOG_FILE_NAME="${FILE_NAME}.log"
     echo "Push logfile $LOG_FILE_NAME file to S3!"
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            aws s3 ls \$S3_PATH/${LOG_FILE_NAME}.log || :
-            aws s3 cp --quiet ${LOG_FILE_NAME}.log \$S3_PATH/${LOG_FILE_NAME} || :
+            aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
+            aws s3 cp --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
         """
     }
 }
@@ -77,22 +78,12 @@ void setTestsresults() {
     }
 }
 
-void enableLogging(String TEST_NAME) {
-
-    echo "Logging test"
-    sh """
-        touch "${TEST_NAME}.log"
-    """
-}
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     echo "Get testUrl"
     waitUntil {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
 
-//         enableLogging(TEST_NAME)
-
-    // add public access to the bucket
         try {
             echo "The $TEST_NAME test was started!"
 
@@ -106,7 +97,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        ./e2e-tests/$TEST_NAME/run |& tee -a "$TEST_NAME.log"
+                        ./e2e-tests/$TEST_NAME/run
                     fi
                 """
             }
@@ -119,9 +110,6 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
 
             if (retryCount >= 2) {
                 currentBuild.result = 'FAILURE'
-                sh """
-                    echo "$exc" |& tee -a "$TEST_NAME.log
-                """
                 return true
             }
             retryCount++
