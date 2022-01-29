@@ -297,10 +297,10 @@ pipeline {
                     steps {
                         CreateCluster('scaling')
                         runTest('init-deploy', 'scaling')
-//                         runTest('limits', 'scaling')
-//                         runTest('scaling', 'scaling')
-//                         runTest('security-context', 'scaling')
-//                         runTest('rs-shard-migration', 'scaling')
+                        runTest('limits', 'scaling')
+                        runTest('scaling', 'scaling')
+                        runTest('security-context', 'scaling')
+                        runTest('rs-shard-migration', 'scaling')
                         ShutdownCluster('scaling')
                    }
                 }
@@ -308,15 +308,15 @@ pipeline {
                     steps {
                         CreateCluster('basic')
                         runTest('one-pod', 'basic')
-//                         runTest('monitoring-2-0', 'basic')
-//                         runTest('arbiter', 'basic')
-//                         runTest('service-per-pod', 'basic')
-//                         runTest('liveness', 'basic')
-//                         runTest('smart-update', 'basic')
-//                         runTest('version-service', 'basic')
-//                         runTest('users', 'basic')
-//                         runTest('data-sharded', 'basic')
-//                         runTest('non-voting', 'basic')
+                        runTest('monitoring-2-0', 'basic')
+                        runTest('arbiter', 'basic')
+                        runTest('service-per-pod', 'basic')
+                        runTest('liveness', 'basic')
+                        runTest('smart-update', 'basic')
+                        runTest('version-service', 'basic')
+                        runTest('users', 'basic')
+                        runTest('data-sharded', 'basic')
+                        runTest('non-voting', 'basic')
                         ShutdownCluster('basic')
                     }
                 }
@@ -324,10 +324,10 @@ pipeline {
                     steps {
                         CreateCluster('selfhealing')
                         runTest('storage', 'selfhealing')
-//                         runTest('self-healing', 'selfhealing')
-//                         runTest('self-healing-chaos', 'selfhealing')
-//                         runTest('operator-self-healing', 'selfhealing')
-//                         runTest('operator-self-healing-chaos', 'selfhealing')
+                        runTest('self-healing', 'selfhealing')
+                        runTest('self-healing-chaos', 'selfhealing')
+                        runTest('operator-self-healing', 'selfhealing')
+                        runTest('operator-self-healing-chaos', 'selfhealing')
                         ShutdownCluster('selfhealing')
                     }
                 }
@@ -336,13 +336,13 @@ pipeline {
                         CreateCluster('backups')
                         sleep 60
                         runTest('upgrade-consistency', 'backups')
-//                         runTest('demand-backup', 'backups')
-//                         runTest('scheduled-backup', 'backups')
-//                         runTest('demand-backup-sharded', 'backups')
-//                         runTest('upgrade', 'backups')
-//                         runTest('upgrade-sharded', 'backups')
-//                         runTest('pitr', 'backups')
-//                         runTest('pitr-sharded', 'backups')
+                        runTest('demand-backup', 'backups')
+                        runTest('scheduled-backup', 'backups')
+                        runTest('demand-backup-sharded', 'backups')
+                        runTest('upgrade', 'backups')
+                        runTest('upgrade-sharded', 'backups')
+                        runTest('pitr', 'backups')
+                        runTest('pitr-sharded', 'backups')
                         ShutdownCluster('backups')
                     }
                 }
