@@ -80,7 +80,6 @@ void setTestsresults() {
 
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
-    echo "Get testUrl"
     waitUntil {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
 
