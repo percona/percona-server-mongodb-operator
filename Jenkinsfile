@@ -96,7 +96,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        ./e2e-tests/$TEST_NAME/run >> e2e-tests/logs/testtrace.log
+                        ./e2e-tests/$TEST_NAME/run
                     fi
                 """
             }
@@ -117,7 +117,6 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
 
     }
     pushLogFile(TEST_NAME)
-    pushLogFile("testtrace")
     echo "The $TEST_NAME test was finished!"
 }
 
