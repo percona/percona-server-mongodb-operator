@@ -140,6 +140,26 @@ spec:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#    schedulerName: "default"
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+#      emptyDir: {}
+#      hostPath:
+#        path: /data
+#        type: Directory
+      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 3Gi
+
     nonvoting:
       enabled: false
       size: 3
@@ -194,7 +214,7 @@ spec:
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
-              storage: 1Gi
+              storage: 3Gi
     arbiter:
       enabled: false
       size: 1
@@ -222,25 +242,6 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-#    schedulerName: "default"
-    resources:
-      limits:
-        cpu: "300m"
-        memory: "0.5G"
-      requests:
-        cpu: "300m"
-        memory: "0.5G"
-    volumeSpec:
-#      emptyDir: {}
-#      hostPath:
-#        path: /data
-#        type: Directory
-      persistentVolumeClaim:
-#        storageClassName: standard
-#        accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: 3Gi
 
   sharding:
     enabled: true
@@ -493,9 +494,11 @@ spec:
 #        keep: 3
 #        storageName: s3-us-west
 #        compressionType: gzip
+#        compressionLevel: 6
 #      - name: weekly-s3-us-west
 #        enabled: false
 #        schedule: "0 0 * * 0"
 #        keep: 5
 #        storageName: s3-us-west
 #        compressionType: gzip
+#        compressionLevel: 6

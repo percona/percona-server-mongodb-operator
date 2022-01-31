@@ -9,10 +9,11 @@ import (
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupSpec struct {
-	PSMDBCluster string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
-	ClusterName  string              `json:"clusterName,omitempty"`
-	StorageName  string              `json:"storageName,omitempty"`
-	Compression  pbm.CompressionType `json:"compressionType,omitempty"`
+	PSMDBCluster     string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
+	ClusterName      string              `json:"clusterName,omitempty"`
+	StorageName      string              `json:"storageName,omitempty"`
+	Compression      pbm.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 }
 
 type BackupState string

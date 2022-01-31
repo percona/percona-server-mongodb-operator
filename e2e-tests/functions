@@ -278,6 +278,7 @@ simple_data_check() {
 	local cluster_pfx=$4
 
 	if [ $isSharded -eq 1 ]; then
+		sleep 10 # give time for start mongos
 		wait_deployment "$cluster_name-mongos"
 		sleep 10
 		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
@@ -515,6 +516,7 @@ compare_kubectl() {
 		| yq d - '**."cloud.google.com/neg"' \
 		| yq d - '**.volumeName' \
 		| yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
+		| yq d - '**."volume.kubernetes.io/storage-provisioner"' \
 		| yq d - 'spec.volumeMode' \
 		| yq d - '**."volume.kubernetes.io/selected-node"' \
 		| yq d - '**."percona.com/ssl*"' \

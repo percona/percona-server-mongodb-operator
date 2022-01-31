@@ -19,6 +19,7 @@ spec:
           endpointUrl: http://minio-service:9000/
     pitr:
       enabled: true
+      oplogSpanMin: 2
     runtimeClassName: container-rc
   sharding:
     enabled: true

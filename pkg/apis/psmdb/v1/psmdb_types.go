@@ -530,12 +530,13 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupTaskSpec struct {
-	Name            string              `json:"name"`
-	Enabled         bool                `json:"enabled"`
-	Keep            int                 `json:"keep,omitempty"`
-	Schedule        string              `json:"schedule,omitempty"`
-	StorageName     string              `json:"storageName,omitempty"`
-	CompressionType pbm.CompressionType `json:"compressionType,omitempty"`
+	Name             string              `json:"name"`
+	Enabled          bool                `json:"enabled"`
+	Keep             int                 `json:"keep,omitempty"`
+	Schedule         string              `json:"schedule,omitempty"`
+	StorageName      string              `json:"storageName,omitempty"`
+	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 }
 
 type BackupStorageS3Spec struct {
