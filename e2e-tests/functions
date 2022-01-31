@@ -25,7 +25,6 @@ if [[ ${ENABLE_LOGGING} == "true" ]]; then
         mkdir "${logs_dir}"
     fi
     exec 5>&1 &> >(tee ${logs_dir}/${test_name}.log)
-    export BASH_XTRACEFD="5"
     echo "Log: ${logs_dir}/${test_name}.log"
 fi
 
