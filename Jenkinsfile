@@ -62,13 +62,13 @@ void popArtifactFile(String FILE_NAME) {
     }
 }
 
-TestsReport = '| Test name             | Status | Test url |\r\n| ------------- | ------------- |'
+TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
 testsReportMap  = [:]
 testsResultsMap = [:]
 
 void makeReport() {
     for ( test in testsReportMap ) {
-        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value[0]} | ${test.value[1]}"
+        TestsReport = TestsReport + "\r\n| ${test.key} | [${test.value[0]}] (${test.value[1]})"
     }
 }
 
