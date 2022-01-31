@@ -68,7 +68,7 @@ testsResultsMap = [:]
 
 void makeReport() {
     for ( test in testsReportMap ) {
-        TestsReport = TestsReport + "\r\n| ${test.key} | " + "\[" + "${test.value[0]}" +"\]" + " " + "\(" + "${test.value[1]}" + "\)" + "|"
+        TestsReport = TestsReport + "\r\n| ${test.key} | [${test.value[0]}] (${test.value[1]}) |"
     }
 }
 
