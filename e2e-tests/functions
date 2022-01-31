@@ -1,8 +1,5 @@
 #!/bin/bash
 
-exec 5>&2
-BASH_XTRACEFD="5"
-
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
 API="psmdb.percona.com/v1-12-0"
@@ -27,9 +24,8 @@ if [[ ${ENABLE_LOGGING} == "true" ]]; then
     if [ ! -d "${logs_dir}" ]; then
         mkdir "${logs_dir}"
     fi
-
-#    exec &> >(tee ${logs_dir}/${test_name}.log)
-    exec 5>&1 &> >(tee ${logs_dir}/${test_name}.log)
+    exec 5>&1 2>&1 >(tee ${logs_dir}/${test_name}.log)
+    export BASH_XTRACEFD="5"
     echo "Log: ${logs_dir}/${test_name}.log"
 fi
 
