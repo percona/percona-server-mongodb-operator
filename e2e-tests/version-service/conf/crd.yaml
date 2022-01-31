@@ -573,6 +573,8 @@ spec:
                                 type: string
                               endpointUrl:
                                 type: string
+                              insecureSkipTLSVerify:
+                                type: boolean
                               maxUploadParts:
                                 type: integer
                               prefix:
@@ -586,6 +588,7 @@ spec:
                             required:
                               - bucket
                               - credentialsSecret
+                              - insecureSkipTLSVerify
                             type: object
                           type:
                             type: string
@@ -596,6 +599,8 @@ spec:
                     tasks:
                       items:
                         properties:
+                          compressionLevel:
+                            type: integer
                           compressionType:
                             type: string
                           enabled:
@@ -17898,6 +17903,8 @@ spec:
               properties:
                 clusterName:
                   type: string
+                compressionLevel:
+                  type: integer
                 compressionType:
                   type: string
                 psmdbCluster:
@@ -17939,6 +17946,8 @@ spec:
                       type: string
                     endpointUrl:
                       type: string
+                    insecureSkipTLSVerify:
+                      type: boolean
                     maxUploadParts:
                       type: integer
                     prefix:
@@ -17952,6 +17961,7 @@ spec:
                   required:
                     - bucket
                     - credentialsSecret
+                    - insecureSkipTLSVerify
                   type: object
                 start:
                   format: date-time
@@ -18032,6 +18042,8 @@ spec:
                           type: string
                         endpointUrl:
                           type: string
+                        insecureSkipTLSVerify:
+                          type: boolean
                         maxUploadParts:
                           type: integer
                         prefix:
@@ -18045,6 +18057,7 @@ spec:
                       required:
                         - bucket
                         - credentialsSecret
+                        - insecureSkipTLSVerify
                       type: object
                     start:
                       format: date-time

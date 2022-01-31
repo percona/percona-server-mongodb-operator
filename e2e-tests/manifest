@@ -3,6 +3,7 @@
 set -ex
 
 # https://v0-19-x.sdk.operatorframework.io/docs/install-operator-sdk/
+# https://github.com/mikefarah/yq/releases/tag/3.4.1
 #operator-sdk generate k8s
 operator-sdk generate crds
 

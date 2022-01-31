@@ -573,6 +573,8 @@ spec:
                                 type: string
                               endpointUrl:
                                 type: string
+                              insecureSkipTLSVerify:
+                                type: boolean
                               maxUploadParts:
                                 type: integer
                               prefix:
@@ -586,6 +588,7 @@ spec:
                             required:
                               - bucket
                               - credentialsSecret
+                              - insecureSkipTLSVerify
                             type: object
                           type:
                             type: string
@@ -596,6 +599,8 @@ spec:
                     tasks:
                       items:
                         properties:
+                          compressionLevel:
+                            type: integer
                           compressionType:
                             type: string
                           enabled:
