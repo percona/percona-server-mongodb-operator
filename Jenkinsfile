@@ -96,7 +96,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        ./e2e-tests/$TEST_NAME/run |& tee -a $TEST_NAME.log
+                        ./e2e-tests/$TEST_NAME/run |& tee -a e2e-tests/logs/$TEST_NAME.log
                     fi
                 """
             }
