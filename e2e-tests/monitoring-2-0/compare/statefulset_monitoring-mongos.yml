@@ -1,8 +1,7 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  annotations:
-    deployment.kubernetes.io/revision: "1"
+  annotations: {}
   generation: 1
   name: monitoring-mongos
   ownerReferences:
@@ -10,7 +9,7 @@ metadata:
       kind: PerconaServerMongoDB
       name: monitoring
 spec:
-  progressDeadlineSeconds: 600
+  podManagementPolicy: OrderedReady
   replicas: 3
   revisionHistoryLimit: 10
   selector:
@@ -20,11 +19,7 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-  strategy:
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 25%
-    type: RollingUpdate
+  serviceName: ""
   template:
     metadata:
       annotations: {}
@@ -313,3 +308,7 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-monitoring-users
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate

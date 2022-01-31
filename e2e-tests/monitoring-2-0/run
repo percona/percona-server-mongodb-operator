@@ -43,7 +43,7 @@ desc 'check if pmm-client container enabled'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl service/$cluster-rs0
 compare_kubectl statefulset/$cluster-cfg
-compare_kubectl deployment/$cluster-mongos
+compare_kubectl statefulset/$cluster-mongos
 
 desc 'check mongod metrics'
 get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 admin:admin

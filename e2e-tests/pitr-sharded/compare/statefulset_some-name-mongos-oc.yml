@@ -1,16 +1,15 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  annotations:
-    deployment.kubernetes.io/revision: "2"
-  generation: 2
+  annotations: {}
+  generation: 1
   name: some-name-mongos
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
       name: some-name
 spec:
-  progressDeadlineSeconds: 600
+  podManagementPolicy: OrderedReady
   replicas: 3
   revisionHistoryLimit: 10
   selector:
@@ -20,11 +19,7 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-  strategy:
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 25%
-    type: RollingUpdate
+  serviceName: ""
   template:
     metadata:
       annotations: {}
@@ -57,7 +52,6 @@ spec:
             - --relaxPermChecks
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
-            - --config=/etc/mongos-config/mongos.conf
           command:
             - /data/db/ps-entry.sh
           env:
@@ -131,11 +125,6 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
-            - mountPath: /etc/mongos-config
-              name: config
-            - mountPath: /etc/users-secret
-              name: users-secret-file
-              readOnly: true
           workingDir: /data/db
         - args:
             - -c
@@ -160,7 +149,6 @@ spec:
             - mountPath: /data/db
               name: mongod-data
       restartPolicy: Always
-      runtimeClassName: container-rc
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
@@ -182,12 +170,7 @@ spec:
             secretName: some-name-ssl-internal
         - emptyDir: {}
           name: mongod-data
-        - name: users-secret-file
-          secret:
-            defaultMode: 420
-            secretName: internal-some-name-users
-        - name: config
-          secret:
-            defaultMode: 420
-            optional: true
-            secretName: some-name-mongos
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate

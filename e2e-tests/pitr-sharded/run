@@ -67,7 +67,7 @@ check_recovery() {
 	echo
 	set -o xtrace
 
-	wait_deployment "$cluster-mongos"
+  wait_for_running $cluster-mongos 3
 	sleep 10
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "$cmp_postfix"
