@@ -208,11 +208,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		err = r.checkFinalizers(cr)
-		return rr, err
-	}
-
 	clusterStatus := api.AppStateInit
 
 	defer func() {
@@ -226,6 +221,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if err != nil {
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
+	}
+
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = r.checkFinalizers(cr)
+		return rr, err
 	}
 
 	err = r.checkConfiguration(cr)

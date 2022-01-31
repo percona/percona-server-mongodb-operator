@@ -3,6 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
 #  finalizers:
+#    - delete-psmdb-in-order
 #    - delete-psmdb-pvc
 spec:
 #  platform: openshift
