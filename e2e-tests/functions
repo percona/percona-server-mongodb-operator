@@ -28,7 +28,8 @@ if [[ ${ENABLE_LOGGING} == "true" ]]; then
         mkdir "${logs_dir}"
     fi
 
-    exec &> >(tee ${logs_dir}/${test_name}.log)
+#    exec &> >(tee ${logs_dir}/${test_name}.log)
+    exec 5>&1 &> >(tee ${logs_dir}/${test_name}.log)
     echo "Log: ${logs_dir}/${test_name}.log"
 fi
 
