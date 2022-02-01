@@ -51,19 +51,26 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
-	var zero int32 = 0
+	var updateStrategy appsv1.StatefulSetUpdateStrategy
+	switch cr.Spec.UpdateStrategy {
+	case api.SmartUpdateStatefulSetStrategyType:
+		updateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	default:
+		var zero int32 = 0
+		updateStrategy = appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
+	}
 	return appsv1.StatefulSetSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
 		},
-		Template: template,
-		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-			Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-				Partition: &zero,
-			},
-		},
+		Template:       template,
+		UpdateStrategy: updateStrategy,
 	}
 }
 

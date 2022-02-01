@@ -946,10 +946,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	var mongos runtime.Object
 	if cr.CompareVersion("1.12.0") >= 0 {
-		depl := psmdb.MongosDeployment(cr)
-		err = r.client.Delete(context.TODO(), depl)
+		msDepl := psmdb.MongosDeployment(cr)
+		err = r.client.Delete(context.TODO(), msDepl)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "failed to delete old mongos deployment %s", depl.Name)
+			return errors.Wrapf(err, "failed to delete old mongos deployment %s", msDepl.Name)
 		}
 
 		msSts := psmdb.MongosStatefulset(cr)
@@ -1083,7 +1083,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, mongos)
 	if err != nil {
-		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos statefulset")
+		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos")
 	}
 
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
