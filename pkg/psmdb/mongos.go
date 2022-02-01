@@ -42,7 +42,57 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (appsv1.StatefulSetSpec, error) {
+func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.StatefulSetSpec {
+	ls := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/component":  "mongos",
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	var zero int32 = 0
+	return appsv1.StatefulSetSpec{
+		Replicas: &cr.Spec.Sharding.Mongos.Size,
+		Selector: &metav1.LabelSelector{
+			MatchLabels: ls,
+		},
+		Template: template,
+		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		},
+	}
+}
+
+func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.DeploymentSpec {
+	ls := map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/component":  "mongos",
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	zero := intstr.FromInt(0)
+	return appsv1.DeploymentSpec{
+		Replicas: &cr.Spec.Sharding.Mongos.Size,
+		Selector: &metav1.LabelSelector{
+			MatchLabels: ls,
+		},
+		Template: template,
+		Strategy: appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxSurge: &zero,
+			},
+		},
+	}
+}
+
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -59,7 +109,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod,
 
 	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances)
 	if err != nil {
-		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
+		return corev1.PodTemplateSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
 	initContainers := InitContainers(cr, operatorPod)
@@ -82,37 +132,24 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod,
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
-	var zero int32 = 0
-	return appsv1.StatefulSetSpec{
-		Replicas: &cr.Spec.Sharding.Mongos.Size,
-		Selector: &metav1.LabelSelector{
-			MatchLabels: ls,
+	return corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      ls,
+			Annotations: annotations,
 		},
-		Template: corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels:      ls,
-				Annotations: annotations,
-			},
-			Spec: corev1.PodSpec{
-				SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
-				Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
-				NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
-				Tolerations:       cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
-				PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
-				RestartPolicy:     corev1.RestartPolicyAlways,
-				ImagePullSecrets:  cr.Spec.ImagePullSecrets,
-				Containers:        containers,
-				InitContainers:    initContainers,
-				Volumes:           volumes(cr, customConf.Type),
-				SchedulerName:     cr.Spec.SchedulerName,
-				RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
-			},
-		},
-		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-			Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-				Partition: &zero,
-			},
+		Spec: corev1.PodSpec{
+			SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
+			Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
+			NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
+			Tolerations:       cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
+			PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
+			RestartPolicy:     corev1.RestartPolicyAlways,
+			ImagePullSecrets:  cr.Spec.ImagePullSecrets,
+			Containers:        containers,
+			InitContainers:    initContainers,
+			Volumes:           volumes(cr, customConf.Type),
+			SchedulerName:     cr.Spec.SchedulerName,
+			RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 		},
 	}, nil
 }

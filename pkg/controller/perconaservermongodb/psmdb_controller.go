@@ -944,20 +944,43 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return nil
 	}
 
-	msSts := psmdb.MongosStatefulset(cr)
-	err = setControllerReference(cr, msSts, r.scheme)
-	if err != nil {
-		return errors.Wrapf(err, "set owner ref for statefulset %s", msSts.Name)
-	}
+	var mongos runtime.Object
+	if cr.CompareVersion("1.12.0") >= 0 {
+		depl := psmdb.MongosDeployment(cr)
+		err = r.client.Delete(context.TODO(), depl)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "failed to delete old mongos deployment %s", depl.Name)
+		}
 
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get statefulset %s", msSts.Name)
-	}
-
-	if !k8serrors.IsNotFound(err) && msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
-		log.Info("waiting for mongos update")
-		return nil
+		msSts := psmdb.MongosStatefulset(cr)
+		err = setControllerReference(cr, msSts, r.scheme)
+		if err != nil {
+			return errors.Wrapf(err, "set owner ref for statefulset %s", msSts.Name)
+		}
+		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get statefulset %s", msSts.Name)
+		}
+		if !k8serrors.IsNotFound(err) && msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
+			log.Info("waiting for mongos update")
+			return nil
+		}
+		mongos = msSts
+	} else {
+		msDepl := psmdb.MongosDeployment(cr)
+		err = setControllerReference(cr, msDepl, r.scheme)
+		if err != nil {
+			return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
+		}
+		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+		}
+		if !k8serrors.IsNotFound(err) && msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
+			log.Info("waiting for mongos update")
+			return nil
+		}
+		mongos = msDepl
 	}
 
 	opPod, err := r.operatorPod()
@@ -993,21 +1016,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		cfgInstances = append(cfgInstances, ext.Host)
 	}
 
-	stsSpec, err := psmdb.MongosStatefulsetSpec(cr, opPod, log, customConfig, cfgInstances)
+	templateSpec, err := psmdb.MongosTemplateSpec(cr, opPod, log, customConfig, cfgInstances)
 	if err != nil {
-		return errors.Wrapf(err, "create statefulset spec %s", msSts.Name)
+		return errors.Wrapf(err, "create template spec for mongos")
 	}
 
 	sslAnn, err := r.sslAnnotation(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to get ssl annotations")
 	}
-	if stsSpec.Template.Annotations == nil {
-		stsSpec.Template.Annotations = make(map[string]string)
+	if templateSpec.Annotations == nil {
+		templateSpec.Annotations = make(map[string]string)
 	}
 
 	for k, v := range sslAnn {
-		stsSpec.Template.Annotations[k] = v
+		templateSpec.Annotations[k] = v
 	}
 
 	if cr.CompareVersion("1.8.0") < 0 {
@@ -1018,7 +1041,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 		for k, v := range depl.Spec.Template.Annotations {
 			if k == "last-applied-secret" || k == "last-applied-secret-ts" {
-				stsSpec.Template.Annotations[k] = v
+				templateSpec.Annotations[k] = v
 			}
 		}
 	}
@@ -1034,8 +1057,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		if err != nil {
 			return errors.Wrap(err, "failed to create a pmm-client container")
 		}
-		stsSpec.Template.Spec.Containers = append(
-			stsSpec.Template.Spec.Containers,
+		templateSpec.Spec.Containers = append(
+			templateSpec.Spec.Containers,
 			pmmC,
 		)
 	}
@@ -1047,21 +1070,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		}
 	}
 
-	if cr.CompareVersion("1.12.0") < 0 {
-		depl := psmdb.MongosDeployment(cr)
-		err = r.client.Delete(context.TODO(), depl)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "failed to delete old mongos deployment %s", depl.Name)
-		}
+	if cr.CompareVersion("1.12.0") >= 0 {
+		mongos.(*appsv1.StatefulSet).Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
+	} else {
+		mongos.(*appsv1.Deployment).Spec = psmdb.MongosDeploymentSpec(cr, templateSpec)
 	}
 
-	msSts.Spec = stsSpec
-	err = r.createOrUpdate(msSts)
+	err = r.createOrUpdate(mongos)
 	if err != nil {
-		return errors.Wrapf(err, "update or create deployment %s", msSts.Name)
+		return errors.Wrapf(err, "update or create mongos %s", mongos)
 	}
 
-	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, msSts.Spec.Template.Labels, cr.Namespace, msSts)
+	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, mongos)
 	if err != nil {
 		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos statefulset")
 	}
