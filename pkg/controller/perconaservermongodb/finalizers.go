@@ -3,152 +3,74 @@ package perconaservermongodb
 import (
 	"context"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	psmdb_mongo "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/mongo"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sort"
 )
 
-func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) error {
-	finalizersRemain := []string{}
+func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
+	shouldReconcile = true
+	finalizers := []string{}
 
-	finalizers := cr.GetFinalizers()
-	// delete-psmdb-in-order should be executed first
-	sort.Slice(finalizers, func(i, j int) bool {
-		if finalizers[i] == "delete-psmdb-in-order" {
-			return true
-		}
-		return finalizers[i] < finalizers[j]
-	})
-
-	for _, f := range finalizers {
-		var err error
+	for _, f := range cr.GetFinalizers() {
 		switch f {
 		case "delete-psmdb-pvc":
 			err = r.deletePvcFinalizer(cr)
 		case "delete-psmdb-in-order":
 			err = r.deletePSMDBPods(cr)
 			if err != nil {
-				return err
+				shouldReconcile = false
 			}
 		}
 		if err != nil {
 			log.Error(err, "failed to run finalizer", "finalizer", f)
-			finalizersRemain = append(finalizersRemain, f)
+			finalizers = append(finalizers, f)
 		}
 	}
+	cr.SetFinalizers(finalizers)
+	err = r.client.Update(context.TODO(), cr)
 
-	cr.SetFinalizers(finalizersRemain)
-	err := r.client.Update(context.TODO(), cr)
-
-	return err
+	return shouldReconcile, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(cr *api.PerconaServerMongoDB) error {
-	stsList, err := r.getAllstatefulsets(cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to get StatefulSet list")
-	}
-
-	for _, sts := range stsList.Items {
-		if err = r.deleteStatefulSetPods(cr, sts); err != nil {
-			return errors.Wrap(err, "failed to delete StatefulSet pods")
-		}
-	}
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetPods(cr *api.PerconaServerMongoDB, sts appsv1.StatefulSet) error {
-	list := corev1.PodList{}
-
-	err := r.client.List(context.TODO(),
-		&list,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(sts.Labels),
-		},
-	)
-	if err != nil {
-		return errors.Wrap(err, "get pod list")
-	}
-
-	// the last pod left - we can leave it for the stateful set
-	if len(list.Items) <= 1 {
-		return nil
-	}
-
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, &sts)
-	if err != nil {
-		return errors.Wrap(err, "get StatefulSet")
-	}
-	var replset *api.ReplsetSpec
+func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(cr *api.PerconaServerMongoDB) (err error) {
+	done := true
 	for _, rs := range cr.Spec.Replsets {
-		if rs.Name == sts.Labels["app.kubernetes.io/replset"] {
-			replset = rs
-			break
+		sts, err := r.getRsStatefulset(cr, rs.Name)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "get rs statefulset")
 		}
-	}
-	var cli *mongo.Client
-	if cr.Spec.Sharding.Enabled {
-		cli, err = r.mongosClientWithRole(cr, roleClusterAdmin)
-	} else {
-		cli, err = r.mongoClientWithRole(cr, *replset, roleClusterAdmin)
-	}
-	if err != nil {
-		return errors.Wrap(err, "mongo client")
-	}
-	err = r.stepDownUntilFirstIsPrimary(context.TODO(), cli)
-	if err != nil {
-		return errors.Wrap(err, "step down until first is primary")
-	}
-	cnf, err := psmdb_mongo.ReadConfig(context.TODO(), cli)
-	if err != nil {
-		return errors.Wrap(err, "get mongo config")
-	}
-	if len(cnf.Members) > 1 {
-		sort.Slice(cnf.Members, func(i, j int) bool {
-			return cnf.Members[i].Host < cnf.Members[j].Host
-		})
-		cnf.Members = cnf.Members[:len(cnf.Members)-1]
-		cnf.Version++
-		err = psmdb_mongo.WriteConfig(context.TODO(), cli, cnf)
-		if err != nil {
-			return errors.Wrap(err, "delete: write mongo config")
+		if k8serrors.IsNotFound(err) {
+			continue
 		}
-	}
 
-	if *sts.Spec.Replicas != 1 {
-		dscaleTo := *sts.Spec.Replicas - 1
-		sts.Spec.Replicas = &dscaleTo
-		err = r.client.Update(context.TODO(), &sts)
-		if err != nil {
-			return errors.Wrap(err, "downscale StatefulSet")
+		pods := &corev1.PodList{}
+		err = r.client.List(context.TODO(),
+			pods,
+			&client.ListOptions{
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(sts.Labels),
+			},
+		)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "get rs statefulset")
+		}
+		if k8serrors.IsNotFound(err) {
+			continue
+		}
+		if len(pods.Items) > int(*sts.Spec.Replicas) {
+			return errors.New("waiting pods to be deleted")
+		}
+		if *sts.Spec.Replicas != 1 {
+			rs.Size = 1
+			done = false
 		}
 	}
-	return errors.New("waiting pods to be deleted")
-}
-
-func (r *ReconcilePerconaServerMongoDB) stepDownUntilFirstIsPrimary(ctx context.Context, cli *mongo.Client) error {
-	status, err := psmdb_mongo.RSStatus(context.TODO(), cli)
-	if err != nil {
-		return errors.Wrap(err, "rs status")
-	}
-	sort.Slice(status.Members, func(i, j int) bool {
-		return status.Members[i].Name < status.Members[j].Name
-	})
-	if status.Members[0].State != psmdb_mongo.MemberStatePrimary {
-		if err := psmdb_mongo.StepDown(ctx, cli, true); err != nil {
-			return errors.Wrap(err, "step down")
-		}
-		if err := r.stepDownUntilFirstIsPrimary(ctx, cli); err != nil {
-			return err
-		}
+	if !done {
+		return errors.New("waiting statefulsets to be resized")
 	}
 	return nil
 }

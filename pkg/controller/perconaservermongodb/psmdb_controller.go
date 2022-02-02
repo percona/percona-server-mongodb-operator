@@ -224,8 +224,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		err = r.checkFinalizers(cr)
-		return rr, err
+		rec, err := r.checkFinalizers(cr)
+		if rec || err != nil {
+			return rr, err
+		}
 	}
 
 	err = r.checkConfiguration(cr)
@@ -541,6 +543,7 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongo
 		// downscale 1 pod on each reconciliation
 		if *sf.Spec.Replicas-rs.Size > 1 {
 			rs.Size = *sf.Spec.Replicas - 1
+			fmt.Println("TEST: rs", rs.Name, rs.Size)
 		}
 	}
 
