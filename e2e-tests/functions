@@ -201,10 +201,10 @@ run_restore() {
 	else
 		run_mongo \
 			'use myApp\n db.test.insert({ x: 100501 })' \
-			"myApp:myPass@$cluster.$namespace"
+			"myApp:myPass@$cluster$cluster_pfx.$namespace"
 
 		for i in $(seq 0 $last_pod); do
-			compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
+			compare_mongo_cmd "find" "myApp:myPass@$cluster$cluster_pfx-${i}.$cluster$cluster_pfx.$namespace" "-2nd"
 		done
 	fi
 	cat $test_dir/conf/restore.yml \
@@ -284,7 +284,7 @@ simple_data_check() {
 		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
 	else
 		for i in $(seq 0 $last_pod); do
-			compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
+			compare_mongo_cmd "find" "myApp:myPass@${cluster_name}${cluster_pfx}-${i}.${cluster_name}${cluster_pfx}.$namespace"
 		done
 	fi
 }

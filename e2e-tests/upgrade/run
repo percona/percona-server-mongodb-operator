@@ -6,7 +6,7 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-CLUSTER='upgrade'
+cluster='upgrade'
 CLUSTER_SIZE=3
 TARGET_API="${API}"
 TARGET_OPERATOR_VER=$(echo -n "${API//psmdb.percona.com\/v/}" | $sed 's/-/./g')
@@ -60,8 +60,8 @@ function compare_generation() {
 }
 
 function wait_cluster_consistency() {
-	until [[ "$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.state}')" == "ready" && \
-	"$(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" ]]; do
+	until [[ "$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')" == "ready" &&
+	"$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" ]]; do
 		echo 'waiting for cluster readyness'
 		sleep 20
 	done
@@ -72,10 +72,10 @@ function check_applied_images() {
 
 	case "${updated_image}" in
 		"operator")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
-			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') && \
-			${IMAGE_PMM} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') && \
-			${IMAGE_MONGOD} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
+			${IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
+			${IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
 				: Operator image has been updated correctly
 			else
 				echo 'Operator image has not been updated'
@@ -83,10 +83,10 @@ function check_applied_images() {
 			fi
 			;;
 		"all")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
-			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.backup.image}') && \
-			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.pmm.image}') && \
-			${TARGET_IMAGE_MONGOD} == $(kubectl_bin get psmdb "${CLUSTER}" -o jsonpath='{.spec.image}') ]]; then
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
+			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
+			${TARGET_IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
 				: Cluster images have been updated correctly
 			else
 				echo 'Cluster images have not been updated'
@@ -114,11 +114,19 @@ function prepare_cr_yaml() {
 	# spinup function expects images to have suffix like "-backup"
 	# to replace them with images from environment variables
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" \
-		| yq w - "metadata.name" "${CLUSTER}" \
+		| yq w - "metadata.name" "${cluster}" \
 		| yq w - "spec.upgradeOptions.apply" "disabled" \
 		| yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" \
 		| yq w - "spec.replsets[*].arbiter.enabled" "false" \
-		| yq w - "spec.backup.enabled" "false" \
+		| yq w - "spec.backup.enabled" "true" \
+		| yq w - "spec.backup.debug" "true" \
+		| yq w - "spec.backup.restartOnFailure" "true" \
+		| yq w - "spec.backup.pitr.enabled" "false" \
+		| yq w - "spec.backup.storages.minio.type" "s3" \
+		| yq w - "spec.backup.storages.minio.s3.credentialsSecret" "minio-secret" \
+		| yq w - "spec.backup.storages.minio.s3.region" "us-east-1" \
+		| yq w - "spec.backup.storages.minio.s3.bucket" "operator-testing" \
+		| yq w - "spec.backup.storages.minio.s3.endpointUrl" "http://minio-service:9000/" \
 		| yq w - "spec.sharding.enabled" "false" \
 		| yq w - "spec.image" "" \
 		| yq w - "spec.backup.image" -- "-backup" \
@@ -129,7 +137,9 @@ function main() {
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || true
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
 	create_namespace "${namespace}"
+	apply_s3_storage_secrets
 	deploy_operator_gh
+	deploy_minio
 
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
@@ -142,16 +152,21 @@ function main() {
 	apply_cluster "${cr_yaml}"
 
 	desc 'check if Pod is started'
-	wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
+	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}"
 	sleep 20
 
 	desc 'write data'
 	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
-		"userAdmin:userAdmin123456@${CLUSTER}-rs0.${namespace}"
-	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${CLUSTER}-rs0.${namespace}"
+		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
 
-	compare_generation "1" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "1" "psmdb" "${CLUSTER}"
+	compare_generation "1" "statefulset" "${cluster}-rs0"
+	compare_generation "1" "psmdb" "${cluster}"
+
+	# create backup
+	backup_name_minio="backup-minio"
+	run_backup minio
+	wait_backup "$backup_name_minio"
 
 	desc 'upgrade operator'
 	kubectl_bin apply -f "${src_dir}/deploy/crd.yaml"
@@ -169,13 +184,13 @@ function main() {
 	sleep 10
 
 	desc 'check images and generation after operator upgrade'
-	wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
+	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}"
 	check_applied_images "operator"
-	compare_generation "1" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "1" "psmdb" "${CLUSTER}"
+	compare_generation "1" "statefulset" "${cluster}-rs0"
+	compare_generation "1" "psmdb" "${cluster}"
 
 	desc 'patch psmdb images and upgrade'
-	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+	kubectl_bin patch psmdb "${cluster}" --type=merge --patch '{
         "spec": {
             "crVersion": "'"${TARGET_OPERATOR_VER}"'",
             "image": "'"${TARGET_IMAGE_MONGOD}"'",
@@ -185,17 +200,29 @@ function main() {
 	sleep 10
 
 	desc 'check cluster after full upgrade'
-	wait_for_running "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
-	wait_cluster_consistency "${CLUSTER}" "${CLUSTER_SIZE}"
-	simple_data_check "${CLUSTER}-rs0" "${CLUSTER_SIZE}"
+	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 	check_applied_images "all"
-	compare_generation "2" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "2" "psmdb" "${CLUSTER}"
+	compare_generation "2" "statefulset" "${cluster}-rs0"
+	compare_generation "2" "psmdb" "${cluster}"
+
+	desc 'drop collection and do restore with new version'
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	backup_dest_minio=$(get_backup_dest "$backup_name_minio")
+	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
+		| grep ${backup_dest_minio}_rs0.dump.gz
+	run_restore $backup_name_minio 3 0 "-rs0"
+	wait_restore $backup_name_minio 3 0 "-rs0"
+	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
 	desc 'cleanup'
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
-#	kubectl_bin delete pvc --all
+	# kubectl_bin delete pvc --all
 	destroy "${namespace}"
 }
 
