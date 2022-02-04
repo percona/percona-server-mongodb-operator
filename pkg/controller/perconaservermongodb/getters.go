@@ -105,6 +105,27 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(cr *api.PerconaSer
 	return list, err
 }
 
+func (r *ReconcilePerconaServerMongoDB) getNonMongosStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+	list := appsv1.StatefulSetList{}
+	filteredList := appsv1.StatefulSetList{}
+
+	err := r.client.List(context.TODO(),
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(clusterLabels(cr)),
+		},
+	)
+
+	for _, sts := range list.Items {
+		if sts.Labels["app.kubernetes.io/component"] != "mongos" {
+			filteredList.Items = append(filteredList.Items, sts)
+		}
+	}
+
+	return filteredList, err
+}
+
 func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 	filteredList := appsv1.StatefulSetList{}

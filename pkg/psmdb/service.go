@@ -247,6 +247,35 @@ func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsE
 	return GetAddr(m, pod.Name, rsName), nil
 }
 
+// MongosHost returns the mongos host for given pod
+func MongosHost(cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod) (string, error) {
+	svcName := cr.Name + "-mongos"
+	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		svcName = pod.Name
+	}
+	svc := new(corev1.Service)
+	err := cl.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      svcName,
+		}, svc)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get mongos service")
+	}
+	var host string
+	if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+		for _, i := range svc.Status.LoadBalancer.Ingress {
+			host = i.IP
+			if len(i.Hostname) > 0 {
+				host = i.Hostname
+			}
+		}
+	} else {
+		host = svc.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix
+	}
+	return host, nil
+}
+
 func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
 	svc, err := getExtServices(cl, namespace, pod.Name)
 	if err != nil {
