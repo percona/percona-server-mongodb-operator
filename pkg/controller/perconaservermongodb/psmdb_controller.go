@@ -750,16 +750,7 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServer
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
-	// needed for labels
-	mongosSvc := psmdb.MongosService(cr, "")
-	svcList := &corev1.ServiceList{}
-	err := r.client.List(context.TODO(),
-		svcList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongosSvc.Labels),
-		},
-	)
+	svcList, err := psmdb.GetMongosServices(r.client, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to list mongos services")
 	}
@@ -1108,9 +1099,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeOutdatedMongosSvc(cr *api.PerconaServerMongoDB) error {
-	//needed for labels
-	svc := psmdb.MongosService(cr, "")
-
 	svcNames := make(map[string]struct{}, cr.Spec.Sharding.Mongos.Size)
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
@@ -1120,15 +1108,7 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedMongosSvc(cr *api.PerconaS
 		svcNames[cr.Name+"-mongos"] = struct{}{}
 	}
 
-	svcList := &corev1.ServiceList{}
-	err := r.client.List(context.TODO(),
-		svcList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(svc.Labels),
-		},
-	)
-
+	svcList, err := psmdb.GetMongosServices(r.client, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to list mongos services")
 	}

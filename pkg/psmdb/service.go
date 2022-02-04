@@ -2,7 +2,6 @@ package psmdb
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/labels"
 	"strconv"
 	"strings"
 	"time"
@@ -204,33 +203,23 @@ func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, rsName strin
 
 // GetMongosAddrs returns a slice of mongos addresses
 func GetMongosAddrs(cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
-	// needed for labels
-	mongosSvc := MongosService(cr, "")
-
-	svcList := &corev1.ServiceList{}
-	err := cl.List(context.TODO(),
-		svcList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongosSvc.Labels),
-		},
-	)
+	if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		host, err := MongosHost(cl, cr, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get mongos host")
+		}
+		return []string{host}, nil
+	}
+	list, err := GetMongosPods(cl, cr)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list mongos services")
+		return nil, errors.Wrap(err, "failed to list mongos pods")
 	}
 
-	addrs := make([]string, 0)
-	for _, svc := range svcList.Items {
-		var host string
-		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-			for _, i := range svc.Status.LoadBalancer.Ingress {
-				host = i.IP
-				if len(i.Hostname) > 0 {
-					host = i.Hostname
-				}
-			}
-		} else {
-			host = svc.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix
+	addrs := make([]string, 0, len(list.Items))
+	for _, pod := range list.Items {
+		host, err := MongosHost(cl, cr, &pod)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get mongos host")
 		}
 		addrs = append(addrs, host)
 	}

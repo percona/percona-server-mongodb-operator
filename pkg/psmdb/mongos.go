@@ -43,14 +43,6 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 }
 
 func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.StatefulSetSpec {
-	ls := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/component":  "mongos",
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-
 	var updateStrategy appsv1.StatefulSetUpdateStrategy
 	switch cr.Spec.UpdateStrategy {
 	case api.SmartUpdateStatefulSetStrategyType:
@@ -67,7 +59,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	return appsv1.StatefulSetSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: ls,
+			MatchLabels: mongosLabels(cr),
 		},
 		Template:       template,
 		UpdateStrategy: updateStrategy,
@@ -75,19 +67,11 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 }
 
 func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.DeploymentSpec {
-	ls := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/component":  "mongos",
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-
 	zero := intstr.FromInt(0)
 	return appsv1.DeploymentSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: ls,
+			MatchLabels: mongosLabels(cr),
 		},
 		Template: template,
 		Strategy: appsv1.DeploymentStrategy{
@@ -100,13 +84,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTempl
 }
 
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
-	ls := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/component":  "mongos",
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
+	ls := mongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
 		for k, v := range cr.Spec.Sharding.Mongos.Labels {
@@ -424,14 +402,10 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: cr.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/instance":   cr.Name,
-				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-				"app.kubernetes.io/part-of":    "percona-server-mongodb",
-				"app.kubernetes.io/component":  "mongos",
-			},
 		},
+	}
+	if cr.CompareVersion("1.12.0") >= 0 {
+		svc.Labels = mongosLabels(cr)
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {
@@ -442,13 +416,7 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 }
 
 func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.ServiceSpec {
-	ls := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-		"app.kubernetes.io/component":  "mongos",
-	}
+	ls := mongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		ls["statefulset.kubernetes.io/pod-name"] = podName
