@@ -574,7 +574,7 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 		}
 
 		component := v.Labels["app.kubernetes.io/component"]
-		if component == "arbiter" || component == "nonVoting" {
+		if component == "arbiter" || component == "nonVoting" || component == "mongos" {
 			continue
 		}
 
@@ -921,9 +921,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return nil
 	}
 
-	uptodate, err := r.isAllSfsUpToDate(cr)
+	stsList, err := r.getNonMongosStatefulsets(cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to check if all sfs are up to date")
+		return errors.Wrap(err, "failed to get all non-mongos sts")
+	}
+	uptodate, err := r.isStsListUpToDate(cr, &stsList)
+	if err != nil {
+		return errors.Wrap(err, "failed to check if all non-mongos sts are up to date")
 	}
 
 	rstRunning, err := r.isRestoreRunning(cr)
@@ -951,10 +955,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "get statefulset %s", msSts.Name)
-		}
-		if !k8serrors.IsNotFound(err) && msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
-			log.Info("waiting for mongos update")
-			return nil
 		}
 		mongos = msSts
 	} else {
@@ -989,7 +989,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "get configsvr pods")
 	}
 
-	// wait all configsvr pods to prevent unnecessary updates to mongos deployment
+	// wait all configsvr pods to prevent unnecessary updates to mongos
 	if int(cr.Spec.Sharding.ConfigsvrReplSet.Size) > len(cfgPods.Items) {
 		return nil
 	}
@@ -1093,6 +1093,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	err = r.removeOutdatedMongosSvc(cr)
 	if err != nil {
 		return errors.Wrap(err, "remove outdated mongos services")
+	}
+	if cr.CompareVersion("1.12.0") >= 0 {
+		err = r.smartMongosUpdate(cr, mongos.(*appsv1.StatefulSet))
+		if err != nil {
+			return errors.Wrap(err, "smart update")
+		}
 	}
 
 	return nil

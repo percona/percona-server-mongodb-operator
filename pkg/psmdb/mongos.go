@@ -25,6 +25,7 @@ func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.MongosNamespacedName().Name,
 			Namespace: cr.MongosNamespacedName().Namespace,
+			Labels:    mongosLabels(cr),
 		},
 	}
 }

@@ -193,6 +193,91 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
+	if cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
+		return nil
+	}
+
+	list, err := r.getMongosPods(cr)
+	if err != nil {
+		return errors.Wrap(err, "get mongos pods")
+	}
+
+	if !isSfsChanged(sts, &list) {
+		return nil
+	}
+
+	log.Info("StatefulSet is changed, starting smart update", "name", sts.Name)
+
+	if sts.Status.ReadyReplicas < sts.Status.Replicas {
+		log.Info("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
+		return nil
+	}
+
+	isBackupRunning, err := r.isBackupRunning(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check active backups")
+	}
+	if isBackupRunning {
+		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
+		return nil
+	}
+
+	hasActiveJobs, err := backup.HasActiveJobs(r.client, cr, backup.Job{}, backup.NotPITRLock)
+	if err != nil {
+		return errors.Wrap(err, "failed to check active jobs")
+	}
+
+	if hasActiveJobs {
+		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
+		return nil
+	}
+
+	client, err := r.mongosClientWithRole(cr, roleClusterAdmin)
+	if err != nil {
+		return fmt.Errorf("failed to get mongos client: %v", err)
+	}
+
+	defer func() {
+		err := client.Disconnect(context.TODO())
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	waitLimit := int(cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds)
+
+	sort.Slice(list.Items, func(i, j int) bool {
+		return list.Items[i].Name > list.Items[j].Name
+	})
+
+	for _, pod := range list.Items {
+		if err := r.applyNWait(cr, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
+			return errors.Wrap(err, "failed to apply changes")
+		}
+	}
+	log.Info("smart update finished for mongos statefulset")
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(cr *api.PerconaServerMongoDB, stsList *appsv1.StatefulSetList) (bool, error) {
+	for _, s := range stsList.Items {
+		podList := new(corev1.PodList)
+		if err := r.client.List(context.TODO(), podList,
+			&k8sclient.ListOptions{
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(s.Labels),
+			}); err != nil {
+			return false, errors.Errorf("failed to get statefulset %s pods: %v", s.Name, err)
+		}
+		if s.Status.UpdatedReplicas < s.Status.Replicas || isSfsChanged(&s, podList) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMongoDB) (bool, error) {
 	sfsList := appsv1.StatefulSetList{}
 	if err := r.client.List(context.TODO(), &sfsList,
@@ -206,13 +291,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(cr *api.PerconaServerMo
 		return false, errors.Wrap(err, "failed to get statefulset list")
 	}
 
-	for _, s := range sfsList.Items {
-		if s.Status.UpdatedReplicas < s.Status.Replicas {
-			return false, nil
-		}
-	}
-
-	return true, nil
+	return r.isStsListUpToDate(cr, &sfsList)
 }
 
 func (r *ReconcilePerconaServerMongoDB) applyNWait(cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
@@ -248,7 +327,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(cr *api.PerconaServerMong
 		ready := false
 		for _, container := range pod.Status.ContainerStatuses {
 			switch container.Name {
-			case "mongod", "mongod-arbiter", "mongod-nv":
+			case "mongod", "mongod-arbiter", "mongod-nv", "mongos":
 				ready = container.Ready
 			}
 		}
