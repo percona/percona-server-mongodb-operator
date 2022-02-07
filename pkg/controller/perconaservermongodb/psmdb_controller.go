@@ -543,7 +543,6 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongo
 		// downscale 1 pod on each reconciliation
 		if *sf.Spec.Replicas-rs.Size > 1 {
 			rs.Size = *sf.Spec.Replicas - 1
-			fmt.Println("TEST: rs", rs.Name, rs.Size)
 		}
 	}
 

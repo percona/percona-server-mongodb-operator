@@ -19,7 +19,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMon
 		switch f {
 		case "delete-psmdb-pvc":
 			err = r.deletePvcFinalizer(cr)
-		case "delete-psmdb-in-order":
+		case "delete-psmdb-pods-in-order":
 			err = r.deletePSMDBPods(cr)
 			if err != nil {
 				shouldReconcile = false
