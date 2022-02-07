@@ -20,7 +20,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(cr *api.PerconaSe
 
 	uptodate, err := r.isAllSfsUpToDate(cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+		return errors.Wrap(err, "failed to check if all sfs are up to date")
 	}
 
 	rstRunning, err := r.isRestoreRunning(cr)

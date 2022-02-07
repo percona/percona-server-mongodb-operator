@@ -161,7 +161,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		if pod.Labels["app.kubernetes.io/component"] == "arbiter" {
 			arbiterSfs, err := r.getArbiterStatefulset(cr, pod.Labels["app.kubernetes.io/replset"])
 			if err != nil {
-				return errors.Wrap(err, "failed to get arbiter statefilset")
+				return errors.Wrap(err, "failed to get arbiter statefulset")
 			}
 
 			updateRevision = arbiterSfs.Status.UpdateRevision
