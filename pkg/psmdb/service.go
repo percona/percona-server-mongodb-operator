@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 )
 
 // Service returns a core/v1 API Service
@@ -48,20 +47,6 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			ClusterIP:                "None",
 			Selector:                 ls,
 			LoadBalancerSourceRanges: replset.Expose.LoadBalancerSourceRanges,
-		},
-	}
-}
-
-// ServiceExport returns a ServiceExport object needed for Multi-cluster Services
-func ServiceExport(m *api.PerconaServerMongoDB, svc *corev1.Service) *mcs.ServiceExport {
-	return &mcs.ServiceExport{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceExport",
-			APIVersion: "net.gke.io/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      svc.Name,
-			Namespace: m.Namespace,
 		},
 	}
 }

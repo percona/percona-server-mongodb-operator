@@ -17,8 +17,9 @@ spec:
 #  runUid: 1001
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
-  #multiCluster:
-  #  enabled: true
+#  multiCluster:
+#    enabled: true
+#    DNSSuffix: svc.clusterset.local
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: 4.4-recommended

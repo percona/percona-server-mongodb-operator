@@ -1,6 +1,8 @@
 package mcs
 
 import (
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	corev1 "k8s.io/api/core/v1"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -63,4 +65,18 @@ outer:
 	schemeBuilder.Register(addKnownTypes)
 
 	return nil
+}
+
+// ServiceExport returns a ServiceExport object needed for Multi-cluster Services
+func ServiceExport(m *api.PerconaServerMongoDB, svc *corev1.Service) *mcs.ServiceExport {
+	return &mcs.ServiceExport{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceExport",
+			APIVersion: MCSSchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      svc.Name,
+			Namespace: m.Namespace,
+		},
+	}
 }

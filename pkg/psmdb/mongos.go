@@ -374,8 +374,11 @@ func MongosService(cr *api.PerconaServerMongoDB) corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Name + "-" + "mongos",
 			Namespace: cr.Namespace,
-			Labels:    ls,
 		},
+	}
+
+	if cr.CompareVersion("1.12.0") >= 0 {
+		svc.Labels = ls
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {

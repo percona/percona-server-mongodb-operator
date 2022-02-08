@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 )
@@ -57,7 +58,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 	}
 
 	for _, svc := range svcList.Items {
-		se := psmdb.ServiceExport(cr, &svc)
+		se := mcs.ServiceExport(cr, &svc)
 		err = setControllerReference(cr, se, r.scheme)
 		if err != nil {
 			return errors.Wrap(err, "set owner ref for serviceexport "+se.Name)
