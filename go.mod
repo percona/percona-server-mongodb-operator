@@ -24,7 +24,7 @@ require (
 	github.com/timvaillancourt/go-mongodb-fixtures v0.0.0-20180517014041-bee1cce826fb // indirect
 	github.com/timvaillancourt/go-mongodb-replset v0.0.0-20180529222116-173aaa3b66af
 	github.com/valyala/fasthttp v1.32.0
-	go.mongodb.org/mongo-driver v1.8.2
+	go.mongodb.org/mongo-driver v1.8.3
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	k8s.io/api v0.23.2
