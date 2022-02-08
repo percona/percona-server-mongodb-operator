@@ -90,5 +90,10 @@ Operator deployed in the OpenShift environment demonstrates the process:
 8. Repeat steps 3-5 for other images, and update corresponding options
    in the ``deploy/cr.yaml`` file.
 
+   .. note:: Don't forget to set :ref:`upgradeoptions.apply<upgradeoptions-apply>`
+      option to ``Disabled``. Otherwise :ref:`Smart Upgrade functionality<operator-update-smartupdates>`
+      will try using the image recommended by the Version Service instead of the
+      custom one.
+
 9. Now follow the standard `Percona Distribution for MongoDB Operator installation instruction <./openshift.html>`_
 
