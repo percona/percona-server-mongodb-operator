@@ -76,20 +76,18 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		})
 	}
 
-	if *m.Spec.Mongod.Security.EnableEncryption {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: m.Spec.EncryptionKeySecretName(),
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &secretFileMode,
-						SecretName:  m.Spec.EncryptionKeySecretName(),
-						Optional:    &fvar,
-					},
+	volumes = append(volumes,
+		corev1.Volume{
+			Name: m.Spec.EncryptionKeySecretName(),
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &secretFileMode,
+					SecretName:  m.Spec.EncryptionKeySecretName(),
+					Optional:    &fvar,
 				},
 			},
-		)
-	}
+		},
+	)
 
 	c, err := container(m, replset, containerName, resources, ikeyName, customConf.Type.IsUsable(),
 		livenessProbe, readinessProbe, containerSecurityContext)

@@ -399,45 +399,11 @@ type MongosSpec struct {
 }
 
 type MongodSpec struct {
-	Net                *MongodSpecNet                `json:"net,omitempty"`
-	AuditLog           *MongoSpecAuditLog            `json:"auditLog,omitempty"`
-	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
-	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
-	Security           *MongodSpecSecurity           `json:"security,omitempty"`
-	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
-	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
+	Security *MongodSpecSecurity `json:"security,omitempty"`
 }
-
-type MongodSpecNet struct {
-	Port     int32 `json:"port,omitempty"`
-	HostPort int32 `json:"hostPort,omitempty"`
-}
-
-type MongodSpecReplication struct {
-	OplogSizeMB int `json:"oplogSizeMB,omitempty"`
-}
-
-// MongodChiperMode is a cipher mode used by Data-at-Rest Encryption
-type MongodChiperMode string
-
-const (
-	MongodChiperModeUnset MongodChiperMode = ""
-	MongodChiperModeCBC   MongodChiperMode = "AES256-CBC"
-	MongodChiperModeGCM   MongodChiperMode = "AES256-GCM"
-)
 
 type MongodSpecSecurity struct {
-	RedactClientLogData  bool             `json:"redactClientLogData,omitempty"`
-	EnableEncryption     *bool            `json:"enableEncryption,omitempty"`
-	EncryptionKeySecret  string           `json:"encryptionKeySecret,omitempty"`
-	EncryptionCipherMode MongodChiperMode `json:"encryptionCipherMode,omitempty"`
-}
-
-type MongodSpecSetParameter struct {
-	TTLMonitorSleepSecs                   int `json:"ttlMonitorSleepSecs,omitempty"`
-	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
-	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
-	CursorTimeoutMillis                   int `json:"cursorTimeoutMillis,omitempty"`
+	EncryptionKeySecret string `json:"encryptionKeySecret,omitempty"`
 }
 
 type MongosSpecSetParameter struct {
@@ -525,12 +491,6 @@ const (
 	OperationProfilingModeAll    OperationProfilingMode = "all"
 	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
 )
-
-type MongodSpecOperationProfiling struct {
-	Mode              OperationProfilingMode `json:"mode,omitempty"`
-	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
-	RateLimit         int                    `json:"rateLimit,omitempty"`
-}
 
 type BackupTaskSpec struct {
 	Name             string              `json:"name"`
