@@ -44,19 +44,24 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		})
 	}
 
-	volumes = append(volumes,
-		corev1.VolumeMount{
-			Name:      cr.Spec.EncryptionKeySecretName(),
-			MountPath: mongodRESTencryptDir,
-			ReadOnly:  true,
-		},
-	)
-
+	if *cr.Spec.Mongod.Security.EnableEncryption {
+		volumes = append(volumes,
+			corev1.VolumeMount{
+				Name:      cr.Spec.EncryptionKeySecretName(),
+				MountPath: mongodRESTencryptDir,
+				ReadOnly:  true,
+			},
+		)
+	}
 	if cr.CompareVersion("1.8.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "users-secret-file",
 			MountPath: "/etc/users-secret",
 		})
+	}
+	hostPort := int32(0)
+	if cr.CompareVersion("1.12.0") < 0 {
+		hostPort = cr.Spec.Mongod.Net.HostPort
 	}
 	container := corev1.Container{
 		Name:            name,
@@ -66,7 +71,8 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
-				ContainerPort: api.DefaultMongodPort,
+				HostPort:      hostPort,
+				ContainerPort: api.MongodPort(cr),
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -80,7 +86,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			},
 			{
 				Name:  "MONGODB_PORT",
-				Value: strconv.Itoa(int(api.DefaultMongodPort)),
+				Value: strconv.Itoa(int(api.MongodPort(cr))),
 			},
 			{
 				Name:  "MONGODB_REPLSET",
@@ -130,6 +136,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		"--bind_ip_all",
 		"--auth",
 		"--dbpath=" + MongodContainerDataDir,
+		"--port=" + strconv.Itoa(int(api.MongodPort(m))),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
@@ -160,6 +167,17 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	if replset.Storage != nil {
 		switch replset.Storage.Engine {
 		case api.StorageEngineWiredTiger:
+			if m.CompareVersion("1.12.0") < 0 && *m.Spec.Mongod.Security.EnableEncryption {
+				args = append(args,
+					"--enableEncryption",
+					"--encryptionKeyFile="+mongodRESTencryptDir+"/"+EncryptionKeyName,
+				)
+				if m.Spec.Mongod.Security.EncryptionCipherMode != api.MongodChiperModeUnset {
+					args = append(args,
+						"--encryptionCipherMode="+string(m.Spec.Mongod.Security.EncryptionCipherMode),
+					)
+				}
+			}
 			if limit, ok := resources.Limits[corev1.ResourceMemory]; ok && !limit.IsZero() {
 				args = append(args, fmt.Sprintf(
 					"--wiredTigerCacheSizeGB=%.2f",
@@ -197,6 +215,81 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		}
 		if replset.Storage.SyncPeriodSecs > 0 {
 			args = append(args, "--syncdelay="+strconv.Itoa(replset.Storage.SyncPeriodSecs))
+		}
+	}
+
+	if m.CompareVersion("1.12.0") < 0 {
+		mSpec := m.Spec.Mongod
+		// operationProfiling
+		if mSpec.OperationProfiling != nil {
+			switch mSpec.OperationProfiling.Mode {
+			case api.OperationProfilingModeAll:
+				args = append(args, "--profile=2")
+			case api.OperationProfilingModeSlowOp:
+				args = append(args,
+					"--slowms="+strconv.Itoa(int(mSpec.OperationProfiling.SlowOpThresholdMs)),
+					"--profile=1",
+				)
+			}
+			if mSpec.OperationProfiling.RateLimit > 0 {
+				args = append(args, "--rateLimit="+strconv.Itoa(mSpec.OperationProfiling.RateLimit))
+			}
+		}
+
+		// security
+		if mSpec.Security != nil && mSpec.Security.RedactClientLogData {
+			args = append(args, "--redactClientLogData")
+		}
+
+		// replication
+		if mSpec.Replication != nil && mSpec.Replication.OplogSizeMB > 0 {
+			args = append(args, "--oplogSize="+strconv.Itoa(mSpec.Replication.OplogSizeMB))
+		}
+
+		// setParameter
+		if mSpec.SetParameter != nil {
+			if mSpec.SetParameter.TTLMonitorSleepSecs > 0 {
+				args = append(args,
+					"--setParameter",
+					"ttlMonitorSleepSecs="+strconv.Itoa(mSpec.SetParameter.TTLMonitorSleepSecs),
+				)
+			}
+			if mSpec.SetParameter.WiredTigerConcurrentReadTransactions > 0 {
+				args = append(args,
+					"--setParameter",
+					"wiredTigerConcurrentReadTransactions="+strconv.Itoa(mSpec.SetParameter.WiredTigerConcurrentReadTransactions),
+				)
+			}
+			if mSpec.SetParameter.WiredTigerConcurrentWriteTransactions > 0 {
+				args = append(args,
+					"--setParameter",
+					"wiredTigerConcurrentWriteTransactions="+strconv.Itoa(mSpec.SetParameter.WiredTigerConcurrentWriteTransactions),
+				)
+			}
+			if mSpec.SetParameter.CursorTimeoutMillis > 0 {
+				args = append(args,
+					"--setParameter",
+					"cursorTimeoutMillis="+strconv.Itoa(mSpec.SetParameter.CursorTimeoutMillis),
+				)
+			}
+		}
+
+		// auditLog
+		if mSpec.AuditLog != nil && mSpec.AuditLog.Destination == api.AuditLogDestinationFile {
+			if mSpec.AuditLog.Filter == "" {
+				mSpec.AuditLog.Filter = "{}"
+			}
+			args = append(args,
+				"--auditDestination=file",
+				"--auditFilter="+mSpec.AuditLog.Filter,
+				"--auditFormat="+string(mSpec.AuditLog.Format),
+			)
+			switch mSpec.AuditLog.Format {
+			case api.AuditLogFormatBSON:
+				args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
+			default:
+				args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
+			}
 		}
 	}
 

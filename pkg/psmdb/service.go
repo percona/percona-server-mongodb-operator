@@ -39,8 +39,8 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			Ports: []corev1.ServicePort{
 				{
 					Name:       mongodPortName,
-					Port:       api.DefaultMongodPort,
-					TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
+					Port:       api.MongodPort(m),
+					TargetPort: intstr.FromInt(int(api.MongodPort(m))),
 				},
 			},
 			ClusterIP:                "None",
@@ -77,8 +77,8 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 		Ports: []corev1.ServicePort{
 			{
 				Name:       mongodPortName,
-				Port:       api.DefaultMongodPort,
-				TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
+				Port:       api.MongodPort(m),
+				TargetPort: intstr.FromInt(int(api.MongodPort(m))),
 			},
 		},
 		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
@@ -227,7 +227,7 @@ func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, err
 // GetAddr returns replicaSet pod address in cluster
 func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
-		":" + strconv.Itoa(int(api.DefaultMongodPort))
+		":" + strconv.Itoa(int(api.MongodPort(m)))
 }
 
 func getExtServices(cl client.Client, namespace, podName string) (*corev1.Service, error) {

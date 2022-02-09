@@ -28,7 +28,7 @@ var (
 	defaultMongodSize               int32 = 3
 	defaultReplsetName                    = "rs"
 	defaultStorageEngine                  = StorageEngineWiredTiger
-	DefaultMongodPort               int32 = 27017
+	defaultMongodPort               int32 = 27017
 	defaultWiredTigerCacheSizeRatio       = 0.5
 	defaultInMemorySizeRatio              = 0.9
 	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
@@ -68,12 +68,38 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Mongod == nil {
 		cr.Spec.Mongod = &MongodSpec{}
 	}
+	if cr.CompareVersion("1.12.0") < 0 {
+		if cr.Spec.Mongod.Net == nil {
+			cr.Spec.Mongod.Net = &MongodSpecNet{}
+		}
+		if cr.Spec.Mongod.Net.Port == 0 {
+			cr.Spec.Mongod.Net.Port = defaultMongodPort
+		}
+		if cr.Spec.Mongod.Storage == nil {
+			cr.Spec.Mongod.Storage = &MongodSpecStorage{}
+		}
+		if cr.Spec.Mongod.Storage.Engine == "" {
+			cr.Spec.Mongod.Storage.Engine = defaultStorageEngine
+		}
+		if cr.Spec.Mongod.OperationProfiling == nil {
+			cr.Spec.Mongod.OperationProfiling = &MongodSpecOperationProfiling{
+				Mode: defaultOperationProfilingMode,
+			}
+		}
+		if cr.Spec.Mongod.Security.EnableEncryption == nil {
+			is120 := cr.CompareVersion("1.2.0") >= 0
+			cr.Spec.Mongod.Security.EnableEncryption = &is120
+		}
+	}
 	if cr.Spec.Mongod.Security == nil {
 		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
 
 	if cr.Spec.EncryptionKeySecretName() == "" {
-		cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
+		is1120 := cr.CompareVersion("1.12.0") >= 0
+		if is1120 || (!is1120 && *cr.Spec.Mongod.Security.EnableEncryption) {
+			cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
+		}
 	}
 
 	if cr.Spec.Secrets.SSL == "" {
@@ -261,8 +287,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if replset.Storage == nil {
-			replset.Storage = new(MongodSpecStorage)
-			replset.Storage.Engine = defaultStorageEngine
+			if cr.CompareVersion("1.12.0") >= 0 {
+				replset.Storage = new(MongodSpecStorage)
+				replset.Storage.Engine = defaultStorageEngine
+			} else {
+				replset.Storage = cr.Spec.Mongod.Storage
+			}
 		}
 
 		switch replset.Storage.Engine {
@@ -352,7 +382,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if replset.ReadinessProbe.TCPSocket == nil {
 			replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(DefaultMongodPort)),
+				Port: intstr.FromInt(int(MongodPort(cr))),
 			}
 		}
 
@@ -594,7 +624,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ReadinessProbe = &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(DefaultMongodPort)),
+					Port: intstr.FromInt(int(MongodPort(cr))),
 				},
 			},
 		}
@@ -723,4 +753,11 @@ func (v *VolumeSpec) reconcileOpts() error {
 	}
 
 	return nil
+}
+
+func MongodPort(cr *PerconaServerMongoDB) int32 {
+	if cr.CompareVersion("1.12.0") >= 0 {
+		return defaultMongodPort
+	}
+	return cr.Spec.Mongod.Net.Port
 }

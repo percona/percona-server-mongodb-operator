@@ -210,6 +210,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 }
 
 func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool, cfgInstances []string) []string {
+	mdSpec := cr.Spec.Mongod
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
@@ -240,6 +241,10 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 			"--sslMode=preferSSL",
 			"--clusterAuthMode=x509",
 		)
+	}
+
+	if cr.CompareVersion("1.12.0") < 0 && mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
+		args = append(args, "--redactClientLogData")
 	}
 
 	if msSpec.SetParameter != nil {
