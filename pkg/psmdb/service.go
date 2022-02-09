@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -205,6 +206,10 @@ func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, rsName strin
 // MongoHost returns the mongo host for given pod
 func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
 	if rsExposed {
+		if m.Spec.MultiCluster.Enabled {
+			return GetMCSAddr(m, pod.Name), nil
+		}
+
 		return getExtAddr(cl, m.Namespace, pod)
 	}
 
@@ -229,6 +234,11 @@ func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, err
 func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
+}
+
+// GetMCSAddr returns ReplicaSet pod address using MultiCluster FQDN
+func GetMCSAddr(m *api.PerconaServerMongoDB, pod string) string {
+	return fmt.Sprintf("%s.%s.%s:%d", pod, m.Namespace, m.Spec.MultiCluster.DNSSuffix, m.Spec.Mongod.Net.Port)
 }
 
 func getExtServices(cl client.Client, namespace, podName string) (*corev1.Service, error) {
