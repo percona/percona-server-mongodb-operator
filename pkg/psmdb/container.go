@@ -44,7 +44,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		})
 	}
 
-	if *cr.Spec.Mongod.Security.EnableEncryption {
+	if is1120 := cr.CompareVersion("1.12.0") >= 0; is1120 || (!is1120 && *cr.Spec.Mongod.Security.EnableEncryption) {
 		volumes = append(volumes,
 			corev1.VolumeMount{
 				Name:      cr.Spec.EncryptionKeySecretName(),
@@ -167,11 +167,13 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	if replset.Storage != nil {
 		switch replset.Storage.Engine {
 		case api.StorageEngineWiredTiger:
-			if m.CompareVersion("1.12.0") < 0 && *m.Spec.Mongod.Security.EnableEncryption {
+			if is1120 := m.CompareVersion("1.12.0") >= 0; is1120 || (!is1120 && *m.Spec.Mongod.Security.EnableEncryption) {
 				args = append(args,
 					"--enableEncryption",
 					"--encryptionKeyFile="+mongodRESTencryptDir+"/"+EncryptionKeyName,
 				)
+			}
+			if m.CompareVersion("1.12.0") < 0 && *m.Spec.Mongod.Security.EnableEncryption {
 				if m.Spec.Mongod.Security.EncryptionCipherMode != api.MongodChiperModeUnset {
 					args = append(args,
 						"--encryptionCipherMode="+string(m.Spec.Mongod.Security.EncryptionCipherMode),
