@@ -64,9 +64,6 @@ spec:
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --configsvr
-            - --slowms=100
-            - --profile=1
-            - --rateLimit=100
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
