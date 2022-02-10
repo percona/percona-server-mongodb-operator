@@ -227,7 +227,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
-	err = r.safeDownscale(cr)
+	isDownscale, err := r.safeDownscale(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "safe downscale")
 	}
@@ -240,11 +240,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile users secret")
-	}
-
-	err = r.deleteOrphanPVCs(cr)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed to delete orphan PVCs: %v", err)
 	}
 
 	repls := cr.Spec.Replsets
@@ -491,6 +486,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "delete config server")
 	}
 
+	// clean orphan PVCs if downscale
+	if isDownscale {
+		err = r.deleteOrphanPVCs(cr)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to delete orphan PVCs: %v", err)
+		}
+	}
+
 	err = r.sheduleEnsureVersion(cr, VersionServiceClient{})
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
@@ -531,11 +534,13 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServer
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongoDB) error {
+// return whether need to downscale
+func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongoDB) (bool, error) {
+	isDownscale := false
 	for _, rs := range cr.Spec.Replsets {
 		sf, err := r.getRsStatefulset(cr, rs.Name)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "get rs statefulset")
+			return false, errors.Wrap(err, "get rs statefulset")
 		}
 
 		if k8serrors.IsNotFound(err) {
@@ -545,10 +550,11 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongo
 		// downscale 1 pod on each reconciliation
 		if *sf.Spec.Replicas-rs.Size > 1 {
 			rs.Size = *sf.Spec.Replicas - 1
+			isDownscale = true
 		}
 	}
 
-	return nil
+	return isDownscale, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {

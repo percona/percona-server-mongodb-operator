@@ -48,19 +48,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(cr *api.PerconaServerMongo
 	return mongosPods, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
-	mongosPods := corev1.PodList{}
-	err := r.client.List(context.TODO(),
-		&mongosPods,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
-		},
-	)
-
-	return mongosPods, err
-}
-
 func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
 	list := appsv1.StatefulSetList{}
 
