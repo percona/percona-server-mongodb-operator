@@ -117,7 +117,15 @@ function prepare_cr_yaml() {
 		| yq w - "spec.upgradeOptions.apply" "disabled" \
 		| yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" \
 		| yq w - "spec.replsets[*].arbiter.enabled" "false" \
-		| yq w - "spec.backup.enabled" "false" \
+		| yq w - "spec.backup.enabled" "true" \
+		| yq w - "spec.backup.debug" "true" \
+		| yq w - "spec.backup.restartOnFailure" "true" \
+		| yq w - "spec.backup.pitr.enabled" "false" \
+		| yq w - "spec.backup.storages.minio.type" "s3" \
+		| yq w - "spec.backup.storages.minio.s3.credentialsSecret" "minio-secret" \
+		| yq w - "spec.backup.storages.minio.s3.region" "us-east-1" \
+		| yq w - "spec.backup.storages.minio.s3.bucket" "operator-testing" \
+		| yq w - "spec.backup.storages.minio.s3.endpointUrl" "http://minio-service:9000/" \
 		| yq w - "spec.sharding.enabled" "true" \
 		| yq w - "spec.sharding.configsvrReplSet.size" "${CLUSTER_SIZE}" \
 		| yq w - "spec.sharding.mongos.size" "${CLUSTER_SIZE}" \
@@ -133,11 +141,11 @@ function check_upgrade_order() {
 
 	local start=$((upgrade_order * cluster_size - cluster_size + 1))
 	local end=$((upgrade_order * cluster_size))
-	local nr=$(kubectl_bin get pod --sort-by=.status.startTime | grep -vE '^NAME|client|operator' | sed -n "${start},${end}p" | grep -c "\-${pod_type}\-")
+	local nr=$(kubectl_bin get pod --sort-by=.status.startTime | grep -vE '^NAME|client|operator|minio-service' | sed -n "${start},${end}p" | grep -c "\-${pod_type}\-")
 
 	if [[ ${nr} -ne ${cluster_size} ]]; then
 		echo "${pod_type} was not upgraded ${upgrade_order}!"
-		kubectl_bin get pod --sort-by=.status.startTime | grep -vE 'client|operator'
+		kubectl_bin get pod --sort-by=.status.startTime | grep -vE 'client|operator|minio-service'
 		exit 1
 	else
 		echo "${pod_type} was upgraded ${upgrade_order}!"
@@ -148,7 +156,9 @@ function main() {
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || true
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
 	create_namespace "${namespace}"
+	apply_s3_storage_secrets
 	deploy_operator_gh
+	deploy_minio
 
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
@@ -168,6 +178,17 @@ function main() {
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
 	compare_generation "1" "psmdb" "${cluster}"
+
+	# create backup
+	backup_name_minio="backup-minio"
+	wait_backup_agent $cluster-rs0-0
+	wait_backup_agent $cluster-rs0-1
+	wait_backup_agent $cluster-rs0-2
+	wait_backup_agent $cluster-cfg-0
+	wait_backup_agent $cluster-cfg-1
+	wait_backup_agent $cluster-cfg-2
+	run_backup minio
+	wait_backup "$backup_name_minio"
 
 	desc 'upgrade operator'
 	kubectl_bin apply -f "${src_dir}/deploy/crd.yaml"
@@ -221,10 +242,21 @@ function main() {
 	check_upgrade_order "rs0" "${CLUSTER_SIZE}" "2"
 	check_upgrade_order "mongos" "${CLUSTER_SIZE}" "3"
 
+	desc 'drop collection and do restore with new version'
+	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	backup_dest_minio=$(get_backup_dest "$backup_name_minio")
+	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://operator-testing/${backup_dest_minio}" \
+		| grep "${backup_dest_minio}_rs0.dump.gz"
+	run_restore $backup_name_minio 3 1 "-mongos"
+	wait_restore $backup_name_minio 3 1 "-mongos"
+	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
+
 	desc 'cleanup'
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
-	#   kubectl_bin delete pvc --all
 	destroy "${namespace}"
 }
 

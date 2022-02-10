@@ -19,7 +19,7 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServerMongoDB) error {
 	ctasks := make(map[string]api.BackupTaskSpec)
-	ls := backup.NewBackupCronJobLabels(cr.Name)
+	ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
 
 	for _, task := range cr.Spec.Backup.Tasks {
 		cjob, err := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
