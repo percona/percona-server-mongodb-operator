@@ -20,7 +20,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) (bool, error) {
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(context.TODO(),
 		types.NamespacedName{
@@ -30,9 +30,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&sysUsersSecretObj,
 	)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return nil
+		return false, nil
 	} else if err != nil {
-		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
+		return false, errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
 	}
 
 	secretName := api.InternalUserSecretName(cr)
@@ -46,7 +46,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		&internalSysSecretObj,
 	)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "get internal sys users secret")
+		return false, errors.Wrap(err, "get internal sys users secret")
 	}
 
 	if k8serrors.IsNotFound(err) {
@@ -57,40 +57,40 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		}
 		err = r.client.Create(context.TODO(), internalSysUsersSecret)
 		if err != nil {
-			return errors.Wrap(err, "create internal sys users secret")
+			return false, errors.Wrap(err, "create internal sys users secret")
 		}
-		return nil
+		return false, nil
 	}
 
 	// we do this check after work with secret objects because in case of upgrade cluster we need to be sure that internal secret exist
 	if cr.Status.State != api.AppStateReady {
-		return nil
+		return false, nil
 	}
 
 	newSysData, err := json.Marshal(sysUsersSecretObj.Data)
 	if err != nil {
-		return errors.Wrap(err, "marshal sys secret data")
+		return false, errors.Wrap(err, "marshal sys secret data")
 	}
 
 	newSecretDataHash := sha256Hash(newSysData)
 	dataChanged, err := sysUsersSecretDataChanged(newSecretDataHash, &internalSysSecretObj)
 	if err != nil {
-		return errors.Wrap(err, "check sys users data changes")
+		return false, errors.Wrap(err, "check sys users data changes")
 	}
 
 	if !dataChanged || cr.Spec.Unmanaged {
-		return nil
+		return true, nil
 	}
 
 	containers, err := r.updateSysUsers(cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
-		return errors.Wrap(err, "manage sys users")
+		return false, errors.Wrap(err, "manage sys users")
 	}
 
 	if len(containers) > 0 {
 		rsPodList, err := r.getMongodPods(cr)
 		if err != nil {
-			return errors.Wrap(err, "failed to get mongos pods")
+			return false, errors.Wrap(err, "failed to get mongos pods")
 		}
 
 		pods := rsPodList.Items
@@ -98,14 +98,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		if cr.Spec.Sharding.Enabled {
 			mongosList, err := r.getMongosPods(cr)
 			if err != nil {
-				return errors.Wrap(err, "failed to get mongos pods")
+				return false, errors.Wrap(err, "failed to get mongos pods")
 			}
 
 			pods = append(pods, mongosList.Items...)
 
 			cfgPodlist, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
 			if err != nil {
-				return errors.Wrap(err, "failed to get mongos pods")
+				return false, errors.Wrap(err, "failed to get mongos pods")
 			}
 
 			pods = append(pods, cfgPodlist.Items...)
@@ -114,7 +114,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 		for _, name := range containers {
 			err = r.killcontainer(pods, name)
 			if err != nil {
-				return errors.Wrapf(err, "failed to kill %s container", name)
+				return false, errors.Wrapf(err, "failed to kill %s container", name)
 			}
 		}
 	}
@@ -122,10 +122,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(cr *api.PerconaServerMong
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
 	err = r.client.Update(context.TODO(), &internalSysSecretObj)
 	if err != nil {
-		return errors.Wrap(err, "update internal sys users secret")
+		return false, errors.Wrap(err, "update internal sys users secret")
 	}
 
-	return nil
+	return true, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) killcontainer(pods []corev1.Pod, containerName string) error {

@@ -181,6 +181,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		RequeueAfter: r.reconcileIn,
 	}
 
+	isReady := true
+
 	// As operator can handle a few clusters
 	// lock should be created per cluster to not lock cron jobs of other clusters
 	l := r.lockers.LoadOrCreate(request.NamespacedName.String())
@@ -210,6 +212,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		err = r.checkFinalizers(cr)
+		if err == nil {
+			return reconcile.Result{}, nil
+		}
 		return rr, err
 	}
 
@@ -233,10 +238,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
-	err = r.safeDownscale(cr)
+	ok, err := r.safeDownscale(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "safe downscale")
 	}
+	isReady = isReady && ok
 
 	err = r.reconcileUsersSecret(cr)
 	if err != nil {
@@ -258,10 +264,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if cr.CompareVersion("1.5.0") >= 0 {
-		err := r.reconcileUsers(cr, repls)
+		ok, err := r.reconcileUsers(cr, repls)
 		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed to reconcile users")
+			return rr, errors.Wrap(err, "failed to reconcile users")
 		}
+		isReady = isReady && ok
 	}
 
 	removed, err := r.getRemovedSfs(cr)
@@ -291,6 +298,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
 		err := r.ensureVersion(cr, VersionServiceClient{})
 		if err != nil {
+			isReady = false
 			logger.Info("failed to ensure version, running with default", "error", err)
 		}
 	}
@@ -454,6 +462,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			logger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 
+		if clusterStatus != api.AppStateReady {
+			isReady = false
+		}
+
 		if err := r.fetchVersionFromMongo(cr, replset); err != nil {
 			return rr, errors.Wrap(err, "update mongo version")
 		}
@@ -464,18 +476,21 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return reconcile.Result{}, errors.Wrap(err, "on restore")
 	}
 
-	err = r.reconcileMongos(cr)
+	ok, err = r.reconcileMongos(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
+	isReady = isReady && ok
 
-	if err := r.enableBalancerIfNeeded(cr); err != nil {
+	if ok, err = r.enableBalancerIfNeeded(cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
+	isReady = isReady && ok
 
-	if err := r.upgradeFCVIfNeeded(cr, *repls[0], cr.Status.MongoVersion); err != nil {
+	if ok, err = r.upgradeFCVIfNeeded(cr, *repls[0], cr.Status.MongoVersion); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
+	isReady = isReady && ok
 
 	err = r.deleteMongosIfNeeded(cr)
 	if err != nil {
@@ -493,11 +508,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	// DB cluster can be not ready yet so it's requeued after some time
-	if err = r.updatePITR(cr); err != nil {
+	if ok, err = r.updatePITR(cr); err != nil {
 		return rr, err
 	}
+	isReady = isReady && ok
 
-	return rr, nil
+	if !isReady {
+		return rr, nil
+	}
+	return reconcile.Result{}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServerMongoDB) error {
@@ -527,24 +546,28 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServer
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongoDB) (bool, error) {
+	ready := true
+
 	for _, rs := range cr.Spec.Replsets {
 		sf, err := r.getRsStatefulset(cr, rs.Name)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "get rs statefulset")
+			return false, errors.Wrap(err, "get rs statefulset")
 		}
 
 		if k8serrors.IsNotFound(err) {
+			ready = false
 			continue
 		}
 
 		// downscale 1 pod on each reconciliation
 		if *sf.Spec.Replicas-rs.Size > 1 {
 			rs.Size = *sf.Spec.Replicas - 1
+			ready = false
 		}
 	}
 
-	return nil
+	return ready, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
@@ -716,36 +739,44 @@ func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(cr *api.Percon
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServerMongoDB, repl api.ReplsetSpec, newFCV string) error {
+func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(cr *api.PerconaServerMongoDB, repl api.ReplsetSpec, newFCV string) (bool, error) {
 	if !cr.Spec.UpgradeOptions.SetFCV {
-		return nil
+		return true, nil
+	}
+
+	if newFCV == "" {
+		return false, nil
 	}
 
 	up, err := r.isAllSfsUpToDate(cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to check is all sfs up to date")
+		return false, errors.Wrap(err, "failed to check is all sfs up to date")
 	}
 
 	if !up {
-		return nil
+		return false, nil
 	}
 
 	fcvsv, err := v.NewSemver(newFCV)
 	if err != nil {
-		return errors.Wrap(err, "invalid version")
+		return false, errors.Wrap(err, "invalid version")
 	}
 
 	fcv, err := r.getFCV(cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to get FCV")
+		return false, errors.Wrap(err, "failed to get FCV")
 	}
 
 	if !canUpgradeVersion(fcv, MajorMinor(fcvsv)) {
-		return nil
+		return false, nil
 	}
 
 	err = r.setFCV(cr, newFCV)
-	return errors.Wrap(err, "failed to set FCV")
+	if err != nil {
+		return false, errors.Wrap(err, "failed to set FCV")
+	}
+
+	return true, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoDB) error {
@@ -909,66 +940,66 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(cr *api.PerconaS
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMongoDB) (bool, error) {
 	if !cr.Spec.Sharding.Enabled {
-		return nil
+		return true, nil
 	}
 
 	uptodate, err := r.isAllSfsUpToDate(cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+		return false, errors.Wrap(err, "failed to chaeck if all sfs are up to date")
 	}
 
 	rstRunning, err := r.isRestoreRunning(cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to check running restores")
+		return false, errors.Wrap(err, "failed to check running restores")
 	}
 
 	if !uptodate || rstRunning {
-		return nil
+		return false, nil
 	}
 
 	msDepl := psmdb.MongosDeployment(cr)
 	err = setControllerReference(cr, msDepl, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
+		return false, errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
 	}
 
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+		return false, errors.Wrapf(err, "get deployment %s", msDepl.Name)
 	}
 
 	if !k8serrors.IsNotFound(err) && msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
 		log.Info("waiting for mongos update")
-		return nil
+		return false, nil
 	}
 
 	opPod, err := r.operatorPod()
 	if err != nil {
-		return errors.Wrap(err, "failed to get operator pod")
+		return false, errors.Wrap(err, "failed to get operator pod")
 	}
 
 	customConfig, err := r.getCustomConfig(cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
 	if err != nil {
-		return errors.Wrap(err, "check if mongos custom configuration exists")
+		return false, errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
 	cfgPods, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
 	if err != nil {
-		return errors.Wrap(err, "get configsvr pods")
+		return false, errors.Wrap(err, "get configsvr pods")
 	}
 
 	// wait all configsvr pods to prevent unnecessary updates to mongos deployment
 	if int(cr.Spec.Sharding.ConfigsvrReplSet.Size) > len(cfgPods.Items) {
-		return nil
+		return false, nil
 	}
 
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
 		host, err := psmdb.MongoHost(r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
 		if err != nil {
-			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
+			return false, errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}
 		cfgInstances = append(cfgInstances, host)
 	}
@@ -979,12 +1010,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig, cfgInstances)
 	if err != nil {
-		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
+		return false, errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
 
 	sslAnn, err := r.sslAnnotation(cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to get ssl annotations")
+		return false, errors.Wrap(err, "failed to get ssl annotations")
 	}
 	if deplSpec.Template.Annotations == nil {
 		deplSpec.Template.Annotations = make(map[string]string)
@@ -997,7 +1028,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	if cr.CompareVersion("1.8.0") < 0 {
 		depl, err := r.getMongosDeployment(cr)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "failed to get mongos deployment")
+			return false, errors.Wrap(err, "failed to get mongos deployment")
 		}
 
 		for k, v := range depl.Spec.Template.Annotations {
@@ -1011,12 +1042,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		pmmsec := corev1.Secret{}
 		err := r.client.Get(context.TODO(), types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
 		if err != nil {
-			return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
+			return false, errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
 		}
 
 		pmmC, err := psmdb.AddPMMContainer(cr, api.UserSecretName(cr), pmmsec, cr.Spec.PMM.MongosParams)
 		if err != nil {
-			return errors.Wrap(err, "failed to create a pmm-client container")
+			return false, errors.Wrap(err, "failed to create a pmm-client container")
 		}
 		deplSpec.Template.Spec.Containers = append(
 			deplSpec.Template.Spec.Containers,
@@ -1027,7 +1058,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	if cr.CompareVersion("1.11.0") >= 0 && cr.Spec.Sharding.Mongos != nil {
 		pvcs := cr.Spec.Sharding.Mongos.SidecarPVCs
 		if err := ensurePVCs(context.Background(), r.client, cr.Namespace, pvcs); err != nil {
-			return errors.Wrap(err, "ensure pvc")
+			return false, errors.Wrap(err, "ensure pvc")
 		}
 	}
 
@@ -1035,34 +1066,34 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	if cr.CompareVersion("1.9.0") >= 0 {
 		err = r.createOrUpdate(msDepl)
 		if err != nil {
-			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+			return false, errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
 		}
 	} else {
 		err = r.createOrUpdateDeploymentLegacy(msDepl, msDepl.Name, msDepl.Namespace)
 		if err != nil {
-			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+			return false, errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
 		}
 	}
 
 	err = r.reconcilePDB(cr.Spec.Sharding.Mongos.PodDisruptionBudget, msDepl.Spec.Template.Labels, cr.Namespace, msDepl)
 	if err != nil {
-		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos deployment")
+		return false, errors.Wrap(err, "reconcile PodDisruptionBudget for mongos deployment")
 	}
 
 	mongosSvc := psmdb.MongosService(cr)
 	err = setControllerReference(cr, &mongosSvc, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
+		return false, errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
 	}
 
 	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
 
 	err = r.createOrUpdate(&mongosSvc)
 	if err != nil {
-		return errors.Wrap(err, "create or update mongos service")
+		return false, errors.Wrap(err, "create or update mongos service")
 	}
 
-	return nil
+	return true, nil
 }
 
 func ensurePVCs(

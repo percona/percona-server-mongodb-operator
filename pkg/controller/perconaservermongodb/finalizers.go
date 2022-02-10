@@ -27,6 +27,10 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMon
 	cr.SetFinalizers(finalizers)
 	err := r.client.Update(context.TODO(), cr)
 
+	if err == nil && len(finalizers) > 0 {
+		err = errors.New("failed to run finalizers")
+	}
+
 	return err
 }
 

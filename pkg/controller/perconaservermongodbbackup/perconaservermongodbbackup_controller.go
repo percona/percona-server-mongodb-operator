@@ -99,7 +99,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return rr, nil
+			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		return rr, err
@@ -107,7 +107,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 
 	if (cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError) &&
 		cr.ObjectMeta.DeletionTimestamp == nil {
-		return rr, nil
+		return reconcile.Result{}, nil
 	}
 
 	status := cr.Status
@@ -161,6 +161,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(request reconcile.Reques
 	status, err = r.reconcile(cluster, cr, bcp)
 	if err != nil {
 		return rr, errors.Wrap(err, "reconcile backup")
+	}
+
+	if status.State == psmdbv1.BackupStateReady || status.State == psmdbv1.BackupStateError {
+		return reconcile.Result{}, nil
 	}
 
 	return rr, nil
@@ -232,6 +236,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(cr *psmdbv1.Percon
 
 	cr.SetFinalizers(finalizers)
 	err = r.client.Update(context.TODO(), cr)
+
+	if err == nil && len(finalizers) > 0 {
+		err = errors.New("failed to run finalizers")
+	}
 
 	return err
 }

@@ -205,80 +205,80 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongo
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) (bool, error) {
 	if !cr.Spec.Backup.Enabled {
-		return nil
+		return true, nil
 	}
 
 	// pitr is disabled right before restore so it must not be re-enabled during restore
 	isRestoring, err := r.isRestoreRunning(cr)
 	if err != nil {
-		return errors.Wrap(err, "checking if restore running on pbm update")
+		return false, errors.Wrap(err, "checking if restore running on pbm update")
 	}
 
 	if isRestoring || cr.Status.State != api.AppStateReady {
-		return nil
+		return false, nil
 	}
 
 	pbm, err := backup.NewPBM(r.client, cr)
 	if err != nil {
-		return errors.Wrap(err, "create pbm object")
+		return false, errors.Wrap(err, "create pbm object")
 	}
 	defer pbm.Close()
 
 	if cr.Spec.Backup.PITR.Enabled {
 		hasFullBackup, err := r.hasFullBackup(cr)
 		if err != nil {
-			return errors.Wrap(err, "check full backup")
+			return false, errors.Wrap(err, "check full backup")
 		}
 
 		if !hasFullBackup {
 			log.Info("Point-in-time recovery will work only with full backup. Please create one manually or wait for scheduled backup to be created (if configured).")
-			return nil
+			return false, nil
 		}
 	}
 
 	val, err := pbm.C.GetConfigVar("pitr.enabled")
 	if err != nil {
 		if !errors.Is(err, mongo.ErrNoDocuments) {
-			return errors.Wrap(err, "get pitr.enabled")
+			return false, errors.Wrap(err, "get pitr.enabled")
 		}
 
-		return nil
+		return false, nil
 	}
 
 	enabled, ok := val.(bool)
 	if !ok {
-		return errors.Wrap(err, "unexpected value of pitr.enabled")
+		return false, errors.Wrap(err, "unexpected value of pitr.enabled")
 	}
 
 	if enabled != cr.Spec.Backup.PITR.Enabled {
 		val := strconv.FormatBool(cr.Spec.Backup.PITR.Enabled)
 		if err := pbm.C.SetConfigVar("pitr.enabled", val); err != nil {
-			return errors.Wrap(err, "update pitr.enabled")
+			return false, errors.Wrap(err, "update pitr.enabled")
 		}
 	}
 
 	val, err = pbm.C.GetConfigVar("pitr.oplogSpanMin")
 	if err != nil {
 		if !errors.Is(err, mongo.ErrNoDocuments) {
-			return errors.Wrap(err, "get pitr.oplogSpanMin")
+			return false, errors.Wrap(err, "get pitr.oplogSpanMin")
 		}
 
-		return nil
+		return false, nil
 	}
 
 	oplogSpanMin, ok := val.(float64)
 	if !ok {
-		return errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
+		return false, errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
 	}
 
 	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin {
 		val := strconv.FormatFloat(cr.Spec.Backup.PITR.OplogSpanMin, 'f', -1, 64)
 		if err := pbm.C.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
-			return errors.Wrap(err, "update pitr.oplogSpanMin")
+			return false, errors.Wrap(err, "update pitr.oplogSpanMin")
 		}
 	}
 
-	return nil
+	return true, nil
 }

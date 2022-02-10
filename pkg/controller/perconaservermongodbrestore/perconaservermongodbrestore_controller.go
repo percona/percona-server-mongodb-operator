@@ -96,7 +96,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return rr, nil
+			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		return rr, err
@@ -132,6 +132,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(request reconcile.Reque
 	status, err = r.reconcileRestore(cr)
 	if err != nil {
 		return rr, fmt.Errorf("reconcile: %v", err)
+	}
+
+	switch status.State {
+	case psmdbv1.RestoreStateReady, psmdbv1.RestoreStateError:
+		return reconcile.Result{}, nil
 	}
 
 	return rr, nil
