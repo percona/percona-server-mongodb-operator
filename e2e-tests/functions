@@ -1,16 +1,14 @@
 #!/bin/bash
 
-exec 5>&2
-BASH_XTRACEFD="5"
-
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-API="psmdb.percona.com/v1-11-0"
+API="psmdb.percona.com/v1-12-0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
+PMM_SERVER_VER="2.24.0"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -19,6 +17,15 @@ test_name=$(basename $test_dir)
 namespace="${test_name}-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
+logs_dir=$(realpath $test_dir/../logs)
+
+if [[ ${ENABLE_LOGGING} == "true" ]]; then
+	if [ ! -d "${logs_dir}" ]; then
+		mkdir "${logs_dir}"
+	fi
+	exec &> >(tee ${logs_dir}/${test_name}.log)
+	echo "Log: ${logs_dir}/${test_name}.log"
+fi
 
 if [ -f "$conf_dir/cloud-secret.yml" ]; then
 	SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
@@ -200,10 +207,10 @@ run_restore() {
 	else
 		run_mongo \
 			'use myApp\n db.test.insert({ x: 100501 })' \
-			"myApp:myPass@$cluster.$namespace"
+			"myApp:myPass@$cluster$cluster_pfx.$namespace"
 
 		for i in $(seq 0 $last_pod); do
-			compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
+			compare_mongo_cmd "find" "myApp:myPass@$cluster$cluster_pfx-${i}.$cluster$cluster_pfx.$namespace" "-2nd"
 		done
 	fi
 	cat $test_dir/conf/restore.yml \
@@ -277,12 +284,13 @@ simple_data_check() {
 	local cluster_pfx=$4
 
 	if [ $isSharded -eq 1 ]; then
+		sleep 10 # give time for start mongos
 		wait_deployment "$cluster_name-mongos"
 		sleep 10
 		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
 	else
 		for i in $(seq 0 $last_pod); do
-			compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
+			compare_mongo_cmd "find" "myApp:myPass@${cluster_name}${cluster_pfx}-${i}.${cluster_name}${cluster_pfx}.$namespace"
 		done
 	fi
 }
@@ -313,7 +321,11 @@ wait_restore_object() {
 deploy_operator() {
 	desc 'start operator'
 
-	kubectl_bin apply -f ${test_dir}/conf/crd.yaml || kubectl_bin apply -f ${src_dir}/deploy/crd.yaml || :
+	if [ -f ${test_dir}/conf/crd.yaml ]; then
+		kubectl_bin apply -f ${test_dir}/conf/crd.yaml
+	else
+		kubectl_bin apply -f ${src_dir}/deploy/crd.yaml
+	fi
 	kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
 
 	cat ${src_dir}/deploy/operator.yaml \
@@ -327,7 +339,7 @@ deploy_operator() {
 
 deploy_minio() {
 	desc 'install Minio'
-	helm del minio-service || :
+	helm uninstall minio-service || :
 	helm repo remove minio || :
 	helm repo add minio https://helm.min.io/
 	# kubectl_bin delete pvc minio-service --force
@@ -370,14 +382,14 @@ destroy_chaos_mesh() {
 	local chaos_mesh_ns=$(helm list --all-namespaces --filter chaos-mesh | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
 
 	desc 'destroy chaos-mesh'
-	kubectl_bin delete podchaos --all --all-namespaces || :
-	kubectl_bin delete networkchaos --all --all-namespaces || :
+	timeout 30 kubectl delete podchaos --all --all-namespaces || :
+	timeout 30 kubectl delete networkchaos --all --all-namespaces || :
 	if [ -n "${chaos_mesh_ns}" ]; then
 		helm uninstall chaos-mesh --namespace ${chaos_mesh_ns} || :
 	fi
-	kubectl_bin delete crd awschaos.chaos-mesh.org dnschaos.chaos-mesh.org gcpchaos.chaos-mesh.org httpchaos.chaos-mesh.org iochaos.chaos-mesh.org jvmchaos.chaos-mesh.org kernelchaos.chaos-mesh.org networkchaos.chaos-mesh.org podchaos.chaos-mesh.org podhttpchaos.chaos-mesh.org podiochaos.chaos-mesh.org podnetworkchaos.chaos-mesh.org schedules.chaos-mesh.org stresschaos.chaos-mesh.org timechaos.chaos-mesh.org workflownodes.chaos-mesh.org workflows.chaos-mesh.org || :
-	kubectl_bin delete clusterrolebinding chaos-mesh-chaos-controller-manager-cluster-level || :
-	kubectl_bin delete clusterrole chaos-mesh-chaos-controller-manager-cluster-level chaos-mesh-chaos-controller-manager-target-namespace || :
+	timeout 30 kubectl delete crd awschaos.chaos-mesh.org dnschaos.chaos-mesh.org gcpchaos.chaos-mesh.org httpchaos.chaos-mesh.org iochaos.chaos-mesh.org jvmchaos.chaos-mesh.org kernelchaos.chaos-mesh.org networkchaos.chaos-mesh.org podchaos.chaos-mesh.org podhttpchaos.chaos-mesh.org podiochaos.chaos-mesh.org podnetworkchaos.chaos-mesh.org schedules.chaos-mesh.org stresschaos.chaos-mesh.org timechaos.chaos-mesh.org workflownodes.chaos-mesh.org workflows.chaos-mesh.org || :
+	timeout 30 kubectl delete clusterrolebinding chaos-mesh-chaos-controller-manager-cluster-level || :
+	timeout 30 kubectl delete clusterrole chaos-mesh-chaos-controller-manager-cluster-level chaos-mesh-chaos-controller-manager-target-namespace || :
 }
 
 retry() {
@@ -507,6 +519,7 @@ compare_kubectl() {
 		| yq d - '**."cloud.google.com/neg"' \
 		| yq d - '**.volumeName' \
 		| yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
+		| yq d - '**."volume.kubernetes.io/storage-provisioner"' \
 		| yq d - 'spec.volumeMode' \
 		| yq d - '**."volume.kubernetes.io/selected-node"' \
 		| yq d - '**."percona.com/ssl*"' \
@@ -527,6 +540,7 @@ compare_kubectl() {
 
 	if version_gt "1.22"; then
 		yq d -i ${new_result} 'spec.internalTrafficPolicy'
+		yq d -i ${new_result} 'spec.allocateLoadBalancerNodePorts'
 		if [[ $expected_result == */cronjob* ]]; then
 			yq d -i ${new_result} 'metadata.generation'
 		fi
@@ -600,7 +614,7 @@ compare_mongo_cmd() {
 	local suffix="$4"
 
 	run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}
 	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
@@ -714,7 +728,6 @@ destroy() {
 	kubectl_bin delete psmdb-backup --all || :
 	kubectl_bin delete psmdb-restore --all || :
 
-	destroy_chaos_mesh
 	kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v1.5.2/cert-manager.yaml 2>/dev/null || :
 	if [ -n "$OPENSHIFT" ]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &
@@ -887,15 +900,10 @@ kubectl_bin() {
 	for i in $(seq 0 2); do
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
-		[[ ${-/x/} != $- ]] && echo "--- $i stdout" | cat - "$LAST_OUT" >&$BASH_XTRACEFD
-		[[ ${-/x/} != $- ]] && echo "--- $i stderr" | cat - "$LAST_ERR" >&$BASH_XTRACEFD
 		if [[ ${exit_status} != 0 ]]; then
 			sleep "$((timeout * i))"
 		else
-			cat "$LAST_OUT"
-			cat "$LAST_ERR" >&2
-			rm "$LAST_OUT" "$LAST_ERR"
-			return ${exit_status}
+			break
 		fi
 	done
 	cat "$LAST_OUT"

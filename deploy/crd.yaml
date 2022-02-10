@@ -314,6 +314,31 @@ spec:
       subresources:
         status: {}
     - name: v1-11-0
+      storage: false
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: ENDPOINT
+        type: string
+        jsonPath: .status.host
+      - name: Status
+        type: string
+        jsonPath: .status.state
+      - name: Age
+        type: date
+        jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
+    - name: v1-12-0
       storage: true
       served: true
       schema:
@@ -371,7 +396,7 @@ spec:
         - name: Cluster
           type: string
           description: Cluster name
-          jsonPath: .spec.psmdbCluster
+          jsonPath: .spec.clusterName
         - name: Storage
           type: string
           description: Storage name from pxc spec

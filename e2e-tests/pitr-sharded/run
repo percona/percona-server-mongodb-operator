@@ -53,7 +53,7 @@ check_recovery() {
 		"myApp:myPass@$cluster-mongos.$namespace"
 
 	desc 'waiting for chunks to be uploaded'
-	sleep 545
+	sleep 120
 
 	desc "check restore by $restore_type"
 	cat $test_dir/conf/restore.yml \

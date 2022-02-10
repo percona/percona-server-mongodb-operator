@@ -19,7 +19,7 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServerMongoDB) error {
 	ctasks := make(map[string]api.BackupTaskSpec)
-	ls := backup.NewBackupCronJobLabels(cr.Name)
+	ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
 
 	for _, task := range cr.Spec.Backup.Tasks {
 		cjob, err := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
@@ -179,7 +179,7 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	for _, bcp := range bcps.Items {
 		if bcp.Status.State != api.BackupStateReady &&
 			bcp.Status.State != api.BackupStateError &&
-			bcp.Spec.PSMDBCluster == cr.Name {
+			bcp.Spec.GetClusterName() == cr.Name {
 			return true, nil
 		}
 	}
@@ -197,7 +197,7 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongo
 	}
 
 	for _, b := range backups.Items {
-		if b.Status.State == api.BackupStateReady && b.Spec.PSMDBCluster == cr.Name {
+		if b.Status.State == api.BackupStateReady && b.Spec.GetClusterName() == cr.Name {
 			return true, nil
 		}
 	}

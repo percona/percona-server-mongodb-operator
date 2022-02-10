@@ -170,18 +170,23 @@ func (p *PBM) DeletePITR(until *time.Time, l *log.Event) error {
 
 	var zerots primitive.Timestamp
 	if until == nil {
-		return p.deleteChunks(zerots, zerots, stg)
+		return p.deleteChunks(zerots, zerots, stg, l)
 	}
 
 	bcp, err := p.GetLastBackup(&primitive.Timestamp{T: uint32(until.Unix()), I: 0})
+	if errors.Is(err, ErrNotFound) {
+		l.Debug("nothing to delete")
+		return nil
+	}
+
 	if err != nil {
 		return errors.Wrap(err, "get recent backup")
 	}
 
-	return p.deleteChunks(zerots, bcp.LastWriteTS, stg)
+	return p.deleteChunks(zerots, bcp.LastWriteTS, stg, l)
 }
 
-func (p *PBM) deleteChunks(start, until primitive.Timestamp, stg storage.Storage) (err error) {
+func (p *PBM) deleteChunks(start, until primitive.Timestamp, stg storage.Storage, l *log.Event) (err error) {
 	var chunks []PITRChunk
 
 	if until.T > 0 {
@@ -191,6 +196,9 @@ func (p *PBM) deleteChunks(start, until primitive.Timestamp, stg storage.Storage
 	}
 	if err != nil {
 		return errors.Wrap(err, "get pitr chunks")
+	}
+	if len(chunks) == 0 {
+		l.Debug("nothing to delete")
 	}
 
 	for _, chnk := range chunks {
@@ -211,6 +219,8 @@ func (p *PBM) deleteChunks(start, until primitive.Timestamp, stg storage.Storage
 		if err != nil {
 			return errors.Wrap(err, "delete pitr chunk metadata")
 		}
+
+		l.Debug("deleted %s", chnk.FName)
 	}
 
 	return nil

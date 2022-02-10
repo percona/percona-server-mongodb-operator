@@ -55,14 +55,14 @@ func (p *PBM) GetRestoreMeta(name string) (*RestoreMeta, error) {
 }
 
 func (p *PBM) getRestoreMeta(clause bson.D) (*RestoreMeta, error) {
-	r := &RestoreMeta{}
 	res := p.Conn.Database(DB).Collection(RestoresCollection).FindOne(p.ctx, clause)
 	if res.Err() != nil {
 		if res.Err() == mongo.ErrNoDocuments {
-			return r, nil
+			return nil, ErrNotFound
 		}
 		return nil, errors.Wrap(res.Err(), "get")
 	}
+	r := &RestoreMeta{}
 	err := res.Decode(r)
 	return r, errors.Wrap(err, "decode")
 }

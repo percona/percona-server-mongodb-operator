@@ -15,13 +15,6 @@ import (
 	"time"
 
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
-	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,6 +33,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/percona/percona-server-mongodb-operator/clientcmd"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 var (
@@ -207,6 +208,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 		return rr, err
 	}
 
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = r.checkFinalizers(cr)
+		return rr, err
+	}
+
 	clusterStatus := api.AppStateInit
 
 	defer func() {
@@ -230,11 +236,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	isDownscale, err := r.safeDownscale(cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "safe downscale")
-	}
-
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		err = r.checkFinalizers(cr)
-		return rr, err
 	}
 
 	err = r.reconcileUsersSecret(cr)
@@ -314,13 +315,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 	}
 
 	if *cr.Spec.Mongod.Security.EnableEncryption {
-		created, err := r.ensureSecurityKey(cr, cr.Spec.Mongod.Security.EncryptionKeySecret, psmdb.EncryptionKeyName, 32, false)
+		created, err := r.ensureSecurityKey(cr, cr.Spec.EncryptionKeySecretName(), psmdb.EncryptionKeyName, 32, false)
 		if err != nil {
-			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Mongod.Security.EncryptionKeySecret)
+			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.EncryptionKeySecretName())
 			return reconcile.Result{}, err
 		}
 		if created {
-			logger.Info("Created a new mongo key", "KeyName", cr.Spec.Mongod.Security.EncryptionKeySecret)
+			logger.Info("Created a new mongo key", "KeyName", cr.Spec.EncryptionKeySecretName())
 		}
 	}
 
@@ -1068,6 +1069,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		)
 	}
 
+	if cr.CompareVersion("1.11.0") >= 0 && cr.Spec.Sharding.Mongos != nil {
+		pvcs := cr.Spec.Sharding.Mongos.SidecarPVCs
+		if err := ensurePVCs(context.Background(), r.client, cr.Namespace, pvcs); err != nil {
+			return errors.Wrap(err, "ensure pvc")
+		}
+	}
+
 	msDepl.Spec = deplSpec
 	if cr.CompareVersion("1.9.0") >= 0 {
 		err = r.createOrUpdate(msDepl)
@@ -1097,6 +1105,36 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	err = r.createOrUpdate(&mongosSvc)
 	if err != nil {
 		return errors.Wrap(err, "create or update mongos service")
+	}
+
+	return nil
+}
+
+func ensurePVCs(
+	ctx context.Context,
+	cl client.Client,
+	namespace string,
+	pvcs []corev1.PersistentVolumeClaim,
+) error {
+	for _, pvc := range pvcs {
+		// ignore pvc namespace
+		pvc.Namespace = namespace
+
+		err := cl.Get(ctx,
+			types.NamespacedName{Namespace: pvc.Namespace, Name: pvc.Name},
+			&corev1.PersistentVolumeClaim{})
+		if err == nil {
+			// already exists
+			continue
+		}
+
+		if !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get %v/%v", pvc.Namespace, pvc.Name)
+		}
+
+		if err := cl.Create(ctx, &pvc); err != nil {
+			return errors.Wrapf(err, "create PVC %v/%v", pvc.Namespace, pvc.Name)
+		}
 	}
 
 	return nil
@@ -1139,9 +1177,12 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(cr *api.PerconaServerMongo
 }
 
 // TODO: reduce cyclomatic complexity
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	matchLabels map[string]string, internalKeyName string) (*appsv1.StatefulSet, error) {
-
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	matchLabels map[string]string,
+	internalKeyName string,
+) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"

@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -82,7 +83,7 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 			return errors.New("backupSource destination is required")
 		}
 
-		if r.Spec.BackupSource.Destination[:5] != "s3://" {
+		if r.Spec.BackupSource.S3 != nil && !strings.HasPrefix(r.Spec.BackupSource.Destination, "s3://") {
 			return errors.New("backupSource destination should use s3 protocol format")
 		}
 

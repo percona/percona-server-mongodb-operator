@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	v "github.com/hashicorp/go-version"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -14,6 +13,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
@@ -247,6 +248,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		}
 	}
 
+	patch := client.MergeFrom(cr.DeepCopy())
 	newVersion, err := vs.GetExactVersion(cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
 	if err != nil {
 		return errors.Wrap(err, "failed to check version")
@@ -279,21 +281,9 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 		cr.Spec.PMM.Image = newVersion.PMMImage
 	}
 
-	err = r.client.Update(context.Background(), cr)
+	err = r.client.Patch(context.Background(), cr, patch)
 	if err != nil {
-		return fmt.Errorf("failed to update CR: %v", err)
-	}
-
-	time.Sleep(1 * time.Second) // based on experiments operator just need it.
-
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr)
-	if err != nil {
-		return fmt.Errorf("failed to get CR: %v", err)
-	}
-
-	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
-	if err != nil {
-		return fmt.Errorf("failed to set defaults for CR: %v", err)
+		return errors.Wrap(err, "failed to update CR")
 	}
 
 	cr.Status.PMMVersion = newVersion.PMMVersion
@@ -301,14 +291,21 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(cr *api.PerconaServerMongo
 	cr.Status.MongoVersion = newVersion.MongoVersion
 	cr.Status.MongoImage = newVersion.MongoImage
 
-	err = r.client.Status().Update(context.Background(), cr)
-	if err != nil {
-		return fmt.Errorf("failed to update CR status: %v", err)
-	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		c := &api.PerconaServerMongoDB{}
 
-	time.Sleep(1 * time.Second)
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		if err != nil {
+			return err
+		}
 
-	return nil
+		c.Status.PMMVersion = newVersion.PMMVersion
+		c.Status.BackupVersion = newVersion.BackupVersion
+		c.Status.MongoVersion = newVersion.MongoVersion
+		c.Status.MongoImage = newVersion.MongoImage
+
+		return r.client.Status().Update(context.TODO(), c)
+	})
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {

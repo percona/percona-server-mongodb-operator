@@ -47,7 +47,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 	if *cr.Spec.Mongod.Security.EnableEncryption {
 		volumes = append(volumes,
 			corev1.VolumeMount{
-				Name:      cr.Spec.Mongod.Security.EncryptionKeySecret,
+				Name:      cr.Spec.EncryptionKeySecretName(),
 				MountPath: mongodRESTencryptDir,
 				ReadOnly:  true,
 			},
@@ -191,7 +191,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 					)
 				}
 			}
-			if limit, ok := resources.Limits[corev1.ResourceCPU]; ok && !limit.IsZero() {
+			if limit, ok := resources.Limits[corev1.ResourceMemory]; ok && !limit.IsZero() {
 				args = append(args, fmt.Sprintf(
 					"--wiredTigerCacheSizeGB=%.2f",
 					getWiredTigerCacheSizeGB(resources.Limits, replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio, true),

@@ -28,7 +28,7 @@ RUN find vendor -regextype posix-extended -iregex '.*(license|notice)(\.md|\.txt
             sh -c 'mkdir -pv /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi") \
                    && cp -v "$0" /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi")' {} \;
 
-FROM registry.access.redhat.com/ubi7/ubi-minimal AS ubi7
+FROM registry.access.redhat.com/ubi8/ubi-minimal AS ubi8
 RUN microdnf update && microdnf clean all
 
 LABEL name="Percona Server for MongoDB Operator" \
