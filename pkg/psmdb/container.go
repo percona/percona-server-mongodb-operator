@@ -163,6 +163,22 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		args = append(args, "--shardsvr")
 	}
 
+	// operationProfiling
+	if mSpec := m.Spec.Mongod; m.CompareVersion("1.12.0") < 0 && mSpec.OperationProfiling != nil {
+		switch mSpec.OperationProfiling.Mode {
+		case api.OperationProfilingModeAll:
+			args = append(args, "--profile=2")
+		case api.OperationProfilingModeSlowOp:
+			args = append(args,
+				"--slowms="+strconv.Itoa(int(mSpec.OperationProfiling.SlowOpThresholdMs)),
+				"--profile=1",
+			)
+		}
+		if mSpec.OperationProfiling.RateLimit > 0 {
+			args = append(args, "--rateLimit="+strconv.Itoa(mSpec.OperationProfiling.RateLimit))
+		}
+	}
+
 	// storage
 	if replset.Storage != nil {
 		switch replset.Storage.Engine {
@@ -222,21 +238,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 
 	if m.CompareVersion("1.12.0") < 0 {
 		mSpec := m.Spec.Mongod
-		// operationProfiling
-		if mSpec.OperationProfiling != nil {
-			switch mSpec.OperationProfiling.Mode {
-			case api.OperationProfilingModeAll:
-				args = append(args, "--profile=2")
-			case api.OperationProfilingModeSlowOp:
-				args = append(args,
-					"--slowms="+strconv.Itoa(int(mSpec.OperationProfiling.SlowOpThresholdMs)),
-					"--profile=1",
-				)
-			}
-			if mSpec.OperationProfiling.RateLimit > 0 {
-				args = append(args, "--rateLimit="+strconv.Itoa(mSpec.OperationProfiling.RateLimit))
-			}
-		}
 
 		// security
 		if mSpec.Security != nil && mSpec.Security.RedactClientLogData {
