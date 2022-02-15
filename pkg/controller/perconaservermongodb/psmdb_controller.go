@@ -791,7 +791,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 					Namespace: cr.Namespace,
 				},
 				Data: map[string]string{
-					"mongod.conf": rs.Configuration,
+					"mongod.conf": string(rs.Configuration),
 				},
 			})
 			if err != nil {
@@ -818,7 +818,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.Percon
 				Namespace: cr.Namespace,
 			},
 			Data: map[string]string{
-				"mongod.conf": rs.NonVoting.Configuration,
+				"mongod.conf": string(rs.NonVoting.Configuration),
 			},
 		})
 		if err != nil {
@@ -851,7 +851,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(cr *api.Percona
 			Namespace: cr.Namespace,
 		},
 		Data: map[string]string{
-			"mongos.conf": cr.Spec.Sharding.Mongos.Configuration,
+			"mongos.conf": string(cr.Spec.Sharding.Mongos.Configuration),
 		},
 	})
 	if err != nil {
@@ -1149,7 +1149,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	containerSecurityContext := replset.ContainerSecurityContext
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
-	configuration := replset.Configuration
 	configName := psmdb.MongodCustomConfigName(cr.Name, replset.Name)
 
 	if replset.ClusterRole == api.ClusterRoleConfigSvr {
@@ -1173,7 +1172,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		resources = replset.NonVoting.Resources
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
-		configuration = replset.NonVoting.Configuration
 		configName = psmdb.MongodCustomConfigName(cr.Name, replset.Name+"-nv")
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
@@ -1208,7 +1206,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels,
 		multiAZ, size, internalKeyName, inits, log, customConfig, resources,
 		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
-		configuration, configName)
+		configName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}

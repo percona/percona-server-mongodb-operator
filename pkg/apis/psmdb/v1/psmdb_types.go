@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"strconv"
 	"strings"
 
@@ -307,9 +308,41 @@ type NonVotingSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	Configuration            string                     `json:"configuration,omitempty"`
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 
 	MultiAZ
+}
+
+type MongoConfiguration string
+
+func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interface{}, error) {
+	m := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(conf), m)
+	if err != nil {
+		return nil, err
+	}
+	val, ok := m[name]
+	if !ok {
+		return nil, nil
+	}
+	options, _ := val.(map[interface{}]interface{})
+	return options, nil
+}
+
+func (conf MongoConfiguration) IsEncryptionEnabled() (bool, error) {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return false, err
+	}
+	enabled, ok := m["enableEncryption"]
+	if !ok {
+		return false, nil
+	}
+	b, ok := enabled.(bool)
+	if !ok {
+		return false, errors.New("enableEncryption value is not bool")
+	}
+	return b, nil
 }
 
 type ReplsetSpec struct {
@@ -325,7 +358,7 @@ type ReplsetSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
-	Configuration            string                     `json:"configuration,omitempty"`
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
@@ -394,7 +427,7 @@ type MongosSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	Configuration            string                     `json:"configuration,omitempty"`
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	*ResourcesSpec           `json:"resources,omitempty"`
 }
 
