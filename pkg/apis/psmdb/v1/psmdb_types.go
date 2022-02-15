@@ -587,6 +587,7 @@ func (p PITRSpec) Disabled() PITRSpec {
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
 	Annotations              map[string]string            `json:"annotations,omitempty"`
+	Labels                   map[string]string            `json:"labels,omitempty"`
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
 	Image                    string                       `json:"image,omitempty"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`

@@ -1,8 +1,5 @@
 #!/bin/bash
 
-exec 5>&2
-BASH_XTRACEFD="5"
-
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
 API="psmdb.percona.com/v1-12-0"
@@ -11,7 +8,9 @@ IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
-PMM_SERVER_VER="2.24.0"
+PMM_SERVER_VER=$(curl https://raw.githubusercontent.com/Percona-Lab/percona-openshift/main/helm/pmm-server/Chart.yaml | awk '/^version/{print $NF}')
+IMAGE_PMM_SERVER_REPO="perconalab/pmm-server"
+IMAGE_PMM_SERVER_TAG="dev-latest"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -20,6 +19,15 @@ test_name=$(basename $test_dir)
 namespace="${test_name}-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
+logs_dir=$(realpath $test_dir/../logs)
+
+if [[ ${ENABLE_LOGGING} == "true" ]]; then
+	if [ ! -d "${logs_dir}" ]; then
+		mkdir "${logs_dir}"
+	fi
+	exec &> >(tee ${logs_dir}/${test_name}.log)
+	echo "Log: ${logs_dir}/${test_name}.log"
+fi
 
 if [ -f "$conf_dir/cloud-secret.yml" ]; then
 	SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
@@ -201,10 +209,10 @@ run_restore() {
 	else
 		run_mongo \
 			'use myApp\n db.test.insert({ x: 100501 })' \
-			"myApp:myPass@$cluster.$namespace"
+			"myApp:myPass@$cluster$cluster_pfx.$namespace"
 
 		for i in $(seq 0 $last_pod); do
-			compare_mongo_cmd "find" "myApp:myPass@$cluster-${i}.$cluster.$namespace" "-2nd"
+			compare_mongo_cmd "find" "myApp:myPass@$cluster$cluster_pfx-${i}.$cluster$cluster_pfx.$namespace" "-2nd"
 		done
 	fi
 	cat $test_dir/conf/restore.yml \
@@ -284,7 +292,7 @@ simple_data_check() {
 		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
 	else
 		for i in $(seq 0 $last_pod); do
-			compare_mongo_cmd "find" "myApp:myPass@${cluster_name}-${i}.${cluster_name}.$namespace"
+			compare_mongo_cmd "find" "myApp:myPass@${cluster_name}${cluster_pfx}-${i}.${cluster_name}${cluster_pfx}.$namespace"
 		done
 	fi
 }
@@ -894,15 +902,10 @@ kubectl_bin() {
 	for i in $(seq 0 2); do
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
-		[[ ${-/x/} != $- ]] && echo "--- $i stdout" | cat - "$LAST_OUT" >&$BASH_XTRACEFD
-		[[ ${-/x/} != $- ]] && echo "--- $i stderr" | cat - "$LAST_ERR" >&$BASH_XTRACEFD
 		if [[ ${exit_status} != 0 ]]; then
 			sleep "$((timeout * i))"
 		else
-			cat "$LAST_OUT"
-			cat "$LAST_ERR" >&2
-			rm "$LAST_OUT" "$LAST_ERR"
-			return ${exit_status}
+			break
 		fi
 	done
 	cat "$LAST_OUT"
