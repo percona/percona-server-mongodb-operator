@@ -1,10 +1,10 @@
-![Percona Kubernetes Operator for Percona Server for MongoDB](operator.png)
+![Percona Distribution for MongoDB Operator](operator.png)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 [Percona Server for MongoDB](https://www.percona.com/software/mongodb/percona-server-for-mongodb) (PSMDB) is an open-source enterprise MongoDB solution that helps you to ensure data availability for your applications while improving security and simplifying the development of new applications in the most demanding public, private, and hybrid cloud environments.
 
-Based on our best practices for deployment and configuration, [Percona Kubernetes Operator for PSMDB](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html) contains everything you need to quickly and consistently deploy and scale Percona Server for MongoDB instances into a Kubernetes cluster on-premises or in the cloud. It provides the following capabilities:
+Based on our best practices for deployment and configuration, [Percona Distribution for MongoDB Operator](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html) contains everything you need to quickly and consistently deploy and scale Percona Server for MongoDB instances into a Kubernetes cluster on-premises or in the cloud. It provides the following capabilities:
 
 * Easy deployment with no single point of failure
 * Sharding support
@@ -20,12 +20,42 @@ Percona Operators are based on the [Operator SDK](https://github.com/operator-fr
 
 Please read more about architecture and design decisions [here](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/architecture.html).
 
-# Installation
+# Quickstart installation
+
+## Helm
+
+Install the Operator:
+
+```bash
+helm install my-op percona/psmdb-operator
+```
+
+Install Percona Server for MongoDB:
+
+```bash
+helm install my-db percona/psmdb-db
+```
+
+See more details in:
+- [Helm installation documentation](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/helm.html)
+- [Operator helm chart parameter reference](https://github.com/percona/percona-helm-charts/blob/main/charts/psmdb-operator)
+- [Percona Server for MongoDB helm chart parameters reference](https://github.com/percona/percona-helm-charts/blob/main/charts/psmdb-db)
+
+## kubectl
 
 It usually takes two steps to deploy Percona Server for MongoDB on Kubernetes:
 
-* Deploy the operator from `deploy/bundle.yaml`
-* Deploy the database cluster itself from `deploy/cr.yaml`
+Deploy the operator from `deploy/bundle.yaml`:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/main/deploy/bundle.yaml
+```
+
+Deploy the database cluster itself from `deploy/cr.yaml
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/main/deploy/cr-minimal.yaml
+```
 
 See full documentation with examples and various advanced cases on [percona.com](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html).
 
