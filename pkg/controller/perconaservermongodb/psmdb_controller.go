@@ -755,8 +755,13 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongos(cr *api.PerconaServerMongoD
 		return errors.Wrap(err, "failed to list mongos services")
 	}
 
-	msSts := psmdb.MongosStatefulset(cr)
-	err = r.client.Delete(context.TODO(), msSts)
+	var mongos runtime.Object
+	if cr.CompareVersion("1.12.0") >= 0 {
+		mongos = psmdb.MongosStatefulset(cr)
+	} else {
+		mongos = psmdb.MongosDeployment(cr)
+	}
+	err = r.client.Delete(context.TODO(), mongos)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete mongos statefulset")
 	}
@@ -942,9 +947,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 	var mongos runtime.Object
 	if cr.CompareVersion("1.12.0") >= 0 {
 		msDepl := psmdb.MongosDeployment(cr)
-		err = r.client.Delete(context.TODO(), msDepl)
+		err = r.client.Get(context.TODO(), types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "failed to delete old mongos deployment %s", msDepl.Name)
+			return errors.Wrapf(err, "get old mongos deployment %s", msDepl.Name)
+		}
+		if k8serrors.IsNotFound(err) {
+			err = r.client.Delete(context.TODO(), msDepl)
+			if err != nil {
+				return errors.Wrapf(err, "failed to delete old mongos deployment %s", msDepl.Name)
+			}
 		}
 
 		msSts := psmdb.MongosStatefulset(cr)

@@ -233,18 +233,6 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(cr *api.PerconaServerM
 		return nil
 	}
 
-	client, err := r.mongosClientWithRole(cr, roleClusterAdmin)
-	if err != nil {
-		return fmt.Errorf("failed to get mongos client: %v", err)
-	}
-
-	defer func() {
-		err := client.Disconnect(context.TODO())
-		if err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
-
 	waitLimit := int(cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds)
 
 	sort.Slice(list.Items, func(i, j int) bool {

@@ -46,7 +46,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.StatefulSetSpec {
 	var updateStrategy appsv1.StatefulSetUpdateStrategy
 	switch cr.Spec.UpdateStrategy {
-	case api.SmartUpdateStatefulSetStrategyType:
+	case api.SmartUpdateStatefulSetStrategyType, appsv1.OnDeleteStatefulSetStrategyType:
 		updateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
 	default:
 		var zero int32 = 0
