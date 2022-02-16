@@ -1,0 +1,151 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+
+if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+  MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+else
+  MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+fi
+
+main_cluster="cross-site-sharded-main"
+replica_cluster="cross-site-sharded-replica"
+
+desc "Create main cluster"
+create_namespace $namespace
+deploy_operator
+kubectl_bin apply \
+  -f "$conf_dir/secrets.yml" \
+  -f "$conf_dir/client.yml"
+
+apply_cluster "$test_dir/conf/$main_cluster.yml"
+desc 'check if all 3 Pods started'
+wait_for_running $main_cluster-rs0 3
+wait_for_running $main_cluster-cfg 3 "false"
+
+desc 'Create user'
+run_mongos \
+  'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+  "userAdmin:userAdmin123456@$main_cluster-mongos.$namespace"
+sleep 2
+
+desc 'Set chunk size to 32 MB'
+run_mongos \
+  "use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
+  "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+sleep 2
+
+desc 'Write data'
+run_script_mongos "${test_dir}/data.js" "user:pass@$main_cluster-mongos.$namespace"
+
+desc 'shard collection'
+run_mongos \
+  'sh.enableSharding("app")' \
+  "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+sleep 2
+
+run_mongos \
+  'sh.shardCollection("app.city", { _id: 1 } )' \
+  "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+
+sleep 120
+desc 'check chunks'
+chunks_param1="ns"
+chunks_param2='"app.city"'
+
+if [[ ${MONGO_VER} == "5.0" ]]; then
+  chunks_param1="uuid"
+  chunks_param2=$(run_mongos \
+    "use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
+    "user:pass@$main_cluster-mongos.$namespace" |
+    grep "switched to db app" -A 1 | grep -v "switched to db app")
+fi
+
+shards=0
+for i in "rs0" "rs1" "rs2"; do
+  out=$(run_mongos \
+    "use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
+    "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace" |
+    grep "switched to db config" -A 1 | grep -v "switched to db config")
+
+  desc "$i has $out chunks"
+
+  if [[ $out -ne 0 ]]; then
+    ((shards = shards + 1))
+  fi
+done
+
+if [[ $shards -lt 3 ]]; then
+  echo "data is only on some of the shards, maybe sharding is not working"
+  exit 1
+fi
+
+desc "Create replica_cluster"
+create_namespace $replica_namespace
+deploy_operator
+
+kubectl_bin apply \
+  -f "$conf_dir/client.yml"
+
+desc "Copy secrets from main to replica namespace"
+kubectl_bin get -o yaml secret some-name-ssl-internal -n ${namespace} |
+  yq d - 'metadata.namespace' |
+  yq d - 'metadata.creationTimestamp' |
+  yq d - 'metadata.resourceVersion' |
+  yq d - 'metadata.selfLink' |
+  yq d - 'metadata.uid' |
+  kubectl_bin apply -f -
+
+kubectl_bin get -o yaml secret some-name-ssl -n ${namespace} |
+  yq d - 'metadata.namespace' |
+  yq d - 'metadata.creationTimestamp' |
+  yq d - 'metadata.resourceVersion' |
+  yq d - 'metadata.selfLink' |
+  yq d - 'metadata.uid' |
+  kubectl_bin apply -f -
+
+kubectl_bin get -o yaml secret some-users -n ${namespace} |
+  yq d - 'metadata.namespace' |
+  yq d - 'metadata.creationTimestamp' |
+  yq d - 'metadata.resourceVersion' |
+  yq d - 'metadata.selfLink' |
+  yq d - 'metadata.uid' |
+  kubectl_bin apply -f -
+
+sleep 30
+
+apply_cluster "$test_dir/conf/${replica_cluster}.yml"
+sleep 200
+
+replica_cfg_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-0)
+replica_cfg_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-1)
+replica_cfg_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-2)
+#replica_mongos_endpoint=$(get_service_endpoint cross-site-sharded-replica-mongos)
+replica_rs0_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-0)
+replica_rs0_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-1)
+replica_rs0_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-2)
+replica_rs1_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-0)
+replica_rs1_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-1)
+replica_rs1_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-2)
+replica_rs2_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs2-0)
+replica_rs2_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs2-1)
+replica_rs2_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs2-2)
+
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+
+kubectl_bin patch psmdb ${main_cluster} --type=merge --patch '{
+			"spec": {"replsets":[
+			  {"name": "rs0","volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage": "1Gi"}}}},"expose":{"enabled": true, "exposeType": "LoadBalancer"},"affinity":{"antiAffinityTopologyKey": "none"}, "resources":{"limits":{"cpu": "500m", "memory": "0.1G"}, "requests":{"cpu": "100m", "memory": "0.1G"}},"size": 3,"externalNodes":[{"host":"'${replica_rs0_0_endpoint}'"},{"host":"'${replica_rs0_1_endpoint}'", "port": 27017, "priority": 0, "votes": 0},{"host":"'${replica_rs0_2_endpoint}'", "port": 27017, "priority": 0, "votes": 0}]},
+			  {"name": "rs1","volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage": "1Gi"}}}},"expose":{"enabled": true, "exposeType": "LoadBalancer"},"affinity":{"antiAffinityTopologyKey": "none"},"resources":{"limits":{"cpu": "500m", "memory": "0.1G"}, "requests":{"cpu": "100m", "memory": "0.1G"}},"size": 3, "externalNodes":[{"host":"'${replica_rs1_0_endpoint}'"},{"host":"'${replica_rs1_1_endpoint}'", "port": 27017, "priority": 0, "votes": 0},{"host":"'${replica_rs1_2_endpoint}'", "port": 27017, "priority": 0, "votes": 0}]},
+			  {"name": "rs2","volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage": "1Gi"}}}},"expose":{"enabled": true, "exposeType": "LoadBalancer"},"affinity":{"antiAffinityTopologyKey": "none"}, "resources":{"limits":{"cpu": "500m", "memory": "0.1G"}, "requests":{"cpu": "100m", "memory": "0.1G"}},"size": 3, "externalNodes":[{"host":"'${replica_rs2_0_endpoint}'"},{"host":"'${replica_rs2_1_endpoint}'", "port": 27017, "priority": 0, "votes": 0},{"host":"'${replica_rs2_2_endpoint}'", "port": 27017, "priority": 0, "votes": 0}]}
+			  ],
+			  "sharding":{"configsvrReplSet":{ "externalNodes": [{"host":"'${replica_cfg_0_endpoint}'"},{"host":"'${replica_cfg_1_endpoint}'"},{"host":"'${replica_cfg_2_endpoint}'"}]}}
+			  }
+		}'
+
+destroy "$namespace"
+destroy $replica_namespace
