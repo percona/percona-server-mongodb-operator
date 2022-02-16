@@ -1,6 +1,6 @@
-# Percona Server for MongoDB Operator Adopters
+# Percona Distribution for MongoDB Operator Adopters
 
-This is the list of organizations and users that publicly shared details of how they are using Percona Operator for running their MongoDB.  Please send PRs to add or remove organizations/users.
+This is the list of organizations and users that publicly shared details of how they are using Percona Operator for running their MongoDB. Please send PRs to add or remove organizations/users.
 
 The list of organizations that have publicly shared the usage of Percona Server for MongoDB Operator. 
 
