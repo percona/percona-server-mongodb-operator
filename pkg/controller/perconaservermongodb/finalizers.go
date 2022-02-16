@@ -40,11 +40,11 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(cr *api.PerconaServerMon
 	done := true
 	for _, rs := range cr.Spec.Replsets {
 		sts, err := r.getRsStatefulset(cr, rs.Name)
-		if err != nil && !k8serrors.IsNotFound(err) {
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
 			return errors.Wrap(err, "get rs statefulset")
-		}
-		if k8serrors.IsNotFound(err) {
-			continue
 		}
 
 		pods := &corev1.PodList{}
@@ -52,14 +52,14 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(cr *api.PerconaServerMon
 			pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(sts.Labels),
+				LabelSelector: labels.SelectorFromSet(sts.Spec.Selector.MatchLabels),
 			},
 		)
-		if err != nil && !k8serrors.IsNotFound(err) {
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
 			return errors.Wrap(err, "get rs statefulset")
-		}
-		if k8serrors.IsNotFound(err) {
-			continue
 		}
 		if len(pods.Items) > int(*sts.Spec.Replicas) {
 			return errors.New("waiting pods to be deleted")
