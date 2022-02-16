@@ -36,17 +36,31 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 }
 
 func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMongoDB) error {
+	ls := clusterLabels(cr)
+
+	seList := mcs.ServiceExportList()
+	err := r.client.List(context.TODO(),
+		seList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(ls),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get service export list")
+	}
 	if !cr.Spec.MultiCluster.Enabled {
+		for _, se := range seList.Items {
+			err = r.client.Delete(context.TODO(), &se)
+			if err != nil {
+				return errors.Wrap(err, "delete service export "+se.Name)
+			}
+		}
 		return nil
 	}
-	ls := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
+
 	svcList := &corev1.ServiceList{}
-	err := r.client.List(context.TODO(),
+	err = r.client.List(context.TODO(),
 		svcList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -57,14 +71,24 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 		return errors.Wrap(err, "get service list")
 	}
 
+	svcNames := make(map[string]struct{}, len(svcList.Items))
 	for _, svc := range svcList.Items {
-		se := mcs.ServiceExport(cr, &svc)
+		se := mcs.ServiceExport(cr, svc.Name, ls)
 		err = setControllerReference(cr, se, r.scheme)
 		if err != nil {
 			return errors.Wrap(err, "set owner ref for serviceexport "+se.Name)
 		}
 		if err := r.createOrUpdate(se); err != nil {
 			return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
+		}
+		svcNames[svc.Name] = struct{}{}
+	}
+
+	for _, se := range seList.Items {
+		if _, ok := svcNames[se.Name]; !ok {
+			if err := r.client.Delete(context.TODO(), &se); err != nil {
+				return errors.Wrap(err, "delete service export")
+			}
 		}
 	}
 	return nil
