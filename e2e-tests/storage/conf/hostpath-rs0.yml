@@ -4,11 +4,11 @@ metadata:
   name: hostpath
 spec:
   image:
-  mongod:
-    security:
-      enableEncryption: true
   replsets:
   - name: rs0
+    configuration: |
+      security:
+        enableEncryption: true
     volumeSpec:
       hostPath:
         path: /run/data-dir
