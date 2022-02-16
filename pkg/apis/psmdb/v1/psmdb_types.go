@@ -332,11 +332,11 @@ func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interfac
 func (conf MongoConfiguration) IsEncryptionEnabled() (bool, error) {
 	m, err := conf.GetOptions("security")
 	if err != nil || m == nil {
-		return false, err
+		return true, err // true by default
 	}
 	enabled, ok := m["enableEncryption"]
 	if !ok {
-		return false, nil
+		return true, nil // true by default
 	}
 	b, ok := enabled.(bool)
 	if !ok {

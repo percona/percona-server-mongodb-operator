@@ -187,7 +187,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		log.Error(err, "failed to check if mongo encryption enabled")
 	}
 	if m.CompareVersion("1.12.0") >= 0 && encryptionEnabled {
-		args = append(args,
+		args = append(args, "--enableEncryption",
 			"--encryptionKeyFile="+mongodRESTencryptDir+"/"+EncryptionKeyName,
 		)
 	}
