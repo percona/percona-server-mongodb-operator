@@ -27,7 +27,7 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
-	return &corev1.Service{
+	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
@@ -35,7 +35,6 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Name + "-" + replset.Name,
 			Namespace: m.Namespace,
-			Labels:    ls,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -50,6 +49,12 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			LoadBalancerSourceRanges: replset.Expose.LoadBalancerSourceRanges,
 		},
 	}
+
+	if m.CompareVersion("1.12.0") >= 0 {
+		svc.Labels = ls
+	}
+
+	return svc
 }
 
 // ExternalService returns a Service object needs to serve external connections
