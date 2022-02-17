@@ -951,7 +951,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "get old mongos deployment %s", msDepl.Name)
 		}
-		if k8serrors.IsNotFound(err) {
+		if !k8serrors.IsNotFound(err) {
 			err = r.client.Delete(context.TODO(), msDepl)
 			if err != nil {
 				return errors.Wrapf(err, "failed to delete old mongos deployment %s", msDepl.Name)
