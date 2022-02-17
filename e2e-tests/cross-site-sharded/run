@@ -89,7 +89,7 @@ create_namespace $replica_namespace
 deploy_operator
 
 kubectl_bin apply \
-  -f "$conf_dir/client.yml"
+	-f "$conf_dir/client.yml"
 
 desc "Copy secrets from main to replica namespace"
 
