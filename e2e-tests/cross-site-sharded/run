@@ -44,13 +44,13 @@ run_script_mongos "${test_dir}/data.js" "user:pass@$main_cluster-mongos.$namespa
 
 desc 'shard collection'
 run_mongos \
-  'sh.enableSharding("app")' \
-  "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+	'sh.enableSharding("app")' \
+	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
 sleep 2
 
 run_mongos \
-  'sh.shardCollection("app.city", { _id: 1 } )' \
-  "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+	'sh.shardCollection("app.city", { _id: 1 } )' \
+	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
 
 sleep 120
 desc 'check chunks'
@@ -58,19 +58,19 @@ chunks_param1="ns"
 chunks_param2='"app.city"'
 
 if [[ ${MONGO_VER} == "5.0" ]]; then
-  chunks_param1="uuid"
-  chunks_param2=$(run_mongos \
-    "use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
-    "user:pass@$main_cluster-mongos.$namespace" |
-    grep "switched to db app" -A 1 | grep -v "switched to db app")
+	chunks_param1="uuid"
+	chunks_param2=$(run_mongos \
+		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
+		"user:pass@$main_cluster-mongos.$namespace" \
+		| grep "switched to db app" -A 1 | grep -v "switched to db app")
 fi
 
 shards=0
 for i in "rs0" "rs1"; do
-  out=$(run_mongos \
-    "use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
-    "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace" |
-    grep "switched to db config" -A 1 | grep -v "switched to db config")
+	out=$(run_mongos \
+		"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
+		"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace" \
+		| grep "switched to db config" -A 1 | grep -v "switched to db config")
 
 	desc "$i has $out chunks"
 
@@ -93,22 +93,22 @@ kubectl_bin apply \
 
 desc "Copy secrets from main to replica namespace"
 
-kubectl get secret ${main_cluster}-secrets -o yaml -n ${namespace} |
-  yq d - metadata |
-  yq w - metadata.name ${replica_cluster}-secrets |
-  kubectl_bin apply -f -
+kubectl get secret ${main_cluster}-secrets -o yaml -n ${namespace} \
+	| yq d - metadata \
+	| yq w - metadata.name ${replica_cluster}-secrets \
+	| kubectl_bin apply -f -
 
-kubectl_bin get secret ${main_cluster}-ssl-internal -o yaml -n ${namespace}|
-  yq d - metadata |
-  yq d - status |
-  yq w - metadata.name ${replica_cluster}-ssl-internal |
-  kubectl_bin apply -f -
+kubectl_bin get secret ${main_cluster}-ssl-internal -o yaml -n ${namespace} \
+	| yq d - metadata \
+	| yq d - status \
+	| yq w - metadata.name ${replica_cluster}-ssl-internal \
+	| kubectl_bin apply -f -
 
-kubectl_bin get secret ${main_cluster}-ssl -o yaml -n ${namespace} |
-  yq d - metadata |
-  yq d - status |
-  yq w - metadata.name ${replica_cluster}-ssl |
-  kubectl_bin apply -f -
+kubectl_bin get secret ${main_cluster}-ssl -o yaml -n ${namespace} \
+	| yq d - metadata \
+	| yq d - status \
+	| yq w - metadata.name ${replica_cluster}-ssl \
+	| kubectl_bin apply -f -
 
 sleep 30
 
