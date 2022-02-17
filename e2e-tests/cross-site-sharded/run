@@ -35,8 +35,8 @@ sleep 2
 
 desc 'Set chunk size to 32 MB'
 run_mongos \
-  "use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
-  "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+	"use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
+	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
 sleep 2
 
 desc 'Write data'
