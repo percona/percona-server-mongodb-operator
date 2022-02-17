@@ -72,7 +72,7 @@ for i in "rs0" "rs1"; do
     "clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace" |
     grep "switched to db config" -A 1 | grep -v "switched to db config")
 
-  desc "$i has $out chunks"
+	desc "$i has $out chunks"
 
   if [[ $out -ne 0 ]]; then
     ((shards = shards + 1))
