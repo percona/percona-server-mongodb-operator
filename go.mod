@@ -14,7 +14,7 @@ require (
 	github.com/hashicorp/go-version v1.2.0
 	github.com/jetstack/cert-manager v0.15.1
 	github.com/mitchellh/go-ps v1.0.0
-	github.com/operator-framework/operator-sdk v0.17.2
+	github.com/operator-framework/operator-sdk v0.18.2
 	github.com/percona/percona-backup-mongodb v1.6.1-0.20220110120847-2c3b83a6d7b4
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
@@ -28,16 +28,14 @@ require (
 	golang.org/x/tools v0.0.0-20201028153306-37f0764111ff // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
-	k8s.io/api v0.18.0
-	k8s.io/apimachinery v0.18.0
+	k8s.io/api v0.18.4
+	k8s.io/apimachinery v0.18.4
 	k8s.io/client-go v12.0.0+incompatible
-	sigs.k8s.io/controller-runtime v0.5.2
+	sigs.k8s.io/controller-runtime v0.6.1
 )
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.2.0
-	k8s.io/api => k8s.io/api v0.17.4 // Required by client-go
-	k8s.io/apimachinery => k8s.io/apimachinery v0.17.4 // Required by client-go
-	k8s.io/client-go => k8s.io/client-go v0.17.4 // Required by prometheus-operator
+	k8s.io/client-go => k8s.io/client-go v0.18.2 // Required by prometheus-operator
 )
