@@ -19,8 +19,8 @@ desc "Create main cluster"
 create_namespace $namespace
 deploy_operator
 kubectl_bin apply \
-  -f "$conf_dir/client.yml" \
-  -f "$test_dir/conf/secrets.yml"
+	-f "$conf_dir/client.yml" \
+	-f "$test_dir/conf/secrets.yml"
 
 apply_cluster "$test_dir/conf/$main_cluster.yml"
 desc 'check if all 3 Pods started'
