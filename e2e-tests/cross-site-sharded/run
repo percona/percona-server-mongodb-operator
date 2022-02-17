@@ -80,8 +80,8 @@ for i in "rs0" "rs1"; do
 done
 
 if [[ $shards -lt 2 ]]; then
-  echo "data is only on some of the shards, maybe sharding is not working"
-  exit 1
+	echo "data is only on some of the shards, maybe sharding is not working"
+	exit 1
 fi
 
 desc "Create replica_cluster"
