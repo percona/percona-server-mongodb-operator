@@ -74,9 +74,9 @@ for i in "rs0" "rs1"; do
 
 	desc "$i has $out chunks"
 
-  if [[ $out -ne 0 ]]; then
-    ((shards = shards + 1))
-  fi
+	if [[ $out -ne 0 ]]; then
+		((shards = shards + 1))
+	fi
 done
 
 if [[ $shards -lt 2 ]]; then
