@@ -105,26 +105,7 @@ spec:
           requests:
             storage: 1Gi
     size: 3
-  - name: rs2
-    expose:
-      enabled: true
-      exposeType: LoadBalancer
-    affinity:
-      antiAffinityTopologyKey: none
-    resources:
-      limits:
-        cpu: 500m
-        memory: 1G
-      requests:
-        cpu: 100m
-        memory: 0.1G
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1Gi
-    size: 3
   secrets:
-    key: some-key
-    users: some-users
-    ssl: some-name-ssl
+    users: cross-site-sharded-main-secrets
+    ssl: cross-site-sharded-main-ssl
+    sslInternal: cross-site-sharded-main-ssl-internal
