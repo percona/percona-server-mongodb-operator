@@ -29,8 +29,8 @@ wait_for_running $main_cluster-cfg 3 "false"
 
 desc 'Create user'
 run_mongos \
-  'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
-  "userAdmin:userAdmin123456@$main_cluster-mongos.$namespace"
+	'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$main_cluster-mongos.$namespace"
 sleep 2
 
 desc 'Set chunk size to 32 MB'
