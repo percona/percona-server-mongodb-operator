@@ -20,15 +20,13 @@ const (
 	// MongodContainerDataDir is a mondo data path in container
 	MongodContainerDataDir = "/data/db"
 
-	sslDir               = "/etc/mongodb-ssl"
-	sslInternalDir       = "/etc/mongodb-ssl-internal"
-	mongodConfigDir      = "/etc/mongodb-config"
-	mongosConfigDir      = "/etc/mongos-config"
-	mongodSecretsDir     = "/etc/mongodb-secrets"
-	mongodRESTencryptDir = "/etc/mongodb-encryption"
-	EncryptionKeyName    = "encryption-key"
-	mongodPortName       = "mongodb"
-	mongosPortName       = "mongos"
+	sslDir           = "/etc/mongodb-ssl"
+	sslInternalDir   = "/etc/mongodb-ssl-internal"
+	mongodConfigDir  = "/etc/mongodb-config"
+	mongosConfigDir  = "/etc/mongos-config"
+	mongodSecretsDir = "/etc/mongodb-secrets"
+	mongodPortName   = "mongodb"
+	mongosPortName   = "mongos"
 )
 
 func InternalKey(cr *api.PerconaServerMongoDB) string {

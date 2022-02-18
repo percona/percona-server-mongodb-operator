@@ -345,6 +345,39 @@ func (conf MongoConfiguration) IsEncryptionEnabled() (bool, error) {
 	return b, nil
 }
 
+// setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
+func (conf *MongoConfiguration) setEncryptionDefaults() error {
+	m := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(*conf), m)
+	if err != nil {
+		return err
+	}
+	val, ok := m["security"]
+	if !ok {
+		return nil
+	}
+	security, ok := val.(map[interface{}]interface{})
+	if !ok {
+		return errors.New("security configuration section is invalid")
+	}
+	if _, ok = security["enableEncryption"]; ok {
+		security["encryptionKeyFile"] = MongodRESTencryptDir + "/" + EncryptionKeyName
+	}
+	res, err := yaml.Marshal(m)
+	if err != nil {
+		return err
+	}
+	*conf = MongoConfiguration(res)
+	return nil
+}
+
+func (conf *MongoConfiguration) SetDefaults() error {
+	if err := conf.setEncryptionDefaults(); err != nil {
+		return errors.Wrap(err, "failed to set encryption defaults")
+	}
+	return nil
+}
+
 type ReplsetSpec struct {
 	Resources                *ResourcesSpec             `json:"resources,omitempty"`
 	Name                     string                     `json:"name"`

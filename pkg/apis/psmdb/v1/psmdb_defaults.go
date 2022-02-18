@@ -16,6 +16,11 @@ import (
 // DefaultDNSSuffix is a default dns suffix for the cluster service
 const DefaultDNSSuffix = "svc.cluster.local"
 
+const (
+	MongodRESTencryptDir = "/etc/mongodb-encryption"
+	EncryptionKeyName    = "encryption-key"
+)
+
 // ConfigReplSetName is the only possible name for config replica set
 const (
 	ConfigReplSetName = "cfg"
@@ -260,6 +265,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		cr.Spec.Sharding.Mongos.reconcileOpts()
+
+		if err := cr.Spec.Sharding.Mongos.Configuration.SetDefaults(); err != nil {
+			return errors.Wrap(err, "failed to set configuration defaults")
+		}
 
 		if cr.Spec.Sharding.Mongos.Expose.ExposeType == "" {
 			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
@@ -528,6 +537,10 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		rs.setSafeDefauts(log)
 	}
 
+	if err := rs.Configuration.SetDefaults(); err != nil {
+		return errors.Wrap(err, "failed to set configuration defaults")
+	}
+
 	var fsgroup *int64
 	if platform == version.PlatformKubernetes {
 		var tp int64 = 1001
@@ -654,6 +667,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 
 	if nv.PodSecurityContext == nil {
 		nv.PodSecurityContext = rs.PodSecurityContext
+	}
+
+	if err := nv.Configuration.SetDefaults(); err != nil {
+		return errors.Wrap(err, "failed to set configuration defaults")
 	}
 
 	return nil
