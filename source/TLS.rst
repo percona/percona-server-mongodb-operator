@@ -10,13 +10,14 @@ The Percona Distribution for MongoDB Operator uses Transport Layer Security (TLS
 
 The internal certificate is also used as an authorization method.
 
-TLS security can be configured in several ways. By default, the Operator
-generates certificates automatically if there are no certificate secrets
-available. Other options are the following ones:
+Certificates for TLS security can be generated in several ways:
 
-* The Operator can use a specifically installed *cert-manager* for the automatic
-  certificates generation,
-* Certificates can be generated manually.
+* the Operator can use a specifically installed *cert-manager*, which will
+  automatically generate and renew short-term TLS certificates,
+* certificates can be generated manually and presented to the Operator in a
+  Secrets object,
+* if there are no certificate secrets available, and no *cert-manager*, the
+  Operator will automatically generate and use long-term certificates.
 
 You can also use pre-generated certificates available in the
 ``deploy/ssl-secrets.yaml`` file for test purposes, but we strongly recommend
@@ -27,38 +28,49 @@ Operator yourself, as well as how to temporarily disable it if needed.
 
 .. contents:: :local:
 
+.. _tls.certs.certmanager:
+
 Install and use the *cert-manager*
 ====================================
 
 About the *cert-manager*
 ------------------------
 
-A *cert-manager* is a Kubernetes certificate management controller which widely used to automate the management and issuance of TLS certificates. It is community-driven, and open source. 
+A `cert-manager <https://cert-manager.io/docs/>`_ is a Kubernetes certificate
+management controller which widely used to automate the management and issuance
+of TLS certificates. It is community-driven, and open source. 
 
-When you have already installed *cert-manager* and deploy the operator, the operator requests a certificate from the *cert-manager*. The *cert-manager* acts as a self-signed issuer and generates certificates. The Percona Operator self-signed issuer is local to the operator namespace. This self-signed issuer is created because Percona Server for MongoDB requires all certificates are issued by the same CA.
+When you have already installed *cert-manager* and deploy the operator, the
+operator requests a certificate from the *cert-manager*. The *cert-manager* acts
+as a self-signed issuer and generates certificates. The Percona Operator
+self-signed issuer is local to the operator namespace. This self-signed issuer
+is created because Percona Server for MongoDB requires all certificates issued
+by the same :abbr:`CA (Certificate authority)`.
 
-The creation of the self-signed issuer allows you to deploy and use the Percona Operator without creating a clusterissuer separately.
+Self-signed issuer allows you to deploy and use the Percona
+Operator without creating a clusterissuer separately.
 
 Installation of the *cert-manager*
 ----------------------------------
 
 The steps to install the *cert-manager* are the following:
 
-* Create a namespace
-* Disable resource validations on the cert-manager namespace
-* Install the cert-manager.
+* create a namespace,
+* disable resource validations on the cert-manager namespace,
+* install the cert-manager.
 
 The following commands perform all the needed actions:
 
-::
-    
-    kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false
+.. code:: bash
 
-After the installation, you can verify the *cert-manager* by running the following command:
+   $ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false
 
-::
-  
-  kubectl get pods -n cert-manager
+After the installation, you can verify the *cert-manager* by running the
+following command:
+
+.. code:: bash
+
+   $ kubectl get pods -n cert-manager
 
 The result should display the *cert-manager* and webhook active and running.
 
@@ -77,13 +89,20 @@ The set of commands generate certificates with the following attributes:
 *  ``Server-key.pem`` - the private key
 *  ``ca.pem`` - Certificate Authority
 
-You should generate certificates twice: one set is for external communications, and another set is for internal ones. A secret created for the external use must be added to the ``spec.secrets.ssl`` key of the ``deploy/cr.yaml`` file. A certificate generated for internal communications must be added to the ``spec.secrets.sslInternal`` key of the ``deploy/cr.yaml`` file.
+You should generate certificates twice: one set is for external communications,
+and another set is for internal ones. A secret created for the external use must
+be added to the ``spec.secrets.ssl`` key of the ``deploy/cr.yaml`` file. A
+certificate generated for internal communications must be added to the
+``spec.secrets.sslInternal`` key of the ``deploy/cr.yaml`` file.
 
-Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to generate certificates manually are as follows::
+Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
+generate certificates manually are as follows:
 
-	CLUSTER_NAME=my-cluster-name
-	NAMESPACE=default
-	cat <<EOF | cfssl gencert -initca - | cfssljson -bare ca
+.. code:: bash
+
+	$ CLUSTER_NAME=my-cluster-name
+	$ NAMESPACE=default
+	$ cat <<EOF | cfssl gencert -initca - | cfssljson -bare ca
 	  {
 	    "CN": "Root CA",
 	    "names": [
@@ -98,7 +117,7 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	  }
 	EOF
 
-	cat <<EOF > ca-config.json
+	$ cat <<EOF > ca-config.json
 	  {
 	    "signing": {
 	      "default": {
@@ -109,7 +128,7 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	  }
 	EOF
 
-	cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare server
+	$ cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare server
 	  {
 	    "hosts": [
 	      "localhost",
@@ -132,11 +151,11 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	    }
 	  }
 	EOF
-	cfssl bundle -ca-bundle=ca.pem -cert=server.pem | cfssljson -bare server
+	$ cfssl bundle -ca-bundle=ca.pem -cert=server.pem | cfssljson -bare server
 
-	kubectl create secret generic my-cluster-name-ssl-internal --from-file=tls.crt=server.pem --from-file=tls.key=server-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
+	$ kubectl create secret generic my-cluster-name-ssl-internal --from-file=tls.crt=server.pem --from-file=tls.key=server-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
 
-	cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare client
+	$ cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare client
 	  {
 	    "hosts": [
 	      "${CLUSTER_NAME}-rs0",
@@ -159,11 +178,16 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	  }
 	EOF
 
-	kubectl create secret generic my-cluster-name-ssl --from-file=tls.crt=client.pem --from-file=tls.key=client-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
+	$ kubectl create secret generic my-cluster-name-ssl --from-file=tls.crt=client.pem --from-file=tls.key=client-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
+
+.. _tls.no.tls:
 
 Run Percona Server for MongoDB without TLS
 ==========================================
 
-Omitting TLS is also possible, but we recommend that you run your cluster with the TLS protocol enabled.
+Omitting TLS is also possible, but we recommend that you run your cluster with
+the TLS protocol enabled.
 
-To disable TLS protocol (e.g. for demonstration purposes) set the ``spec.allowUnsafeConfigurations`` key to ``true`` in the ``deploy/cr.yaml`` file and and make sure that there are no certificate secrets available.
+To disable TLS protocol (e.g. for demonstration purposes) set the
+``spec.allowUnsafeConfigurations`` key to ``true`` in the ``deploy/cr.yaml``
+file and and make sure that there are no certificate secrets available.
