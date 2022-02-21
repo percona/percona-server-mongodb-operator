@@ -37,7 +37,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		},
 	}
 
-	if useConfigFile {
+	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
 			MountPath: mongodConfigDir,
@@ -304,7 +304,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		}
 	}
 
-	if useConfigFile {
+	if m.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", mongodConfigDir))
 	}
 

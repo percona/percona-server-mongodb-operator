@@ -91,13 +91,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				Mode: defaultOperationProfilingMode,
 			}
 		}
+		if cr.Spec.Mongod.Security == nil {
+			cr.Spec.Mongod.Security = &MongodSpecSecurity{}
+		}
 		if cr.Spec.Mongod.Security.EnableEncryption == nil {
 			is120 := cr.CompareVersion("1.2.0") >= 0
 			cr.Spec.Mongod.Security.EnableEncryption = &is120
 		}
-	}
-	if cr.Spec.Mongod.Security == nil {
-		cr.Spec.Mongod.Security = &MongodSpecSecurity{}
 	}
 
 	if cr.Spec.EncryptionKeySecretName() == "" {

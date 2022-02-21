@@ -70,7 +70,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
-	if customConf.Type.IsUsable() {
+	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: customConf.Type.VolumeSource(configName),
@@ -117,7 +117,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		annotations = make(map[string]string)
 	}
 
-	if customConf.Type.IsUsable() {
+	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
