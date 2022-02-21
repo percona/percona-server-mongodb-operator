@@ -559,15 +559,10 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	local unmanaged="${6:-false}"
 
-	if [[ ${unmanaged} == "true" ]]; then
-		kubectl_bin exec ${client_container} -- \
-			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false"
-	else
-		kubectl_bin exec ${client_container} -- \
-			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
-	fi
+  kubectl_bin exec ${client_container} -- \
+    bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+
 }
 
 run_mongos() {
