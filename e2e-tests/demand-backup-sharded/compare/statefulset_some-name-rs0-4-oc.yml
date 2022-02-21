@@ -56,6 +56,7 @@ spec:
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
           command:
             - /data/db/ps-entry.sh
           env:
@@ -188,6 +189,11 @@ spec:
             defaultMode: 288
             optional: false
             secretName: some-name-mongodb-keyfile
+        - configMap:
+            defaultMode: 420
+            name: monitoring-rs0-mongod
+            optional: true
+          name: config
         - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
