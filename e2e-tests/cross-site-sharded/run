@@ -172,7 +172,7 @@ run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin1
 sleep 120
 desc "Check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
-desc "Check failover finished successfully"
+desc "Failover check finished successfully"
 
 #destroy "$namespace"
 #destroy $replica_namespace
