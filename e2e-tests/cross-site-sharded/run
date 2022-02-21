@@ -161,10 +161,6 @@ kubectl_bin config set-context $(kubectl_bin config current-context) --namespace
 kubectl_bin delete psmdb $main_cluster
 sleep 120
 
-#run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cluster-rs0-0.$replica_namespace"
-#run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cluster-rs1-0.$replica_namespace"
-#run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cluster-cfg-0.$replica_namespace"
-
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs0_0_endpoint" "mongodb" ":27017"
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs1_0_endpoint" "mongodb" ":27017"
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
@@ -174,5 +170,5 @@ desc "Check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
 desc "Failover check finished successfully"
 
-#destroy "$namespace"
-#destroy $replica_namespace
+destroy "$namespace"
+destroy $replica_namespace
