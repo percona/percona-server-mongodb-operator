@@ -561,13 +561,13 @@ run_mongo() {
 	local mongo_flag="$5"
 	local unmanaged="${6:-false}"
 
-  if [[ ${unmanaged} == "true" ]]; then
-    kubectl_bin exec ${client_container} -- \
-      bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false"
-  else
-    kubectl_bin exec ${client_container} -- \
-      bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
-  fi
+	if [[ ${unmanaged} == "true" ]]; then
+		kubectl_bin exec ${client_container} -- \
+			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false"
+	else
+		kubectl_bin exec ${client_container} -- \
+			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+	fi
 }
 
 run_mongos() {
