@@ -173,3 +173,9 @@ Install the Operator
    .. code:: bash
 
       mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
+
+.. seealso:: 
+
+   * :ref:`operator-backups`
+   * :ref:`operator-updates`
+   * :ref:`operator-scale`

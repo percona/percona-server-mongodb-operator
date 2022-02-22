@@ -174,3 +174,9 @@ Install Percona Server for MongoDB
 
       $ oc run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
       percona-client:/$ mongo "mongodb://userAdmin:userAdmin123456@my-cluster-name-mongos.psmdb.svc.cluster.local/admin?ssl=false"
+
+.. seealso:: 
+
+   * :ref:`operator-backups`
+   * :ref:`operator-updates`
+   * :ref:`operator-scale`

@@ -83,3 +83,9 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    .. code:: bash
 
       mongo "mongodb://userAdmin:userAdminPassword@minimal-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"
+
+.. seealso:: 
+
+   * :ref:`operator-backups`
+   * :ref:`operator-updates`
+   * :ref:`operator-scale`

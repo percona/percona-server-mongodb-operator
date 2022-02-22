@@ -209,3 +209,9 @@ Also, you can delete your cluster via the GKE console. Just click the ``Delete``
    :align: center
 
 The cluster deletion may take time.
+
+.. seealso:: 
+
+   * :ref:`operator-backups`
+   * :ref:`operator-updates`
+   * :ref:`operator-scale`

@@ -1,3 +1,5 @@
+.. _operator-scale:
+
 Scale Percona Server for MongoDB on Kubernetes and OpenShift
 ============================================================
 

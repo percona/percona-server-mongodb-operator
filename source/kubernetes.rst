@@ -109,3 +109,9 @@ Install Percona server for MongoDB on Kubernetes
 
       $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
       percona-client:/$ mongo "mongodb://userAdmin:userAdmin123456@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
+
+.. seealso:: 
+
+   * :ref:`operator-backups`
+   * :ref:`operator-updates`
+   * :ref:`operator-scale`
