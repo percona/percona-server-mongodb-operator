@@ -345,7 +345,7 @@ pipeline {
                     steps {
                         CreateCluster('cross-site')
                         sleep 60
-                        runTest('cross-site', 'cross-site')
+                        runTest('cross-site-sharded', 'cross-site')
                         ShutdownCluster('cross-site')
                     }
                 }
