@@ -9,7 +9,7 @@ pipeline {
           ENABLE_LOGGING="true"
   }
   agent {
-    label any
+    label none
   }
   stages {
     stage('Test notifications') {
