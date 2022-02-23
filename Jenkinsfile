@@ -13,8 +13,8 @@ pipeline {
   }
   stages {
     stage('Test notifications') {
-
       steps {
+        script {
           echo "Test"
           slackSend channel: '@${AUTHOR_NAME}', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
           def author=${AUTHOR_NAME}
@@ -23,6 +23,7 @@ pipeline {
           {
               slackSend channel: '@testnotifications', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
           }
+        }
       }
     }
   }
