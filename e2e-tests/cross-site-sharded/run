@@ -170,5 +170,6 @@ desc "Check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
 desc "Failover check finished successfully"
 
-destroy "$namespace"
+destroy "$namespace" "true"
+
 destroy $replica_namespace
