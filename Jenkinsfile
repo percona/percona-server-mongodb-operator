@@ -24,7 +24,8 @@ pipeline {
             {
                 slackSend channel: '@testnotifications', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
             }
-          catch (exc){
+          }
+          catch (exc) {
             echo "Error"
 //             slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
           }
