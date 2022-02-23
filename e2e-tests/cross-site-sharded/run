@@ -85,7 +85,7 @@ if [[ $shards -lt 2 ]]; then
 fi
 
 desc "Create replica_cluster"
-create_namespace $replica_namespace
+create_namespace $replica_namespace 0
 deploy_operator
 
 kubectl_bin apply \
@@ -170,5 +170,5 @@ desc "Check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
 desc "Failover check finished successfully"
 
-#destroy "$namespace"
-#destroy $replica_namespace
+destroy "$namespace"
+destroy $replica_namespace
