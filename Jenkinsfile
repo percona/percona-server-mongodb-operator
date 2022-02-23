@@ -17,7 +17,8 @@ pipeline {
         script {
           echo "Test"
           try {
-            slackSend channel: "@'"${AUTHOR_NAME}"'", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
+            def AUTHOR="nmarukovich"
+            slackSend channel: "@${AUTHOR}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
           }
           catch (exc) {
             echo "Error"
