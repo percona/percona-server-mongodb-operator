@@ -113,7 +113,7 @@ kubectl_bin get secret ${main_cluster}-ssl -o yaml -n ${namespace} \
 sleep 30
 
 apply_cluster "$test_dir/conf/${replica_cluster}.yml"
-sleep 200
+sleep 600
 
 replica_cfg_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-0)
 replica_cfg_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-1)
