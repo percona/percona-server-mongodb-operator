@@ -205,7 +205,7 @@ spec:
             secretName: some-name-mongodb-keyfile
         - configMap:
             defaultMode: 420
-            name: monitoring-rs2-mongod
+            name: some-name-rs2-mongod
             optional: true
           name: config
         - name: some-name-mongodb-encryption-key
