@@ -299,10 +299,10 @@ pipeline {
 //                         ShutdownCluster('scaling')
 //                    }
 //                 }
-                stage('E2E Basic Tests') {
-                    steps {
-                        CreateCluster('basic')
-                        runTest('one-pod', 'basic')
+//                 stage('E2E Basic Tests') {
+//                     steps {
+//                         CreateCluster('basic')
+//                         runTest('one-pod', 'basic')
 //                         runTest('monitoring-2-0', 'basic')
 //                         runTest('arbiter', 'basic')
 //                         runTest('service-per-pod', 'basic')
@@ -312,9 +312,9 @@ pipeline {
 //                         runTest('users', 'basic')
 //                         runTest('data-sharded', 'basic')
 //                         runTest('non-voting', 'basic')
-                        ShutdownCluster('basic')
-                    }
-                }
+//                         ShutdownCluster('basic')
+//                     }
+//                 }
 //                 stage('E2E SelfHealing') {
 //                     steps {
 //                         CreateCluster('selfhealing')
@@ -341,14 +341,14 @@ pipeline {
 //                         ShutdownCluster('backups')
 //                     }
 //                 }
-//                 stage('CrossSite replication') {
-//                     steps {
-//                         CreateCluster('cross-site')
-//                         sleep 60
-//                         runTest('cross-site-sharded', 'cross-site')
-//                         ShutdownCluster('cross-site')
-//                     }
-//                 }
+                stage('CrossSite replication') {
+                    steps {
+                        CreateCluster('cross-site')
+                        sleep 60
+                        runTest('cross-site-sharded', 'cross-site')
+                        ShutdownCluster('cross-site')
+                    }
+                }
             }
         }
     }
