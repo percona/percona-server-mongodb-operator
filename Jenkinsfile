@@ -142,205 +142,220 @@ pipeline {
         label 'docker'
     }
     stages {
-        stage('Prepare') {
-            when {
-                expression {
-                    !skipBranchBulds
-                }
-            }
+        stage('Test notifications') {
             steps {
-                stash includes: 'vendor/**', name: 'vendorFILES'
-                installRpms()
-                script {
-                    if ( AUTHOR_NAME == 'null' )  {
-                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
-                    }
-                    for (comment in pullRequest.comments) {
-                        println("Author: ${comment.user}, Comment: ${comment.body}")
-                        if (comment.user.equals('JNKPercona')) {
-                            println("delete comment")
-                            comment.delete()
-                        }
-                    }
+                echo "Test"
+                slackSend channel: '@${AUTHOR_NAME}', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
+
+                if (${AUTHOR_NAME} == slackUserId(${AUTHOR_NAME})
+                {
+                    slackSend channel: '@${AUTHOR_NAME}', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
                 }
-                sh '''
-                    if [ ! -d $HOME/google-cloud-sdk/bin ]; then
-                        rm -rf $HOME/google-cloud-sdk
-                        curl https://sdk.cloud.google.com | bash
-                    fi
-
-                    source $HOME/google-cloud-sdk/path.bash.inc
-                    gcloud components install alpha
-                    gcloud components install kubectl
-
-                    curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
-                    curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
-                        | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
-
-                    curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
-                        | sudo tar -C /usr/local/bin --wildcards -zxvpf -
-
-                    sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/3.3.2/yq_linux_amd64 > /usr/local/bin/yq"
-                    sudo chmod +x /usr/local/bin/yq
-                '''
-                withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
-                    sh '''
-                        cp $CLOUD_SECRET_FILE ./e2e-tests/conf/cloud-secret.yml
-                    '''
+                else {
+                    slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                 }
+                slackSend channel: '@testnotifications', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
             }
         }
-        stage('Build docker image') {
-            when {
-                expression {
-                    !skipBranchBulds
-                }
-            }
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
-                    sh '''
-                        DOCKER_TAG=perconalab/percona-server-mongodb-operator:$VERSION
-                        docker_tag_file='./results/docker/TAG'
-                        mkdir -p $(dirname ${docker_tag_file})
-                        echo ${DOCKER_TAG} > "${docker_tag_file}"
-                            sg docker -c "
-                                docker login -u '${USER}' -p '${PASS}'
-                                export RELEASE=0
-                                export IMAGE=\$DOCKER_TAG
-                                ./e2e-tests/build
-                                docker logout
-                            "
-                        sudo rm -rf ./build
-                    '''
-                }
-                stash includes: 'results/docker/TAG', name: 'IMAGE'
-                archiveArtifacts 'results/docker/TAG'
-            }
-        }
-        stage('GoLicenseDetector test') {
-            when {
-                expression {
-                    !skipBranchBulds
-                }
-            }
-            steps {
-                sh """
-                    mkdir -p $WORKSPACE/src/github.com/percona
-                    ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator
-                    sg docker -c "
-                        docker run \
-                            --rm \
-                            -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
-                            -w /go/src/github.com/percona/percona-server-mongodb-operator \
-                            golang:1.17 sh -c '
-                                go install github.com/google/go-licenses@latest;
-                                /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
-                                    | cut -d , -f 3 \
-                                    | sort -u \
-                                    > go-licenses-new || :
-                            '
-                    "
-                    diff -u e2e-tests/license/compare/go-licenses go-licenses-new
-                """
-            }
-        }
-        stage('GoLicense test') {
-            when {
-                expression {
-                    !skipBranchBulds
-                }
-            }
-            steps {
-                sh '''
-                    mkdir -p $WORKSPACE/src/github.com/percona
-                    ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator
-                    sg docker -c "
-                        docker run \
-                            --rm \
-                            -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
-                            -w /go/src/github.com/percona/percona-server-mongodb-operator \
-                            golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
-                    "
-                '''
-
-                withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_TOKEN')]) {
-                    sh """
-                        golicense -plain ./percona-server-mongodb-operator \
-                            | grep -v 'license not found' \
-                            | sed -r 's/^[^ ]+[ ]+//' \
-                            | sort \
-                            | uniq \
-                            > golicense-new || true
-
-                        diff -u e2e-tests/license/compare/golicense golicense-new
-                    """
-                }
-                unstash 'vendorFILES'
-            }
-        }
-        stage('Run tests for operator') {
-            when {
-                expression {
-                    !skipBranchBulds
-                }
-            }
-            options {
-                timeout(time: 3, unit: 'HOURS')
-            }
-            parallel {
-                stage('E2E Scaling') {
-                    steps {
-                        CreateCluster('scaling')
-                        runTest('init-deploy', 'scaling')
-                        runTest('limits', 'scaling')
-                        runTest('scaling', 'scaling')
-                        runTest('security-context', 'scaling')
-                        runTest('rs-shard-migration', 'scaling')
-                        ShutdownCluster('scaling')
-                   }
-                }
-                stage('E2E Basic Tests') {
-                    steps {
-                        CreateCluster('basic')
-                        runTest('one-pod', 'basic')
-                        runTest('monitoring-2-0', 'basic')
-                        runTest('arbiter', 'basic')
-                        runTest('service-per-pod', 'basic')
-                        runTest('liveness', 'basic')
-                        runTest('smart-update', 'basic')
-                        runTest('version-service', 'basic')
-                        runTest('users', 'basic')
-                        runTest('data-sharded', 'basic')
-                        runTest('non-voting', 'basic')
-                        ShutdownCluster('basic')
-                    }
-                }
-                stage('E2E SelfHealing') {
-                    steps {
-                        CreateCluster('selfhealing')
-                        runTest('storage', 'selfhealing')
-                        runTest('self-healing', 'selfhealing')
-                        runTest('self-healing-chaos', 'selfhealing')
-                        runTest('operator-self-healing', 'selfhealing')
-                        runTest('operator-self-healing-chaos', 'selfhealing')
-                        ShutdownCluster('selfhealing')
-                    }
-                }
-                stage('E2E Backups') {
-                    steps {
-                        CreateCluster('backups')
-                        sleep 60
-                        runTest('upgrade-consistency', 'backups')
-                        runTest('demand-backup', 'backups')
-                        runTest('scheduled-backup', 'backups')
-                        runTest('demand-backup-sharded', 'backups')
-                        runTest('upgrade', 'backups')
-                        runTest('upgrade-sharded', 'backups')
-                        runTest('pitr', 'backups')
-                        runTest('pitr-sharded', 'backups')
-                        ShutdownCluster('backups')
-                    }
-                }
+//         stage('Prepare') {
+//             when {
+//                 expression {
+//                     !skipBranchBulds
+//                 }
+//             }
+//             steps {
+//                 stash includes: 'vendor/**', name: 'vendorFILES'
+//                 installRpms()
+//                 script {
+//                     if ( AUTHOR_NAME == 'null' )  {
+//                         AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
+//                     }
+//                     for (comment in pullRequest.comments) {
+//                         println("Author: ${comment.user}, Comment: ${comment.body}")
+//                         if (comment.user.equals('JNKPercona')) {
+//                             println("delete comment")
+//                             comment.delete()
+//                         }
+//                     }
+//                 }
+//                 sh '''
+//                     if [ ! -d $HOME/google-cloud-sdk/bin ]; then
+//                         rm -rf $HOME/google-cloud-sdk
+//                         curl https://sdk.cloud.google.com | bash
+//                     fi
+//
+//                     source $HOME/google-cloud-sdk/path.bash.inc
+//                     gcloud components install alpha
+//                     gcloud components install kubectl
+//
+//                     curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+//                     curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
+//                         | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
+//
+//                     curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
+//                         | sudo tar -C /usr/local/bin --wildcards -zxvpf -
+//
+//                     sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/3.3.2/yq_linux_amd64 > /usr/local/bin/yq"
+//                     sudo chmod +x /usr/local/bin/yq
+//                 '''
+//                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
+//                     sh '''
+//                         cp $CLOUD_SECRET_FILE ./e2e-tests/conf/cloud-secret.yml
+//                     '''
+//                 }
+//             }
+//         }
+//         stage('Build docker image') {
+//             when {
+//                 expression {
+//                     !skipBranchBulds
+//                 }
+//             }
+//             steps {
+//                 withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+//                     sh '''
+//                         DOCKER_TAG=perconalab/percona-server-mongodb-operator:$VERSION
+//                         docker_tag_file='./results/docker/TAG'
+//                         mkdir -p $(dirname ${docker_tag_file})
+//                         echo ${DOCKER_TAG} > "${docker_tag_file}"
+//                             sg docker -c "
+//                                 docker login -u '${USER}' -p '${PASS}'
+//                                 export RELEASE=0
+//                                 export IMAGE=\$DOCKER_TAG
+//                                 ./e2e-tests/build
+//                                 docker logout
+//                             "
+//                         sudo rm -rf ./build
+//                     '''
+//                 }
+//                 stash includes: 'results/docker/TAG', name: 'IMAGE'
+//                 archiveArtifacts 'results/docker/TAG'
+//             }
+//         }
+//         stage('GoLicenseDetector test') {
+//             when {
+//                 expression {
+//                     !skipBranchBulds
+//                 }
+//             }
+//             steps {
+//                 sh """
+//                     mkdir -p $WORKSPACE/src/github.com/percona
+//                     ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator
+//                     sg docker -c "
+//                         docker run \
+//                             --rm \
+//                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
+//                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
+//                             golang:1.17 sh -c '
+//                                 go install github.com/google/go-licenses@latest;
+//                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
+//                                     | cut -d , -f 3 \
+//                                     | sort -u \
+//                                     > go-licenses-new || :
+//                             '
+//                     "
+//                     diff -u e2e-tests/license/compare/go-licenses go-licenses-new
+//                 """
+//             }
+//         }
+//         stage('GoLicense test') {
+//             when {
+//                 expression {
+//                     !skipBranchBulds
+//                 }
+//             }
+//             steps {
+//                 sh '''
+//                     mkdir -p $WORKSPACE/src/github.com/percona
+//                     ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator
+//                     sg docker -c "
+//                         docker run \
+//                             --rm \
+//                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
+//                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
+//                             golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
+//                     "
+//                 '''
+//
+//                 withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_TOKEN')]) {
+//                     sh """
+//                         golicense -plain ./percona-server-mongodb-operator \
+//                             | grep -v 'license not found' \
+//                             | sed -r 's/^[^ ]+[ ]+//' \
+//                             | sort \
+//                             | uniq \
+//                             > golicense-new || true
+//
+//                         diff -u e2e-tests/license/compare/golicense golicense-new
+//                     """
+//                 }
+//                 unstash 'vendorFILES'
+//             }
+//         }
+//         stage('Run tests for operator') {
+//             when {
+//                 expression {
+//                     !skipBranchBulds
+//                 }
+//             }
+//             options {
+//                 timeout(time: 3, unit: 'HOURS')
+//             }
+//             parallel {
+//                 stage('E2E Scaling') {
+//                     steps {
+//                         CreateCluster('scaling')
+//                         runTest('init-deploy', 'scaling')
+//                         runTest('limits', 'scaling')
+//                         runTest('scaling', 'scaling')
+//                         runTest('security-context', 'scaling')
+//                         runTest('rs-shard-migration', 'scaling')
+//                         ShutdownCluster('scaling')
+//                    }
+//                 }
+//                 stage('E2E Basic Tests') {
+//                     steps {
+//                         CreateCluster('basic')
+//                         runTest('one-pod', 'basic')
+//                         runTest('monitoring-2-0', 'basic')
+//                         runTest('arbiter', 'basic')
+//                         runTest('service-per-pod', 'basic')
+//                         runTest('liveness', 'basic')
+//                         runTest('smart-update', 'basic')
+//                         runTest('version-service', 'basic')
+//                         runTest('users', 'basic')
+//                         runTest('data-sharded', 'basic')
+//                         runTest('non-voting', 'basic')
+//                         ShutdownCluster('basic')
+//                     }
+//                 }
+//                 stage('E2E SelfHealing') {
+//                     steps {
+//                         CreateCluster('selfhealing')
+//                         runTest('storage', 'selfhealing')
+//                         runTest('self-healing', 'selfhealing')
+//                         runTest('self-healing-chaos', 'selfhealing')
+//                         runTest('operator-self-healing', 'selfhealing')
+//                         runTest('operator-self-healing-chaos', 'selfhealing')
+//                         ShutdownCluster('selfhealing')
+//                     }
+//                 }
+//                 stage('E2E Backups') {
+//                     steps {
+//                         CreateCluster('backups')
+//                         sleep 60
+//                         runTest('upgrade-consistency', 'backups')
+//                         runTest('demand-backup', 'backups')
+//                         runTest('scheduled-backup', 'backups')
+//                         runTest('demand-backup-sharded', 'backups')
+//                         runTest('upgrade', 'backups')
+//                         runTest('upgrade-sharded', 'backups')
+//                         runTest('pitr', 'backups')
+//                         runTest('pitr-sharded', 'backups')
+//                         ShutdownCluster('backups')
+//                     }
+//                 }
             }
         }
     }
