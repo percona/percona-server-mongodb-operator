@@ -9,7 +9,7 @@ pipeline {
           ENABLE_LOGGING="true"
   }
   agent {
-    label none
+    label 'docker'
   }
   stages {
     stage('Test notifications') {
