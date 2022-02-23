@@ -163,6 +163,11 @@ spec:
             defaultMode: 288
             optional: false
             secretName: liveness-mongodb-keyfile
+        - configMap:
+            defaultMode: 420
+            name: liveness-rs0-mongod
+            optional: true
+          name: config
         - name: liveness-mongodb-encryption-key
           secret:
             defaultMode: 288

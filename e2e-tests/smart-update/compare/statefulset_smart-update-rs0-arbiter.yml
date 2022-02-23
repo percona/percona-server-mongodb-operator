@@ -165,7 +165,7 @@ spec:
             secretName: smart-update-mongodb-keyfile
         - configMap:
             defaultMode: 420
-            name: smart-update-rs0-arbiter
+            name: smart-update-rs0-mongod
             optional: true
           name: config
         - name: smart-update-mongodb-encryption-key
