@@ -1399,7 +1399,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, l
 		}
 
 		orig := pvc.DeepCopy()
-		pvc.Labels = sfs.Labels
+		for k, v := range sfs.Labels {
+			pvc.Labels[k] = v
+		}
 		patch := client.MergeFrom(orig)
 
 		if err := r.client.Patch(context.TODO(), &pvc, patch); err != nil {
