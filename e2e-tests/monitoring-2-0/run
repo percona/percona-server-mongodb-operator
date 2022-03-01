@@ -56,7 +56,7 @@ compare_kubectl statefulset/$cluster-rs0
 compare_kubectl service/$cluster-rs0
 compare_kubectl statefulset/$cluster-cfg
 compare_kubectl deployment/$cluster-mongos
-sleep 200
+
 desc 'check mongod metrics'
 get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 admin:admin
 get_metric_values mongodb_connections $namespace-$cluster-rs0-1 admin:admin
