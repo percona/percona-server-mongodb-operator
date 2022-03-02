@@ -104,7 +104,6 @@ spec:
     size: 3
     configuration: |
       net:
-        hostPort: 0
         port: 27017
       operationProfiling:
         mode: slowOp
@@ -144,7 +143,6 @@ spec:
     size: 3
     configuration: |
       net:
-        hostPort: 0
         port: 27017
       operationProfiling:
         mode: slowOp
@@ -184,7 +182,6 @@ spec:
     size: 3
     configuration: |
       net:
-        hostPort: 0
         port: 27017
       operationProfiling:
         mode: slowOp
