@@ -453,7 +453,31 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerM
 		return errors.Wrap(err, "failed to get cluster admin")
 	}
 
-	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password, roleClusterMonitor)
+	err = mongo.CreateRole(context.Background(), cli, "explainRole",
+		[]interface{}{
+			map[string]interface{}{
+				"resource": map[string]string{
+					"db":         "",
+					"collection": "system.profile",
+				},
+				"actions": []string{
+					"listIndexes",
+					"listCollections",
+					"dbStats",
+					"dbHash",
+					"collStats",
+					"find",
+				},
+			},
+		}, []interface{}{})
+	if err != nil {
+		return errors.Wrap(err, "failed to create role")
+	}
+	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password,
+		map[string]string{"db": "admin", "role": "explainRole"},
+		map[string]string{"db": "admin", "role": string(roleClusterMonitor)},
+		map[string]string{"db": "local", "role": "read"},
+	)
 	if err != nil {
 		return errors.Wrap(err, "failed to create monitorUser")
 	}
