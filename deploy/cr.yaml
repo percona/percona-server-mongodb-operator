@@ -2,7 +2,8 @@ apiVersion: psmdb.percona.com/v1-12-0
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
-#  finalizers:
+  finalizers:
+    - delete-psmdb-pods-in-order
 #    - delete-psmdb-pvc
 spec:
 #  platform: openshift
