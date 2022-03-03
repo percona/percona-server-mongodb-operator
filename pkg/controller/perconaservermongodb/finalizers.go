@@ -2,32 +2,77 @@ package perconaservermongodb
 
 import (
 	"context"
-
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) checkFinalizers(cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
+	shouldReconcile = true
 	finalizers := []string{}
 
 	for _, f := range cr.GetFinalizers() {
 		switch f {
 		case "delete-psmdb-pvc":
-			err := r.deletePvcFinalizer(cr)
+			err = r.deletePvcFinalizer(cr)
+		case "delete-psmdb-pods-in-order":
+			err = r.deletePSMDBPods(cr)
 			if err != nil {
-				log.Error(err, "failed to run finalizer", "finalizer", f)
-				finalizers = append(finalizers, f)
+				shouldReconcile = false
 			}
 		}
+		if err != nil {
+			log.Error(err, "failed to run finalizer", "finalizer", f)
+			finalizers = append(finalizers, f)
+		}
 	}
-
 	cr.SetFinalizers(finalizers)
-	err := r.client.Update(context.TODO(), cr)
+	err = r.client.Update(context.TODO(), cr)
 
-	return err
+	return shouldReconcile, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(cr *api.PerconaServerMongoDB) (err error) {
+	done := true
+	for _, rs := range cr.Spec.Replsets {
+		sts, err := r.getRsStatefulset(cr, rs.Name)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return errors.Wrap(err, "get rs statefulset")
+		}
+
+		pods := &corev1.PodList{}
+		err = r.client.List(context.TODO(),
+			pods,
+			&client.ListOptions{
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(sts.Spec.Selector.MatchLabels),
+			},
+		)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return errors.Wrap(err, "get rs statefulset")
+		}
+		if len(pods.Items) > int(*sts.Spec.Replicas) {
+			return errors.New("waiting pods to be deleted")
+		}
+		if *sts.Spec.Replicas != 1 {
+			rs.Size = 1
+			done = false
+		}
+	}
+	if !done {
+		return errors.New("waiting statefulsets to be resized")
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePvcFinalizer(cr *api.PerconaServerMongoDB) error {
