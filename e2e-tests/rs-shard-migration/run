@@ -11,7 +11,7 @@ function get_shard_parameter() {
     local namespace=$2
     local parameter=${3:-lastCommittedOpTime}
     run_mongo 'db.isMaster().'${parameter}'' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" \
-        | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match'
+        | egrep -v 'I  NETWORK|W  NETWORK|I  CONNPOOL|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match'
 }
 
 function main() {

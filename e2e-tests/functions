@@ -616,7 +616,7 @@ compare_mongo_cmd() {
 	local suffix="$4"
 
 	run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+		| egrep -v 'I  NETWORK|W  NETWORK|F  NETWORK|I  CONNPOOL|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}
 	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
@@ -629,7 +629,7 @@ compare_mongos_cmd() {
 	local suffix="$4"
 
 	run_mongos "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+		| egrep -v 'I  NETWORK|W  NETWORK|I  CONNPOOL|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}
 	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
@@ -639,7 +639,7 @@ get_mongo_primary_endpoint() {
 	local uri="$1"
 
 	run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
-		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I  NETWORK|W  NETWORK|I  CONNPOOL|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| grep ":27017$"
 }
@@ -678,7 +678,7 @@ compare_mongo_user() {
 	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
-		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I  NETWORK|W  NETWORK|I  CONNPOOL|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| $sed -e '/"ok" : 1/,+4d' \
 		| sed -e '$s/,$/}/' \
@@ -932,7 +932,7 @@ getSecretData() {
 check_mongo_auth() {
 	local uri="$1"
 
-	ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
+	ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | egrep -v 'I  NETWORK|W  NETWORK|I  CONNPOOL|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match')
 	desc "ping return"
 	if [ "${ping}" != "1" ]; then
 		return 1
