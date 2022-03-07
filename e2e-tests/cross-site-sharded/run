@@ -165,6 +165,8 @@ run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin1
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs1_0_endpoint" "mongodb" ":27017"
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
 
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
+kubectl_bin patch psmdb ${replica_cluster} --type=merge --patch '{"spec":{"unmanaged": false}}'
 sleep 120
 desc "Check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
