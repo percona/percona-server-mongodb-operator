@@ -453,31 +453,37 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(cr *api.PerconaServerM
 		return errors.Wrap(err, "failed to get cluster admin")
 	}
 
-	err = mongo.CreateRole(context.Background(), cli, "explainRole",
-		[]interface{}{
-			map[string]interface{}{
-				"resource": map[string]string{
-					"db":         "",
-					"collection": "system.profile",
+	var roles []interface{}
+	if cr.CompareVersion("1.12.0") >= 0 {
+		err = mongo.CreateRole(context.Background(), cli, "explainRole",
+			[]interface{}{
+				map[string]interface{}{
+					"resource": map[string]string{
+						"db":         "",
+						"collection": "system.profile",
+					},
+					"actions": []string{
+						"listIndexes",
+						"listCollections",
+						"dbStats",
+						"dbHash",
+						"collStats",
+						"find",
+					},
 				},
-				"actions": []string{
-					"listIndexes",
-					"listCollections",
-					"dbStats",
-					"dbHash",
-					"collStats",
-					"find",
-				},
-			},
-		}, []interface{}{})
-	if err != nil {
-		return errors.Wrap(err, "failed to create role")
+			}, []interface{}{})
+		if err != nil {
+			return errors.Wrap(err, "failed to create role")
+		}
+		roles = []interface{}{
+			map[string]string{"db": "admin", "role": "explainRole"},
+			map[string]string{"db": "admin", "role": string(roleClusterMonitor)},
+			map[string]string{"db": "local", "role": "read"},
+		}
+	} else {
+		roles = []interface{}{roleClusterMonitor}
 	}
-	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password,
-		map[string]string{"db": "admin", "role": "explainRole"},
-		map[string]string{"db": "admin", "role": string(roleClusterMonitor)},
-		map[string]string{"db": "local", "role": "read"},
-	)
+	err = mongo.CreateUser(context.Background(), cli, monitorUser.Username, monitorUser.Password, roles...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create monitorUser")
 	}
