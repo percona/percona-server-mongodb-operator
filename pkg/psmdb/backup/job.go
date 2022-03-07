@@ -60,7 +60,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        jobName,
 			Namespace:   namespace,
-			Labels:      NewBackupCronJobLabels(crName),
+			Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
 			Annotations: backupSpec.Annotations,
 		},
 		Spec: batchv1b.CronJobSpec{
@@ -68,11 +68,15 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 			ConcurrencyPolicy: batchv1b.ForbidConcurrent,
 			JobTemplate: batchv1b.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      NewBackupCronJobLabels(crName),
+					Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
 					Annotations: backupSpec.Annotations,
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
+							Annotations: backupSpec.Annotations,
+						},
 						Spec: backupPod,
 					},
 				},
@@ -83,15 +87,21 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 	return cj, nil
 }
 
-func NewBackupCronJobLabels(crName string) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   crName,
-		"app.kubernetes.io/replset":    "general",
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/component":  "backup-schedule",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+func NewBackupCronJobLabels(crName string, labels map[string]string) map[string]string {
+	base := make(map[string]string)
+
+	for k, v := range labels {
+		base[k] = v
 	}
+
+	base["app.kubernetes.io/name"] = "percona-server-mongodb"
+	base["app.kubernetes.io/instance"] = crName
+	base["app.kubernetes.io/replset"] = "general"
+	base["app.kubernetes.io/managed-by"] = "percona-server-mongodb-operator"
+	base["app.kubernetes.io/component"] = "backup-schedule"
+	base["app.kubernetes.io/part-of"] = "percona-server-mongodb"
+
+	return base
 }
 
 func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) ([]string, error) {

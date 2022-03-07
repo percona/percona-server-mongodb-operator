@@ -1,6 +1,6 @@
 # Contributing to the Operator
 
-Percona welcomes and encourages community contributions to help improve [Percona Kubernetes Operator for Percona Server for MongoDB](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html). The Operator automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment, and contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.
+Percona welcomes and encourages community contributions to help improve [Percona Distribution for MongoDB Operator](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html). The Operator automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment, and contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ Please make sure to read and observe the [Contribution Policy](code-of-conduct.m
 
 Improvement and bugfix tasks for the Operator are tracked in [Jira](https://Jira.percona.com/projects/K8SPSMDB/issues). Although not mandatory, it is a good practice to examine already open Jira issues before submitting a pull request. For bigger contributions, we suggest creating a Jira issue first and discussing it with the engineering team and community before proposing any code changes.
 
-Another good place to discuss Percona Kubernetes Operator for Percona XtraDB Cluster with developers and other community members is the [community forum](https://forums.percona.com/categories/kubernetes-operator-percona-server-mongodb).
+Another good place to discuss Percona Distribution for MongoDB Operator with developers and other community members is the [community forum](https://forums.percona.com/categories/kubernetes-operator-percona-server-mongodb).
 
 ### 1. Contributing to the source tree
 
@@ -63,7 +63,7 @@ Your pull request will go through an automated build and testing process, and yo
 
 ### 2. Code review by the Operator developers
 
-Your contribution will be reviewed by other developers contributing to the project.  The more complex your changes are, the more experts will be involved. You will receive feedback and recommendations directly on your pull request on GitHub, so keep an eye on your submission and be prepared to make further amendments. The developers might even provide some concrete suggestions on how to modify your code to better match the project’s expectations.
+Your contribution will be reviewed by other developers contributing to the project. The more complex your changes are, the more experts will be involved. You will receive feedback and recommendations directly on your pull request on GitHub, so keep an eye on your submission and be prepared to make further amendments. The developers might even provide some concrete suggestions on how to modify your code to better match the project’s expectations.
 
 ## Building and automated testing
 
