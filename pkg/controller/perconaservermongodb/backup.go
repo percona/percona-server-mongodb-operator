@@ -17,7 +17,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	ctasks := make(map[string]api.BackupTaskSpec)
 	ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
 
@@ -35,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 				return errors.Wrap(err, "set owner reference for backup task "+cjob.Name)
 			}
 
-			err = r.createOrUpdate(&cjob)
+			err = r.createOrUpdate(ctx, &cjob)
 			if err != nil {
 				return errors.Wrap(err, "create or update backup job")
 			}
@@ -44,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 
 	// Remove old/unused tasks
 	tasksList := &batchv1beta1.CronJobList{}
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		tasksList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -58,20 +58,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	for _, t := range tasksList.Items {
 		if spec, ok := ctasks[t.Name]; ok {
 			if spec.Keep > 0 {
-				oldjobs, err := r.oldScheduledBackups(cr, t.Name, spec.Keep)
+				oldjobs, err := r.oldScheduledBackups(ctx, cr, t.Name, spec.Keep)
 				if err != nil {
 					return fmt.Errorf("remove old backups: %v", err)
 				}
 
 				for _, todel := range oldjobs {
-					err = r.client.Delete(context.TODO(), &todel)
+					err = r.client.Delete(ctx, &todel)
 					if err != nil {
 						return fmt.Errorf("failed to delete backup object: %v", err)
 					}
 				}
 			}
 		} else {
-			err := r.client.Delete(context.TODO(), &t)
+			err := r.client.Delete(ctx, &t)
 			if err != nil && !k8sErrors.IsNotFound(err) {
 				return fmt.Errorf("delete backup task %s: %v", t.Name, err)
 			}
@@ -82,10 +82,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 }
 
 // oldScheduledBackups returns list of the most old psmdb-bakups that execeed `keep` limit
-func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(cr *api.PerconaServerMongoDB,
+func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context, cr *api.PerconaServerMongoDB,
 	ancestor string, keep int) ([]api.PerconaServerMongoDBBackup, error) {
 	bcpList := api.PerconaServerMongoDBBackupList{}
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&bcpList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
@@ -146,9 +146,9 @@ func (h *minHeap) Pop() interface{} {
 	return x
 }
 
-func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(cr *api.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	restores := api.PerconaServerMongoDBRestoreList{}
-	if err := r.client.List(context.TODO(), &restores, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.client.List(ctx, &restores, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -167,9 +167,9 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(cr *api.PerconaServerMo
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	bcps := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(context.TODO(), &bcps, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.client.List(ctx, &bcps, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -187,9 +187,9 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) hasFullBackup(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	backups := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(context.TODO(), &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.client.List(ctx, &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -205,13 +205,13 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongo
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Backup.Enabled {
 		return nil
 	}
 
 	// pitr is disabled right before restore so it must not be re-enabled during restore
-	isRestoring, err := r.isRestoreRunning(cr)
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "checking if restore running on pbm update")
 	}
@@ -220,14 +220,14 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		return nil
 	}
 
-	pbm, err := backup.NewPBM(r.client, cr)
+	pbm, err := backup.NewPBM(ctx, r.client, cr)
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
-	defer pbm.Close()
+	defer pbm.Close(ctx)
 
 	if cr.Spec.Backup.PITR.Enabled {
-		hasFullBackup, err := r.hasFullBackup(cr)
+		hasFullBackup, err := r.hasFullBackup(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "check full backup")
 		}

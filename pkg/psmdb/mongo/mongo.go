@@ -432,12 +432,12 @@ func UpdateUser(ctx context.Context, client *mongo.Client, currName, newName, pa
 		return errors.New("empty user data")
 	}
 
-	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "createUser", Value: newName}, {Key: "pwd", Value: pass}, {Key: "roles", Value: mu.Users[0].Roles}}).Err()
+	err = client.Database("admin").RunCommand(ctx, bson.D{{Key: "createUser", Value: newName}, {Key: "pwd", Value: pass}, {Key: "roles", Value: mu.Users[0].Roles}}).Err()
 	if err != nil {
 		return errors.Wrap(err, "create user")
 	}
 
-	err = client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "dropUser", Value: currName}}).Err()
+	err = client.Database("admin").RunCommand(ctx, bson.D{{Key: "dropUser", Value: currName}}).Err()
 	return errors.Wrap(err, "drop user")
 }
 
