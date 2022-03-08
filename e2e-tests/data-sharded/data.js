@@ -1,4 +1,4 @@
-db = db.getSiblingDB('app');
+db = db.getSiblingDB("app");
 
 var bulk = db.city.initializeUnorderedBulkOp();
 
