@@ -24,6 +24,7 @@ type Config struct {
 	Username    string
 	Password    string
 	TLSConf     *tls.Config
+	Direct      bool
 }
 
 func Dial(conf *Config) (*mongo.Client, error) {
@@ -38,11 +39,12 @@ func Dial(conf *Config) (*mongo.Client, error) {
 			Username: conf.Username,
 		}).
 		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
-		SetReadPreference(readpref.Primary()).SetTLSConfig(conf.TLSConf)
+		SetReadPreference(readpref.Primary()).SetTLSConfig(conf.TLSConf).
+		SetDirect(conf.Direct)
 
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {
-		return nil, errors.Errorf("failed to connect to mongo rs: %v", err)
+		return nil, errors.Wrap(err, "connect to mongo rs")
 	}
 
 	defer func() {
@@ -59,7 +61,7 @@ func Dial(conf *Config) (*mongo.Client, error) {
 
 	err = client.Ping(ctx, readpref.Primary())
 	if err != nil {
-		return nil, errors.Errorf("failed to ping mongo: %v", err)
+		return nil, errors.Wrap(err, "ping mongo")
 	}
 
 	return client, nil
@@ -586,7 +588,7 @@ func (m *ConfigMembers) SetVotes() {
 				// We're setting it to 2 as default, to allow
 				// users to configure external nodes with lower
 				// priority than local nodes.
-				[]ConfigMember(*m)[i].Priority = 2
+				[]ConfigMember(*m)[i].Priority = DefaultPriority
 			}
 		} else if member.ArbiterOnly {
 			// Arbiter should always have a vote

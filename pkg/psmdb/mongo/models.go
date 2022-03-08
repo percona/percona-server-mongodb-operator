@@ -10,6 +10,7 @@ const (
 	MinVotingMembers = 1
 	MaxVotingMembers = 7
 	MaxMembers       = 50
+	DefaultPriority  = 2
 )
 
 // Replica Set tags: https://docs.mongodb.com/manual/tutorial/configure-replica-set-tag-sets/#add-tag-sets-to-a-replica-set
