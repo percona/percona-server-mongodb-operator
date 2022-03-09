@@ -83,6 +83,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
     tasks:
       - name: each-hour
         enabled: true

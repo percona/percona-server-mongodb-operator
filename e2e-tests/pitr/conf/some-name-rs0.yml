@@ -17,6 +17,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
     pitr:
       enabled: true
       oplogSpanMin: 2

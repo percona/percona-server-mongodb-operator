@@ -17,6 +17,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           prefix: psmdb
+          insecureSkipTLSVerify: false
       minio:
         type: s3
         s3:
@@ -24,6 +25,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
       gcp-cs:
         type: s3
         s3:
@@ -32,6 +34,7 @@ spec:
           bucket: operator-testing
           prefix: psmdb
           endpointUrl: https://storage.googleapis.com
+          insecureSkipTLSVerify: false
       azure-blob:
         type: azure
         azure:

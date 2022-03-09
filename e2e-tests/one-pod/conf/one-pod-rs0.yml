@@ -81,10 +81,11 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:9.9.9-backup
     storages:
-     minio:
-       type: s3
-       s3:
-         bucket: operator-testing
-         credentialsSecret: minio-secret
-         region: us-east-1
-         endpointUrl: http://minio-service:9000/
+      minio:
+        type: s3
+        s3:
+          bucket: operator-testing
+          credentialsSecret: minio-secret
+          region: us-east-1
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false

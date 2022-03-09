@@ -141,7 +141,6 @@ spec:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#    schedulerName: "default"
     resources:
       limits:
         cpu: "300m"
@@ -194,7 +193,6 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-#    schedulerName: "default"
       podDisruptionBudget:
         maxUnavailable: 1
 #        minAvailable: 0

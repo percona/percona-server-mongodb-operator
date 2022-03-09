@@ -58,8 +58,8 @@ function compare_generation() {
 }
 
 function wait_cluster_consistency() {
-	until [[ "$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')" == "ready" &&
-	"$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" &&
+	until [[ "$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')" == "ready" && \
+	"$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" && \
 	"$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.replsets.cfg.ready}')" == "${CLUSTER_SIZE}" ]]; do
 		echo 'waiting for cluster readyness'
 		sleep 20
@@ -71,9 +71,9 @@ function check_applied_images() {
 
 	case "${updated_image}" in
 		"operator")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
-			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
-			${IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
+			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') && \
+			${IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') && \
 			${IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
 				: Operator image has been updated correctly
 			else
@@ -82,9 +82,9 @@ function check_applied_images() {
 			fi
 			;;
 		"all")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
-			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
-			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') && \
+			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') && \
+			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') && \
 			${TARGET_IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
 				: Cluster images have been updated correctly
 			else
@@ -126,6 +126,7 @@ function prepare_cr_yaml() {
 		| yq w - "spec.backup.storages.minio.s3.region" "us-east-1" \
 		| yq w - "spec.backup.storages.minio.s3.bucket" "operator-testing" \
 		| yq w - "spec.backup.storages.minio.s3.endpointUrl" "http://minio-service:9000/" \
+		| yq w - "spec.backup.storages.minio.s3.insecureSkipTLSVerify" "false" \
 		| yq w - "spec.sharding.enabled" "true" \
 		| yq w - "spec.sharding.configsvrReplSet.size" "${CLUSTER_SIZE}" \
 		| yq w - "spec.sharding.mongos.size" "${CLUSTER_SIZE}" \
