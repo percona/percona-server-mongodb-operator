@@ -101,7 +101,7 @@ func CreateRole(ctx context.Context, client *mongo.Client, role string, privileg
 		{Key: "roles", Value: rolesArr},
 	}
 
-	res := client.Database("admin").RunCommand(context.Background(), m)
+	res := client.Database("admin").RunCommand(ctx, m)
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "failed to create role")
 	}
@@ -121,7 +121,7 @@ func CreateRole(ctx context.Context, client *mongo.Client, role string, privileg
 func CreateUser(ctx context.Context, client *mongo.Client, user, pwd string, roles ...interface{}) error {
 	resp := OKResponse{}
 
-	res := client.Database("admin").RunCommand(context.Background(), bson.D{
+	res := client.Database("admin").RunCommand(ctx, bson.D{
 		{Key: "createUser", Value: user},
 		{Key: "pwd", Value: pwd},
 		{Key: "roles", Value: roles},
