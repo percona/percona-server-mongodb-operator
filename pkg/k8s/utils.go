@@ -1,8 +1,8 @@
 package k8s
 
 import (
-    "fmt"
-    "os"
+	"fmt"
+	"os"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"

@@ -1135,7 +1135,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 
 // TODO: reduce cyclomatic complexity
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
-        ctx context.Context,
+	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	replset *api.ReplsetSpec,
 	matchLabels map[string]string,
