@@ -168,6 +168,13 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Mongos = &mongosStatus
 		cr.Status.Size += int32(mongosStatus.Size)
 		cr.Status.Ready += int32(mongosStatus.Ready)
+
+		if cr.CompareVersion("1.12.0") >= 0 && !inProgress {
+			inProgress, err = r.upgradeInProgress(cr, "mongos")
+			if err != nil {
+				return errors.Wrapf(err, "set upgradeInProgres")
+			}
+		}
 	} else {
 		cr.Status.Mongos = nil
 	}
