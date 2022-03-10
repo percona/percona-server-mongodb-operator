@@ -1,6 +1,8 @@
 package psmdb
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,13 +17,13 @@ type Credentials struct {
 	Password string
 }
 
-func MongoClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (*mgo.Client, error) {
-	pods, err := GetRSPods(k8sclient, cr, rs.Name)
+func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (*mgo.Client, error) {
+	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
-	rsAddrs, err := GetReplsetAddrs(k8sclient, cr, rs.Name, rs.Expose.Enabled, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, rs.Name, rs.Expose.Enabled, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
@@ -34,7 +36,7 @@ func MongoClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.R
 	}
 
 	if !cr.Spec.UnsafeConf {
-		tlsCfg, err := tls.Config(k8sclient, cr)
+		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}
@@ -45,8 +47,8 @@ func MongoClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.R
 	return mongo.Dial(conf)
 }
 
-func MongosClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
-	hosts, err := GetMongosAddrs(k8sclient, cr)
+func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
+	hosts, err := GetMongosAddrs(ctx, k8sclient, cr)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongos addrs")
 	}
@@ -57,7 +59,7 @@ func MongosClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, c Crede
 	}
 
 	if !cr.Spec.UnsafeConf {
-		tlsCfg, err := tls.Config(k8sclient, cr)
+		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}

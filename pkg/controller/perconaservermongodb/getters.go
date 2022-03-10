@@ -14,9 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	mongodPods := corev1.PodList{}
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&mongodPods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -27,18 +27,18 @@ func (r *ReconcilePerconaServerMongoDB) getMongodPods(cr *api.PerconaServerMongo
 	return mongodPods, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getMongosDeployment(cr *api.PerconaServerMongoDB) (appsv1.Deployment, error) {
+func (r *ReconcilePerconaServerMongoDB) getMongosDeployment(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.Deployment, error) {
 	mongos := appsv1.Deployment{}
 
-	err := r.client.Get(context.TODO(), cr.MongosNamespacedName(), &mongos)
+	err := r.client.Get(ctx, cr.MongosNamespacedName(), &mongos)
 
 	return mongos, err
 
 }
 
-func (r *ReconcilePerconaServerMongoDB) getMongosPods(cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	mongosPods := corev1.PodList{}
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&mongosPods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -49,13 +49,13 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(cr *api.PerconaServerMongo
 	return mongosPods, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
 	list := appsv1.StatefulSetList{}
 
 	l := arbiterLabels(cr)
 	l["app.kubernetes.io/replset"] = rs
 
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -70,18 +70,18 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(cr *api.PerconaSer
 	return list.Items[0], err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
 	sts := appsv1.StatefulSet{}
 
-	err := r.client.Get(context.TODO(), cr.StatefulsetNamespacedName(rs), &sts)
+	err := r.client.Get(ctx, cr.StatefulsetNamespacedName(rs), &sts)
 
 	return sts, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -92,10 +92,10 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(cr *api.PerconaSe
 	return list, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -106,7 +106,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(cr *api.PerconaSer
 	return list, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 
 	selectors := labels.SelectorFromSet(clusterLabels(cr))
@@ -117,7 +117,7 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(cr *api.Perc
 	}
 	selectors.Add(*req)
 
-	err = r.client.List(context.TODO(),
+	err = r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -128,11 +128,11 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(cr *api.Perc
 	return list, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 	filteredList := appsv1.StatefulSetList{}
 
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -149,18 +149,16 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServer
 	return filteredList, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCfgStatefulset(cr *api.PerconaServerMongoDB) (appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) getCfgStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSet, error) {
 	sts := appsv1.StatefulSet{}
-	err := r.client.Get(context.TODO(),
-		types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &sts)
-
+	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &sts)
 	return sts, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getAllPVCs(cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
+func (r *ReconcilePerconaServerMongoDB) getAllPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
 	list := corev1.PersistentVolumeClaimList{}
 
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,

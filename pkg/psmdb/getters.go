@@ -34,9 +34,9 @@ func mongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return lbls
 }
 
-func GetRSPods(k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
+func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	pods := corev1.PodList{}
-	err := k8sclient.List(context.TODO(),
+	err := k8sclient.List(ctx,
 		&pods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -47,8 +47,8 @@ func GetRSPods(k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName str
 	return pods, err
 }
 
-func GetPrimaryPod(client *mgo.Client) (string, error) {
-	status, err := mongo.RSStatus(context.TODO(), client)
+func GetPrimaryPod(ctx context.Context, client *mgo.Client) (string, error) {
+	status, err := mongo.RSStatus(ctx, client)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get rs status")
 	}
@@ -56,9 +56,9 @@ func GetPrimaryPod(client *mgo.Client) (string, error) {
 	return status.Primary().Name, nil
 }
 
-func GetMongosPods(cl client.Client, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+func GetMongosPods(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	pods := corev1.PodList{}
-	err := cl.List(context.TODO(),
+	err := cl.List(ctx,
 		&pods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -69,9 +69,9 @@ func GetMongosPods(cl client.Client, cr *api.PerconaServerMongoDB) (corev1.PodLi
 	return pods, err
 }
 
-func GetMongosServices(cl client.Client, cr *api.PerconaServerMongoDB) (*corev1.ServiceList, error) {
+func GetMongosServices(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*corev1.ServiceList, error) {
 	list := new(corev1.ServiceList)
-	err := cl.List(context.TODO(),
+	err := cl.List(ctx,
 		list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,

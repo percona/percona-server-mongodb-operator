@@ -108,7 +108,7 @@ func (s ServiceAddr) String() string {
 	return s.Host + ":" + strconv.Itoa(s.Port)
 }
 
-func GetServiceAddr(svc corev1.Service, pod corev1.Pod, cl client.Client) (*ServiceAddr, error) {
+func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl client.Client) (*ServiceAddr, error) {
 	addr := &ServiceAddr{}
 
 	switch svc.Spec.Type {
@@ -122,7 +122,7 @@ func GetServiceAddr(svc corev1.Service, pod corev1.Pod, cl client.Client) (*Serv
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		host, err := getIngressPoint(pod, cl)
+		host, err := getIngressPoint(ctx, pod, cl)
 		if err != nil {
 			return nil, errors.Wrap(err, "get ingress endpoint")
 		}
@@ -146,7 +146,7 @@ func GetServiceAddr(svc corev1.Service, pod corev1.Pod, cl client.Client) (*Serv
 	return addr, nil
 }
 
-func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
+func getIngressPoint(ctx context.Context, pod corev1.Pod, cl client.Client) (string, error) {
 	var retries uint64 = 0
 
 	var ip string
@@ -163,7 +163,7 @@ func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 		}
 
 		svc := &corev1.Service{}
-		err := cl.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, svc)
+		err := cl.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, svc)
 		if err != nil {
 			return "", errors.Wrap(err, "failed to fetch service")
 		}
@@ -187,11 +187,11 @@ func getIngressPoint(pod corev1.Pod, cl client.Client) (string, error) {
 }
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
-func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods []corev1.Pod) ([]string, error) {
+func GetReplsetAddrs(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
-		host, err := MongoHost(cl, m, rsName, rsExposed, pod)
+		host, err := MongoHost(ctx, cl, m, rsName, rsExposed, pod)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
 		}
@@ -202,22 +202,22 @@ func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, rsName strin
 }
 
 // GetMongosAddrs returns a slice of mongos addresses
-func GetMongosAddrs(cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
+func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
 	if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
-		host, err := MongosHost(cl, cr, nil)
+		host, err := MongosHost(ctx, cl, cr, nil)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get mongos host")
 		}
 		return []string{host}, nil
 	}
-	list, err := GetMongosPods(cl, cr)
+	list, err := GetMongosPods(ctx, cl, cr)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list mongos pods")
 	}
 
 	addrs := make([]string, 0, len(list.Items))
 	for _, pod := range list.Items {
-		host, err := MongosHost(cl, cr, &pod)
+		host, err := MongosHost(ctx, cl, cr, &pod)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get mongos host")
 		}
@@ -228,22 +228,22 @@ func GetMongosAddrs(cl client.Client, cr *api.PerconaServerMongoDB) ([]string, e
 }
 
 // MongoHost returns the mongo host for given pod
-func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
+func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
 	if rsExposed {
-		return getExtAddr(cl, m.Namespace, pod)
+		return getExtAddr(ctx, cl, m.Namespace, pod)
 	}
 
 	return GetAddr(m, pod.Name, rsName), nil
 }
 
 // MongosHost returns the mongos host for given pod
-func MongosHost(cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod) (string, error) {
+func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod) (string, error) {
 	svcName := cr.Name + "-mongos"
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		svcName = pod.Name
 	}
 	svc := new(corev1.Service)
-	err := cl.Get(context.TODO(),
+	err := cl.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      svcName,
@@ -265,13 +265,13 @@ func MongosHost(cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod)
 	return host, nil
 }
 
-func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, error) {
-	svc, err := getExtServices(cl, namespace, pod.Name)
+func getExtAddr(ctx context.Context, cl client.Client, namespace string, pod corev1.Pod) (string, error) {
+	svc, err := getExtServices(ctx, cl, namespace, pod.Name)
 	if err != nil {
 		return "", errors.Wrap(err, "fetch service address")
 	}
 
-	hostname, err := GetServiceAddr(*svc, pod, cl)
+	hostname, err := GetServiceAddr(ctx, *svc, pod, cl)
 	if err != nil {
 		return "", errors.Wrap(err, "get service hostname")
 	}
@@ -285,11 +285,11 @@ func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }
 
-func getExtServices(cl client.Client, namespace, podName string) (*corev1.Service, error) {
+func getExtServices(ctx context.Context, cl client.Client, namespace, podName string) (*corev1.Service, error) {
 	svcMeta := &corev1.Service{}
 
 	for retries := 0; retries < 6; retries++ {
-		err := cl.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
+		err := cl.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				time.Sleep(500 * time.Millisecond)

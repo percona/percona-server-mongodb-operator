@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
+func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
 	clusterCondition := api.ClusterCondition{
 		Status:             api.ConditionTrue,
 		Type:               api.AppStateInit,
@@ -39,7 +39,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Message = "Error: " + reconcileErr.Error()
 		cr.Status.State = api.AppStateError
 
-		return r.writeStatus(cr)
+		return r.writeStatus(ctx, cr)
 	}
 
 	cr.Status.Message = ""
@@ -70,7 +70,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	cr.Status.Size = 0
 	cr.Status.Ready = 0
 	for _, rs := range repls {
-		status, err := r.rsStatus(cr, rs)
+		status, err := r.rsStatus(ctx, cr, rs)
 		if err != nil {
 			return errors.Wrapf(err, "get replset %v status", rs.Name)
 		}
@@ -124,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Ready += status.Ready
 
 		if !inProgress {
-			inProgress, err = r.upgradeInProgress(cr, rs.Name)
+			inProgress, err = r.upgradeInProgress(ctx, cr, rs.Name)
 			if err != nil {
 				return errors.Wrapf(err, "set upgradeInProgres")
 			}
@@ -132,7 +132,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	}
 
 	if cr.Spec.Sharding.Enabled {
-		mongosStatus, err := r.mongosStatus(cr)
+		mongosStatus, err := r.mongosStatus(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "get mongos status")
 		}
@@ -170,7 +170,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Ready += int32(mongosStatus.Ready)
 
 		if cr.CompareVersion("1.12.0") >= 0 && !inProgress {
-			inProgress, err = r.upgradeInProgress(cr, "mongos")
+			inProgress, err = r.upgradeInProgress(ctx, cr, "mongos")
 			if err != nil {
 				return errors.Wrapf(err, "set upgradeInProgres")
 			}
@@ -179,7 +179,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Mongos = nil
 	}
 
-	host, err := r.connectionEndpoint(cr)
+	host, err := r.connectionEndpoint(ctx, cr)
 	if err != nil {
 		log.Error(err, "get psmdb connection endpoint")
 	}
@@ -206,12 +206,12 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
-	return r.writeStatus(cr)
+	return r.writeStatus(ctx, cr)
 }
 
-func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(cr *api.PerconaServerMongoDB, rsName string) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) (bool, error) {
 	sfsObj := &appsv1.StatefulSet{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}, sfsObj)
+	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}, sfsObj)
 	if err != nil {
 		return false, err
 	}
@@ -219,25 +219,25 @@ func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(cr *api.PerconaServerM
 	return sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) writeStatus(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		c := &api.PerconaServerMongoDB{}
 
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
 			return err
 		}
 
 		c.Status = cr.Status
 
-		return r.client.Status().Update(context.TODO(), c)
+		return r.client.Status().Update(ctx, c)
 	})
 
 	return errors.Wrap(err, "write status")
 }
 
-func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
-	list, err := psmdb.GetRSPods(r.client, cr, rsSpec.Name)
+func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
+	list, err := psmdb.GetRSPods(ctx, r.client, cr, rsSpec.Name)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)
 	}
@@ -289,8 +289,8 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(cr *api.PerconaServerMongoDB, r
 	return status, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoDB) (api.MongosStatus, error) {
-	list, err := r.getMongosPods(cr)
+func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.MongosStatus, error) {
+	list, err := r.getMongosPods(ctx, cr)
 	if err != nil {
 		return api.MongosStatus{}, fmt.Errorf("get list: %v", err)
 	}
@@ -334,9 +334,9 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(cr *api.PerconaServerMongoD
 	return status, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServerMongoDB) (string, error) {
+func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		addrs, err := psmdb.GetMongosAddrs(r.client, cr)
+		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr)
 		if err != nil {
 			return "", errors.Wrap(err, "get mongos addresses")
 		}
@@ -346,7 +346,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServer
 	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled &&
 		rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 		list := corev1.PodList{}
-		err := r.client.List(context.TODO(),
+		err := r.client.List(ctx,
 			&list,
 			&client.ListOptions{
 				Namespace: cr.Namespace,
@@ -362,7 +362,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(cr *api.PerconaServer
 		if err != nil {
 			return "", errors.Wrap(err, "list psmdb pods")
 		}
-		addrs, err := psmdb.GetReplsetAddrs(r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
+		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
 		if err != nil {
 			return "", errors.Wrap(err, "get replset addresses")
 		}
