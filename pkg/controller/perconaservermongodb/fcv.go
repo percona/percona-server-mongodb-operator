@@ -11,22 +11,22 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-func (r *ReconcilePerconaServerMongoDB) getFCV(cr *api.PerconaServerMongoDB) (string, error) {
-	c, err := r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
+func (r *ReconcilePerconaServerMongoDB) getFCV(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
+	c, err := r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], roleClusterAdmin)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get connection")
 	}
 
 	defer func() {
-		if err := c.Disconnect(context.Background()); err != nil {
+		if err := c.Disconnect(ctx); err != nil {
 			log.Error(err, "close client connection")
 		}
 	}()
 
-	return mongo.GetFCV(context.TODO(), c)
+	return mongo.GetFCV(ctx, c)
 }
 
-func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, version string) error {
+func (r *ReconcilePerconaServerMongoDB) setFCV(ctx context.Context, cr *api.PerconaServerMongoDB, version string) error {
 	if len(version) == 0 {
 		return errors.New("empty version")
 	}
@@ -40,9 +40,9 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 	var connErr error
 
 	if cr.Spec.Sharding.Enabled {
-		cli, connErr = r.mongosClientWithRole(cr, roleClusterAdmin)
+		cli, connErr = r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 	} else {
-		cli, connErr = r.mongoClientWithRole(cr, *cr.Spec.Replsets[0], roleClusterAdmin)
+		cli, connErr = r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], roleClusterAdmin)
 	}
 
 	if connErr != nil {
@@ -50,10 +50,10 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(cr *api.PerconaServerMongoDB, ver
 	}
 
 	defer func() {
-		if err := cli.Disconnect(context.Background()); err != nil {
+		if err := cli.Disconnect(ctx); err != nil {
 			log.Error(err, "close client connection")
 		}
 	}()
 
-	return mongo.SetFCV(context.TODO(), cli, MajorMinor(v))
+	return mongo.SetFCV(ctx, cli, MajorMinor(v))
 }
