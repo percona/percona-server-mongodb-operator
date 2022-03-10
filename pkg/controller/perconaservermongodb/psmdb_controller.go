@@ -928,7 +928,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return nil
 	}
 
-	stsList, err := r.getNonMongosStatefulsets(cr)
+	stsList, err := r.getStatefulsetsExceptMongos(cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to get all non-mongos sts")
 	}

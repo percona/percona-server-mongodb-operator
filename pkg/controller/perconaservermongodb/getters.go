@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -105,25 +106,26 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(cr *api.PerconaSer
 	return list, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getNonMongosStatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
-	filteredList := appsv1.StatefulSetList{}
 
-	err := r.client.List(context.TODO(),
+	selectors := labels.SelectorFromSet(clusterLabels(cr))
+
+	req, err := labels.NewRequirement("app.kubernetes.io/component", selection.NotEquals, []string{"mongos"})
+	if err != nil {
+		return list, errors.Wrap(err, "get selector requirement")
+	}
+	selectors.Add(*req)
+
+	err = r.client.List(context.TODO(),
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(clusterLabels(cr)),
+			LabelSelector: selectors,
 		},
 	)
 
-	for _, sts := range list.Items {
-		if sts.Labels["app.kubernetes.io/component"] != "mongos" {
-			filteredList.Items = append(filteredList.Items, sts)
-		}
-	}
-
-	return filteredList, err
+	return list, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
