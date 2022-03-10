@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
+func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
 	services := make([]corev1.Service, 0)
 
 	for _, pod := range podList.Items {
@@ -24,7 +24,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 			return nil, errors.Wrap(err, "set owner ref for Service "+service.Name)
 		}
 
-		err = r.createOrUpdate(service)
+		err = r.createOrUpdate(ctx, service)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create external service for replset "+replset.Name)
 		}
@@ -35,11 +35,11 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(cr *api.PerconaSe
 	return services, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	ls := clusterLabels(cr)
 
 	seList := mcs.ServiceExportList()
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		seList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -51,7 +51,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 	}
 	if !cr.Spec.MultiCluster.Enabled {
 		for _, se := range seList.Items {
-			err = r.client.Delete(context.TODO(), &se)
+			err = r.client.Delete(ctx, &se)
 			if err != nil {
 				return errors.Wrap(err, "delete service export "+se.Name)
 			}
@@ -60,7 +60,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 	}
 
 	svcList := &corev1.ServiceList{}
-	err = r.client.List(context.TODO(),
+	err = r.client.List(ctx,
 		svcList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -78,7 +78,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 		if err != nil {
 			return errors.Wrap(err, "set owner ref for serviceexport "+se.Name)
 		}
-		if err := r.createOrUpdate(se); err != nil {
+		if err := r.createOrUpdate(ctx, se); err != nil {
 			return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
 		}
 		svcNames[svc.Name] = struct{}{}
@@ -86,7 +86,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 
 	for _, se := range seList.Items {
 		if _, ok := svcNames[se.Name]; !ok {
-			if err := r.client.Delete(context.TODO(), &se); err != nil {
+			if err := r.client.Delete(ctx, &se); err != nil {
 				return errors.Wrap(err, "delete service export")
 			}
 		}
@@ -94,7 +94,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(cr *api.PerconaServerMong
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	if cr.Spec.Pause {
 		return nil
 	}
@@ -121,7 +121,7 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaSe
 
 	// clear old services
 	svcList := &corev1.ServiceList{}
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		svcList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -134,7 +134,7 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(cr *api.PerconaSe
 
 	for _, svc := range svcList.Items {
 		if _, ok := svcNames[svc.Name]; !ok {
-			if err := r.client.Delete(context.TODO(), &svc); err != nil {
+			if err := r.client.Delete(ctx, &svc); err != nil {
 				return errors.Wrapf(err, "delete service %s", svc.Name)
 			}
 		}

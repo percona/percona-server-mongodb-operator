@@ -15,14 +15,8 @@ import (
 var (
 	schemeBuilder = &runtime.SchemeBuilder{}
 
-	// AddToScheme is used to register MCS CRDs to a runtime.Scheme
-	AddToScheme = schemeBuilder.AddToScheme
-
 	// MCSSchemeGroupVersion is group version used to register Kubernetes Multi-Cluster Services (MCS) objects
 	MCSSchemeGroupVersion = schema.GroupVersion{}
-
-	ServiceExportGVR = MCSSchemeGroupVersion.WithResource("serviceexports")
-	ServiceImportGVR = MCSSchemeGroupVersion.WithResource("serviceimports")
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
