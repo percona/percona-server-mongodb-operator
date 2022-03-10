@@ -17,6 +17,7 @@ limitations under the License.
 package resourcelock
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,9 +38,9 @@ type LeaseLock struct {
 }
 
 // Get returns the election record from a Lease spec
-func (ll *LeaseLock) Get() (*LeaderElectionRecord, []byte, error) {
+func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, error) {
 	var err error
-	ll.lease, err = ll.Client.Leases(ll.LeaseMeta.Namespace).Get(ll.LeaseMeta.Name, metav1.GetOptions{})
+	ll.lease, err = ll.Client.Leases(ll.LeaseMeta.Namespace).Get(ctx, ll.LeaseMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,27 +53,32 @@ func (ll *LeaseLock) Get() (*LeaderElectionRecord, []byte, error) {
 }
 
 // Create attempts to create a Lease
-func (ll *LeaseLock) Create(ler LeaderElectionRecord) error {
+func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error {
 	var err error
-	ll.lease, err = ll.Client.Leases(ll.LeaseMeta.Namespace).Create(&coordinationv1.Lease{
+	ll.lease, err = ll.Client.Leases(ll.LeaseMeta.Namespace).Create(ctx, &coordinationv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ll.LeaseMeta.Name,
 			Namespace: ll.LeaseMeta.Namespace,
 		},
 		Spec: LeaderElectionRecordToLeaseSpec(&ler),
-	})
+	}, metav1.CreateOptions{})
 	return err
 }
 
 // Update will update an existing Lease spec.
-func (ll *LeaseLock) Update(ler LeaderElectionRecord) error {
+func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error {
 	if ll.lease == nil {
 		return errors.New("lease not initialized, call get or create first")
 	}
 	ll.lease.Spec = LeaderElectionRecordToLeaseSpec(&ler)
-	var err error
-	ll.lease, err = ll.Client.Leases(ll.LeaseMeta.Namespace).Update(ll.lease)
-	return err
+
+	lease, err := ll.Client.Leases(ll.LeaseMeta.Namespace).Update(ctx, ll.lease, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+
+	ll.lease = lease
+	return nil
 }
 
 // RecordEvent in leader election while adding meta-data
@@ -81,7 +87,11 @@ func (ll *LeaseLock) RecordEvent(s string) {
 		return
 	}
 	events := fmt.Sprintf("%v %v", ll.LockConfig.Identity, s)
-	ll.LockConfig.EventRecorder.Eventf(&coordinationv1.Lease{ObjectMeta: ll.lease.ObjectMeta}, corev1.EventTypeNormal, "LeaderElection", events)
+	subject := &coordinationv1.Lease{ObjectMeta: ll.lease.ObjectMeta}
+	// Populate the type meta, so we don't have to get it from the schema
+	subject.Kind = "Lease"
+	subject.APIVersion = coordinationv1.SchemeGroupVersion.String()
+	ll.LockConfig.EventRecorder.Eventf(subject, corev1.EventTypeNormal, "LeaderElection", events)
 }
 
 // Describe is used to convert details on current resource lock

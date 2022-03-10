@@ -37,24 +37,19 @@ const (
 	roleBackup         UserRole = "backup"
 )
 
-func (r *ReconcilePerconaServerMongoDB) getUserSecret(cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
+func (r *ReconcilePerconaServerMongoDB) getUserSecret(ctx context.Context, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
 	secrets := corev1.Secret{}
-	err := r.client.Get(
-		context.TODO(),
-		types.NamespacedName{Name: name, Namespace: cr.Namespace},
-		&secrets,
-	)
-
+	err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, &secrets)
 	return secrets, errors.Wrap(err, "get user secrets")
 }
 
-func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(cr *api.PerconaServerMongoDB, role UserRole) (psmdb.Credentials, error) {
-	return r.getCredentials(cr, api.UserSecretName(cr), role)
+func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(ctx context.Context, cr *api.PerconaServerMongoDB, role UserRole) (psmdb.Credentials, error) {
+	return r.getCredentials(ctx, cr, api.UserSecretName(cr), role)
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMongoDB, name string, role UserRole) (psmdb.Credentials, error) {
+func (r *ReconcilePerconaServerMongoDB) getCredentials(ctx context.Context, cr *api.PerconaServerMongoDB, name string, role UserRole) (psmdb.Credentials, error) {
 	creds := psmdb.Credentials{}
-	usersSecret, err := r.getUserSecret(cr, name)
+	usersSecret, err := r.getUserSecret(ctx, cr, name)
 	if err != nil {
 		return creds, errors.Wrap(err, "failed to get user secret")
 	}
@@ -81,9 +76,9 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(cr *api.PerconaServerMong
 	return creds, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	secretObj := corev1.Secret{}
-	err := r.client.Get(context.TODO(),
+	err := r.client.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.Secrets.Users,
@@ -128,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(cr *api.PerconaServ
 		Data: data,
 		Type: corev1.SecretTypeOpaque,
 	}
-	err = r.client.Create(context.TODO(), &secretObj)
+	err = r.client.Create(ctx, &secretObj)
 	if err != nil {
 		return fmt.Errorf("create Users secret: %v", err)
 	}
