@@ -615,8 +615,8 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if nv.LivenessProbe.StartupDelaySeconds < 1 {
 		nv.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
 	}
-	if nv.LivenessProbe.Handler.Exec == nil {
-		nv.LivenessProbe.Probe.Handler.Exec = &corev1.ExecAction{
+	if nv.LivenessProbe.ProbeHandler.Exec == nil {
+		nv.LivenessProbe.Probe.ProbeHandler.Exec = &corev1.ExecAction{
 			Command: []string{
 				"/data/db/mongodb-healthcheck",
 				"k8s",
@@ -628,14 +628,14 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		}
 	}
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
-		nv.LivenessProbe.Handler.Exec.Command = append(
-			nv.LivenessProbe.Handler.Exec.Command,
+		nv.LivenessProbe.ProbeHandler.Exec.Command = append(
+			nv.LivenessProbe.ProbeHandler.Exec.Command,
 			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds))
 	}
 
 	if nv.ReadinessProbe == nil {
 		nv.ReadinessProbe = &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				TCPSocket: &corev1.TCPSocketAction{
 					Port: intstr.FromInt(int(MongodPort(cr))),
 				},
