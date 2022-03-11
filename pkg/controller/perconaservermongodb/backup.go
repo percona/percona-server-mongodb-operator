@@ -32,7 +32,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context
 
 			err := setControllerReference(cr, &cjob, r.scheme)
 			if err != nil {
-				return errors.Wrap(err, "set owner reference for backup task "+cjob.Name)
+				return errors.Wrapf(err, "set owner reference for backup task %s", cjob.Name)
 			}
 
 			err = r.createOrUpdate(ctx, &cjob)

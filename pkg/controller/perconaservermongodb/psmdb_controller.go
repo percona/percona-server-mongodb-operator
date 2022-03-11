@@ -437,12 +437,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 			err = setControllerReference(cr, service, r.scheme)
 			if err != nil {
-				return reconcile.Result{}, errors.Wrap(err, "set owner ref for service "+service.Name)
+				return reconcile.Result{}, errors.Wrapf(err, "set owner ref for service %s", service.Name)
 			}
 
 			err = r.createOrUpdate(ctx, service)
 			if err != nil {
-				return reconcile.Result{}, errors.Wrap(err, "create or update service for replset "+replset.Name)
+				return reconcile.Result{}, errors.Wrapf(err, "create or update service for replset %s", replset.Name)
 			}
 		}
 

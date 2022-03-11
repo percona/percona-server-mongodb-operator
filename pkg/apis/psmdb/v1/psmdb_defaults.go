@@ -31,7 +31,7 @@ var (
 	defaultMongodSize               int32 = 3
 	defaultReplsetName                    = "rs"
 	defaultStorageEngine                  = StorageEngineWiredTiger
-	defaultMongodPort               int32 = 27017
+	DefaultMongodPort               int32 = 27017
 	defaultWiredTigerCacheSizeRatio       = 0.5
 	defaultInMemorySizeRatio              = 0.9
 	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
@@ -75,7 +75,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Mongod.Net = &MongodSpecNet{}
 	}
 	if cr.Spec.Mongod.Net.Port == 0 {
-		cr.Spec.Mongod.Net.Port = defaultMongodPort
+		cr.Spec.Mongod.Net.Port = DefaultMongodPort
 	}
 	if cr.Spec.Mongod.Storage == nil {
 		cr.Spec.Mongod.Storage = &MongodSpecStorage{}

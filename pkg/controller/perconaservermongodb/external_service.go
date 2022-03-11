@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,12 +22,12 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 		service := psmdb.ExternalService(cr, replset, pod.Name)
 		err := setControllerReference(cr, service, r.scheme)
 		if err != nil {
-			return nil, errors.Wrap(err, "set owner ref for Service "+service.Name)
+			return nil, errors.Wrapf(err, "set owner ref for Service %s", service.Name)
 		}
 
 		err = r.createOrUpdate(ctx, service)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create external service for replset "+replset.Name)
+			return nil, errors.Wrapf(err, "failed to create external service for replset %s", replset.Name)
 		}
 
 		services = append(services, *service)
@@ -53,7 +54,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 		for _, se := range seList.Items {
 			err = r.client.Delete(ctx, &se)
 			if err != nil {
-				return errors.Wrap(err, "delete service export "+se.Name)
+				return errors.Wrapf(err, "delete service export %s", se.Name)
 			}
 		}
 		return nil
@@ -74,9 +75,8 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 	svcNames := make(map[string]struct{}, len(svcList.Items))
 	for _, svc := range svcList.Items {
 		se := mcs.ServiceExport(cr, svc.Name, ls)
-		err = setControllerReference(cr, se, r.scheme)
-		if err != nil {
-			return errors.Wrap(err, "set owner ref for serviceexport "+se.Name)
+		if err = setControllerReference(cr, se, r.scheme); err != nil {
+			return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
 		}
 		if err := r.createOrUpdate(ctx, se); err != nil {
 			return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
@@ -86,7 +86,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 
 	for _, se := range seList.Items {
 		if _, ok := svcNames[se.Name]; !ok {
-			if err := r.client.Delete(ctx, &se); err != nil {
+			if err := r.client.Delete(ctx, &se); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrap(err, "delete service export")
 			}
 		}

@@ -28,6 +28,12 @@ func rsLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
 	return lbls
 }
 
+func mongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
+	lbls := clusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "mongos"
+	return lbls
+}
+
 func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	pods := corev1.PodList{}
 	err := k8sclient.List(ctx,

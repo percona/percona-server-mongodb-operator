@@ -243,7 +243,7 @@ func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 
 // GetMCSAddr returns ReplicaSet pod address using MultiCluster FQDN
 func GetMCSAddr(m *api.PerconaServerMongoDB, pod string) string {
-	return fmt.Sprintf("%s.%s.%s:%d", pod, m.Namespace, m.Spec.MultiCluster.DNSSuffix, m.Spec.Mongod.Net.Port)
+	return fmt.Sprintf("%s.%s.%s:%d", pod, m.Namespace, m.Spec.MultiCluster.DNSSuffix, api.DefaultMongodPort)
 }
 
 func getExtServices(ctx context.Context, cl client.Client, namespace, podName string) (*corev1.Service, error) {
