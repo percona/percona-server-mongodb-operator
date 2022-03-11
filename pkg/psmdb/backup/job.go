@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1b "k8s.io/api/batch/v1beta1"
+	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -13,11 +13,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) (batchv1b.CronJob, error) {
+func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) (batchv1beta1.CronJob, error) {
 	jobName := crName + "-backup-" + backup.Name
 	containerArgs, err := newBackupCronJobContainerArgs(backup, jobName)
 	if err != nil {
-		return batchv1b.CronJob{}, errors.Wrap(err, "cannot generate container arguments")
+		return batchv1beta1.CronJob{}, errors.Wrap(err, "cannot generate container arguments")
 	}
 
 	backupPod := corev1.PodSpec{
@@ -52,7 +52,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 		RuntimeClassName: backupSpec.RuntimeClassName,
 	}
 
-	cj := batchv1b.CronJob{
+	return batchv1beta1.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1beta1",
 			Kind:       "CronJob",
@@ -63,10 +63,10 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 			Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
 			Annotations: backupSpec.Annotations,
 		},
-		Spec: batchv1b.CronJobSpec{
+		Spec: batchv1beta1.CronJobSpec{
 			Schedule:          backup.Schedule,
-			ConcurrencyPolicy: batchv1b.ForbidConcurrent,
-			JobTemplate: batchv1b.JobTemplateSpec{
+			ConcurrencyPolicy: batchv1beta1.ForbidConcurrent,
+			JobTemplate: batchv1beta1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
 					Annotations: backupSpec.Annotations,
@@ -82,9 +82,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				},
 			},
 		},
-	}
-
-	return cj, nil
+	}, nil
 }
 
 func NewBackupCronJobLabels(crName string, labels map[string]string) map[string]string {

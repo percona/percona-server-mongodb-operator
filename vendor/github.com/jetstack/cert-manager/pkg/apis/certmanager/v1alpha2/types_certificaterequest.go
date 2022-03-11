@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Jetstack cert-manager contributors.
+Copyright 2020 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,27 +23,44 @@ import (
 )
 
 const (
+	// Pending indicates that a CertificateRequest is still in progress.
 	CertificateRequestReasonPending = "Pending"
-	CertificateRequestReasonFailed  = "Failed"
-	CertificateRequestReasonIssued  = "Issued"
+
+	// Failed indicates that a CertificateRequest has failed, either due to
+	// timing out or some other critical failure.
+	CertificateRequestReasonFailed = "Failed"
+
+	// Issued indicates that a CertificateRequest has been completed, and that
+	// the `status.certificate` field is set.
+	CertificateRequestReasonIssued = "Issued"
+
+	// Denied is a Ready condition reason that indicates that a
+	// CertificateRequest has been denied, and the CertificateRequest will never
+	// be issued.
+	CertificateRequestReasonDenied = "Denied"
 )
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CertificateRequest is a type to represent a Certificate Signing Request
+// A CertificateRequest is used to request a signed certificate from one of the
+// configured issuers.
+//
+// All fields within the CertificateRequest's `spec` are immutable after creation.
+// A CertificateRequest will either succeed or fail, as denoted by its `status.state`
+// field.
+//
+// A CertificateRequest is a one-shot resource, meaning it represents a single
+// point in time request for a certificate and cannot be re-used.
 // +k8s:openapi-gen=true
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Issuer",type="string",JSONPath=".spec.issuerRef.name",description="",priority=1
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",priority=1
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC."
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:path=certificaterequests,shortName=cr;crs
 type CertificateRequest struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CertificateRequestSpec   `json:"spec,omitempty"`
+	// Desired state of the CertificateRequest resource.
+	Spec CertificateRequestSpec `json:"spec,omitempty"`
+
+	// Status of the CertificateRequest. This is set and managed automatically.
 	Status CertificateRequestStatus `json:"status,omitempty"`
 }
 
@@ -59,46 +76,74 @@ type CertificateRequestList struct {
 
 // CertificateRequestSpec defines the desired state of CertificateRequest
 type CertificateRequestSpec struct {
-	// Requested certificate default Duration
+	// The requested 'duration' (i.e. lifetime) of the Certificate.
+	// This option may be ignored/overridden by some issuer types.
 	// +optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
 
 	// IssuerRef is a reference to the issuer for this CertificateRequest.  If
-	// the 'kind' field is not set, or set to 'Issuer', an Issuer resource with
+	// the `kind` field is not set, or set to `Issuer`, an Issuer resource with
 	// the given name in the same namespace as the CertificateRequest will be
-	// used.  If the 'kind' field is set to 'ClusterIssuer', a ClusterIssuer with
-	// the provided name will be used. The 'name' field in this stanza is
+	// used.  If the `kind` field is set to `ClusterIssuer`, a ClusterIssuer with
+	// the provided name will be used. The `name` field in this stanza is
 	// required at all times. The group field refers to the API group of the
-	// issuer which defaults to 'cert-manager.io' if empty.
+	// issuer which defaults to `cert-manager.io` if empty.
 	IssuerRef cmmeta.ObjectReference `json:"issuerRef"`
 
-	// Byte slice containing the PEM encoded CertificateSigningRequest
+	// The PEM-encoded x509 certificate signing request to be submitted to the
+	// CA for signing.
 	CSRPEM []byte `json:"csr"`
 
-	// IsCA will mark the resulting certificate as valid for signing. This
-	// implies that the 'cert sign' usage is set
+	// IsCA will request to mark the certificate as valid for certificate signing
+	// when submitting to the issuer.
+	// This will automatically add the `cert sign` usage to the list of `usages`.
 	// +optional
 	IsCA bool `json:"isCA,omitempty"`
 
-	// Usages is the set of x509 actions that are enabled for a given key.
-	// Defaults are ('digital signature', 'key encipherment') if empty
+	// Usages is the set of x509 usages that are requested for the certificate.
+	// Defaults to `digital signature` and `key encipherment` if not specified.
 	// +optional
 	Usages []KeyUsage `json:"usages,omitempty"`
+
+	// Username contains the name of the user that created the CertificateRequest.
+	// Populated by the cert-manager webhook on creation and immutable.
+	// +optional
+	Username string `json:"username,omitempty"`
+	// UID contains the uid of the user that created the CertificateRequest.
+	// Populated by the cert-manager webhook on creation and immutable.
+	// +optional
+	UID string `json:"uid,omitempty"`
+	// Groups contains group membership of the user that created the CertificateRequest.
+	// Populated by the cert-manager webhook on creation and immutable.
+	// +listType=atomic
+	// +optional
+	Groups []string `json:"groups,omitempty"`
+	// Extra contains extra attributes of the user that created the CertificateRequest.
+	// Populated by the cert-manager webhook on creation and immutable.
+	// +optional
+	Extra map[string][]string `json:"extra,omitempty"`
 }
 
-// CertificateStatus defines the observed state of CertificateRequest and
+// CertificateRequestStatus defines the observed state of CertificateRequest and
 // resulting signed certificate.
 type CertificateRequestStatus struct {
+	// List of status conditions to indicate the status of a CertificateRequest.
+	// Known condition types are `Ready` and `InvalidRequest`.
 	// +optional
 	Conditions []CertificateRequestCondition `json:"conditions,omitempty"`
 
-	// Byte slice containing a PEM encoded signed certificate resulting from the
-	// given certificate signing request.
+	// The PEM encoded x509 certificate resulting from the certificate
+	// signing request.
+	// If not set, the CertificateRequest has either not been completed or has
+	// failed. More information on failure can be found by checking the
+	// `conditions` field.
 	// +optional
 	Certificate []byte `json:"certificate,omitempty"`
 
-	// Byte slice containing the PEM encoded certificate authority of the signed
-	// certificate.
+	// The PEM encoded x509 certificate of the signer, also known as the CA
+	// (Certificate Authority).
+	// This is set on a best-effort basis by different issuers.
+	// If not set, the CA is assumed to be unknown/not available.
 	// +optional
 	CA []byte `json:"ca,omitempty"`
 
@@ -110,10 +155,11 @@ type CertificateRequestStatus struct {
 
 // CertificateRequestCondition contains condition information for a CertificateRequest.
 type CertificateRequestCondition struct {
-	// Type of the condition, currently ('Ready', 'InvalidRequest').
+	// Type of the condition, known values are (`Ready`,
+	// `InvalidRequest`, `Approved`, `Denied`).
 	Type CertificateRequestConditionType `json:"type"`
 
-	// Status of the condition, one of ('True', 'False', 'Unknown').
+	// Status of the condition, one of (`True`, `False`, `Unknown`).
 	Status cmmeta.ConditionStatus `json:"status"`
 
 	// LastTransitionTime is the timestamp corresponding to the last status
@@ -146,4 +192,16 @@ const (
 	// parameters being invalid. Additional information about why the request
 	// was rejected can be found in the `reason` and `message` fields.
 	CertificateRequestConditionInvalidRequest CertificateRequestConditionType = "InvalidRequest"
+
+	// CertificateRequestConditionApproved indicates that a certificate request
+	// is approved and ready for signing. Condition must never have a status of
+	// `False`, and cannot be modified once set. Cannot be set alongside
+	// `Denied`.
+	CertificateRequestConditionApproved CertificateRequestConditionType = "Approved"
+
+	// CertificateRequestConditionDenied indicates that a certificate request is
+	// denied, and must never be signed. Condition must never have a status of
+	// `False`, and cannot be modified once set. Cannot be set alongside
+	// `Approved`.
+	CertificateRequestConditionDenied CertificateRequestConditionType = "Denied"
 )
