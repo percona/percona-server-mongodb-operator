@@ -40,16 +40,16 @@ type PBM struct {
 
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
-func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
+func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 	rs := cluster.Spec.Replsets[0]
 
-	pods, err := psmdb.GetRSPods(c, cluster, rs.Name)
+	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
 	usersSecretName := api.UserSecretName(cluster)
-	scr, err := secret(c, cluster.Namespace, usersSecretName)
+	scr, err := secret(ctx, c, cluster.Namespace, usersSecretName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get secrets")
 	}
@@ -58,7 +58,7 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
 	}
 
-	addrs, err := psmdb.GetReplsetAddrs(c, cluster, rs.Name, rs.Expose.Enabled, pods.Items)
+	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, rs.Name, rs.Expose.Enabled, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo addr")
 	}
@@ -69,7 +69,7 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 		strings.Join(addrs, ","),
 	)
 
-	pbmc, err := pbm.New(context.Background(), murl, "operator-pbm-ctl")
+	pbmc, err := pbm.New(ctx, murl, "operator-pbm-ctl")
 	if err != nil {
 		return nil, errors.Wrapf(err, "create PBM connection to %s", strings.Join(addrs, ","))
 	}
@@ -84,12 +84,12 @@ func NewPBM(c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 }
 
 // GetPriorities returns priorities to be used in PBM config.
-func (b *PBM) GetPriorities(k8sclient client.Client, cluster *api.PerconaServerMongoDB) (map[string]float64, error) {
+func (b *PBM) GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) (map[string]float64, error) {
 	priorities := make(map[string]float64)
 
 	usersSecret := corev1.Secret{}
 	err := k8sclient.Get(
-		context.TODO(),
+		ctx,
 		types.NamespacedName{Name: cluster.Spec.Secrets.Users, Namespace: cluster.Namespace},
 		&usersSecret,
 	)
@@ -109,7 +109,7 @@ func (b *PBM) GetPriorities(k8sclient client.Client, cluster *api.PerconaServerM
 			priorities[extNode.HostPort()] = 0.5
 		}
 
-		cli, err := psmdb.MongoClient(k8sclient, cluster, *rs, c)
+		cli, err := psmdb.MongoClient(ctx, k8sclient, cluster, *rs, c)
 		if err != nil {
 			return priorities, errors.Wrap(err, "get mongo client")
 		}
@@ -118,7 +118,7 @@ func (b *PBM) GetPriorities(k8sclient client.Client, cluster *api.PerconaServerM
 		// the remaining nodes will be automatically assigned priority 1.0,
 		// including the primary. That's why, we need to get primary nodes and
 		// set them in the config.
-		primary, err := psmdb.GetPrimaryPod(cli)
+		primary, err := psmdb.GetPrimaryPod(ctx, cli)
 		if err != nil {
 			return priorities, errors.Wrap(err, "get primary pod")
 		}
@@ -130,7 +130,7 @@ func (b *PBM) GetPriorities(k8sclient client.Client, cluster *api.PerconaServerM
 
 // SetConfig sets the pbm config with storage defined in the cluster CR
 // by given storageName
-func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority map[string]float64) error {
+func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api.PITRSpec, priority map[string]float64) error {
 	conf := pbm.Config{
 		PITR: pbm.PITRConf{
 			Enabled: pitr.Enabled,
@@ -157,7 +157,7 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 		}
 
 		if len(stg.S3.CredentialsSecret) != 0 {
-			s3secret, err := secret(b.k8c, b.namespace, stg.S3.CredentialsSecret)
+			s3secret, err := secret(ctx, b.k8c, b.namespace, stg.S3.CredentialsSecret)
 			if err != nil {
 				return errors.Wrap(err, "getting s3 credentials secret name")
 			}
@@ -173,7 +173,7 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 		if stg.Azure.CredentialsSecret == "" {
 			return errors.New("no credentials specified for the secret name")
 		}
-		azureSecret, err := secret(b.k8c, b.namespace, stg.Azure.CredentialsSecret)
+		azureSecret, err := secret(ctx, b.k8c, b.namespace, stg.Azure.CredentialsSecret)
 		if err != nil {
 			return errors.Wrap(err, "getting azure credentials secret name")
 		}
@@ -201,18 +201,18 @@ func (b *PBM) SetConfig(stg api.BackupStorageSpec, pitr api.PITRSpec, priority m
 }
 
 // Close close the PBM connection
-func (b *PBM) Close() error {
-	return b.C.Conn.Disconnect(context.Background())
+func (b *PBM) Close(ctx context.Context) error {
+	return b.C.Conn.Disconnect(ctx)
 }
 
-func secret(cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
+func secret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: namespace,
 		},
 	}
-	err := cl.Get(context.TODO(), types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
+	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
 	return secret, err
 }
 
@@ -330,9 +330,9 @@ func (b *PBM) GetLatestTimelinePITR() (pbm.Timeline, error) {
 
 // PITRGetChunkContains returns a pitr slice chunk that belongs to the
 // given replica set and contains the given timestamp
-func (p *PBM) pitrGetChunkContains(rs string, ts primitive.Timestamp) (*pbm.PITRChunk, error) {
+func (p *PBM) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.Timestamp) (*pbm.PITRChunk, error) {
 	res := p.C.Conn.Database(pbm.DB).Collection(pbm.PITRChunksCollection).FindOne(
-		context.TODO(),
+		ctx,
 		bson.D{
 			{"rs", rs},
 			{"start_ts", bson.M{"$lte": ts}},
@@ -348,13 +348,13 @@ func (p *PBM) pitrGetChunkContains(rs string, ts primitive.Timestamp) (*pbm.PITR
 	return chnk, errors.Wrap(err, "decode")
 }
 
-func (b *PBM) GetPITRChunkContains(unixTS int64) (*pbm.PITRChunk, error) {
+func (b *PBM) GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.PITRChunk, error) {
 	nodeInfo, err := b.C.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}
 
-	c, err := b.pitrGetChunkContains(nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
+	c, err := b.pitrGetChunkContains(ctx, nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errNoOplogsForPITR

@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Jetstack cert-manager contributors.
+Copyright 2020 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,19 +16,39 @@ limitations under the License.
 
 package v1alpha3
 
-// Annotation names for Secrets
+// Common annotation keys added to resources.
 const (
-	AltNamesAnnotationKey    = "cert-manager.io/alt-names"
-	IPSANAnnotationKey       = "cert-manager.io/ip-sans"
-	URISANAnnotationKey      = "cert-manager.io/uri-sans"
-	CommonNameAnnotationKey  = "cert-manager.io/common-name"
-	IssuerNameAnnotationKey  = "cert-manager.io/issuer-name"
-	IssuerKindAnnotationKey  = "cert-manager.io/issuer-kind"
+	// Annotation key for DNS subjectAltNames.
+	AltNamesAnnotationKey = "cert-manager.io/alt-names"
+
+	// Annotation key for IP subjectAltNames.
+	IPSANAnnotationKey = "cert-manager.io/ip-sans"
+
+	// Annotation key for URI subjectAltNames.
+	URISANAnnotationKey = "cert-manager.io/uri-sans"
+
+	// Annotation key for certificate common name.
+	CommonNameAnnotationKey = "cert-manager.io/common-name"
+
+	// Annotation key the 'name' of the Issuer resource.
+	IssuerNameAnnotationKey = "cert-manager.io/issuer-name"
+
+	// Annotation key for the 'kind' of the Issuer resource.
+	IssuerKindAnnotationKey = "cert-manager.io/issuer-kind"
+
+	// Annotation key for the 'group' of the Issuer resource.
 	IssuerGroupAnnotationKey = "cert-manager.io/issuer-group"
-	CertificateNameKey       = "cert-manager.io/certificate-name"
+
+	// Annotation key for the name of the certificate that a resource is related to.
+	CertificateNameKey = "cert-manager.io/certificate-name"
+
+	// Annotation key used to denote whether a Secret is named on a Certificate
+	// as a 'next private key' Secret resource.
+	IsNextPrivateKeySecretLabelKey = "cert-manager.io/next-private-key"
 )
 
 // Deprecated annotation names for Secrets
+// These will be removed in a future release.
 const (
 	DeprecatedIssuerNameAnnotationKey = "certmanager.k8s.io/issuer-name"
 	DeprecatedIssuerKindAnnotationKey = "certmanager.k8s.io/issuer-kind"
@@ -54,8 +74,14 @@ const (
 
 // Annotation names for CertificateRequests
 const (
-	CRPrivateKeyAnnotationKey = "cert-manager.io/private-key-secret-name"
-	// Annotation to declare the CertificateRequest "revision", beloning to a Certificate Resource
+	// Annotation added to CertificateRequest resources to denote the name of
+	// a Secret resource containing the private key used to sign the CSR stored
+	// on the resource.
+	// This annotation *may* not be present, and is used by the 'self signing'
+	// issuer type to self-sign certificates.
+	CertificateRequestPrivateKeyAnnotationKey = "cert-manager.io/private-key-secret-name"
+
+	// Annotation to declare the CertificateRequest "revision", belonging to a Certificate Resource
 	CertificateRequestRevisionAnnotationKey = "cert-manager.io/certificate-revision"
 )
 
@@ -68,6 +94,7 @@ const (
 	IssueTemporaryCertificateAnnotation = "cert-manager.io/issue-temporary-certificate"
 )
 
+// Common/known resource kinds.
 const (
 	ClusterIssuerKind      = "ClusterIssuer"
 	IssuerKind             = "Issuer"
@@ -140,27 +167,27 @@ const (
 type KeyUsage string
 
 const (
-	UsageSigning            KeyUsage = "signing"
-	UsageDigitalSignature   KeyUsage = "digital signature"
-	UsageContentCommittment KeyUsage = "content commitment"
-	UsageKeyEncipherment    KeyUsage = "key encipherment"
-	UsageKeyAgreement       KeyUsage = "key agreement"
-	UsageDataEncipherment   KeyUsage = "data encipherment"
-	UsageCertSign           KeyUsage = "cert sign"
-	UsageCRLSign            KeyUsage = "crl sign"
-	UsageEncipherOnly       KeyUsage = "encipher only"
-	UsageDecipherOnly       KeyUsage = "decipher only"
-	UsageAny                KeyUsage = "any"
-	UsageServerAuth         KeyUsage = "server auth"
-	UsageClientAuth         KeyUsage = "client auth"
-	UsageCodeSigning        KeyUsage = "code signing"
-	UsageEmailProtection    KeyUsage = "email protection"
-	UsageSMIME              KeyUsage = "s/mime"
-	UsageIPsecEndSystem     KeyUsage = "ipsec end system"
-	UsageIPsecTunnel        KeyUsage = "ipsec tunnel"
-	UsageIPsecUser          KeyUsage = "ipsec user"
-	UsageTimestamping       KeyUsage = "timestamping"
-	UsageOCSPSigning        KeyUsage = "ocsp signing"
-	UsageMicrosoftSGC       KeyUsage = "microsoft sgc"
-	UsageNetscapeSGC        KeyUsage = "netscape sgc"
+	UsageSigning           KeyUsage = "signing"
+	UsageDigitalSignature  KeyUsage = "digital signature"
+	UsageContentCommitment KeyUsage = "content commitment"
+	UsageKeyEncipherment   KeyUsage = "key encipherment"
+	UsageKeyAgreement      KeyUsage = "key agreement"
+	UsageDataEncipherment  KeyUsage = "data encipherment"
+	UsageCertSign          KeyUsage = "cert sign"
+	UsageCRLSign           KeyUsage = "crl sign"
+	UsageEncipherOnly      KeyUsage = "encipher only"
+	UsageDecipherOnly      KeyUsage = "decipher only"
+	UsageAny               KeyUsage = "any"
+	UsageServerAuth        KeyUsage = "server auth"
+	UsageClientAuth        KeyUsage = "client auth"
+	UsageCodeSigning       KeyUsage = "code signing"
+	UsageEmailProtection   KeyUsage = "email protection"
+	UsageSMIME             KeyUsage = "s/mime"
+	UsageIPsecEndSystem    KeyUsage = "ipsec end system"
+	UsageIPsecTunnel       KeyUsage = "ipsec tunnel"
+	UsageIPsecUser         KeyUsage = "ipsec user"
+	UsageTimestamping      KeyUsage = "timestamping"
+	UsageOCSPSigning       KeyUsage = "ocsp signing"
+	UsageMicrosoftSGC      KeyUsage = "microsoft sgc"
+	UsageNetscapeSGC       KeyUsage = "netscape sgc"
 )
