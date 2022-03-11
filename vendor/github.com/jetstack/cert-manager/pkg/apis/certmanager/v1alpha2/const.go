@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Jetstack cert-manager contributors.
+Copyright 2020 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ const (
 	// minimum certificate duration before certificate expiration
 	MinimumRenewBefore = time.Minute * 5
 
-	// Default duration before certificate expiration if  Issuer.spec.renewBefore is not set
+	// Deprecated: the default is now 2/3 of Certificate's duration
 	DefaultRenewBefore = time.Hour * 24 * 30
 )
 

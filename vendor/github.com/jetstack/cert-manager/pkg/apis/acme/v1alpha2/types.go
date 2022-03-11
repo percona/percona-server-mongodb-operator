@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Jetstack cert-manager contributors.
+Copyright 2020 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,9 +35,4 @@ const (
 	// IngressEditInPlaceAnnotation is used to toggle the use of ingressClass instead
 	// of ingress on the created Certificate resource
 	IngressEditInPlaceAnnotationKey = "acme.cert-manager.io/http01-edit-in-place"
-)
-
-const (
-	OrderKind     = "Order"
-	ChallengeKind = "Challenge"
 )
