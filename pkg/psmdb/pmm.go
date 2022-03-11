@@ -14,7 +14,8 @@ const (
 )
 
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v160OrGreater bool, customAdminParams string) corev1.Container {
+func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v160OrGreater bool, customAdminParams string) corev1.Container {
+	spec := cr.Spec.PMM
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 
 	for i := 30100; i <= 30105; i++ {
@@ -96,7 +97,7 @@ func PMMContainer(spec api.PMMSpec, secrets string, customLogin bool, clusterNam
 	pmm := corev1.Container{
 		Name:            "pmm-client",
 		Image:           spec.Image,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: cr.Spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PMM_SERVER",
@@ -283,7 +284,7 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmse
 	_, okp := pmmsec.Data[PMMPasswordKey]
 	is120 := cr.CompareVersion("1.2.0") >= 0
 
-	pmmC := PMMContainer(cr.Spec.PMM, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0, customAdminParams)
+	pmmC := PMMContainer(cr, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0, customAdminParams)
 	if is120 {
 		res, err := CreateResources(cr.Spec.PMM.Resources)
 		if err != nil {
