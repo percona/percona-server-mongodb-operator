@@ -2,10 +2,10 @@
 
 set -e
 
-if command -v controller-gen &> /dev/null; then
-    echo "controller-gen is required. install using:"
-    echo "  go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest"
-    exit 1
+if ! command -v controller-gen &>/dev/null; then
+	echo "controller-gen is required. install using:"
+	echo "  go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest"
+	exit 1
 fi
 
 set -o xtrace
