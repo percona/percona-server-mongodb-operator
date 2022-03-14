@@ -26,11 +26,13 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDB is the Schema for the perconaservermongodbs API
-// +k8s:openapi-gen=true
-// +kubebuilder:resource:shortName="psmdb"
-// +kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+//+k8s:openapi-gen=true
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:resource:shortName="psmdb"
+//+kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
+//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaServerMongoDB struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

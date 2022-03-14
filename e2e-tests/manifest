@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 
-set -ex
+set -e
 
-# https://v0-19-x.sdk.operatorframework.io/docs/install-operator-sdk/
-# https://github.com/mikefarah/yq/releases/tag/3.4.1
-#operator-sdk generate k8s
-operator-sdk generate crds
+if command -v controller-gen &> /dev/null; then
+    echo "controller-gen is required. install using:"
+    echo "  go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest"
+    exit 1
+fi
+
+set -o xtrace
+
+controller-gen crd paths=./pkg/apis/... output:dir=./deploy/crds
 
 crd_ver=${1}
 if [ "${crd_ver}" == "" ]; then
@@ -21,7 +26,7 @@ yq r -d0 "deploy/crd.yaml" \
 yq w -i "$wip_crd" "spec.versions[+].name" "${crd_ver}"
 
 sed '/.*- protocol/d; s/.*- containerPort/&\n&/; s/- containerPort/- protocol/' \
-	deploy/crds/psmdb.percona.com_perconaservermongodbs_crd.yaml \
+	deploy/crds/psmdb.percona.com_perconaservermongodbs.yaml \
 	| yq r - "spec.versions[0]" \
 	| yq w - "subresources.status.0" | yq d - "subresources.status.0" \
 	| yq d - "name" \
@@ -33,9 +38,9 @@ crd_file=$(mktemp)
 yq r "$wip_crd" >"$crd_file"
 
 echo "---" >>"$crd_file"
-yq r "deploy/crds/psmdb.percona.com_perconaservermongodbbackups_crd.yaml" >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbbackups.yaml" >>"$crd_file"
 echo "---" >>"$crd_file"
-yq r "deploy/crds/psmdb.percona.com_perconaservermongodbrestores_crd.yaml" >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbrestores.yaml" >>"$crd_file"
 
 mv "$crd_file" "deploy/crd.yaml"
 
@@ -82,8 +87,8 @@ cat <<EOF >>"$crd_file"
 EOF
 
 echo '---' >>"$crd_file"
-yq r "deploy/crds/psmdb.percona.com_perconaservermongodbbackups_crd.yaml" >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbbackups.yaml" >>"$crd_file"
 echo '---' >>"$crd_file"
-yq r "deploy/crds/psmdb.percona.com_perconaservermongodbrestores_crd.yaml" >>"$crd_file"
+yq r "deploy/crds/psmdb.percona.com_perconaservermongodbrestores.yaml" >>"$crd_file"
 
 mv "$crd_file" "e2e-tests/version-service/conf/crd.yaml"

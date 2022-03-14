@@ -45,8 +45,16 @@ type PerconaServerMongoDBBackupStatus struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDBBackup is the Schema for the perconaservermongodbbackups API
-// +k8s:openapi-gen=true
-// +kubebuilder:resource:shortName="psmdb-backup"
+//+k8s:openapi-gen=true
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:resource:shortName="psmdb-backup"
+//+kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=".spec.clusterName",description="Cluster name"
+//+kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName",description="Storage name"
+//+kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination",description="Backup destination"
+//+kubebuilder:printcolumn:name="Status",type=string,JSONPath=".status.state",description="Job status"
+//+kubebuilder:printcolumn:name="Completed",type=date,JSONPath=".status.completed",description="Completed time"
+//+kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp",description="Created time"
 type PerconaServerMongoDBBackup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
