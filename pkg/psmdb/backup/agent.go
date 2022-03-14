@@ -16,7 +16,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 	c := corev1.Container{
 		Name:            agentContainerName,
 		Image:           cr.Spec.Backup.Image,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: cr.Spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
 			{
 				Name: "PBM_AGENT_MONGODB_USERNAME",
