@@ -3,11 +3,13 @@ package v1
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -102,6 +104,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 	if cr.Spec.Secrets.SSLInternal == "" {
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
+	}
+
+	if cr.Spec.TLS == nil {
+		cr.Spec.TLS = &TLSSpec{
+			CertValidityDuration: metav1.Duration{Duration: time.Hour * 24 * 90},
+		}
 	}
 
 	if cr.Spec.Mongod.OperationProfiling == nil {

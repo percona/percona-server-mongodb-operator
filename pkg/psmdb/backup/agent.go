@@ -11,7 +11,7 @@ import (
 )
 
 // AgentContainer creates the container object for a backup agent
-func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSize int32) (corev1.Container, error) {
+func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) (corev1.Container, error) {
 	res, err := psmdb.CreateResources(cr.Spec.Backup.Resources)
 	if err != nil {
 		return corev1.Container{}, errors.Wrap(err, "create resources")
@@ -23,7 +23,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string, replsetSiz
 	c := corev1.Container{
 		Name:            agentContainerName,
 		Image:           cr.Spec.Backup.Image,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: cr.Spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
 			{
 				Name: "PBM_AGENT_MONGODB_USERNAME",

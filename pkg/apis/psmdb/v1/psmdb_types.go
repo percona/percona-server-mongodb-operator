@@ -73,6 +73,11 @@ type PerconaServerMongoDBSpec struct {
 	Sharding                Sharding                             `json:"sharding,omitempty"`
 	InitImage               string                               `json:"initImage,omitempty"`
 	MultiCluster            MultiCluster                         `json:"multiCluster,omitempty"`
+	TLS                     *TLSSpec                             `json:"tls,omitempty"`
+}
+
+type TLSSpec struct {
+	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
 }
 
 // EncryptionKeySecretName returns spec.Secrets.EncryptionKey.
