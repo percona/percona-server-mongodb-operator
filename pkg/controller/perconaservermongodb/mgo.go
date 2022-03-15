@@ -247,7 +247,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		switch member.State {
 		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 			membersLive++
-		case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRecovering, mongo.MemberStateRollback, mongo.MemberStateDown:
+		case mongo.MemberStateStartup,
+			mongo.MemberStateStartup2,
+			mongo.MemberStateRecovering,
+			mongo.MemberStateRollback,
+			mongo.MemberStateDown,
+			mongo.MemberStateUnknown:
+
 			return api.AppStateInit, nil
 		default:
 			return api.AppStateError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
