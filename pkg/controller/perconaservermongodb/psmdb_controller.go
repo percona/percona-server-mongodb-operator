@@ -1300,7 +1300,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		}
 
 		if cr.Spec.Backup.Enabled {
-			agentC, err := backup.AgentContainer(cr, replset.Name, replset.Size)
+			agentC, err := backup.AgentContainer(cr, replset.Name)
 			if err != nil {
 				return nil, errors.Wrap(err, "create a backup container")
 			}

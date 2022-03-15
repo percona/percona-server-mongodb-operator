@@ -4,6 +4,8 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
+	"reflect"
 	"strconv"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -280,5 +282,61 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		}
 	}
 
+	val, err = pbm.C.GetConfigVar("pitr.compression")
+	var compression = ""
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil
+		} else if !errors.Is(err, bsoncore.ErrElementNotFound) {
+			return errors.Wrap(err, "get pitr.compression")
+		}
+	} else {
+		compression, ok = val.(string)
+		if !ok {
+			return errors.Wrap(err, "unexpected value of pitr.compression")
+		}
+	}
+
+	if compression != string(cr.Spec.Backup.PITR.Compression) {
+		if string(cr.Spec.Backup.PITR.Compression) == "" {
+			if err := pbm.C.DeleteConfigVar("pitr.compression"); err != nil {
+				return errors.Wrap(err, "delete pitr.compression")
+			}
+		} else if err := pbm.C.SetConfigVar("pitr.compression", string(cr.Spec.Backup.PITR.Compression)); err != nil {
+			return errors.Wrap(err, "update pitr.compression")
+		}
+	}
+
+	val, err = pbm.C.GetConfigVar("pitr.compressionLevel")
+	var compressionLevel *int64 = nil
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil
+		} else if !errors.Is(err, bsoncore.ErrElementNotFound) {
+			return errors.Wrap(err, "get pitr.compressionLevel")
+		}
+	} else {
+		tmpCompressionLevel, ok := val.(int64)
+		if !ok {
+			return errors.Wrap(err, "unexpected value of pitr.compressionLevel")
+		}
+		compressionLevel = Int64(tmpCompressionLevel)
+	}
+
+	if !reflect.DeepEqual(compressionLevel, cr.Spec.Backup.PITR.CompressionLevel) {
+		if cr.Spec.Backup.PITR.CompressionLevel == nil {
+			if err := pbm.C.DeleteConfigVar("pitr.compressionLevel"); err != nil {
+				return errors.Wrap(err, "delete pitr.compressionLevel")
+			}
+		} else if err := pbm.C.SetConfigVar("pitr.compressionLevel", strconv.FormatInt(*(cr.Spec.Backup.PITR.CompressionLevel), 10)); err != nil {
+			return errors.Wrap(err, "update pitr.compressionLevel")
+		}
+	}
+
 	return nil
+}
+
+// Int64 returns a pointer to the int64 value passed in.
+func Int64(v int64) *int64 {
+	return &v
 }
