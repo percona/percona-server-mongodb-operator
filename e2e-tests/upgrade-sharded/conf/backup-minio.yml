@@ -3,5 +3,5 @@ kind: PerconaServerMongoDBBackup
 metadata:
   name: backup-minio
 spec:
-  psmdbCluster: upgrade-sharded
+  clusterName: upgrade-sharded
   storageName: minio
