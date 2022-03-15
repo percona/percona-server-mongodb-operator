@@ -174,4 +174,4 @@ desc "Failover check finished successfully"
 
 destroy "$namespace" "true"
 
-destroy $replica_namespace
+destroy $replica_namespace "true"
