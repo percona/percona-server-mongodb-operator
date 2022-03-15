@@ -1,0 +1,177 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+
+if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+else
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+fi
+
+main_cluster="cross-site-sharded-main"
+replica_cluster="cross-site-sharded-replica"
+
+desc "Create main cluster"
+create_namespace $namespace
+deploy_operator
+kubectl_bin apply \
+	-f "$conf_dir/client.yml" \
+	-f "$test_dir/conf/secrets.yml"
+
+apply_cluster "$test_dir/conf/$main_cluster.yml"
+desc 'check if all 3 Pods started'
+wait_for_running $main_cluster-rs0 3
+wait_for_running $main_cluster-cfg 3 "false"
+
+desc 'Create user'
+run_mongos \
+	'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$main_cluster-mongos.$namespace"
+sleep 2
+
+desc 'Set chunk size to 2 MB'
+run_mongos \
+	"use config\n db.settings.save( { _id:\"chunksize\", value: 2 } )" \
+	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+sleep 2
+
+desc 'Write data'
+run_script_mongos "${test_dir}/data.js" "user:pass@$main_cluster-mongos.$namespace"
+
+desc 'Shard collection'
+run_mongos \
+	'sh.enableSharding("app")' \
+	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+sleep 2
+
+run_mongos \
+	'sh.shardCollection("app.city", { _id: 1 } )' \
+	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
+
+sleep 120
+desc 'Check chunks'
+chunks_param1="ns"
+chunks_param2='"app.city"'
+
+if [[ ${MONGO_VER} == "5.0" ]]; then
+	chunks_param1="uuid"
+	chunks_param2=$(run_mongos \
+		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
+		"user:pass@$main_cluster-mongos.$namespace" \
+		| grep "switched to db app" -A 1 | grep -v "switched to db app")
+fi
+
+shards=0
+for i in "rs0" "rs1"; do
+	out=$(run_mongos \
+		"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
+		"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace" \
+		| grep "switched to db config" -A 1 | grep -v "switched to db config")
+
+	desc "$i has $out chunks"
+
+	if [[ $out -ne 0 ]]; then
+		((shards = shards + 1))
+	fi
+done
+
+if [[ $shards -lt 2 ]]; then
+	echo "data is only on some of the shards, maybe sharding is not working"
+	exit 1
+fi
+
+desc "Create replica_cluster"
+create_namespace $replica_namespace 0
+deploy_operator
+
+kubectl_bin apply \
+	-f "$conf_dir/client.yml"
+
+desc "Copy secrets from main to replica namespace"
+
+kubectl get secret ${main_cluster}-secrets -o yaml -n ${namespace} \
+	| yq d - metadata \
+	| yq w - metadata.name ${replica_cluster}-secrets \
+	| kubectl_bin apply -f -
+
+kubectl_bin get secret ${main_cluster}-ssl-internal -o yaml -n ${namespace} \
+	| yq d - metadata \
+	| yq d - status \
+	| yq w - metadata.name ${replica_cluster}-ssl-internal \
+	| kubectl_bin apply -f -
+
+kubectl_bin get secret ${main_cluster}-ssl -o yaml -n ${namespace} \
+	| yq d - metadata \
+	| yq d - status \
+	| yq w - metadata.name ${replica_cluster}-ssl \
+	| kubectl_bin apply -f -
+
+sleep 30
+
+apply_cluster "$test_dir/conf/${replica_cluster}.yml"
+sleep 600
+
+replica_cfg_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-0)
+replica_cfg_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-1)
+replica_cfg_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-2)
+replica_rs0_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-0)
+replica_rs0_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-1)
+replica_rs0_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-2)
+replica_rs1_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-0)
+replica_rs1_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-1)
+replica_rs1_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-2)
+
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+
+kubectl_bin patch psmdb ${main_cluster} --type=merge --patch '{
+			"spec": {"replsets":[
+			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"LoadBalancer"},"externalNodes":[{"host":"'${replica_rs0_0_endpoint}'"},{"host":"'${replica_rs0_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs0_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs0","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},
+			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"LoadBalancer"},"externalNodes":[{"host":"'${replica_rs1_0_endpoint}'"},{"host":"'${replica_rs1_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs1_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs1","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}}
+			  ],
+			  "sharding":{"configsvrReplSet":{ "externalNodes": [{"host":"'${replica_cfg_0_endpoint}'","priority":1,"votes":1 },{"host":"'${replica_cfg_1_endpoint}'", "priority":1,"votes":1},{"host":"'${replica_cfg_2_endpoint}'"}]}}
+			  }
+		}'
+
+sleep 60
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
+desc 'check if all 3 Pods started'
+wait_for_running $replica_cluster-rs0 3
+wait_for_running $replica_cluster-cfg 3 "false"
+
+desc 'Write data, read from all'
+
+run_mongos \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$main_cluster-mongos.$namespace"
+sleep 2
+run_mongos \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@$main_cluster-mongos.$namespace"
+
+sleep 10 # for minikube
+desc "Compare data"
+compare_mongos_cmd "find" "myApp:myPass@$main_cluster-mongos.$namespace"
+
+desc 'Test failover'
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+kubectl_bin delete psmdb $main_cluster
+sleep 120
+
+run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs0_0_endpoint" "mongodb" ":27017"
+run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs1_0_endpoint" "mongodb" ":27017"
+run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
+
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
+kubectl_bin patch psmdb ${replica_cluster} --type=merge --patch '{"spec":{"unmanaged": false}}'
+sleep 120
+desc "Check failover status"
+compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
+desc "Failover check finished successfully"
+
+destroy "$namespace" "true"
+
+destroy $replica_namespace "true"
