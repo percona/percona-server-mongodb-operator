@@ -110,6 +110,15 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		return rr, nil
 	}
 
+	// TODO: Remove after 1.15
+	if cr.Spec.ClusterName == "" {
+		cr.Spec.ClusterName = cr.Spec.PSMDBCluster
+		cr.Spec.PSMDBCluster = ""
+		if err := r.client.Update(ctx, cr); err != nil {
+			return rr, errors.Wrap(err, "failed to update clusterName")
+		}
+	}
+
 	status := cr.Status
 
 	defer func() {
@@ -133,9 +142,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}
 
 	cluster := &psmdbv1.PerconaServerMongoDB{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.GetClusterName(), Namespace: cr.Namespace}, cluster)
+	err = r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
 	if err != nil {
-		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.GetClusterName())
+		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
 
 	svr, err := version.Server()

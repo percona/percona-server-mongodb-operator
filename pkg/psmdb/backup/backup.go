@@ -59,7 +59,7 @@ func HasActiveJobs(ctx context.Context, cl client.Client, cluster *api.PerconaSe
 		if b.Name == current.Name && current.Type == TypeBackup {
 			continue
 		}
-		if b.Spec.GetClusterName() == cluster.Name &&
+		if b.Spec.ClusterName == cluster.Name &&
 			b.Status.State != api.BackupStateReady &&
 			b.Status.State != api.BackupStateError &&
 			b.Status.State != api.BackupStateWaiting {

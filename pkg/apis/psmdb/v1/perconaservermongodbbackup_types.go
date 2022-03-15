@@ -73,20 +73,11 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 	if len(p.Spec.StorageName) == 0 {
 		return fmt.Errorf("spec storageName field is empty")
 	}
-	if len(p.Spec.GetClusterName()) == 0 {
+	if len(p.Spec.ClusterName) == 0 && len(p.Spec.PSMDBCluster) == 0 {
 		return fmt.Errorf("spec clusterName and deprecated psmdbCluster fields are empty")
 	}
 	if string(p.Spec.Compression) == "" {
 		p.Spec.Compression = pbm.CompressionTypeGZIP
 	}
 	return nil
-}
-
-// GetClusterName returns ClusterName if it's not empty. Otherwise, it will return PSMDBCluster.
-// TODO: Remove after v1.15
-func (p *PerconaServerMongoDBBackupSpec) GetClusterName() string {
-	if len(p.ClusterName) > 0 {
-		return p.ClusterName
-	}
-	return p.PSMDBCluster
 }
