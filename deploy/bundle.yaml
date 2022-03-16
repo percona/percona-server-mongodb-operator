@@ -469,6 +469,11 @@ spec:
                       type: object
                     pitr:
                       properties:
+                        compression:
+                          type: string
+                        compressionLevel:
+                          format: int64
+                          type: integer
                         enabled:
                           type: boolean
                         oplogSpanMin:
