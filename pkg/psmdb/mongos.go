@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
@@ -29,7 +28,7 @@ func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (appsv1.DeploymentSpec, error) {
+func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (appsv1.DeploymentSpec, error) {
 	ls := map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -49,7 +48,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 		return appsv1.DeploymentSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := InitContainers(cr, operatorPod)
+	initContainers := InitContainers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources.Limits = c.Resources.Limits
 		initContainers[i].Resources.Requests = c.Resources.Requests
@@ -104,16 +103,8 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 	}, nil
 }
 
-func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []corev1.Container {
-	image := cr.Spec.InitImage
-	if len(image) == 0 {
-		if cr.CompareVersion(version.Version) != 0 {
-			image = strings.Split(operatorPod.Spec.Containers[0].Image, ":")[0] + ":" + cr.Spec.CRVersion
-		} else {
-			image = operatorPod.Spec.Containers[0].Image
-		}
-	}
-	return []corev1.Container{EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)}
+func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Container {
+	return []corev1.Container{EntrypointInitContainer(initImage, cr.Spec.ImagePullPolicy)}
 }
 
 func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) (corev1.Container, error) {

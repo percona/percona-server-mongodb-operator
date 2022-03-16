@@ -946,9 +946,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return nil
 	}
 
-	opPod, err := r.operatorPod(ctx)
+	initImage, err := r.initImage(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to get operator pod")
+		return errors.Wrap(err, "detect init image")
 	}
 
 	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
@@ -979,7 +979,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		cfgInstances = append(cfgInstances, ext.Host)
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig, cfgInstances)
+	deplSpec, err := psmdb.MongosDeploymentSpec(cr, initImage, log, customConfig, cfgInstances)
 	if err != nil {
 		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
 	}
@@ -1196,11 +1196,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 
 	inits := []corev1.Container{}
 	if cr.CompareVersion("1.5.0") >= 0 {
-		operatorPod, err := r.operatorPod(ctx)
+		initImage, err := r.initImage(ctx, cr)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get operator pod")
+			return nil, errors.Wrap(err, "detect init image")
 		}
-		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
+		inits = append(inits, psmdb.InitContainers(cr, initImage)...)
 	}
 
 	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, configName)
@@ -1369,24 +1369,46 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	return sfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) operatorPod(ctx context.Context) (corev1.Pod, error) {
-	operatorPod := corev1.Pod{}
+func (r *ReconcilePerconaServerMongoDB) initImage(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
+	if cr.Spec.InitImage != "" {
+		return cr.Spec.InitImage, nil
+	}
 
+	opImg, err := r.operatorImage(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get operator pod")
+	}
+
+	if cr.CompareVersion(version.Version) != 0 {
+		return strings.Split(opImg, ":")[0] + ":" + cr.Spec.CRVersion, nil
+	}
+
+	return opImg, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) operatorImage(ctx context.Context) (string, error) {
 	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
-		return operatorPod, err
+		return "", errors.Wrap(err, "read namespace file")
 	}
 
 	ns := strings.TrimSpace(string(nsBytes))
 
+	operatorPod := corev1.Pod{}
 	if err := r.client.Get(ctx, types.NamespacedName{
 		Namespace: ns,
 		Name:      os.Getenv("HOSTNAME"),
 	}, &operatorPod); err != nil {
-		return operatorPod, err
+		return "", errors.Wrap(err, "get operator pod")
 	}
 
-	return operatorPod, nil
+	for _, container := range operatorPod.Spec.Containers {
+		if container.Name == "percona-server-mongodb-operator" {
+			return container.Image, nil
+		}
+	}
+
+	return "", errors.New("no container named percona-server-mongodb-operator in operator pod")
 }
 
 func (r *ReconcilePerconaServerMongoDB) getTLSHash(ctx context.Context, cr *api.PerconaServerMongoDB, secretName string) (string, error) {

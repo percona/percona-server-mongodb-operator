@@ -76,13 +76,14 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "08db0feb.percona.com",
-		Namespace:              namespace,
+		Scheme:                  scheme,
+		MetricsBindAddress:      metricsAddr,
+		Port:                    9443,
+		HealthProbeBindAddress:  probeAddr,
+		LeaderElection:          enableLeaderElection,
+		LeaderElectionID:        "08db0feb.percona.com",
+		LeaderElectionNamespace: namespace,
+		Namespace:               namespace,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
