@@ -212,7 +212,8 @@ with ``kubectl`` command, use *a special backup configuration YAML file* with
 the following contents:
 
 * **backup name** in the ``metadata.name`` key,
-* **Percona Server for MongoDB Cluster name** in the ``spec.psmdbCluster`` key,
+* **Percona Server for MongoDB Cluster name** in the ``clusterName`` key (prior
+  to the Operator version 1.12.0 this key was named ``spec.psmdbCluster``),
 * **storage name** from ``deploy/cr.yaml`` in the ``spec.storageName`` key.
 
 The example of such file is `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/backup/backup.yaml>`_.
@@ -234,7 +235,7 @@ When the backup destination is configured and applied with `kubectl apply -f dep
       metadata:
         name: backup1
       spec:
-        psmdbCluster: my-cluster-name
+        clusterName: my-cluster-name
         storageName: s3-us-west
       EOF
 
