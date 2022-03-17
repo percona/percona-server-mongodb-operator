@@ -316,8 +316,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		logger.Info("Created a new mongo key", "KeyName", internalKey)
 	}
 
-	if *cr.Spec.Mongod.Security.EnableEncryption {
-		created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.EncryptionKeySecretName(), psmdb.EncryptionKeyName, 32, false)
+	if is1120 := cr.CompareVersion("1.12.0") >= 0; is1120 || (!is1120 && *cr.Spec.Mongod.Security.EnableEncryption) {
+		created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.EncryptionKeySecretName(), api.EncryptionKeyName, 32, false)
 		if err != nil {
 			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.EncryptionKeySecretName())
 			return reconcile.Result{}, err
@@ -793,7 +793,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 					Namespace: cr.Namespace,
 				},
 				Data: map[string]string{
-					"mongod.conf": rs.Configuration,
+					"mongod.conf": string(rs.Configuration),
 				},
 			})
 			if err != nil {
@@ -820,7 +820,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 				Namespace: cr.Namespace,
 			},
 			Data: map[string]string{
-				"mongod.conf": rs.NonVoting.Configuration,
+				"mongod.conf": string(rs.NonVoting.Configuration),
 			},
 		})
 		if err != nil {
@@ -853,7 +853,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Con
 			Namespace: cr.Namespace,
 		},
 		Data: map[string]string{
-			"mongos.conf": cr.Spec.Sharding.Mongos.Configuration,
+			"mongos.conf": string(cr.Spec.Sharding.Mongos.Configuration),
 		},
 	})
 	if err != nil {
@@ -1152,7 +1152,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	containerSecurityContext := replset.ContainerSecurityContext
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
-	configuration := replset.Configuration
 	configName := psmdb.MongodCustomConfigName(cr.Name, replset.Name)
 
 	if replset.ClusterRole == api.ClusterRoleConfigSvr {
@@ -1176,7 +1175,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		resources = replset.NonVoting.Resources
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
-		configuration = replset.NonVoting.Configuration
 		configName = psmdb.MongodCustomConfigName(cr.Name, replset.Name+"-nv")
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
@@ -1211,7 +1209,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels,
 		multiAZ, size, internalKeyName, inits, log, customConfig, resources,
 		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
-		configuration, configName)
+		configName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}

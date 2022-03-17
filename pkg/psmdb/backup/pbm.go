@@ -142,29 +142,30 @@ func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api
 
 	switch stg.Type {
 	case api.BackupStorageS3:
-		if stg.S3.CredentialsSecret == "" {
-			return errors.New("no credentials specified for the secret name")
-		}
-		s3secret, err := secret(ctx, b.k8c, b.namespace, stg.S3.CredentialsSecret)
-		if err != nil {
-			return errors.Wrap(err, "getting s3 credentials secret name")
-		}
 		conf.Storage = pbm.StorageConf{
 			Type: pbm.StorageS3,
 			S3: s3.Conf{
-				Region:      stg.S3.Region,
-				EndpointURL: stg.S3.EndpointURL,
-				Bucket:      stg.S3.Bucket,
-				Prefix:      stg.S3.Prefix,
-				Credentials: s3.Credentials{
-					AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
-					SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
-				},
+				Region:                stg.S3.Region,
+				EndpointURL:           stg.S3.EndpointURL,
+				Bucket:                stg.S3.Bucket,
+				Prefix:                stg.S3.Prefix,
 				UploadPartSize:        stg.S3.UploadPartSize,
 				MaxUploadParts:        stg.S3.MaxUploadParts,
 				StorageClass:          stg.S3.StorageClass,
 				InsecureSkipTLSVerify: stg.S3.InsecureSkipTLSVerify,
 			},
+		}
+
+		if len(stg.S3.CredentialsSecret) != 0 {
+			s3secret, err := secret(ctx, b.k8c, b.namespace, stg.S3.CredentialsSecret)
+			if err != nil {
+				return errors.Wrap(err, "getting s3 credentials secret name")
+			}
+
+			conf.Storage.S3.Credentials = s3.Credentials{
+				AccessKeyID:     string(s3secret.Data[awsAccessKeySecretKey]),
+				SecretAccessKey: string(s3secret.Data[awsSecretAccessKeySecretKey]),
+			}
 		}
 	case api.BackupStorageFilesystem:
 		return errors.New("filesystem backup storage not supported yet, skipping storage name")

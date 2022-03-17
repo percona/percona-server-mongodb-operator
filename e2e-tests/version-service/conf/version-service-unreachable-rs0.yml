@@ -14,38 +14,6 @@ spec:
     versionServiceEndpoint: https://wrong-check.percona.com
     apply: 4.2.14-15
     schedule: "0 2 * * *"
-  mongod:
-    net:
-      hostPort: 0
-      port: 27017
-    operationProfiling:
-      mode: slowOp
-      rateLimit: 1
-      slowOpThresholdMs: 100
-    security:
-      enableEncryption: true
-      redactClientLogData: false
-    setParameter:
-      ttlMonitorSleepSecs: 60
-      wiredTigerConcurrentReadTransactions: 128
-      wiredTigerConcurrentWriteTransactions: 128
-    storage:
-      engine: wiredTiger
-      inMemory:
-        engineConfig:
-          inMemorySizeRatio: 0.9
-      mmapv1:
-        nsSize: 16
-        smallfiles: false
-      wiredTiger:
-        collectionConfig:
-          blockCompressor: snappy
-        engineConfig:
-          cacheSizeRatio: 0.5
-          directoryForIndexes: false
-          journalCompressor: snappy
-        indexConfig:
-          prefixCompression: true
   replsets:
   - name: rs0
     affinity:
@@ -67,5 +35,26 @@ spec:
     livenessProbe:
       failureThreshold: 3
     size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        enableEncryption: true
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
   secrets:
     users: some-users

@@ -63,19 +63,8 @@ spec:
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=keyFile
             - --keyFile=/etc/mongodb-secrets/mongodb-key
-            - --slowms=100
-            - --profile=1
-            - --rateLimit=100
             - --wiredTigerCacheSizeGB=0.25
-            - --wiredTigerCollectionBlockCompressor=snappy
-            - --wiredTigerJournalCompressor=snappy
             - --wiredTigerIndexPrefixCompression=true
-            - --setParameter
-            - ttlMonitorSleepSecs=60
-            - --setParameter
-            - wiredTigerConcurrentReadTransactions=128
-            - --setParameter
-            - wiredTigerConcurrentWriteTransactions=128
             - --config=/etc/mongodb-config/mongod.conf
           command:
             - /data/db/ps-entry.sh

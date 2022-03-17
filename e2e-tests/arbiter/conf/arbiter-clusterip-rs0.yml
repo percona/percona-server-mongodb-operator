@@ -5,11 +5,11 @@ metadata:
 spec:
   #platform: openshift
   image:
-  mongod:
-    security:
-      enableEncryption: true
   replsets:
   - name: rs0
+    configuration: |
+      security:
+        enableEncryption: true
     affinity:
       antiAffinityTopologyKey: none
     arbiter:

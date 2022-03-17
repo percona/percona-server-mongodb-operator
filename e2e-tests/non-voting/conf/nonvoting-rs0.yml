@@ -13,6 +13,9 @@ spec:
   - name: rs0
     affinity:
       antiAffinityTopologyKey: none
+    configuration: |
+      security:
+        enableEncryption: true
     nonvoting:
       enabled: true
       size: 3
