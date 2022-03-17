@@ -5,9 +5,6 @@ metadata:
 spec:
   #platform: openshift
   image:
-  mongod:
-    security:
-      enableEncryption: true
   replsets:
   - name: rs0
     affinity:
@@ -21,5 +18,8 @@ spec:
           requests:
             storage: 1Gi
     size: 3
+    configuration: |
+      security:
+        enableEncryption: true
   secrets:
     users: some-users
