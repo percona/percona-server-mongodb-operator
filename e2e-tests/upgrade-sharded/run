@@ -119,6 +119,7 @@ function prepare_cr_yaml() {
 		| yq w - "spec.replsets[*].arbiter.enabled" "false" \
 		| yq w - "spec.backup.enabled" "true" \
 		| yq w - "spec.backup.debug" "true" \
+		| yq w - "spec.backup.tasks" "[]" \
 		| yq w - "spec.backup.restartOnFailure" "true" \
 		| yq w - "spec.backup.pitr.enabled" "false" \
 		| yq w - "spec.backup.storages.minio.type" "s3" \
