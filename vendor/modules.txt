@@ -288,7 +288,7 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
-# github.com/percona/percona-backup-mongodb v1.6.1-0.20220110120847-2c3b83a6d7b4
+# github.com/percona/percona-backup-mongodb v1.6.1-0.20220306055702-373054ff37e4
 ## explicit; go 1.15
 github.com/percona/percona-backup-mongodb/pbm
 github.com/percona/percona-backup-mongodb/pbm/log
