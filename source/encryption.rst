@@ -18,7 +18,9 @@ be edited to turn this feature on:
    * ``AES256-GCM``
    
 #. ``security.encryptionKeySecret`` should specify a secret object with the
-   encryption key::
+   encryption key:
+
+   .. code-block:: yaml
 
       mongod:
         ...

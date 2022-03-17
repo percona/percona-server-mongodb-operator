@@ -33,12 +33,12 @@ file may include ``path`` and ``type`` keys to set the node’s filesystem
 object path and to specify whether it is a file, a directory, or
 something else (e.g. a socket):
 
-::
+.. code:: yaml
 
-    volumeSpec:
-      hostPath:
-        path: /data
-        type: Directory
+   volumeSpec:
+     hostPath:
+       path: /data
+       type: Directory
 
 Please note, you must created the hostPath manually and should have following
 attributes:

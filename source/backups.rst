@@ -221,14 +221,14 @@ When the backup destination is configured and applied with `kubectl apply -f dep
 
 .. code:: bash
 
-   kubectl apply -f deploy/backup/backup.yaml
+   $ kubectl apply -f deploy/backup/backup.yaml
 
 .. note:: Storing backup settings in a separate file can be replaced by
    passing its content to the ``kubectl apply`` command as follows:
 
    .. code:: bash
 
-      cat <<EOF | kubectl apply -f-
+      $ cat <<EOF | kubectl apply -f-
       apiVersion: psmdb.percona.com/v1
       kind: PerconaServerMongoDBBackup
       metadata:
@@ -298,7 +298,7 @@ Following things are needed to restore a previously saved backup:
 
   .. code:: bash
 
-     kubectl get psmdb-backup
+     $ kubectl get psmdb-backup
 
   .. note:: Obviously, you can make this check only on the same cluster on
      which you have previously made the backup.
@@ -307,7 +307,7 @@ Following things are needed to restore a previously saved backup:
 
   .. code:: bash
 
-     kubectl get psmdb
+     $ kubectl get psmdb
 
 .. _backups-no-pitr-restore:
 
@@ -363,14 +363,14 @@ restoration can be done in the following way.
 
    .. code:: bash
 
-      kubectl apply -f deploy/backup/restore.yaml
+      $ kubectl apply -f deploy/backup/restore.yaml
 
 .. note:: Storing backup settings in a separate file can be replaced by
    passing its content to the ``kubectl apply`` command as follows:
 
    .. code:: bash
 
-      cat <<EOF | kubectl apply -f-
+      $ cat <<EOF | kubectl apply -f-
       apiVersion: psmdb.percona.com/v1
       kind: PerconaServerMongoDBRestore
       metadata:
@@ -437,25 +437,25 @@ Following steps are needed to roll back the cluster to a specific date and time:
 
    .. code:: bash
 
-      kubectl apply -f deploy/backup/restore.yaml
+      $ kubectl apply -f deploy/backup/restore.yaml
 
    .. note:: Storing backup settings in a separate file can be replaced by
       passing its content to the ``kubectl apply`` command as follows:
 
       .. code:: bash
 
-            cat <<EOF | kubectl apply -f-
-            apiVersion: psmdb.percona.com/v1
-            kind: PerconaServerMongoDBRestore
-            metadata:
-              name: restore1
-            spec:
-              clusterName: my-cluster-name
-              backupName: backup1
-              pitr:
-                type: date
-                date: YYYY-MM-DD hh:mm:ss
-            EOF
+         $ cat <<EOF | kubectl apply -f-
+         apiVersion: psmdb.percona.com/v1
+         kind: PerconaServerMongoDBRestore
+         metadata:
+           name: restore1
+         spec:
+           clusterName: my-cluster-name
+           backupName: backup1
+           pitr:
+             type: date
+             date: YYYY-MM-DD hh:mm:ss
+         EOF
 
 Delete the unneeded backup
 --------------------------
@@ -472,10 +472,10 @@ by the following command:
 
 .. code:: bash
 
-   kubectl get psmdb-backup
+   $ kubectl get psmdb-backup
 
 When the name is known, backup can be deleted as follows:
 
 .. code:: bash
 
-   kubectl delete psmdb-backup/<backup-name>
+   $ kubectl delete psmdb-backup/<backup-name>

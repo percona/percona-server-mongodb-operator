@@ -16,15 +16,15 @@ backups involves following steps:
 
    .. code:: bash
 
-         helm install \
-           --name minio-service \
-           --set accessKey=some-access-key \
-           --set secretKey=some-secret-key \
-           --set service.type=ClusterIP \
-           --set configPath=/tmp/.minio/ \
-           --set persistence.size=2G \
-           --set environment.MINIO_REGION=us-east-1 \
-           stable/minio
+      $ helm install \
+        --name minio-service \
+        --set accessKey=some-access-key \
+        --set secretKey=some-secret-key \
+        --set service.type=ClusterIP \
+        --set configPath=/tmp/.minio/ \
+        --set persistence.size=2G \
+        --set environment.MINIO_REGION=us-east-1 \
+        stable/minio
 
    Don’t forget to substitute default ``some-access-key`` and
    ``some-secret-key`` strings in this command with actual unique
@@ -40,13 +40,13 @@ backups involves following steps:
 
    .. code:: bash
 
-         kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-          bash -c 'AWS_ACCESS_KEY_ID=some-access-key \
-          AWS_SECRET_ACCESS_KEY=some-secret-key \
-          AWS_DEFAULT_REGION=us-east-1 \
-           /usr/bin/aws \
-           --endpoint-url http://minio-service:9000 \
-           s3 mb s3://operator-testing'
+      $ kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+        bash -c 'AWS_ACCESS_KEY_ID=some-access-key \
+        AWS_SECRET_ACCESS_KEY=some-secret-key \
+        AWS_DEFAULT_REGION=us-east-1 \
+        /usr/bin/aws \
+        --endpoint-url http://minio-service:9000 \
+        s3 mb s3://operator-testing'
 
    This command creates the bucket named ``operator-testing`` with
    the selected access and secret keys (substitute ``some-access-key``
@@ -59,7 +59,7 @@ backups involves following steps:
    ``credentialsSecret`` and the ``endpointUrl`` (which should point to
    the previously created Minio Service).
 
-   ::
+   .. code:: yaml
 
       ...
       backup:
@@ -97,12 +97,12 @@ backups involves following steps:
 
    .. code:: bash
 
-          kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
-            run backup \
-            --server-address=<cluster-name>-backup-coordinator:10001 \
-            --storage <storage> \
-            --compression-algorithm=gzip \
-            --description=my-backup
+      $ kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
+         run backup \
+         --server-address=<cluster-name>-backup-coordinator:10001 \
+         --storage <storage> \
+         --compression-algorithm=gzip \
+         --description=my-backup
 
    Don’t forget to specify the name of your cluster instead of the
    ``<cluster-name>`` part of the Backup Coordinator URL (the
@@ -119,15 +119,15 @@ backups involves following steps:
 
    .. code:: bash
 
-         kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- list backups --server-address=<cluster-name>-backup-coordinator:10001
+      $ kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- list backups --server-address=<cluster-name>-backup-coordinator:10001
 
    Now, restore the backup, using backup name instead of the
    ``backup-name`` parameter:
 
    .. code:: bash
 
-         kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
-           run restore \
-           --server-address=<cluster-name>-backup-coordinator:10001 \
-           --storage <storage> \
-           backup-name
+      $ kubectl run -it --rm pbmctl --image=percona/percona-server-mongodb-operator:0.3.0-backup-pbmctl --restart=Never -- \
+         run restore \
+         --server-address=<cluster-name>-backup-coordinator:10001 \
+         --storage <storage> \
+         backup-name

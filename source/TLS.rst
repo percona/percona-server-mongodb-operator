@@ -50,15 +50,15 @@ The steps to install the *cert-manager* are the following:
 
 The following commands perform all the needed actions:
 
-::
-    
-    kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false
+.. code:: bash
+
+   $ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false
 
 After the installation, you can verify the *cert-manager* by running the following command:
 
-::
-  
-  kubectl get pods -n cert-manager
+.. code:: bash
+
+   $ kubectl get pods -n cert-manager
 
 The result should display the *cert-manager* and webhook active and running.
 
@@ -79,11 +79,13 @@ The set of commands generate certificates with the following attributes:
 
 You should generate certificates twice: one set is for external communications, and another set is for internal ones. A secret created for the external use must be added to the ``spec.secrets.ssl`` key of the ``deploy/cr.yaml`` file. A certificate generated for internal communications must be added to the ``spec.secrets.sslInternal`` key of the ``deploy/cr.yaml`` file.
 
-Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to generate certificates manually are as follows::
+Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to generate certificates manually are as follows:
 
-	CLUSTER_NAME=my-cluster-name
-	NAMESPACE=default
-	cat <<EOF | cfssl gencert -initca - | cfssljson -bare ca
+.. code:: bash
+
+	$ CLUSTER_NAME=my-cluster-name
+	$ NAMESPACE=default
+	$ cat <<EOF | cfssl gencert -initca - | cfssljson -bare ca
 	  {
 	    "CN": "Root CA",
 	    "names": [
@@ -98,7 +100,7 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	  }
 	EOF
 
-	cat <<EOF > ca-config.json
+	$ cat <<EOF > ca-config.json
 	  {
 	    "signing": {
 	      "default": {
@@ -109,7 +111,7 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	  }
 	EOF
 
-	cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare server
+	$ cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare server
 	  {
 	    "hosts": [
 	      "localhost",
@@ -132,11 +134,11 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	    }
 	  }
 	EOF
-	cfssl bundle -ca-bundle=ca.pem -cert=server.pem | cfssljson -bare server
+	$ cfssl bundle -ca-bundle=ca.pem -cert=server.pem | cfssljson -bare server
 
-	kubectl create secret generic my-cluster-name-ssl-internal --from-file=tls.crt=server.pem --from-file=tls.key=server-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
+	$ kubectl create secret generic my-cluster-name-ssl-internal --from-file=tls.crt=server.pem --from-file=tls.key=server-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
 
-	cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare client
+	$ cat <<EOF | cfssl gencert -ca=ca.pem  -ca-key=ca-key.pem -config=./ca-config.json - | cfssljson -bare client
 	  {
 	    "hosts": [
 	      "${CLUSTER_NAME}-rs0",
@@ -159,7 +161,7 @@ Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
 	  }
 	EOF
 
-	kubectl create secret generic my-cluster-name-ssl --from-file=tls.crt=client.pem --from-file=tls.key=client-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
+	$ kubectl create secret generic my-cluster-name-ssl --from-file=tls.crt=client.pem --from-file=tls.key=client-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
 
 Run Percona Server for MongoDB without TLS
 ==========================================

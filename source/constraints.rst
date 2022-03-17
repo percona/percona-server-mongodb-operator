@@ -20,7 +20,7 @@ the Pod will not be able to land on it.
 The following example binds the Pod to any node having a
 self-explanatory ``disktype: ssd`` label:
 
-::
+.. code-block:: yaml
 
    nodeSelector:
      disktype: ssd
@@ -58,7 +58,7 @@ values:
 The following example forces Percona Server for MongoDB Pods to avoid
 occupying the same node:
 
-::
+.. code-block:: yaml
 
    affinity:
      antiAffinityTopologyKey: "kubernetes.io/hostname"
@@ -73,7 +73,7 @@ tuning may be needed. In this case, the ``advanced`` option placed in the
 file turns off the effect of the ``antiAffinityTopologyKey`` and allows
 the use of the standard Kubernetes affinity constraints of any complexity:
 
-::
+.. code-block:: yaml
 
    affinity:
       advanced:
@@ -134,7 +134,7 @@ Toleration should have a specified ``effect``, such as the following:
 
 When a *taint* with the ``NoExecute`` effect is assigned to a node, any pod configured to not tolerating this *taint* is removed from the node. This removal can be immediate or after the ``tolerationSeconds`` interval. The following example defines this effect and the removal interval:
 
-::
+.. code-block:: yaml
 
    tolerations:
    - key: "node.alpha.kubernetes.io/unreachable"
@@ -157,7 +157,7 @@ your Kubernetes cluster, and specifying the ``PriorityClassName`` in the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`_
 file:
 
-::
+.. code-block:: yaml
 
    priorityClassName: high-priority
 
@@ -180,7 +180,7 @@ options in the
 file can be used to set these limits. The recommended variant is the
 following:
 
-::
+.. code-block:: yaml
 
    podDisruptionBudget:
       maxUnavailable: 1

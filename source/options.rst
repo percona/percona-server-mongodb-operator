@@ -70,8 +70,8 @@ name and a specific suffix:
 For example, let's define a ``mongod.conf`` configuration file and put there
 several MongoDB options we used in the previous example:
 
-::
-   
+.. code:: yaml
+
      operationProfiling:
        mode: slowOp
      systemLog:
@@ -80,9 +80,9 @@ several MongoDB options we used in the previous example:
 You can create a ConfigMap from the ``mongod.conf`` file with the
 ``kubectl create configmap`` command. It has the following syntax:
 
-::
+.. code:: bash
 
-   kubectl create configmap <configmap-name> <resource-type=resource-name>
+   $ kubectl create configmap <configmap-name> <resource-type=resource-name>
 
 The following example defines ``my-cluster-name-rs0-mongod`` as the ConfigMap
 name and the ``mongod.conf`` file as the data source:
@@ -131,8 +131,8 @@ Actual options should be encoded with `Base64 <https://en.wikipedia.org/wiki/Bas
 For example, let's define a ``mongod.conf`` configuration file and put there
 several MongoDB options we used in the previous example:
 
-::
-   
+.. code:: yaml
+
      operationProfiling:
        mode: slowOp
      systemLog:

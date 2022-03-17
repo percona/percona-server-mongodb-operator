@@ -27,13 +27,17 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    Executing ``minikube dashboard`` will start the dashboard and open it in your
    default web browser.
 
-#. Deploy the operator with the following command::
+#. Deploy the operator with the following command:
 
-     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/bundle.yaml
+   .. code-block:: bash
 
-#. Deploy MongoDB cluster with::
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/bundle.yaml
 
-     kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/cr-minimal.yaml
+#. Deploy MongoDB cluster with:
+
+   .. code-block:: bash
+
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/cr-minimal.yaml
      
    This deploys a one shard MongoDB cluster with one replica set with one node,
    one mongos node and one config server node. ``deploy/cr-minimal.yaml`` is for minimal 
@@ -44,9 +48,11 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
 
    .. include:: ./assets/code/kubectl-get-minimal-response.txt
    
-   You can clone the repository with all manifests and source code by executing the following command::
-   
-      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
+   You can clone the repository with all manifests and source code by executing the following command:
+
+   .. code-block:: bash
+
+      $ git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
 
 #. During previous steps, the Operator has generated several `secrets <https://kubernetes.io/docs/concepts/configuration/secret/>`_,
    including the password for the admin user, which you will need to access the
@@ -54,13 +60,15 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    default Secrets object you are interested in has ``minimal-cluster-name-secrets``
    name). Then ``kubectl get secret minimal-cluster-name-secrets -o yaml`` will return
    the YAML file with generated secrets, including the ``MONGODB_USER_ADMIN``
-   and ``MONGODB_USER_ADMIN_PASSWORD`` strings, which should look as follows::
+   and ``MONGODB_USER_ADMIN_PASSWORD`` strings, which should look as follows:
 
-     ...
-     data:
-       ...
-       MONGODB_USER_ADMIN_PASSWORD: aDAzQ0pCY3NSWEZ2ZUIzS1I=
-       MONGODB_USER_ADMIN_USER: dXNlckFkbWlu
+   .. code-block:: yaml
+
+      ...
+      data:
+        ...
+        MONGODB_USER_ADMIN_PASSWORD: aDAzQ0pCY3NSWEZ2ZUIzS1I=
+        MONGODB_USER_ADMIN_USER: dXNlckFkbWlu
 
    Here the actual login name and password are base64-encoded, and
    ``echo 'aDAzQ0pCY3NSWEZ2ZUIzS1I=' | base64 --decode`` will bring it back to a
@@ -74,7 +82,7 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
 
    .. code:: bash
 
-      kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
+      $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
    
    Executing it may require some time to deploy the correspondent Pod.  Now run
    ``mongo`` tool in the percona-client command shell using the login (which is
@@ -82,4 +90,4 @@ The following steps are needed to run Percona Distribution for MongoDB Operator 
    
    .. code:: bash
 
-      mongo "mongodb://userAdmin:userAdminPassword@minimal-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"
+      $ mongo "mongodb://userAdmin:userAdminPassword@minimal-cluster-name-mongos.default.svc.cluster.local/admin?ssl=false"

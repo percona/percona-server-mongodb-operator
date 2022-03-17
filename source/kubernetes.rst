@@ -7,7 +7,7 @@ Install Percona server for MongoDB on Kubernetes
 
    .. code:: bash
 
-      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
+      $ git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
    .. note:: It is crucial to specify the right branch with ``-b``
