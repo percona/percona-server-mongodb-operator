@@ -564,8 +564,8 @@ run_mongo() {
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
 
-  kubectl_bin exec ${client_container} -- \
-    bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
 
 }
 
@@ -913,6 +913,8 @@ kubectl_bin() {
 		exit_status=$?
 		set -e
 		if [[ ${exit_status} != 0 ]]; then
+			cat "$LAST_OUT"
+			cat "$LAST_ERR" >&2
 			sleep "$((timeout * i))"
 		else
 			break

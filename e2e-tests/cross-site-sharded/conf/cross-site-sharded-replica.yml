@@ -141,7 +141,6 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        enabled: true
         exposeType: LoadBalancer
   mongod:
     net:
