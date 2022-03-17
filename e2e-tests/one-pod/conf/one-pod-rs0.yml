@@ -17,10 +17,28 @@ spec:
   - name: rs0
     size: 1
     configuration: |
-      operationProfiling:
-        mode: slowOp
       systemLog:
         verbosity: 1
+      security:
+        redactClientLogData: false
+        enableEncryption: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          collectionConfig:
+            blockCompressor: snappy
+          indexConfig:
+            prefixCompression: true
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
     podDisruptionBudget:
@@ -45,38 +63,6 @@ spec:
         resources:
           requests:
             storage: 3Gi
-  mongod:
-    net:
-      port: 27017
-      hostPort: 0
-    security:
-      redactClientLogData: false
-      enableEncryption: false
-    setParameter:
-      ttlMonitorSleepSecs: 60
-      wiredTigerConcurrentReadTransactions: 128
-      wiredTigerConcurrentWriteTransactions: 128
-    storage:
-      engine: wiredTiger
-      inMemory:
-        engineConfig:
-          inMemorySizeRatio: 0.9
-      mmapv1:
-        nsSize: 16
-        smallfiles: false
-      wiredTiger:
-        engineConfig:
-          cacheSizeRatio: 0.5
-          directoryForIndexes: false
-          journalCompressor: snappy
-        collectionConfig:
-          blockCompressor: snappy
-        indexConfig:
-          prefixCompression: true
-    operationProfiling:
-      mode: slowOp
-      slowOpThresholdMs: 100
-      rateLimit: 100
   backup:
     enabled: true
     debug: true
