@@ -70,38 +70,6 @@ spec:
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: aws-s3
-  mongod:
-    net:
-      hostPort: 0
-      port: 27017
-    operationProfiling:
-      mode: slowOp
-      rateLimit: 1
-      slowOpThresholdMs: 100
-    security:
-      enableEncryption: true
-      redactClientLogData: false
-    setParameter:
-      ttlMonitorSleepSecs: 60
-      wiredTigerConcurrentReadTransactions: 128
-      wiredTigerConcurrentWriteTransactions: 128
-    storage:
-      engine: wiredTiger
-      inMemory:
-        engineConfig:
-          inMemorySizeRatio: 0.9
-      mmapv1:
-        nsSize: 16
-        smallfiles: false
-      wiredTiger:
-        collectionConfig:
-          blockCompressor: snappy
-        engineConfig:
-          cacheSizeRatio: 0.5
-          directoryForIndexes: false
-          journalCompressor: snappy
-        indexConfig:
-          prefixCompression: true
   replsets:
   - name: rs0
     affinity:
@@ -119,6 +87,27 @@ spec:
           requests:
             storage: 1Gi
     size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        enableEncryption: true
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
   secrets:
     key: some-key
     users: some-users

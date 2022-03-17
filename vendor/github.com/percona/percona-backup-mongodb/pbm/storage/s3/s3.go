@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -14,9 +15,11 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -53,8 +56,62 @@ type Conf struct {
 	// certificate chain and host name
 	InsecureSkipTLSVerify bool `bson:"insecureSkipTLSVerify" json:"insecureSkipTLSVerify" yaml:"insecureSkipTLSVerify"`
 
-	// DebugLog enables debug logs from S3 client
-	DebugLog bool `bson:"debugLog,omitempty" json:"debugLog,omitempty" yaml:"debugLog,omitempty"`
+	// DebugLogLevels enables AWS SDK debug logging (sub)levels. Available options:
+	// LogDebug, Signing, HTTPBody, RequestRetries, RequestErrors, EventStreamBody
+	//
+	// Any sub levels will enable LogDebug level accordingly to AWS SDK Go module behavior
+	// https://pkg.go.dev/github.com/aws/aws-sdk-go@v1.40.7/aws#LogLevelType
+	DebugLogLevels string `bson:"debugLogLevels,omitempty" json:"debugLogLevels,omitempty" yaml:"debugLogLevels,omitempty"`
+
+	// Retryer is configuration for client.DefaultRetryer
+	// https://pkg.go.dev/github.com/aws/aws-sdk-go/aws/client#DefaultRetryer
+	Retryer *Retryer `bson:"retryer,omitempty" json:"retryer,omitempty" yaml:"retryer,omitempty"`
+}
+
+type Retryer struct {
+	// Num max Retries is the number of max retries that will be performed.
+	// https://pkg.go.dev/github.com/aws/aws-sdk-go/aws/client#DefaultRetryer.NumMaxRetries
+	NumMaxRetries int `bson:"numMaxRetries" json:"numMaxRetries" yaml:"numMaxRetries"`
+
+	// MinRetryDelay is the minimum retry delay after which retry will be performed.
+	// https://pkg.go.dev/github.com/aws/aws-sdk-go/aws/client#DefaultRetryer.MinRetryDelay
+	MinRetryDelay time.Duration `bson:"minRetryDelay" json:"minRetryDelay" yaml:"minRetryDelay"`
+
+	// MaxRetryDelay is the maximum retry delay before which retry must be performed.
+	// https://pkg.go.dev/github.com/aws/aws-sdk-go/aws/client#DefaultRetryer.MaxRetryDelay
+	MaxRetryDelay time.Duration `bson:"maxRetryDelay" json:"maxRetryDelay" yaml:"maxRetryDelay"`
+}
+
+type SDKDebugLogLevel string
+
+const (
+	LogDebug        SDKDebugLogLevel = "LogDebug"
+	Signing         SDKDebugLogLevel = "Signing"
+	HTTPBody        SDKDebugLogLevel = "HTTPBody"
+	RequestRetries  SDKDebugLogLevel = "RequestRetries"
+	RequestErrors   SDKDebugLogLevel = "RequestErrors"
+	EventStreamBody SDKDebugLogLevel = "EventStreamBody"
+)
+
+// SDKLogLevel returns the appropriate AWS SDK debug logging level. If the level
+// is not recognized, returns aws.LogLevelType(0)
+func (l SDKDebugLogLevel) SDKLogLevel() aws.LogLevelType {
+	switch l {
+	case LogDebug:
+		return aws.LogDebug
+	case Signing:
+		return aws.LogDebugWithSigning
+	case HTTPBody:
+		return aws.LogDebugWithHTTPBody
+	case RequestRetries:
+		return aws.LogDebugWithRequestRetries
+	case RequestErrors:
+		return aws.LogDebugWithRequestErrors
+	case EventStreamBody:
+		return aws.LogDebugWithEventStreamBody
+	}
+
+	return aws.LogLevelType(0)
 }
 
 type AWSsse struct {
@@ -85,7 +142,51 @@ func (c *Conf) Cast() error {
 		c.StorageClass = s3.StorageClassStandard
 	}
 
+	if c.Retryer != nil {
+		if c.Retryer.MinRetryDelay == 0 {
+			c.Retryer.MinRetryDelay = client.DefaultRetryerMinRetryDelay
+		}
+		if c.Retryer.MaxRetryDelay == 0 {
+			c.Retryer.MaxRetryDelay = client.DefaultRetryerMaxRetryDelay
+		}
+	}
+
 	return nil
+}
+
+// SDKLogLevel returns AWS SDK log level value from comma-separated
+// SDKDebugLogLevel values string. If the string does not contain a valid value,
+// returns aws.LogOff.
+//
+// If the string is incorrect formatted, prints warnings to the io.Writer.
+// Passing nil as the io.Writer will discard any warnings.
+func SDKLogLevel(levels string, out io.Writer) aws.LogLevelType {
+	if out == nil {
+		out = ioutil.Discard
+	}
+
+	var logLevel aws.LogLevelType
+
+	for _, lvl := range strings.Split(levels, ",") {
+		lvl = strings.TrimSpace(lvl)
+		if lvl == "" {
+			continue
+		}
+
+		l := SDKDebugLogLevel(lvl).SDKLogLevel()
+		if l == 0 {
+			fmt.Fprintf(out, "Warning: S3 client debug log level: unsupported %q\n", lvl)
+			continue
+		}
+
+		logLevel |= l
+	}
+
+	if logLevel == 0 {
+		logLevel = aws.LogOff
+	}
+
+	return logLevel
 }
 
 type Credentials struct {
@@ -191,6 +292,16 @@ func (s *S3) Save(name string, data io.Reader, sizeb int) error {
 			u.PartSize = int64(partSize) // 10MB part size
 			u.LeavePartsOnError = true   // Don't delete the parts if the upload fails.
 			u.Concurrency = cc
+
+			u.RequestOptions = append(u.RequestOptions, func(r *request.Request) {
+				if s.opts.Retryer != nil {
+					r.Retryer = client.DefaultRetryer{
+						NumMaxRetries: s.opts.Retryer.NumMaxRetries,
+						MinRetryDelay: s.opts.Retryer.MinRetryDelay,
+						MaxRetryDelay: s.opts.Retryer.MaxRetryDelay,
+					}
+				}
+			})
 		}).Upload(uplInput)
 		return errors.Wrap(err, "upload to S3")
 	case S3ProviderGCS:
@@ -520,18 +631,13 @@ func (s *S3) session() (*session.Session, error) {
 		}
 	}
 
-	logLevel := aws.LogOff
-	if s.opts.DebugLog {
-		logLevel = aws.LogDebug
-	}
-
 	return session.NewSession(&aws.Config{
 		Region:           aws.String(s.opts.Region),
 		Endpoint:         aws.String(s.opts.EndpointURL),
 		Credentials:      credentials.NewChainCredentials(providers),
 		S3ForcePathStyle: aws.Bool(true),
 		HTTPClient:       httpClient,
-		LogLevel:         &logLevel,
+		LogLevel:         aws.LogLevel(SDKLogLevel(s.opts.DebugLogLevels, nil)),
 		Logger:           awsLogger(s.log),
 	})
 }

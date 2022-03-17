@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"strconv"
 	"strings"
 
@@ -318,9 +319,74 @@ type NonVotingSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	Configuration            string                     `json:"configuration,omitempty"`
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 
 	MultiAZ
+}
+
+type MongoConfiguration string
+
+func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interface{}, error) {
+	m := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(conf), m)
+	if err != nil {
+		return nil, err
+	}
+	val, ok := m[name]
+	if !ok {
+		return nil, nil
+	}
+	options, _ := val.(map[interface{}]interface{})
+	return options, nil
+}
+
+func (conf MongoConfiguration) IsEncryptionEnabled() (bool, error) {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return true, err // true by default
+	}
+	enabled, ok := m["enableEncryption"]
+	if !ok {
+		return true, nil // true by default
+	}
+	b, ok := enabled.(bool)
+	if !ok {
+		return false, errors.New("enableEncryption value is not bool")
+	}
+	return b, nil
+}
+
+// setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
+func (conf *MongoConfiguration) setEncryptionDefaults() error {
+	m := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(*conf), m)
+	if err != nil {
+		return err
+	}
+	val, ok := m["security"]
+	if !ok {
+		return nil
+	}
+	security, ok := val.(map[interface{}]interface{})
+	if !ok {
+		return errors.New("security configuration section is invalid")
+	}
+	if _, ok = security["enableEncryption"]; ok {
+		security["encryptionKeyFile"] = MongodRESTencryptDir + "/" + EncryptionKeyName
+	}
+	res, err := yaml.Marshal(m)
+	if err != nil {
+		return err
+	}
+	*conf = MongoConfiguration(res)
+	return nil
+}
+
+func (conf *MongoConfiguration) SetDefaults() error {
+	if err := conf.setEncryptionDefaults(); err != nil {
+		return errors.Wrap(err, "failed to set encryption defaults")
+	}
+	return nil
 }
 
 type ReplsetSpec struct {
@@ -336,7 +402,7 @@ type ReplsetSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
-	Configuration            string                     `json:"configuration,omitempty"`
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
@@ -405,7 +471,7 @@ type MongosSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	Configuration            string                     `json:"configuration,omitempty"`
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	*ResourcesSpec           `json:"resources,omitempty"`
 }
 
@@ -586,8 +652,10 @@ type BackupStorageSpec struct {
 }
 
 type PITRSpec struct {
-	Enabled      bool    `json:"enabled,omitempty"`
-	OplogSpanMin float64 `json:"oplogSpanMin,omitempty"`
+	Enabled          bool                `json:"enabled,omitempty"`
+	OplogSpanMin     float64             `json:"oplogSpanMin,omitempty"`
+	Compression      pbm.CompressionType `json:"compression,omitempty"`
+	CompressionLevel *int64              `json:"compressionLevel,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {
