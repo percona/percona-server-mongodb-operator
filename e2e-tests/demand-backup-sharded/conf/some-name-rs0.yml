@@ -72,12 +72,7 @@ spec:
         replication:
           localPingThresholdMs: 15
       expose:
-        enabled: false
         exposeType: ClusterIP
-      operationProfiling:
-        mode: slowOp
-        slowOpThresholdMs: 100
-        rateLimit: 100
       sidecars:
       - image: busybox
         command: ["/bin/sh"]
