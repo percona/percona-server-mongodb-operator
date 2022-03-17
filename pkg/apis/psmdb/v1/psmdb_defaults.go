@@ -789,7 +789,7 @@ func (v *VolumeSpec) reconcileOpts() error {
 
 func MongodPort(cr *PerconaServerMongoDB) int32 {
 	if cr.CompareVersion("1.12.0") >= 0 {
-		return defaultMongodPort
+		return DefaultMongodPort
 	}
 	return cr.Spec.Mongod.Net.Port
 }
