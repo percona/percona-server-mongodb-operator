@@ -1447,29 +1447,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, spec *
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj client.Object) error {
-	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
-	if !ok {
-		return errors.New("can't convert object to ObjectMetaAccessor")
+	if obj.GetAnnotations() == nil {
+		obj.SetAnnotations(make(map[string]string))
 	}
 
-	objectMeta := metaAccessor.GetObjectMeta()
-
-	if objectMeta.GetAnnotations() == nil {
-		objectMeta.SetAnnotations(make(map[string]string))
-	}
-
-	objAnnotations := objectMeta.GetAnnotations()
+	objAnnotations := obj.GetAnnotations()
 	delete(objAnnotations, "percona.com/last-config-hash")
-	objectMeta.SetAnnotations(objAnnotations)
+	obj.SetAnnotations(objAnnotations)
 
 	hash, err := getObjectHash(obj)
 	if err != nil {
 		return errors.Wrap(err, "calculate object hash")
 	}
 
-	objAnnotations = objectMeta.GetAnnotations()
+	objAnnotations = obj.GetAnnotations()
 	objAnnotations["percona.com/last-config-hash"] = hash
-	objectMeta.SetAnnotations(objAnnotations)
+	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
@@ -1478,8 +1471,8 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 	oldObject := reflect.New(val.Type()).Interface().(client.Object)
 
 	err = r.client.Get(ctx, types.NamespacedName{
-		Name:      objectMeta.GetName(),
-		Namespace: objectMeta.GetNamespace(),
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
 	}, oldObject)
 
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -1494,16 +1487,16 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 
 	updateObject := false
 	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!compareMaps(oldObjectMeta.GetLabels(), objectMeta.GetLabels()) {
+		!compareMaps(oldObjectMeta.GetLabels(), obj.GetLabels()) {
 		updateObject = true
 	} else if _, ok := obj.(*corev1.Service); !ok {
 		// ignore annotations changes for Service object
 		// in case NodePort, to avoid port changing
-		updateObject = !compareMaps(oldObjectMeta.GetAnnotations(), objectMeta.GetAnnotations())
+		updateObject = !compareMaps(oldObjectMeta.GetAnnotations(), obj.GetAnnotations())
 	}
 
 	if updateObject {
-		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
+		obj.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
 			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
@@ -1524,6 +1517,8 @@ func getObjectHash(obj client.Object) (string, error) {
 		dataToMarshall = object.Spec
 	case *corev1.Service:
 		dataToMarshall = object.Spec
+	case *corev1.Secret:
+		dataToMarshall = object.Data
 	default:
 		dataToMarshall = obj
 	}

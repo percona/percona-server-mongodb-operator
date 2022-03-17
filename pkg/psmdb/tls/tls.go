@@ -136,3 +136,13 @@ func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerM
 		Certificates:       []tls.Certificate{cert},
 	}, nil
 }
+
+func ParseTLSCert(tlsCert []byte) (*x509.Certificate, error) {
+	block, _ := pem.Decode(tlsCert)
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse certificate")
+	}
+	return cert, nil
+}
