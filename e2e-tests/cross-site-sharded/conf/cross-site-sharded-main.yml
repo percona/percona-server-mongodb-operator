@@ -1,0 +1,175 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: cross-site-sharded-main
+spec:
+  #platform: openshift
+  unmanaged: false
+  image:
+  imagePullPolicy: Always
+  secrets:
+    users: cross-site-sharded-main-secrets
+    ssl: cross-site-sharded-main-ssl
+    sslInternal: cross-site-sharded-main-ssl-internal
+  replsets:
+  - name: rs0
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: none
+    podDisruptionBudget:
+      maxUnavailable: 1
+    expose:
+      enabled: true
+      exposeType: LoadBalancer
+    nonvoting:
+      enabled: false
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    arbiter:
+      enabled: false
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+  - name: rs1
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: none
+    podDisruptionBudget:
+      maxUnavailable: 1
+    expose:
+      enabled: true
+      exposeType: LoadBalancer
+    nonvoting:
+      enabled: false
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    arbiter:
+      enabled: false
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      expose:
+        enabled: true
+        exposeType: LoadBalancer
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      expose:
+        enabled: true
+        exposeType: LoadBalancer
+  mongod:
+    net:
+      port: 27017
+      hostPort: 0
+    security:
+      redactClientLogData: false
+      enableEncryption: true
+      encryptionKeySecret: my-cluster-name-mongodb-encryption-key
+      encryptionCipherMode: AES256-CBC
+    setParameter:
+      ttlMonitorSleepSecs: 60
+      wiredTigerConcurrentReadTransactions: 128
+      wiredTigerConcurrentWriteTransactions: 128
+    storage:
+      engine: wiredTiger
+      inMemory:
+        engineConfig:
+          inMemorySizeRatio: 0.9
+      wiredTiger:
+        engineConfig:
+          cacheSizeRatio: 0.5
+          directoryForIndexes: false
+          journalCompressor: snappy
+        collectionConfig:
+          blockCompressor: snappy
+        indexConfig:
+          prefixCompression: true
+    operationProfiling:
+      mode: slowOp
+      slowOpThresholdMs: 100
+      rateLimit: 100

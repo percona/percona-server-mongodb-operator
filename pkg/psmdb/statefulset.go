@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 
 	"github.com/go-logr/logr"
 
@@ -35,7 +36,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
 	resourcesSpec *api.ResourcesSpec, podSecurityContext *corev1.PodSecurityContext,
 	containerSecurityContext *corev1.SecurityContext, livenessProbe *api.LivenessProbeExtended,
-	readinessProbe *corev1.Probe, configuration string, configName string) (appsv1.StatefulSetSpec, error) {
+	readinessProbe *corev1.Probe, configName string) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
 
@@ -69,14 +70,18 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
-	if customConf.Type.IsUsable() {
+	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: customConf.Type.VolumeSource(configName),
 		})
 	}
+	encryptionEnabled, err := isEncryptionEnabled(m, replset)
+	if err != nil {
+		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
+	}
 
-	if *m.Spec.Mongod.Security.EnableEncryption {
+	if encryptionEnabled {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: m.Spec.EncryptionKeySecretName(),
@@ -112,7 +117,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		annotations = make(map[string]string)
 	}
 
-	if customConf.Type.IsUsable() {
+	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
@@ -208,4 +213,15 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 	}
 
 	return nil
+}
+
+func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+	if cr.CompareVersion("1.12.0") >= 0 {
+		enabled, err := replset.Configuration.IsEncryptionEnabled()
+		if err != nil {
+			return false, errors.Wrap(err, "failed to parse replset configuration")
+		}
+		return enabled, nil
+	}
+	return *cr.Spec.Mongod.Security.EnableEncryption, nil
 }

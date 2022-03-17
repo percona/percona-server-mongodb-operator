@@ -114,7 +114,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, lo
 		annotations = make(map[string]string)
 	}
 
-	if customConf.Type.IsUsable() {
+	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
@@ -182,7 +182,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		},
 	}
 
-	if useConfigFile {
+	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
 			MountPath: mongosConfigDir,
@@ -279,7 +279,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		)
 	}
 
-	if mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
+	if cr.CompareVersion("1.12.0") < 0 && mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
 		args = append(args, "--redactClientLogData")
 	}
 
@@ -384,7 +384,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 		}
 	}
 
-	if configSource.IsUsable() {
+	if cr.CompareVersion("1.9.0") >= 0 && configSource.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: configSource.VolumeSource(MongosCustomConfigName(cr.Name)),

@@ -415,40 +415,9 @@ spec:
 #        format: BSON
 #        filter: '{}'
 
-  mongod:
-    net:
-      port: 27017
-      hostPort: 0
-    security:
-      redactClientLogData: false
-      enableEncryption: true
-      encryptionCipherMode: AES256-CBC
-    setParameter:
-      ttlMonitorSleepSecs: 60
-      wiredTigerConcurrentReadTransactions: 128
-      wiredTigerConcurrentWriteTransactions: 128
-    storage:
-      engine: wiredTiger
-      inMemory:
-        engineConfig:
-          inMemorySizeRatio: 0.9
-      wiredTiger:
-        engineConfig:
-          cacheSizeRatio: 0.5
-          directoryForIndexes: false
-          journalCompressor: snappy
-        collectionConfig:
-          blockCompressor: snappy
-        indexConfig:
-          prefixCompression: true
-    operationProfiling:
-      mode: slowOp
-      slowOpThresholdMs: 100
-      rateLimit: 100
-#    auditLog:
-#      destination: file
-#      format: BSON
-#      filter: '{}'
+#  mongod:
+#    security:
+#      encryptionKeySecret: "my-cluster-name-mongodb-encryption-key"
 
   backup:
     enabled: true
