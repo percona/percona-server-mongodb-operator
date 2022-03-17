@@ -169,7 +169,7 @@ function main() {
 	wait_backup "$backup_name_minio"
 
 	desc 'upgrade operator'
-	kubectl_bin apply --server-side -f "${src_dir}/deploy/crd.yaml"
+	kubectl_bin apply --server-side --force-conflicts -f "${src_dir}/deploy/crd.yaml"
 	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 	kubectl_bin patch deployment "${OPERATOR_NAME}" \
 		-p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${TARGET_IMAGE}"'"}]}}}}'
