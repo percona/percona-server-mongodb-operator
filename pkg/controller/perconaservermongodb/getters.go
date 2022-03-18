@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -99,6 +100,28 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Contex
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+		},
+	)
+
+	return list, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+	list := appsv1.StatefulSetList{}
+
+	selectors := labels.SelectorFromSet(clusterLabels(cr))
+
+	req, err := labels.NewRequirement("app.kubernetes.io/component", selection.NotEquals, []string{"mongos"})
+	if err != nil {
+		return list, errors.Wrap(err, "get selector requirement")
+	}
+	selectors.Add(*req)
+
+	err = r.client.List(ctx,
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: selectors,
 		},
 	)
 

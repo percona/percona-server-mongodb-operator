@@ -20,7 +20,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 
 	uptodate, err := r.isAllSfsUpToDate(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+		return errors.Wrap(err, "failed to check if all sfs are up to date")
 	}
 
 	rstRunning, err := r.isRestoreRunning(ctx, cr)
@@ -32,22 +32,22 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		return nil
 	}
 
-	msDepl := psmdb.MongosDeployment(cr)
+	msSts := psmdb.MongosStatefulset(cr)
 
 	for {
-		err = r.client.Get(ctx, types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+		err = r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
 		if err != nil && !k8sErrors.IsNotFound(err) {
-			return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+			return errors.Wrapf(err, "get statefulset %s", msSts.Name)
 		}
 
-		if msDepl.ObjectMeta.Generation == msDepl.Status.ObservedGeneration {
+		if msSts.ObjectMeta.Generation == msSts.Status.ObservedGeneration {
 			break
 		}
 
 		time.Sleep(1 * time.Second)
 	}
 
-	if msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
+	if msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
 		log.Info("waiting for mongos update")
 		return nil
 	}
@@ -105,14 +105,14 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		return nil
 	}
 
-	msDepl := psmdb.MongosDeployment(cr)
+	msSts := psmdb.MongosStatefulset(cr)
 
-	err := r.client.Get(ctx, cr.MongosNamespacedName(), msDepl)
+	err := r.client.Get(ctx, cr.MongosNamespacedName(), msSts)
 	if k8sErrors.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
-		return errors.Wrapf(err, "get mongos deployment %s", msDepl.Name)
+		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
 	mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)

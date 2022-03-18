@@ -28,6 +28,12 @@ func rsLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
 	return lbls
 }
 
+func mongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
+	lbls := clusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "mongos"
+	return lbls
+}
+
 func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	pods := corev1.PodList{}
 	err := k8sclient.List(ctx,
@@ -48,4 +54,32 @@ func GetPrimaryPod(ctx context.Context, client *mgo.Client) (string, error) {
 	}
 
 	return status.Primary().Name, nil
+}
+
+func GetMongosPods(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+	pods := corev1.PodList{}
+	err := cl.List(ctx,
+		&pods,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongosLabels(cr)),
+		},
+	)
+
+	return pods, err
+}
+
+func GetMongosServices(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*corev1.ServiceList, error) {
+	list := new(corev1.ServiceList)
+	err := cl.List(ctx,
+		list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongosLabels(cr)),
+		},
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list mongos services")
+	}
+	return list, nil
 }
