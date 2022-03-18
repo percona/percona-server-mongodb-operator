@@ -405,6 +405,7 @@ spec:
           memory: "0.5G"
       expose:
         exposeType: ClusterIP
+#        servicePerPod: true
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
