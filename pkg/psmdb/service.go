@@ -208,6 +208,32 @@ func GetReplsetAddrs(ctx context.Context, cl client.Client, m *api.PerconaServer
 	return addrs, nil
 }
 
+// GetMongosAddrs returns a slice of mongos addresses
+func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
+	if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		host, err := MongosHost(ctx, cl, cr, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get mongos host")
+		}
+		return []string{host}, nil
+	}
+	list, err := GetMongosPods(ctx, cl, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list mongos pods")
+	}
+
+	addrs := make([]string, 0, len(list.Items))
+	for _, pod := range list.Items {
+		host, err := MongosHost(ctx, cl, cr, &pod)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get mongos host")
+		}
+		addrs = append(addrs, host)
+	}
+
+	return addrs, nil
+}
+
 // MongoHost returns the mongo host for given pod
 func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
 	if rsExposed {
@@ -219,6 +245,35 @@ func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoD
 	}
 
 	return GetAddr(m, pod.Name, rsName), nil
+}
+
+// MongosHost returns the mongos host for given pod
+func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod) (string, error) {
+	svcName := cr.Name + "-mongos"
+	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		svcName = pod.Name
+	}
+	svc := new(corev1.Service)
+	err := cl.Get(ctx,
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      svcName,
+		}, svc)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get mongos service")
+	}
+	var host string
+	if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+		for _, i := range svc.Status.LoadBalancer.Ingress {
+			host = i.IP
+			if len(i.Hostname) > 0 {
+				host = i.Hostname
+			}
+		}
+	} else {
+		host = svc.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix
+	}
+	return host, nil
 }
 
 func getExtAddr(ctx context.Context, cl client.Client, namespace string, pod corev1.Pod) (string, error) {
