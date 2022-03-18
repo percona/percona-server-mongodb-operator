@@ -32,9 +32,9 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 	err = r.createSSLByCertManager(ctx, cr)
 	if err != nil {
 		log.Error(err, "issue cert with cert-manager")
-		err = r.createSSLManualy(ctx, cr)
+		err = r.createSSLManually(ctx, cr)
 		if err != nil {
-			return errors.Wrap(err, "create ssl manualy")
+			return errors.Wrap(err, "create ssl manually")
 		}
 	}
 	return nil
@@ -164,7 +164,7 @@ func (r *ReconcilePerconaServerMongoDB) waitForCerts(ctx context.Context, cr *ap
 	}
 }
 
-func (r *ReconcilePerconaServerMongoDB) createSSLManualy(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	data := make(map[string][]byte)
 	certificateDNSNames := []string{"localhost"}
 	for _, replset := range cr.Spec.Replsets {
@@ -201,7 +201,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManualy(ctx context.Context, cr
 
 	caCert, tlsCert, key, err = tls.Issue(certificateDNSNames)
 	if err != nil {
-		return errors.Wrap(err, "create pxc certificate")
+		return errors.Wrap(err, "create psmdb certificate")
 	}
 	data["ca.crt"] = caCert
 	data["tls.crt"] = tlsCert
@@ -248,7 +248,6 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSSLSecret(ctx context.Cont
 
 	oldDNSNames := cert.DNSNames
 
-	updateObject := false
 	if len(oldDNSNames) == len(DNSNames) {
 		for _, oldName := range oldDNSNames {
 			found := false
@@ -259,19 +258,19 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSSLSecret(ctx context.Cont
 				}
 			}
 			if !found {
-				updateObject = true
+				updated = true
 				break
 			}
 		}
 	} else {
-		updateObject = true
+		updated = true
 	}
 
-	if updateObject {
-		return true, r.client.Update(ctx, secret)
+	if updated {
+		return updated, r.client.Update(ctx, secret)
 	}
 
-	return false, nil
+	return
 }
 
 func getShardingSans(cr *api.PerconaServerMongoDB) []string {
