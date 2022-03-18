@@ -40,4 +40,4 @@ fail() {
 "$dir/upgrade/run" || fail "upgrade"
 "$dir/users/run" || fail "users"
 "$dir/version-service/run" || fail "version-service"
-"$dir/cross-site-sharded/run" || fail "cross-site-sharded"
+#"$dir/cross-site-sharded/run" || fail "cross-site-sharded"
