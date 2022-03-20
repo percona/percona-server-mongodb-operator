@@ -115,22 +115,22 @@ sleep 30
 apply_cluster "$test_dir/conf/${replica_cluster}.yml"
 sleep 600
 
-replica_cfg_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-0)
-replica_cfg_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-1)
-replica_cfg_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-cfg-2)
-replica_rs0_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-0)
-replica_rs0_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-1)
-replica_rs0_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs0-2)
-replica_rs1_0_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-0)
-replica_rs1_1_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-1)
-replica_rs1_2_endpoint=$(get_service_endpoint cross-site-sharded-replica-rs1-2)
+replica_cfg_0_endpoint=$(get_service_ip cross-site-sharded-replica-cfg-0 'cfg')
+replica_cfg_1_endpoint=$(get_service_ip cross-site-sharded-replica-cfg-1 'cfg')
+replica_cfg_2_endpoint=$(get_service_ip cross-site-sharded-replica-cfg-2 'cfg')
+replica_rs0_0_endpoint=$(get_service_ip cross-site-sharded-replica-rs0-0)
+replica_rs0_1_endpoint=$(get_service_ip cross-site-sharded-replica-rs0-1)
+replica_rs0_2_endpoint=$(get_service_ip cross-site-sharded-replica-rs0-2)
+replica_rs1_0_endpoint=$(get_service_ip cross-site-sharded-replica-rs1-0 'rs1')
+replica_rs1_1_endpoint=$(get_service_ip cross-site-sharded-replica-rs1-1 'rs1')
+replica_rs1_2_endpoint=$(get_service_ip cross-site-sharded-replica-rs1-2 'rs1')
 
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 
 kubectl_bin patch psmdb ${main_cluster} --type=merge --patch '{
 			"spec": {"replsets":[
-			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"LoadBalancer"},"externalNodes":[{"host":"'${replica_rs0_0_endpoint}'"},{"host":"'${replica_rs0_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs0_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs0","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},
-			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"LoadBalancer"},"externalNodes":[{"host":"'${replica_rs1_0_endpoint}'"},{"host":"'${replica_rs1_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs1_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs1","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}}
+			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"ClusterIp"},"externalNodes":[{"host":"'${replica_rs0_0_endpoint}'"},{"host":"'${replica_rs0_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs0_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs0","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},
+			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"ClusterIp"},"externalNodes":[{"host":"'${replica_rs1_0_endpoint}'"},{"host":"'${replica_rs1_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs1_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs1","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}}
 			  ],
 			  "sharding":{"configsvrReplSet":{ "externalNodes": [{"host":"'${replica_cfg_0_endpoint}'","priority":1,"votes":1 },{"host":"'${replica_cfg_1_endpoint}'", "priority":1,"votes":1},{"host":"'${replica_cfg_2_endpoint}'"}]}}
 			  }
