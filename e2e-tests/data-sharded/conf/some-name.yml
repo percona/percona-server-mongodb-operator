@@ -25,13 +25,7 @@ spec:
       affinity:
         antiAffinityTopologyKey: none
       expose:
-        enabled: false
         exposeType: ClusterIP
-      operationProfiling:
-        mode: slowOp
-        slowOpThresholdMs: 100
-        rateLimit: 100
- 
 
   replsets:
 
