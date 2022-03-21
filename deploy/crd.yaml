@@ -18203,6 +18203,8 @@ spec:
                               additionalProperties:
                                 type: string
                               type: object
+                            servicePerPod:
+                              type: boolean
                           type: object
                         hostPort:
                           format: int32
@@ -20842,7 +20844,6 @@ spec:
                 pitr:
                   properties:
                     date:
-                      format: date-time
                       type: string
                     type:
                       type: string

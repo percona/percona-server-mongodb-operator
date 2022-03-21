@@ -326,7 +326,7 @@ type NonVotingSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 
-	MultiAZ
+	MultiAZ `json:",inline"`
 }
 
 type MongoConfiguration string

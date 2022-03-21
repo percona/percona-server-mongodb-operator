@@ -1,8 +1,10 @@
 package v1
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -108,9 +110,39 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 	return nil
 }
 
+// +kubebuilder:validation:Type=string
+type PITRestoreDate struct {
+	metav1.Time `json:",inline"`
+}
+
+func (PITRestoreDate) OpenAPISchemaType() []string { return []string{"string"} }
+func (PITRestoreDate) OpenAPISchemaFormat() string { return "" }
+
+func (t *PITRestoreDate) UnmarshalJSON(b []byte) (err error) {
+	if len(b) == 4 && string(b) == "null" {
+		t.Time = metav1.NewTime(time.Time{})
+		return nil
+	}
+
+	var str string
+
+	if err = json.Unmarshal(b, &str); err != nil {
+		return err
+	}
+
+	pt, err := time.Parse("2006-01-02 15:04:05", str)
+	if err != nil {
+		return
+	}
+
+	t.Time = metav1.NewTime(pt.Local())
+
+	return nil
+}
+
 type PITRestoreSpec struct {
-	Type PITRestoreType `json:"type,omitempty"`
-	Date *metav1.Time   `json:"date,omitempty"`
+	Type PITRestoreType  `json:"type,omitempty"`
+	Date *PITRestoreDate `json:"date,omitempty"`
 }
 
 type PITRestoreType string

@@ -18203,6 +18203,8 @@ spec:
                               additionalProperties:
                                 type: string
                               type: object
+                            servicePerPod:
+                              type: boolean
                           type: object
                         hostPort:
                           format: int32
