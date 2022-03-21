@@ -20,7 +20,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: true
-      exposeType: LoadBalancer
+      exposeType: ClusterIp
     nonvoting:
       enabled: false
       size: 3
@@ -65,7 +65,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: true
-      exposeType: LoadBalancer
+      exposeType: ClusterIp
     nonvoting:
       enabled: false
       size: 3
@@ -112,7 +112,7 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: true
-        exposeType: LoadBalancer
+        exposeType: ClusterIp
       resources:
         limits:
           cpu: "300m"
@@ -141,7 +141,7 @@ spec:
           memory: "0.5G"
       expose:
         enabled: true
-        exposeType: LoadBalancer
+        exposeType: ClusterIp
   mongod:
     net:
       port: 27017
