@@ -204,6 +204,9 @@ func GetReplsetAddrs(cl client.Client, m *api.PerconaServerMongoDB, rsName strin
 // MongoHost returns the mongo host for given pod
 func MongoHost(cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
 	if rsExposed {
+		if strings.Contains(m.Spec.ClusterServiceDNSSuffix, "cluster1") {
+			return GetGlooMeshAddr(m, pod.Name, m.Namespace), nil
+		}
 		return getExtAddr(cl, m.Namespace, pod)
 	}
 
@@ -227,6 +230,12 @@ func getExtAddr(cl client.Client, namespace string, pod corev1.Pod) (string, err
 // GetAddr returns replicaSet pod address in cluster
 func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
+		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
+}
+
+// GetAddr returns replicaSet pod address in cluster
+func GetGlooMeshAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
+	return strings.Join([]string{pod, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
 		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }
 
