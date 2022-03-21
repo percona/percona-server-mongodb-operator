@@ -171,6 +171,13 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		cr.Status.Mongos = &mongosStatus
 		cr.Status.Size += int32(mongosStatus.Size)
 		cr.Status.Ready += int32(mongosStatus.Ready)
+
+		if cr.CompareVersion("1.12.0") >= 0 && !inProgress {
+			inProgress, err = r.upgradeInProgress(ctx, cr, "mongos")
+			if err != nil {
+				return errors.Wrapf(err, "set upgradeInProgres")
+			}
+		}
 	} else {
 		cr.Status.Mongos = nil
 	}
@@ -332,10 +339,11 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-			return loadBalancerServiceEndpoint(ctx, r.client, cr.Name+"-mongos", cr.Namespace)
+		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr)
+		if err != nil {
+			return "", errors.Wrap(err, "get mongos addresses")
 		}
-		return cr.Name + "-mongos." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+		return strings.Join(addrs, ","), nil
 	}
 
 	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled &&
@@ -365,23 +373,4 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 	}
 
 	return cr.Name + "-" + cr.Spec.Replsets[0].Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
-}
-
-func loadBalancerServiceEndpoint(ctx context.Context, client client.Client, serviceName, namespace string) (string, error) {
-	host := ""
-	srv := corev1.Service{}
-	err := client.Get(ctx, types.NamespacedName{
-		Namespace: namespace,
-		Name:      serviceName,
-	}, &srv)
-	if err != nil {
-		return "", errors.Wrap(err, "get service")
-	}
-	for _, i := range srv.Status.LoadBalancer.Ingress {
-		host = i.IP
-		if len(i.Hostname) > 0 {
-			host = i.Hostname
-		}
-	}
-	return host, nil
 }

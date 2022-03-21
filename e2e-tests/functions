@@ -597,7 +597,8 @@ run_script_mongos() {
 
 get_service_ip() {
 	local service=$1
-	if [ "$(kubectl_bin get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
+	local server_type=${2:-rs0}
+	if [ "$(kubectl_bin get psmdb/${service/-$server_type*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
 		echo -n $service.${service/-rs0*/}-rs0
 		return
 	fi

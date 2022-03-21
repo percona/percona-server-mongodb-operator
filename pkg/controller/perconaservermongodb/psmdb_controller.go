@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -575,7 +576,7 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *a
 		}
 
 		component := v.Labels["app.kubernetes.io/component"]
-		if component == "arbiter" || component == "nonVoting" {
+		if component == "arbiter" || component == "nonVoting" || component == "mongos" {
 			continue
 		}
 
@@ -751,16 +752,27 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	msDepl := psmdb.MongosDeployment(cr)
-	err := r.client.Delete(ctx, msDepl)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to delete mongos deployment")
+	svcList, err := psmdb.GetMongosServices(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to list mongos services")
 	}
 
-	mongosSvc := psmdb.MongosService(cr)
-	err = r.client.Delete(ctx, &mongosSvc)
+	var mongos client.Object
+	if cr.CompareVersion("1.12.0") >= 0 {
+		mongos = psmdb.MongosStatefulset(cr)
+	} else {
+		mongos = psmdb.MongosDeployment(cr)
+	}
+	err = r.client.Delete(ctx, mongos)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to delete mongos service")
+		return errors.Wrap(err, "failed to delete mongos statefulset")
+	}
+
+	for _, svc := range svcList.Items {
+		err = r.client.Delete(ctx, &svc)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete mongos services")
+		}
 	}
 
 	return nil
@@ -916,9 +928,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return nil
 	}
 
-	uptodate, err := r.isAllSfsUpToDate(ctx, cr)
+	stsList, err := r.getStatefulsetsExceptMongos(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "failed to chaeck if all sfs are up to date")
+		return errors.Wrap(err, "failed to get all non-mongos sts")
+	}
+	uptodate, err := r.isStsListUpToDate(ctx, cr, &stsList)
+	if err != nil {
+		return errors.Wrap(err, "failed to check if all non-mongos sts are up to date")
 	}
 
 	rstRunning, err := r.isRestoreRunning(ctx, cr)
@@ -930,20 +946,45 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return nil
 	}
 
-	msDepl := psmdb.MongosDeployment(cr)
-	err = setControllerReference(cr, msDepl, r.scheme)
-	if err != nil {
-		return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
-	}
+	var mongos client.Object
+	if cr.CompareVersion("1.12.0") >= 0 {
+		msDepl := psmdb.MongosDeployment(cr)
+		err = r.client.Get(ctx, types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get old mongos deployment %s", msDepl.Name)
+		}
+		if !k8serrors.IsNotFound(err) {
+			err = r.client.Delete(ctx, msDepl)
+			if err != nil {
+				return errors.Wrapf(err, "failed to delete old mongos deployment %s", msDepl.Name)
+			}
+		}
 
-	err = r.client.Get(ctx, types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get deployment %s", msDepl.Name)
-	}
-
-	if !k8serrors.IsNotFound(err) && msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
-		log.Info("waiting for mongos update")
-		return nil
+		msSts := psmdb.MongosStatefulset(cr)
+		err = setControllerReference(cr, msSts, r.scheme)
+		if err != nil {
+			return errors.Wrapf(err, "set owner ref for statefulset %s", msSts.Name)
+		}
+		err = r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get statefulset %s", msSts.Name)
+		}
+		mongos = msSts
+	} else {
+		msDepl := psmdb.MongosDeployment(cr)
+		err = setControllerReference(cr, msDepl, r.scheme)
+		if err != nil {
+			return errors.Wrapf(err, "set owner ref for deployment %s", msDepl.Name)
+		}
+		err = r.client.Get(ctx, types.NamespacedName{Name: msDepl.Name, Namespace: msDepl.Namespace}, msDepl)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get deployment %s", msDepl.Name)
+		}
+		if !k8serrors.IsNotFound(err) && msDepl.Status.UpdatedReplicas < msDepl.Status.Replicas {
+			log.Info("waiting for mongos update")
+			return nil
+		}
+		mongos = msDepl
 	}
 
 	opPod, err := r.operatorPod(ctx)
@@ -961,7 +1002,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return errors.Wrap(err, "get configsvr pods")
 	}
 
-	// wait all configsvr pods to prevent unnecessary updates to mongos deployment
+	// wait all configsvr pods to prevent unnecessary updates to mongos
 	if int(cr.Spec.Sharding.ConfigsvrReplSet.Size) > len(cfgPods.Items) {
 		return nil
 	}
@@ -979,21 +1020,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		cfgInstances = append(cfgInstances, ext.Host)
 	}
 
-	deplSpec, err := psmdb.MongosDeploymentSpec(cr, opPod, log, customConfig, cfgInstances)
+	templateSpec, err := psmdb.MongosTemplateSpec(cr, opPod, log, customConfig, cfgInstances)
 	if err != nil {
-		return errors.Wrapf(err, "create deployment spec %s", msDepl.Name)
+		return errors.Wrapf(err, "create template spec for mongos")
 	}
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to get ssl annotations")
 	}
-	if deplSpec.Template.Annotations == nil {
-		deplSpec.Template.Annotations = make(map[string]string)
+	if templateSpec.Annotations == nil {
+		templateSpec.Annotations = make(map[string]string)
 	}
 
 	for k, v := range sslAnn {
-		deplSpec.Template.Annotations[k] = v
+		templateSpec.Annotations[k] = v
 	}
 
 	if cr.CompareVersion("1.8.0") < 0 {
@@ -1004,7 +1045,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 
 		for k, v := range depl.Spec.Template.Annotations {
 			if k == "last-applied-secret" || k == "last-applied-secret-ts" {
-				deplSpec.Template.Annotations[k] = v
+				templateSpec.Annotations[k] = v
 			}
 		}
 	}
@@ -1020,8 +1061,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		if err != nil {
 			return errors.Wrap(err, "failed to create a pmm-client container")
 		}
-		deplSpec.Template.Spec.Containers = append(
-			deplSpec.Template.Spec.Containers,
+		templateSpec.Spec.Containers = append(
+			templateSpec.Spec.Containers,
 			pmmC,
 		)
 	}
@@ -1033,37 +1074,88 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		}
 	}
 
-	msDepl.Spec = deplSpec
-	if cr.CompareVersion("1.9.0") >= 0 {
-		err = r.createOrUpdate(ctx, msDepl)
-		if err != nil {
-			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+	if cr.CompareVersion("1.12.0") >= 0 {
+		mongos.(*appsv1.StatefulSet).Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
+	} else {
+		mongos.(*appsv1.Deployment).Spec = psmdb.MongosDeploymentSpec(cr, templateSpec)
+	}
+
+	err = r.createOrUpdate(ctx, mongos)
+	if err != nil {
+		return errors.Wrapf(err, "update or create mongos %s", mongos)
+	}
+
+	err = r.reconcilePDB(ctx, cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, mongos)
+	if err != nil {
+		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos")
+	}
+
+	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
+			err = r.createOrUpdateMongosSvc(ctx, cr, cr.Name+"-mongos-"+strconv.Itoa(i))
+			if err != nil {
+				return errors.Wrap(err, "create or update mongos service")
+			}
 		}
 	} else {
-		err = r.createOrUpdateDeploymentLegacy(ctx, msDepl, msDepl.Name, msDepl.Namespace)
+		err = r.createOrUpdateMongosSvc(ctx, cr, cr.Name+"-mongos")
 		if err != nil {
-			return errors.Wrapf(err, "update or create deployment %s", msDepl.Name)
+			return errors.Wrap(err, "create or update mongos service")
+		}
+	}
+	err = r.removeOutdatedMongosSvc(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "remove outdated mongos services")
+	}
+	if cr.CompareVersion("1.12.0") >= 0 {
+		err = r.smartMongosUpdate(ctx, cr, mongos.(*appsv1.StatefulSet))
+		if err != nil {
+			return errors.Wrap(err, "smart update")
 		}
 	}
 
-	err = r.reconcilePDB(ctx, cr.Spec.Sharding.Mongos.PodDisruptionBudget, msDepl.Spec.Template.Labels, cr.Namespace, msDepl)
-	if err != nil {
-		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos deployment")
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) removeOutdatedMongosSvc(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	svcNames := make(map[string]struct{}, cr.Spec.Sharding.Mongos.Size)
+	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
+			svcNames[cr.Name+"-mongos-"+strconv.Itoa(i)] = struct{}{}
+		}
+	} else {
+		svcNames[cr.Name+"-mongos"] = struct{}{}
 	}
 
-	mongosSvc := psmdb.MongosService(cr)
-	err = setControllerReference(cr, &mongosSvc, r.scheme)
+	svcList, err := psmdb.GetMongosServices(ctx, r.client, cr)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for service %s", mongosSvc.Name)
+		return errors.Wrap(err, "failed to list mongos services")
 	}
 
-	mongosSvc.Spec = psmdb.MongosServiceSpec(cr)
+	for _, service := range svcList.Items {
+		if _, ok := svcNames[service.Name]; !ok {
+			err = r.client.Delete(ctx, &service)
+			if err != nil {
+				return errors.Wrapf(err, "failed to delete service %s", service.Name)
+			}
+		}
+	}
+	return nil
+}
 
-	err = r.createOrUpdate(ctx, &mongosSvc)
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateMongosSvc(ctx context.Context, cr *api.PerconaServerMongoDB, name string) error {
+	svc := psmdb.MongosService(cr, name)
+	err := setControllerReference(cr, &svc, r.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "set owner ref for service %s", svc.Name)
+	}
+
+	svc.Spec = psmdb.MongosServiceSpec(cr, name)
+
+	err = r.createOrUpdate(ctx, &svc)
 	if err != nil {
 		return errors.Wrap(err, "create or update mongos service")
 	}
-
 	return nil
 }
 
@@ -1569,28 +1661,6 @@ func compareMaps(x, y map[string]string) bool {
 	}
 
 	return true
-}
-
-func (r *ReconcilePerconaServerMongoDB) createOrUpdateDeploymentLegacy(ctx context.Context, currentObj client.Object, name, namespace string) error {
-	foundObj := currentObj.DeepCopyObject().(client.Object)
-	err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, foundObj)
-	if err != nil && k8serrors.IsNotFound(err) {
-		err := r.client.Create(ctx, currentObj)
-		if err != nil {
-			return errors.Wrapf(err, "create object %s", name)
-		}
-		return nil
-	} else if err != nil {
-		return errors.Wrapf(err, "get object %s", name)
-	}
-
-	currentObj.GetObjectKind().SetGroupVersionKind(foundObj.GetObjectKind().GroupVersionKind())
-	err = r.client.Update(ctx, currentObj)
-	if err != nil {
-		return errors.Wrapf(err, "update object %s", name)
-	}
-
-	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, namespace, name string) (psmdb.CustomConfig, error) {
