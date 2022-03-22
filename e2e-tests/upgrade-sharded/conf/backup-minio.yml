@@ -4,4 +4,5 @@ metadata:
   name: backup-minio
 spec:
   clusterName: upgrade-sharded
+  psmdbCluster: upgrade-sharded # TODO: remove after 1.12 release
   storageName: minio
