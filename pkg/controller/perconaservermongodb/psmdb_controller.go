@@ -1273,6 +1273,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		volumeSpec = replset.NonVoting.VolumeSpec
 	}
 
+	customLabels := make(map[string]string, len(matchLabels))
+	for k, v := range matchLabels {
+		customLabels[k] = v
+	}
+
+	for k, v := range multiAZ.Labels {
+		if _, ok := customLabels[k]; !ok {
+			customLabels[k] = v
+		}
+	}
+
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
 	err := setControllerReference(cr, sfs, r.scheme)
 	if err != nil {
@@ -1298,7 +1309,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels,
+	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, customLabels,
 		multiAZ, size, internalKeyName, inits, log, customConfig, resources,
 		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
 		configName)
@@ -1375,7 +1386,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	} else {
 		if volumeSpec.PersistentVolumeClaim != nil {
 			sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
-				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, replset.Labels, volumeSpec.PersistentVolumeClaim),
+				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, volumeSpec.PersistentVolumeClaim),
 			}
 		} else {
 			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
@@ -1435,8 +1446,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	}
 
 	sfs.Spec = sfsSpec
-	if cr.CompareVersion("1.6.0") >= 0 {
+	if cr.CompareVersion("1.6.0") >= 0 && cr.CompareVersion("1.12.0") < 0 {
 		sfs.Labels = matchLabels
+	} else if cr.CompareVersion("1.12.0") >= 0 {
+		sfs.Labels = customLabels
 	}
 
 	err = r.createOrUpdate(ctx, sfs)
@@ -1449,11 +1462,44 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
 
+	if err := r.reconcilePVCs(sfs, matchLabels); err != nil {
+		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
+	}
+
 	if err := r.smartUpdate(ctx, cr, sfs, replset); err != nil {
 		return nil, errors.Wrap(err, "failed to run smartUpdate")
 	}
 
 	return sfs, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, ls map[string]string) error {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	err := r.client.List(context.TODO(), pvcList, &client.ListOptions{
+		Namespace:     sfs.Namespace,
+		LabelSelector: labels.SelectorFromSet(ls),
+	})
+	if err != nil {
+		return errors.Wrap(err, "list PVCs")
+	}
+
+	for _, pvc := range pvcList.Items {
+		if compareMaps(sfs.Labels, pvc.Labels) {
+			continue
+		}
+
+		orig := pvc.DeepCopy()
+		for k, v := range sfs.Labels {
+			pvc.Labels[k] = v
+		}
+		patch := client.MergeFrom(orig)
+
+		if err := r.client.Patch(context.TODO(), &pvc, patch); err != nil {
+			log.Error(err, "patch PVC", "PVC", pvc.Name)
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) operatorPod(ctx context.Context) (corev1.Pod, error) {
@@ -1648,6 +1694,7 @@ func OwnerRef(ro client.Object, scheme *runtime.Scheme) (metav1.OwnerReference, 
 	}, nil
 }
 
+// compareMaps returns true if two maps are equal
 func compareMaps(x, y map[string]string) bool {
 	if len(x) != len(y) {
 		return false

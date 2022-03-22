@@ -33,24 +33,13 @@ var secretFileMode int32 = 288
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
-	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
+	ls map[string]string, customLabels map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
 	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
 	resources corev1.ResourceRequirements, podSecurityContext *corev1.PodSecurityContext,
 	containerSecurityContext *corev1.SecurityContext, livenessProbe *api.LivenessProbeExtended,
 	readinessProbe *corev1.Probe, configName string) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
-
-	customLabels := make(map[string]string, len(ls))
-	for k, v := range ls {
-		customLabels[k] = v
-	}
-
-	for k, v := range multiAZ.Labels {
-		if _, ok := customLabels[k]; !ok {
-			customLabels[k] = v
-		}
-	}
 
 	volumes := []corev1.Volume{
 		{
@@ -154,7 +143,7 @@ func MongosCustomConfigName(clusterName string) string {
 }
 
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
-func PersistentVolumeClaim(name, namespace string, labels map[string]string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
+func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -163,7 +152,6 @@ func PersistentVolumeClaim(name, namespace string, labels map[string]string, spe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Labels:    labels,
 		},
 		Spec: *spec,
 	}
