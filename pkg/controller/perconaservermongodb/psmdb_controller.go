@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -74,6 +75,11 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
 
+	dc, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, errors.Wrap(err, "get discovery client")
+	}
+
 	return &ReconcilePerconaServerMongoDB{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
@@ -83,6 +89,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		lockers:       newLockStore(),
 
 		clientcmd: cli,
+		discovery: dc,
 	}, nil
 }
 
@@ -135,6 +142,7 @@ type ReconcilePerconaServerMongoDB struct {
 
 	crons         CronRegistry
 	clientcmd     *clientcmd.Client
+	discovery     discovery.DiscoveryInterface
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
 

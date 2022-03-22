@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
@@ -46,15 +47,19 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 	if errSecret == nil && !metav1.IsControlledBy(&secretObj, cr) {
 		return nil
 	}
-	err := r.createSSLByCertManager(ctx, cr)
+
+	cmInstalled, err := k8s.APIGroupExists(r.discovery, cm.SchemeGroupVersion.Group)
 	if err != nil {
-		log.Error(err, "issue cert with cert-manager")
-		err = r.createSSLManualy(ctx, cr)
-		if err != nil {
-			return fmt.Errorf("create ssl manualy: %v", err)
-		}
+		return errors.Wrap(err, "check if cert-manager installed")
 	}
-	return nil
+
+	if cmInstalled {
+		err := r.createSSLByCertManager(ctx, cr)
+		return errors.Wrap(err, "create certificates with cert-manager")
+	}
+
+	err = r.createSSLManualy(ctx, cr)
+	return errors.Wrap(err, "create certificates manually")
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
