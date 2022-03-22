@@ -39,8 +39,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
-	if sfs.Labels["app.kubernetes.io/component"] == "nonVoting" {
-		matchLabels["app.kubernetes.io/component"] = "nonVoting"
+	label, ok := sfs.Labels["app.kubernetes.io/component"]
+	if ok {
+		matchLabels["app.kubernetes.io/component"] = label
 	}
 
 	list := corev1.PodList{}
@@ -260,6 +261,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 			return false, errors.Errorf("failed to get statefulset %s pods: %v", s.Name, err)
 		}
 		if s.Status.UpdatedReplicas < s.Status.Replicas || isSfsChanged(&s, podList) {
+			log.Info("StatefulSet is not up to date", "sts", s.Name)
 			return false, nil
 		}
 	}
