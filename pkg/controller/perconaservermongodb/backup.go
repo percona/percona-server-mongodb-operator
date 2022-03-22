@@ -181,7 +181,7 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr 
 	for _, bcp := range bcps.Items {
 		if bcp.Status.State != api.BackupStateReady &&
 			bcp.Status.State != api.BackupStateError &&
-			bcp.Spec.ClusterName == cr.Name {
+			bcp.Spec.GetClusterName() == cr.Name {
 			return true, nil
 		}
 	}
@@ -199,7 +199,7 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(ctx context.Context, cr *a
 	}
 
 	for _, b := range backups.Items {
-		if b.Status.State == api.BackupStateReady && b.Spec.ClusterName == cr.Name {
+		if b.Status.State == api.BackupStateReady && b.Spec.GetClusterName() == cr.Name {
 			return true, nil
 		}
 	}
