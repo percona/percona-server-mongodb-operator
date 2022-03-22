@@ -230,6 +230,9 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 // MongoHost returns the mongo host for given pod
 func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
 	if rsExposed {
+		if m.Spec.ClusterServiceDNSMode == corev1.DnsModeServiceMesh {
+			return GetServiceMeshAddr(m, pod.Name, m.Namespace), nil
+		}
 		return getExtAddr(ctx, cl, m.Namespace, pod)
 	}
 
@@ -283,6 +286,12 @@ func getExtAddr(ctx context.Context, cl client.Client, namespace string, pod cor
 func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, m.Name + "-" + replset, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
 		":" + strconv.Itoa(int(api.MongodPort(m)))
+}
+
+// GetAddr returns replicaSet pod address in a service mesh
+func GetServiceMeshAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
+	return strings.Join([]string{pod, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
+		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
 }
 
 func getExtServices(ctx context.Context, cl client.Client, namespace, podName string) (*corev1.Service, error) {

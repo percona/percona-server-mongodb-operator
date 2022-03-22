@@ -3,9 +3,10 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
@@ -71,6 +72,7 @@ type PerconaServerMongoDBSpec struct {
 	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	ClusterServiceDNSMode   corev1.DnsMode                       `json:"clusterServiceDNSMode,omitempty"`
 	Sharding                Sharding                             `json:"sharding,omitempty"`
 	InitImage               string                               `json:"initImage,omitempty"`
 	TLS                     *TLSSpec                             `json:"tls,omitempty"`

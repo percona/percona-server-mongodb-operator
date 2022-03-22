@@ -4146,6 +4146,20 @@ const (
 	ServiceTypeExternalName ServiceType = "ExternalName"
 )
 
+// DNS Mode string describes the mode used to generate fqdn/ip for communication between nodes
+// +enum
+type DnsMode string
+
+const (
+	// DnsModeServiceMesh means a FQDN will be generated, assumming the FQDN is resolvable
+	// and available in all clusters
+	DnsModeServiceMesh DnsMode = "ServiceMesh"
+
+	// DnsModeInternal means a FQDN (svc.cluster.local), a ClusterIP or a public IP will be used
+	// depending on how the service is exposed
+	DnsModeInternal DnsMode = "Internal"
+)
+
 // ServiceInternalTrafficPolicyType describes the type of traffic routing for
 // internal traffic
 // +enum
