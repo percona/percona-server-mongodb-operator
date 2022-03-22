@@ -3,10 +3,9 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"strconv"
 	"strings"
-
-	"gopkg.in/yaml.v2"
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
