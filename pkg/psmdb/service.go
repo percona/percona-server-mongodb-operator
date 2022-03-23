@@ -291,7 +291,7 @@ func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 // GetAddr returns replicaSet pod address in a service mesh
 func GetServiceMeshAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, m.Namespace, m.Spec.ClusterServiceDNSSuffix}, ".") +
-		":" + strconv.Itoa(int(m.Spec.Mongod.Net.Port))
+		":" + strconv.Itoa(int(api.MongodPort(m)))
 }
 
 func getExtServices(ctx context.Context, cl client.Client, namespace, podName string) (*corev1.Service, error) {
