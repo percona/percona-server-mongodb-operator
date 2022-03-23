@@ -7,6 +7,7 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
 if [ $EKS -ne 1 ]; then
+  echo "We run this test for EKS only"
 	exit 1
 fi
 
