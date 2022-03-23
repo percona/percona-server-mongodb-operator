@@ -114,6 +114,7 @@ rules:
   - multicluster.x-k8s.io
   resources:
   - serviceexports
+  - serviceimports
   verbs:
   - get
   - list

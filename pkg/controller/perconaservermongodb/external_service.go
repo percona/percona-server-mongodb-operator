@@ -30,10 +30,32 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 			return nil, errors.Wrapf(err, "failed to create external service for replset %s", replset.Name)
 		}
 
+		if cr.Spec.MultiCluster.Enabled {
+			err = r.exportService(ctx, cr, service)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to export service %s", service.Name)
+			}
+		}
+
 		services = append(services, *service)
 	}
 
 	return services, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service) error {
+	ls := clusterLabels(cr)
+	if !cr.Spec.MultiCluster.Enabled {
+		return nil
+	}
+	se := mcs.ServiceExport(cr, svc.Name, ls)
+	if err := setControllerReference(cr, se, r.scheme); err != nil {
+		return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
+	}
+	if err := r.createOrUpdate(ctx, se); err != nil {
+		return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *api.PerconaServerMongoDB) error {
