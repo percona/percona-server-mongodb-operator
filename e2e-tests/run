@@ -41,3 +41,4 @@ fail() {
 "$dir/users/run" || fail "users"
 "$dir/version-service/run" || fail "version-service"
 "$dir/cross-site-sharded/run" || fail "cross-site-sharded"
+"$dir/demand-backup-eks-credentials/run" || fail "demand-backup-eks-credentials"
