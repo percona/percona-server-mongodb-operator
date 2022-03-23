@@ -312,6 +312,7 @@ pipeline {
                         runTest('users', 'basic')
                         runTest('data-sharded', 'basic')
                         runTest('non-voting', 'basic')
+                        runTest('demand-backup-eks-credentials')
                         ShutdownCluster('basic')
                     }
                 }
@@ -341,14 +342,14 @@ pipeline {
                         ShutdownCluster('backups')
                     }
                 }
-//                 stage('CrossSite replication') {
-//                     steps {
-//                         CreateCluster('cross-site')
-//                         sleep 60
-//                         runTest('cross-site-sharded', 'cross-site')
-//                         ShutdownCluster('cross-site')
-//                     }
-//                 }
+                stage('CrossSite replication') {
+                    steps {
+                        CreateCluster('cross-site')
+                        sleep 60
+                        runTest('cross-site-sharded', 'cross-site')
+                        ShutdownCluster('cross-site')
+                    }
+                }
             }
         }
     }
