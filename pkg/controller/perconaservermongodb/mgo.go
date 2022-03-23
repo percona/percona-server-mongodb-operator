@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -48,6 +53,32 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	if err != nil {
 		if cr.Status.Replsets[replset.Name].Initialized {
 			return api.AppStateError, errors.Wrap(err, "dial:")
+		}
+
+		if cr.Spec.MultiCluster.Enabled {
+			siList := &mcs.ServiceImportList{}
+			err = r.client.List(ctx,
+				siList,
+				&client.ListOptions{
+					Namespace: cr.Namespace,
+				},
+			)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return api.AppStateError, errors.Wrap(err, "failed to retrieve service import list")
+			}
+
+			imported := false
+			for _, si := range siList.Items {
+				for _, pod := range pods.Items {
+					if si.Name == pod.Name {
+						imported = true
+						break
+					}
+				}
+			}
+			if !imported {
+				return api.AppStateInit, nil
+			}
 		}
 
 		err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
@@ -374,16 +405,29 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 			continue
 		}
 
+		if m.Spec.MultiCluster.Enabled {
+			imported, err := isServiceImported(ctx, r.client, m, &pod)
+			if err != nil {
+				return errors.Wrapf(err, "failed to check if service is imported")
+			}
+			if !imported {
+				continue
+			}
+		}
+
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
+		var errb, outb bytes.Buffer
 
-		cmd := []string{
-			"sh", "-c",
-			fmt.Sprintf(
+		cmd := []string{"sh", "-c", ""}
+
+		// TODO: please take a look
+		for i := 0; i < 20; i++ {
+			cmd[2] = fmt.Sprintf(
 				`
 				cat <<-EOF | mongo 
 				rs.initiate(
@@ -396,16 +440,24 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 					}
 				)
 				EOF
-			`, replset.Name, host),
-		}
+			`, replset.Name, host)
+			err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+			if err != nil {
+				return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
+			}
+			time.Sleep(time.Second * 5)
 
-		var errb, outb bytes.Buffer
-		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
+			cmd[2] = fmt.Sprintf(`mongo --eval 'db.runCommand( { isMaster: 1 } ).ismaster' --quiet`)
+			errb.Reset()
+			outb.Reset()
+			err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+			if err != nil {
+				return fmt.Errorf("exec ismaster: %v / %s / %s", err, outb.String(), errb.String())
+			}
+			if strings.TrimSuffix(strings.TrimSpace(outb.String()), "\n") == "true" {
+				break
+			}
 		}
-
-		time.Sleep(time.Second * 5)
 
 		userAdmin, err := r.getInternalCredentials(ctx, m, roleUserAdmin)
 		if err != nil {
@@ -564,4 +616,19 @@ func isPodReady(pod corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+func isServiceImported(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod) (bool, error) {
+	si := new(mcs.ServiceImport)
+	err := k8sclient.Get(ctx, types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      pod.Name,
+	}, si)
+	if err != nil {
+		if k8serr.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
