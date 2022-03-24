@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
+
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
-	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -43,6 +43,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
 		return api.AppStateInit, nil
+	}
+
+	if cr.Spec.MultiCluster.Enabled {
+		for _, pod := range pods.Items {
+			imported, err := isServiceImported(ctx, r.client, cr, &pod)
+			if err != nil {
+				return api.AppStateError, errors.Wrapf(err, "check if service is imported for %s", pod.Name)
+			}
+			if !imported {
+				return api.AppStateInit, nil
+			}
+		}
 	}
 
 	if cr.Spec.Unmanaged {
@@ -405,16 +417,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 			continue
 		}
 
-		if m.Spec.MultiCluster.Enabled {
-			imported, err := isServiceImported(ctx, r.client, m, &pod)
-			if err != nil {
-				return errors.Wrapf(err, "failed to check if service is imported")
-			}
-			if !imported {
-				continue
-			}
-		}
-
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, pod)
@@ -426,9 +428,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		cmd := []string{"sh", "-c", ""}
 
 		// TODO: please take a look
-		for i := 0; i < 20; i++ {
-			cmd[2] = fmt.Sprintf(
-				`
+		cmd[2] = fmt.Sprintf(
+			`
 				cat <<-EOF | mongo 
 				rs.initiate(
 					{
@@ -441,23 +442,12 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 				)
 				EOF
 			`, replset.Name, host)
-			err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
-			if err != nil {
-				return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
-			}
-			time.Sleep(time.Second * 5)
-
-			cmd[2] = fmt.Sprintf(`mongo --eval 'db.runCommand( { isMaster: 1 } ).ismaster' --quiet`)
-			errb.Reset()
-			outb.Reset()
-			err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
-			if err != nil {
-				return fmt.Errorf("exec ismaster: %v / %s / %s", err, outb.String(), errb.String())
-			}
-			if strings.TrimSuffix(strings.TrimSpace(outb.String()), "\n") == "true" {
-				break
-			}
+		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
+
+		time.Sleep(time.Second * 5)
 
 		userAdmin, err := r.getInternalCredentials(ctx, m, roleUserAdmin)
 		if err != nil {
