@@ -509,6 +509,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.ClusterServiceDNSSuffix = DefaultDNSSuffix
 	}
 
+	if cr.Spec.ClusterServiceDNSMode == "" {
+		cr.Spec.ClusterServiceDNSMode = DnsModeInternal
+	}
+
 	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
 		return errors.New("backup.enabled must be false on unmanaged clusters")
 	}
