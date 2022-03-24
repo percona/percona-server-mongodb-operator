@@ -8,7 +8,7 @@ metadata:
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
-#  clusterServiceDNSMode: "ServiceMesh"
+#  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
   crVersion: 1.12.0
