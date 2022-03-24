@@ -20,7 +20,6 @@ kubectl_bin apply \
 	-f "$conf_dir/secrets.yml" \
 	-f "$conf_dir/client.yml"
 
-#apply_s3_storage_secrets
 apply_cluster $test_dir/conf/$cluster.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
