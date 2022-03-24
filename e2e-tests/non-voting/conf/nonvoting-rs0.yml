@@ -5,6 +5,10 @@ metadata:
 spec:
   #platform: openshift
   image:
+  mongod:
+    security:
+      enableEncryption: true
+  schedulerName: default-scheduler
   replsets:
   - name: rs0
     affinity:
@@ -48,7 +52,6 @@ spec:
           resources:
             requests:
               storage: 2Gi
-      schedulerName: default-scheduler
     volumeSpec:
       persistentVolumeClaim:
         resources:

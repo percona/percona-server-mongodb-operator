@@ -8,7 +8,7 @@ metadata:
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
-#  clusterServiceDNSMode: "ServiceMesh"
+#  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
   crVersion: 1.12.0
@@ -145,7 +145,6 @@ spec:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#    schedulerName: "default"
     resources:
       limits:
         cpu: "300m"
@@ -198,7 +197,6 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-#    schedulerName: "default"
       podDisruptionBudget:
         maxUnavailable: 1
 #        minAvailable: 0
@@ -422,7 +420,6 @@ spec:
 
   backup:
     enabled: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:main-backup
     serviceAccountName: percona-server-mongodb-operator
 #    annotations:

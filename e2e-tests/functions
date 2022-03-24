@@ -325,12 +325,15 @@ wait_restore_object() {
 deploy_operator() {
 	desc 'start operator'
 
-	if [ -f ${test_dir}/conf/crd.yaml ]; then
-		kubectl_bin apply -f ${test_dir}/conf/crd.yaml
+	local cr_file
+	if [ -f "${test_dir}/conf/crd.yaml" ]; then
+		cr_file="${test_dir}/conf/crd.yaml"
 	else
-		kubectl_bin apply -f ${src_dir}/deploy/crd.yaml
+		cr_file="${src_dir}/deploy/crd.yaml"
 	fi
-	kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
+
+	kubectl_bin apply --server-side --force-conflicts -f "${cr_file}"
+	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 
 	cat ${src_dir}/deploy/operator.yaml \
 		| sed -e "s^image: .*^image: ${IMAGE}^" \
@@ -561,8 +564,8 @@ run_mongo() {
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
 
-  kubectl_bin exec ${client_container} -- \
-    bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
 
 }
 
@@ -906,9 +909,13 @@ kubectl_bin() {
 	local exit_status=0
 	local timeout=4
 	for i in $(seq 0 2); do
+		set +e
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
+		set -e
 		if [[ ${exit_status} != 0 ]]; then
+			cat "$LAST_OUT"
+			cat "$LAST_ERR" >&2
 			sleep "$((timeout * i))"
 		else
 			break
