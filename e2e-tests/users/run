@@ -18,8 +18,8 @@ psmdb="some-name"
 cluster="some-name-rs0"
 
 kubectl_bin apply -f "${conf_dir}/client.yml" \
-    -f "${conf_dir}/secrets.yml" \
-    -f "${conf_dir}/minio-secret.yml"
+	-f "${conf_dir}/secrets.yml" \
+	-f "${conf_dir}/minio-secret.yml"
 
 apply_cluster $test_dir/conf/$cluster.yml
 desc 'Check if all 3 Pods started'

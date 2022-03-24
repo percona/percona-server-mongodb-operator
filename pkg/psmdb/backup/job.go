@@ -3,23 +3,18 @@ package backup
 import (
 	"encoding/json"
 	"fmt"
+
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 )
 
 func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) (batchv1beta1.CronJob, error) {
 	jobName := crName + "-backup-" + backup.Name
-	resources, err := psmdb.CreateResources(backupSpec.Resources)
-	if err != nil {
-		return batchv1beta1.CronJob{}, errors.Wrap(err, "cannot parse Backup resources")
-	}
-
 	containerArgs, err := newBackupCronJobContainerArgs(backup, jobName)
 	if err != nil {
 		return batchv1beta1.CronJob{}, errors.Wrap(err, "cannot generate container arguments")
@@ -50,7 +45,7 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				},
 				Args:            containerArgs,
 				SecurityContext: backupSpec.ContainerSecurityContext,
-				Resources:       resources,
+				Resources:       backupSpec.Resources,
 			},
 		},
 		SecurityContext:  backupSpec.PodSecurityContext,

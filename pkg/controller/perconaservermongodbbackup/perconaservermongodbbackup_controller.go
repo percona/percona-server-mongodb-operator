@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -239,7 +238,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		c := &api.PerconaServerMongoDBBackup{}
+		c := &psmdbv1.PerconaServerMongoDBBackup{}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {

@@ -14,9 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/pkg/errors"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/pkg/errors"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -275,8 +276,8 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		return errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
 	}
 
-	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin {
-		val := strconv.FormatFloat(cr.Spec.Backup.PITR.OplogSpanMin, 'f', -1, 64)
+	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin.Float64() {
+		val := cr.Spec.Backup.PITR.OplogSpanMin.String()
 		if err := pbm.C.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
 			return errors.Wrap(err, "update pitr.oplogSpanMin")
 		}

@@ -53,7 +53,6 @@ spec:
       fsGroup: 1001
       supplementalGroups: [1001, 1003]
   secrets:
-    key: some-key
     users: some-users
   backup:
     containerSecurityContext:
@@ -64,8 +63,6 @@ spec:
       fsGroup: 1001
       supplementalGroups: [1001, 1002, 1003]
     enabled: true
-    debug: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.2.0-backup
     storages:
       minio:
@@ -75,6 +72,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
     tasks:
       - name: each-hour
         enabled: true
