@@ -42,6 +42,8 @@ for i in "${!cases[@]}"; do
 		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
 		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
 		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
+		| yq w - 'spec.backup.enabled' 'false' \
+		| yq w - 'spec.backup.tasks' '[]' \
 		| kubectl_bin apply -f -
 	desc 'check if Pod is started'
 	wait_for_running "${cluster}-rs0" 3
