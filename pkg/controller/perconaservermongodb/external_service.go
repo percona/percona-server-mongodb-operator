@@ -48,7 +48,7 @@ func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *a
 	if !cr.Spec.MultiCluster.Enabled {
 		return nil
 	}
-	se := mcs.ServiceExport(cr, svc.Name, ls)
+	se := mcs.ServiceExport(cr.Namespace, svc.Name, ls)
 	if err := setControllerReference(cr, se, r.scheme); err != nil {
 		return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
 	}
@@ -96,7 +96,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 
 	svcNames := make(map[string]struct{}, len(svcList.Items))
 	for _, svc := range svcList.Items {
-		se := mcs.ServiceExport(cr, svc.Name, ls)
+		se := mcs.ServiceExport(cr.Namespace, svc.Name, ls)
 		if err = setControllerReference(cr, se, r.scheme); err != nil {
 			return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
 		}

@@ -427,7 +427,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 
 		cmd := []string{"sh", "-c", ""}
 
-		// TODO: please take a look
 		cmd[2] = fmt.Sprintf(
 			`
 				cat <<-EOF | mongo 

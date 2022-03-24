@@ -1,7 +1,6 @@
 package mcs
 
 import (
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -20,6 +19,8 @@ var (
 
 	// MCSSchemeGroupVersion is group version used to register Kubernetes Multi-Cluster Services (MCS) objects
 	MCSSchemeGroupVersion = schema.GroupVersion{}
+
+	available = true
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
@@ -55,7 +56,8 @@ outer:
 	}
 
 	if MCSSchemeGroupVersion.Group == "" {
-		return errors.New("Kind ServiceExport is not found in any of the API groups")
+		available = false
+		return nil
 	}
 
 	schemeBuilder.Register(addKnownTypes)
@@ -64,7 +66,7 @@ outer:
 }
 
 // ServiceExport returns a ServiceExport object needed for Multi-cluster Services
-func ServiceExport(m *api.PerconaServerMongoDB, name string, ls map[string]string) *mcs.ServiceExport {
+func ServiceExport(namespace string, name string, ls map[string]string) *mcs.ServiceExport {
 	return &mcs.ServiceExport{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ServiceExport",
@@ -72,7 +74,7 @@ func ServiceExport(m *api.PerconaServerMongoDB, name string, ls map[string]strin
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: m.Namespace,
+			Namespace: namespace,
 			Labels:    ls,
 		},
 	}
@@ -86,4 +88,8 @@ func ServiceExportList() *mcs.ServiceExportList {
 			APIVersion: MCSSchemeGroupVersion.String(),
 		},
 	}
+}
+
+func IsAvailable() bool {
+	return available
 }
