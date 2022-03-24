@@ -7,50 +7,50 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
 check_cr_config() {
-    local cluster="$1"
+	local cluster="$1"
 
-    # apply cr config
-    apply_cluster $test_dir/conf/$cluster.yml
+	# apply cr config
+	apply_cluster $test_dir/conf/$cluster.yml
 
-    # check if all 3 Pod started
-    wait_for_running $cluster 3
+	# check if all 3 Pod started
+	wait_for_running $cluster 3
 
-    # check if statefulset created with expected config
-    compare_kubectl statefulset/$cluster
+	# check if statefulset created with expected config
+	compare_kubectl statefulset/$cluster
 
-    # write data, read from all
-    run_mongo \
-        'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-        "userAdmin:userAdmin123456@$cluster.$namespace"
-    sleep 2
-    run_mongo \
-        'use myApp\n db.test.insert({ x: 100500 })' \
-        "myApp:myPass@$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+	# write data, read from all
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster.$namespace"
+	sleep 2
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
-    # delete cluster
-    kubectl_bin delete \
-        -f $test_dir/conf/$cluster.yml
+	# delete cluster
+	kubectl_bin delete \
+		-f $test_dir/conf/$cluster.yml
 }
 
 main() {
-    deploy_cert_manager
-    create_namespace $namespace
-    deploy_operator
-    kubectl_bin apply \
-        -f $conf_dir/client.yml \
-        -f $conf_dir/secrets.yml \
-        -f $test_dir/conf/hostpath-helper.yml
+	deploy_cert_manager
+	create_namespace $namespace
+	deploy_operator
+	kubectl_bin apply \
+		-f $conf_dir/client.yml \
+		-f $conf_dir/secrets.yml \
+		-f $test_dir/conf/hostpath-helper.yml
 
-    desc 'check emptydir'
-    check_cr_config "emptydir-rs0"
+	desc 'check emptydir'
+	check_cr_config "emptydir-rs0"
 
-    desc 'check hostpath'
-    check_cr_config "hostpath-rs0"
+	desc 'check hostpath'
+	check_cr_config "hostpath-rs0"
 
-    destroy $namespace
+	destroy $namespace
 }
 
 main
