@@ -51,11 +51,10 @@ spec:
             - --sslAllowInvalidCertificates
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
-            - --slowms=0
-            - --profile=1
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
           command:
             - /data/db/ps-entry.sh
           env:
@@ -149,6 +148,11 @@ spec:
             defaultMode: 288
             optional: false
             secretName: local-balancer-mongodb-keyfile
+        - configMap:
+            defaultMode: 420
+            name: local-balancer-rs0-mongod
+            optional: true
+          name: config
         - name: local-balancer-mongodb-encryption-key
           secret:
             defaultMode: 288

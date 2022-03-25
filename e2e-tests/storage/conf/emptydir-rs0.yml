@@ -4,11 +4,11 @@ metadata:
   name: emptydir
 spec:
   image:
-  mongod:
-    security:
-      enableEncryption: true
   replsets:
   - name: rs0
+    configuration: |
+      security:
+        enableEncryption: true
     volumeSpec:
       emptyDir: {}
     size: 3

@@ -10,6 +10,14 @@
       {
         "role": "clusterMonitor",
         "db": "admin"
+      },
+      {
+        "role": "explainRole",
+        "db": "admin"
+      },
+      {
+        "role": "read",
+        "db": "local"
       }
     ],
     "authenticatedUserPrivileges": [
@@ -32,7 +40,12 @@
           "collection": "system.profile"
         },
         "actions": [
-          "find"
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "listCollections",
+          "listIndexes"
         ]
       },
       {

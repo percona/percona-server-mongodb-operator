@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Jetstack cert-manager contributors.
+Copyright 2020 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,20 +25,19 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Certificate is a type to represent a Certificate from ACME
+// A Certificate resource should be created to ensure an up to date and signed
+// x509 certificate is stored in the Kubernetes Secret resource named in `spec.secretName`.
+//
+// The stored certificate will be renewed before it expires (as configured by `spec.renewBefore`).
 // +k8s:openapi-gen=true
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Secret",type="string",JSONPath=".spec.secretName",description=""
-// +kubebuilder:printcolumn:name="Issuer",type="string",JSONPath=".spec.issuerRef.name",description="",priority=1
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",priority=1
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC."
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:path=certificates,shortName=cert;certs
 type Certificate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CertificateSpec   `json:"spec,omitempty"`
+	// Desired state of the Certificate resource.
+	Spec CertificateSpec `json:"spec,omitempty"`
+
+	// Status of the Certificate. This is set and managed automatically.
 	Status CertificateStatus `json:"status,omitempty"`
 }
 
@@ -56,7 +55,10 @@ type CertificateList struct {
 type KeyAlgorithm string
 
 const (
-	RSAKeyAlgorithm   KeyAlgorithm = "rsa"
+	// Denotes the RSA private key type.
+	RSAKeyAlgorithm KeyAlgorithm = "rsa"
+
+	// Denotes the ECDSA private key type.
 	ECDSAKeyAlgorithm KeyAlgorithm = "ecdsa"
 )
 
@@ -64,13 +66,19 @@ const (
 type KeyEncoding string
 
 const (
+	// PKCS1 key encoding will produce PEM files that include the type of
+	// private key as part of the PEM header, e.g. `BEGIN RSA PRIVATE KEY`.
+	// If the keyAlgorithm is set to 'ECDSA', this will produce private keys
+	// that use the `BEGIN EC PRIVATE KEY` header.
 	PKCS1 KeyEncoding = "pkcs1"
+
+	// PKCS8 key encoding will produce PEM files with the `BEGIN PRIVATE KEY`
+	// header. It encodes the keyAlgorithm of the private key as part of the
+	// DER encoded PEM block.
 	PKCS8 KeyEncoding = "pkcs8"
 )
 
 // CertificateSpec defines the desired state of Certificate.
-// A valid Certificate requires at least one of a CommonName, DNSName, or
-// URISAN to be valid.
 type CertificateSpec struct {
 	// Full X509 name specification (https://golang.org/pkg/crypto/x509/pkix/#Name).
 	// +optional
@@ -84,38 +92,55 @@ type CertificateSpec struct {
 	// +optional
 	CommonName string `json:"commonName,omitempty"`
 
-	// Organization is the organization to be used on the Certificate
+	// Organization is a list of organizations to be used on the Certificate.
 	// +optional
 	Organization []string `json:"organization,omitempty"`
 
-	// Certificate default Duration
+	// The requested 'duration' (i.e. lifetime) of the Certificate. This option
+	// may be ignored/overridden by some issuer types. If unset this defaults to
+	// 90 days. Certificate will be renewed either 2/3 through its duration or
+	// `renewBefore` period before its expiry, whichever is later. Minimum
+	// accepted duration is 1 hour. Value must be in units accepted by Go
+	// time.ParseDuration https://golang.org/pkg/time/#ParseDuration
 	// +optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
 
-	// Certificate renew before expiration duration
+	// How long before the currently issued certificate's expiry
+	// cert-manager should renew the certificate. The default is 2/3 of the
+	// issued certificate's duration. Minimum accepted value is 5 minutes.
+	// Value must be in units accepted by Go time.ParseDuration
+	// https://golang.org/pkg/time/#ParseDuration
 	// +optional
 	RenewBefore *metav1.Duration `json:"renewBefore,omitempty"`
 
-	// DNSNames is a list of subject alt names to be used on the Certificate.
+	// DNSNames is a list of DNS subjectAltNames to be set on the Certificate.
 	// +optional
 	DNSNames []string `json:"dnsNames,omitempty"`
 
-	// IPAddresses is a list of IP addresses to be used on the Certificate
+	// IPAddresses is a list of IP address subjectAltNames to be set on the Certificate.
 	// +optional
 	IPAddresses []string `json:"ipAddresses,omitempty"`
 
-	// URISANs is a list of URI Subject Alternative Names to be set on this
-	// Certificate.
+	// URISANs is a list of URI subjectAltNames to be set on the Certificate.
 	// +optional
 	URISANs []string `json:"uriSANs,omitempty"`
 
-	// EmailSANs is a list of Email Subject Alternative Names to be set on this
-	// Certificate.
+	// EmailSANs is a list of email subjectAltNames to be set on the Certificate.
 	// +optional
 	EmailSANs []string `json:"emailSANs,omitempty"`
 
-	// SecretName is the name of the secret resource to store this secret in
+	// SecretName is the name of the secret resource that will be automatically
+	// created and managed by this Certificate resource.
+	// It will be populated with a private key and certificate, signed by the
+	// denoted issuer.
 	SecretName string `json:"secretName"`
+
+	// SecretTemplate defines annotations and labels to be propagated
+	// to the Kubernetes Secret when it is created or updated. Once created,
+	// labels and annotations are not yet removed from the Secret when they are
+	// removed from the template. See https://github.com/jetstack/cert-manager/issues/4292
+	// +optional
+	SecretTemplate *CertificateSecretTemplate `json:"secretTemplate,omitempty"`
 
 	// Keystores configures additional keystore output formats stored in the
 	// `secretName` Secret resource.
@@ -123,50 +148,66 @@ type CertificateSpec struct {
 	Keystores *CertificateKeystores `json:"keystores,omitempty"`
 
 	// IssuerRef is a reference to the issuer for this certificate.
-	// If the 'kind' field is not set, or set to 'Issuer', an Issuer resource
+	// If the `kind` field is not set, or set to `Issuer`, an Issuer resource
 	// with the given name in the same namespace as the Certificate will be used.
-	// If the 'kind' field is set to 'ClusterIssuer', a ClusterIssuer with the
+	// If the `kind` field is set to `ClusterIssuer`, a ClusterIssuer with the
 	// provided name will be used.
-	// The 'name' field in this stanza is required at all times.
+	// The `name` field in this stanza is required at all times.
 	IssuerRef cmmeta.ObjectReference `json:"issuerRef"`
 
-	// IsCA will mark this Certificate as valid for signing.
-	// This implies that the 'cert sign' usage is set
+	// IsCA will mark this Certificate as valid for certificate signing.
+	// This will automatically add the `cert sign` usage to the list of `usages`.
 	// +optional
 	IsCA bool `json:"isCA,omitempty"`
 
-	// Usages is the set of x509 actions that are enabled for a given key. Defaults are ('digital signature', 'key encipherment') if empty
+	// Usages is the set of x509 usages that are requested for the certificate.
+	// Defaults to `digital signature` and `key encipherment` if not specified.
 	// +optional
 	Usages []KeyUsage `json:"usages,omitempty"`
 
 	// KeySize is the key bit size of the corresponding private key for this certificate.
-	// If provided, value must be between 2048 and 8192 inclusive when KeyAlgorithm is
-	// empty or is set to "rsa", and value must be one of (256, 384, 521) when
-	// KeyAlgorithm is set to "ecdsa".
-	// +kubebuilder:validation:ExclusiveMaximum=false
-	// +kubebuilder:validation:Maximum=8192
-	// +kubebuilder:validation:ExclusiveMinimum=false
-	// +kubebuilder:validation:Minimum=0
+	// If `keyAlgorithm` is set to `rsa`, valid values are `2048`, `4096` or `8192`,
+	// and will default to `2048` if not specified.
+	// If `keyAlgorithm` is set to `ecdsa`, valid values are `256`, `384` or `521`,
+	// and will default to `256` if not specified.
+	// No other values are allowed.
 	// +optional
-	KeySize int `json:"keySize,omitempty"`
+	KeySize int `json:"keySize,omitempty"` // Validated by webhook. Be mindful of adding OpenAPI validation- see https://github.com/jetstack/cert-manager/issues/3644 .
 
 	// KeyAlgorithm is the private key algorithm of the corresponding private key
-	// for this certificate. If provided, allowed values are either "rsa" or "ecdsa"
-	// If KeyAlgorithm is specified and KeySize is not provided,
-	// key size of 256 will be used for "ecdsa" key algorithm and
-	// key size of 2048 will be used for "rsa" key algorithm.
+	// for this certificate. If provided, allowed values are either `rsa` or `ecdsa`
+	// If `keyAlgorithm` is specified and `keySize` is not provided,
+	// key size of 256 will be used for `ecdsa` key algorithm and
+	// key size of 2048 will be used for `rsa` key algorithm.
 	// +optional
 	KeyAlgorithm KeyAlgorithm `json:"keyAlgorithm,omitempty"`
 
 	// KeyEncoding is the private key cryptography standards (PKCS)
 	// for this certificate's private key to be encoded in. If provided, allowed
-	// values are "pkcs1" and "pkcs8" standing for PKCS#1 and PKCS#8, respectively.
-	// If KeyEncoding is not specified, then PKCS#1 will be used by default.
+	// values are `pkcs1` and `pkcs8` standing for PKCS#1 and PKCS#8, respectively.
+	// If KeyEncoding is not specified, then `pkcs1` will be used by default.
+	// +optional
 	KeyEncoding KeyEncoding `json:"keyEncoding,omitempty"`
 
 	// Options to control private keys used for the Certificate.
 	// +optional
 	PrivateKey *CertificatePrivateKey `json:"privateKey,omitempty"`
+
+	// EncodeUsagesInRequest controls whether key usages should be present
+	// in the CertificateRequest
+	// +optional
+	EncodeUsagesInRequest *bool `json:"encodeUsagesInRequest,omitempty"`
+
+	// revisionHistoryLimit is the maximum number of CertificateRequest revisions
+	// that are maintained in the Certificate's history. Each revision represents
+	// a single `CertificateRequest` created by this Certificate, either when it
+	// was created, renewed, or Spec was changed. Revisions will be removed by
+	// oldest first if the number of revisions exceeds this number. If set,
+	// revisionHistoryLimit must be a value of `1` or greater. If unset (`nil`),
+	// revisions will not be garbage collected. Default value is `nil`.
+	// +kubebuilder:validation:ExclusiveMaximum=false
+	// +optional
+	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty"` // Validated by the validating webhook.
 }
 
 // CertificatePrivateKey contains configuration options for private keys
@@ -271,16 +312,34 @@ type PKCS12Keystore struct {
 
 // CertificateStatus defines the observed state of Certificate
 type CertificateStatus struct {
+	// List of status conditions to indicate the status of certificates.
+	// Known condition types are `Ready` and `Issuing`.
 	// +optional
 	Conditions []CertificateCondition `json:"conditions,omitempty"`
 
+	// LastFailureTime is the time as recorded by the Certificate controller
+	// of the most recent failure to complete a CertificateRequest for this
+	// Certificate resource.
+	// If set, cert-manager will not re-request another Certificate until
+	// 1 hour has elapsed from this time.
 	// +optional
 	LastFailureTime *metav1.Time `json:"lastFailureTime,omitempty"`
 
+	// The time after which the certificate stored in the secret named
+	// by this resource in spec.secretName is valid.
+	// +optional
+	NotBefore *metav1.Time `json:"notBefore,omitempty"`
+
 	// The expiration time of the certificate stored in the secret named
-	// by this resource in spec.secretName.
+	// by this resource in `spec.secretName`.
 	// +optional
 	NotAfter *metav1.Time `json:"notAfter,omitempty"`
+
+	// RenewalTime is the time at which the certificate will be next
+	// renewed.
+	// If not set, no upcoming renewal is scheduled.
+	// +optional
+	RenewalTime *metav1.Time `json:"renewalTime,omitempty"`
 
 	// The current 'revision' of the certificate as issued.
 	//
@@ -311,10 +370,10 @@ type CertificateStatus struct {
 
 // CertificateCondition contains condition information for an Certificate.
 type CertificateCondition struct {
-	// Type of the condition, currently ('Ready').
+	// Type of the condition, known values are (`Ready`, `Issuing`).
 	Type CertificateConditionType `json:"type"`
 
-	// Status of the condition, one of ('True', 'False', 'Unknown').
+	// Status of the condition, one of (`True`, `False`, `Unknown`).
 	Status cmmeta.ConditionStatus `json:"status"`
 
 	// LastTransitionTime is the timestamp corresponding to the last status
@@ -331,6 +390,14 @@ type CertificateCondition struct {
 	// transition, complementing reason.
 	// +optional
 	Message string `json:"message,omitempty"`
+
+	// If set, this represents the .metadata.generation that the condition was
+	// set based upon.
+	// For instance, if .metadata.generation is currently 12, but the
+	// .status.condition[x].observedGeneration is 9, the condition is out of date
+	// with respect to the current state of the Certificate.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // CertificateConditionType represents an Certificate condition value.
@@ -363,3 +430,15 @@ const (
 	// It will be removed by the 'issuing' controller upon completing issuance.
 	CertificateConditionIssuing CertificateConditionType = "Issuing"
 )
+
+// CertificateSecretTemplate defines the default labels and annotations
+// to be copied to the Kubernetes Secret resource named in `CertificateSpec.secretName`.
+type CertificateSecretTemplate struct {
+	// Annotations is a key value map to be copied to the target Kubernetes Secret.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Labels is a key value map to be copied to the target Kubernetes Secret.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+}

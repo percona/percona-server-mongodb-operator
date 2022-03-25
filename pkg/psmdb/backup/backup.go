@@ -44,9 +44,9 @@ func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) Job {
 
 // HasActiveJobs returns true if there are running backups or restores
 // in given cluster and namestpace
-func HasActiveJobs(cl client.Client, cluster *api.PerconaServerMongoDB, current Job, allowLock ...LockHeaderPredicate) (bool, error) {
+func HasActiveJobs(ctx context.Context, cl client.Client, cluster *api.PerconaServerMongoDB, current Job, allowLock ...LockHeaderPredicate) (bool, error) {
 	bcps := &api.PerconaServerMongoDBBackupList{}
-	err := cl.List(context.TODO(),
+	err := cl.List(ctx,
 		bcps,
 		&client.ListOptions{
 			Namespace: cluster.Namespace,
@@ -68,7 +68,7 @@ func HasActiveJobs(cl client.Client, cluster *api.PerconaServerMongoDB, current 
 	}
 
 	rstrs := &api.PerconaServerMongoDBRestoreList{}
-	err = cl.List(context.TODO(),
+	err = cl.List(ctx,
 		rstrs,
 		&client.ListOptions{
 			Namespace: cluster.Namespace,
@@ -89,11 +89,11 @@ func HasActiveJobs(cl client.Client, cluster *api.PerconaServerMongoDB, current 
 		}
 	}
 
-	pbm, err := NewPBM(cl, cluster)
+	pbm, err := NewPBM(ctx, cl, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "getting pbm object")
 	}
-	defer pbm.Close()
+	defer pbm.Close(ctx)
 
 	allowLock = append(allowLock, NotJobLock(current))
 

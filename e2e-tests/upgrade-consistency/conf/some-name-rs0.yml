@@ -9,8 +9,6 @@ spec:
   allowUnsafeConfigurations: false
   backup:
     enabled: false
-    debug: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:0.4.0-backup
   mongod:
     net:
@@ -62,6 +60,25 @@ spec:
           requests:
             storage: 1Gi
     size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
   secrets:
-    key: some-key
     users: some-users

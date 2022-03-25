@@ -6,38 +6,6 @@ spec:
   image:
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
-  mongod:
-    net:
-      hostPort: 0
-      port: 27017
-    operationProfiling:
-      mode: slowOp
-      rateLimit: 1
-      slowOpThresholdMs: 100
-    security:
-      enableEncryption: true
-      redactClientLogData: false
-    setParameter:
-      ttlMonitorSleepSecs: 60
-      wiredTigerConcurrentReadTransactions: 128
-      wiredTigerConcurrentWriteTransactions: 128
-    storage:
-      engine: wiredTiger
-      inMemory:
-        engineConfig:
-          inMemorySizeRatio: 0.9
-      mmapv1:
-        nsSize: 16
-        smallfiles: false
-      wiredTiger:
-        collectionConfig:
-          blockCompressor: snappy
-        engineConfig:
-          cacheSizeRatio: 0.5
-          directoryForIndexes: false
-          journalCompressor: snappy
-        indexConfig:
-          prefixCompression: true
   replsets:
   - name: rs0
     serviceAccountName: percona-server-mongodb-operator-workload
@@ -58,13 +26,33 @@ spec:
           requests:
             storage: 1Gi
     size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        enableEncryption: true
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
     containerSecurityContext:
       privileged: false
     podSecurityContext:
       fsGroup: 1001
       supplementalGroups: [1001, 1003]
   secrets:
-    key: some-key
     users: some-users
   backup:
     containerSecurityContext:
@@ -75,8 +63,6 @@ spec:
       fsGroup: 1001
       supplementalGroups: [1001, 1002, 1003]
     enabled: true
-    debug: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.2.0-backup
     storages:
       minio:
@@ -86,6 +72,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
     tasks:
       - name: each-hour
         enabled: true

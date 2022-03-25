@@ -8,7 +8,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -20,15 +20,13 @@ const (
 	// MongodContainerDataDir is a mondo data path in container
 	MongodContainerDataDir = "/data/db"
 
-	sslDir               = "/etc/mongodb-ssl"
-	sslInternalDir       = "/etc/mongodb-ssl-internal"
-	mongodConfigDir      = "/etc/mongodb-config"
-	mongosConfigDir      = "/etc/mongos-config"
-	mongodSecretsDir     = "/etc/mongodb-secrets"
-	mongodRESTencryptDir = "/etc/mongodb-encryption"
-	EncryptionKeyName    = "encryption-key"
-	mongodPortName       = "mongodb"
-	mongosPortName       = "mongos"
+	sslDir           = "/etc/mongodb-ssl"
+	sslInternalDir   = "/etc/mongodb-ssl-internal"
+	mongodConfigDir  = "/etc/mongodb-config"
+	mongosConfigDir  = "/etc/mongos-config"
+	mongodSecretsDir = "/etc/mongodb-secrets"
+	mongodPortName   = "mongodb"
+	mongosPortName   = "mongos"
 )
 
 func InternalKey(cr *api.PerconaServerMongoDB) string {
@@ -88,7 +86,7 @@ func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
 }
 
 type HashableObject interface {
-	GetRuntimeObject() runtime.Object
+	GetRuntimeObject() client.Object
 	GetHashHex() (string, error)
 }
 
@@ -107,7 +105,7 @@ type hashableConfigMap struct {
 	corev1.ConfigMap
 }
 
-func (cm *hashableConfigMap) GetRuntimeObject() runtime.Object {
+func (cm *hashableConfigMap) GetRuntimeObject() client.Object {
 	return &cm.ConfigMap
 }
 
@@ -119,7 +117,7 @@ type hashableSecret struct {
 	corev1.Secret
 }
 
-func (s *hashableSecret) GetRuntimeObject() runtime.Object {
+func (s *hashableSecret) GetRuntimeObject() client.Object {
 	return &s.Secret
 }
 

@@ -114,6 +114,24 @@ func (p *PBM) PITRGetChunksSlice(rs string, from, to primitive.Timestamp) ([]PIT
 	return p.pitrGetChunksSlice(rs, q)
 }
 
+func (p *PBM) PITRFindChunk(rs string, ts primitive.Timestamp) (PITRChunk, error) {
+	q := bson.D{
+		{"rs", rs},
+		{"start_ts", bson.M{"$lte": ts}},
+		{"end_ts", bson.M{"$gte": ts}},
+	}
+	o := options.FindOne().SetSort(bson.D{{"start_ts", 1}})
+
+	cur := p.Conn.Database(DB).Collection(PITRChunksCollection).FindOne(p.ctx, q, o)
+	if err := cur.Err(); err != nil {
+		return PITRChunk{}, err
+	}
+
+	var chunk PITRChunk
+	err := cur.Decode(&chunk)
+	return chunk, err
+}
+
 // PITRGetChunksSliceUntil returns slice of PITR oplog chunks that starts up until timestamp (exclusively)
 func (p *PBM) PITRGetChunksSliceUntil(rs string, t primitive.Timestamp) ([]PITRChunk, error) {
 	q := bson.D{}
@@ -132,7 +150,6 @@ func (p *PBM) pitrGetChunksSlice(rs string, q bson.D) ([]PITRChunk, error) {
 		q,
 		options.Find().SetSort(bson.D{{"start_ts", 1}}),
 	)
-
 	if err != nil {
 		return nil, errors.Wrap(err, "get cursor")
 	}

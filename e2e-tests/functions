@@ -11,12 +11,14 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=$(curl https://raw.githubusercontent.com/Percona-Lab/percona-openshift/main/helm/pmm-server/Chart.yaml | awk '/^version/{print $NF}')
 IMAGE_PMM_SERVER_REPO="perconalab/pmm-server"
 IMAGE_PMM_SERVER_TAG="dev-latest"
+CERT_MANAGER_VER="1.6.1"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
 
 test_name=$(basename $test_dir)
 namespace="${test_name}-${RANDOM}"
+replica_namespace="${test_name}-replica-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 logs_dir=$(realpath $test_dir/../logs)
@@ -323,12 +325,15 @@ wait_restore_object() {
 deploy_operator() {
 	desc 'start operator'
 
-	if [ -f ${test_dir}/conf/crd.yaml ]; then
-		kubectl_bin apply -f ${test_dir}/conf/crd.yaml
+	local cr_file
+	if [ -f "${test_dir}/conf/crd.yaml" ]; then
+		cr_file="${test_dir}/conf/crd.yaml"
 	else
-		kubectl_bin apply -f ${src_dir}/deploy/crd.yaml
+		cr_file="${src_dir}/deploy/crd.yaml"
 	fi
-	kubectl_bin apply -f ${src_dir}/deploy/rbac.yaml
+
+	kubectl_bin apply --server-side --force-conflicts -f "${cr_file}"
+	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
 
 	cat ${src_dir}/deploy/operator.yaml \
 		| sed -e "s^image: .*^image: ${IMAGE}^" \
@@ -561,6 +566,7 @@ run_mongo() {
 
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+
 }
 
 run_mongos() {
@@ -591,7 +597,8 @@ run_script_mongos() {
 
 get_service_ip() {
 	local service=$1
-	if [ "$(kubectl_bin get psmdb/${service/-rs0*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
+	local server_type=${2:-rs0}
+	if [ "$(kubectl_bin get psmdb/${service/-$server_type*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
 		echo -n $service.${service/-rs0*/}-rs0
 		return
 	fi
@@ -705,24 +712,26 @@ run_pumba() {
 deploy_cert_manager() {
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-	kubectl_bin apply -f https://github.com/jetstack/cert-manager/releases/download/v1.5.2/cert-manager.yaml --validate=false || : 2>/dev/null
+	kubectl_bin apply -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
 	sleep 30
 }
 
 destroy() {
 	local namespace="$1"
+	local ignore_logs="${2:-false}"
 
-	kubectl_bin logs $(get_operator_pod) \
-		| grep -v 'level=info' \
-		| grep -v 'level=debug' \
-		| grep -v 'Getting tasks for pod' \
-		| grep -v 'Getting pods from source' \
-		| grep -v 'the object has been modified' \
-		| grep -v 'get backup status: Job.batch' \
-		| $sed -r 's/"ts":[0-9.]+//; s^limits-[0-9.]+/^^g' \
-		| sort -u \
-		| tee $tmp_dir/operator.log
-
+	if [[ ${ignore_logs} == "false" ]]; then
+		kubectl_bin logs $(get_operator_pod) \
+			| grep -v 'level=info' \
+			| grep -v 'level=debug' \
+			| grep -v 'Getting tasks for pod' \
+			| grep -v 'Getting pods from source' \
+			| grep -v 'the object has been modified' \
+			| grep -v 'get backup status: Job.batch' \
+			| $sed -r 's/"ts":[0-9.]+//; s^limits-[0-9.]+/^^g' \
+			| sort -u \
+			| tee $tmp_dir/operator.log
+	fi
 	#TODO: maybe will be enabled later
 	#diff $test_dir/compare/operator.log $tmp_dir/operator.log
 
@@ -730,7 +739,7 @@ destroy() {
 	kubectl_bin delete psmdb-backup --all || :
 	kubectl_bin delete psmdb-restore --all || :
 
-	kubectl_bin delete -f https://github.com/jetstack/cert-manager/releases/download/v1.5.2/cert-manager.yaml 2>/dev/null || :
+	kubectl_bin delete -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" 2>/dev/null || :
 	if [ -n "$OPENSHIFT" ]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &
 	else
@@ -900,9 +909,13 @@ kubectl_bin() {
 	local exit_status=0
 	local timeout=4
 	for i in $(seq 0 2); do
+		set +e
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
+		set -e
 		if [[ ${exit_status} != 0 ]]; then
+			cat "$LAST_OUT"
+			cat "$LAST_ERR" >&2
 			sleep "$((timeout * i))"
 		else
 			break

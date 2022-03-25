@@ -5,13 +5,6 @@ metadata:
 spec:
   #platform: openshift
   image:
-  mongod:
-    operationProfiling:
-      mode: slowOp
-      slowOpThresholdMs: 100
-      rateLimit: 100
-    security:
-      enableEncryption: true
   replsets:
   - name: rs0
     affinity:
@@ -22,6 +15,13 @@ spec:
           requests:
             storage: 1Gi
     size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+        rateLimit: 100
+      security:
+        enableEncryption: true
 
   sharding:
     enabled: true

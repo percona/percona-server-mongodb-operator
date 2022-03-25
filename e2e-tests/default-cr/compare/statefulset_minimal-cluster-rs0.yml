@@ -64,8 +64,6 @@ spec:
             - --clusterAuthMode=keyFile
             - --keyFile=/etc/mongodb-secrets/mongodb-key
             - --shardsvr
-            - --slowms=0
-            - --profile=1
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
