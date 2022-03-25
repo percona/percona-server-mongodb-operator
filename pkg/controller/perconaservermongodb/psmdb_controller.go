@@ -537,7 +537,7 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServer
 	return nil
 }
 
-// return whether need to downscale
+// safeDownscale ensures replica set pods downscaled one by one and returns true if a downscale is in progress
 func (r *ReconcilePerconaServerMongoDB) safeDownscale(cr *api.PerconaServerMongoDB) (bool, error) {
 	isDownscale := false
 	for _, rs := range cr.Spec.Replsets {
@@ -693,6 +693,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(cr *api.PerconaServerMo
 					podName := strings.TrimPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-")
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
+						log.Info("remove orphan pvc", "pvc", pvc.Name)
 						err := r.client.Delete(context.TODO(), &pvc)
 						if err != nil {
 							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
