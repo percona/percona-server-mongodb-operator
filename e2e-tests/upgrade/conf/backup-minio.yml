@@ -3,5 +3,6 @@ kind: PerconaServerMongoDBBackup
 metadata:
   name: backup-minio
 spec:
-  psmdbCluster: upgrade
+  clusterName: upgrade
+  psmdbCluster: upgrade # TODO: remove after 1.12 release
   storageName: minio
