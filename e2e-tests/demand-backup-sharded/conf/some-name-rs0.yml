@@ -8,8 +8,6 @@ spec:
   imagePullPolicy: Always
   backup:
     enabled: true
-    debug: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
       aws-s3:
@@ -19,6 +17,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           prefix: psmdb
+          insecureSkipTLSVerify: false
       minio:
         type: s3
         s3:
@@ -26,6 +25,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
       gcp-cs:
         type: s3
         s3:
@@ -34,6 +34,7 @@ spec:
           bucket: operator-testing
           prefix: psmdb
           endpointUrl: https://storage.googleapis.com
+          insecureSkipTLSVerify: false
       azure-blob:
         type: azure
         azure:
@@ -71,12 +72,7 @@ spec:
         replication:
           localPingThresholdMs: 15
       expose:
-        enabled: false
         exposeType: ClusterIP
-      operationProfiling:
-        mode: slowOp
-        slowOpThresholdMs: 100
-        rateLimit: 100
       sidecars:
       - image: busybox
         command: ["/bin/sh"]
@@ -209,5 +205,4 @@ spec:
       args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
       name: rs-sidecar-1
   secrets:
-    key: some-key
     users: some-users
