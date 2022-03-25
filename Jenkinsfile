@@ -312,7 +312,7 @@ pipeline {
                         runTest('users', 'basic')
                         runTest('data-sharded', 'basic')
                         runTest('non-voting', 'basic')
-                        runTest('demand-backup-eks-credentials')
+                        runTest('demand-backup-eks-credentials', 'basic')
                         ShutdownCluster('basic')
                     }
                 }
