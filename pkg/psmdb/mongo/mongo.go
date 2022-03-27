@@ -82,7 +82,7 @@ func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 	return *resp.Config, nil
 }
 
-func CreateRole(ctx context.Context, client *mongo.Client, role string, privileges []interface{}, roles []interface{}) error {
+func CreateRole(ctx context.Context, client *mongo.Client, role string, privileges []RolePrivilege, roles []interface{}) error {
 	resp := OKResponse{}
 
 	privilegesArr := bson.A{}
@@ -118,7 +118,67 @@ func CreateRole(ctx context.Context, client *mongo.Client, role string, privileg
 	return nil
 }
 
-func CreateUser(ctx context.Context, client *mongo.Client, user, pwd string, roles ...interface{}) error {
+func UpdateRole(ctx context.Context, client *mongo.Client, role string, privileges []RolePrivilege, roles []interface{}) error {
+	resp := OKResponse{}
+
+	privilegesArr := bson.A{}
+	for _, p := range privileges {
+		privilegesArr = append(privilegesArr, p)
+	}
+
+	rolesArr := bson.A{}
+	for _, r := range roles {
+		rolesArr = append(rolesArr, r)
+	}
+
+	m := bson.D{
+		{Key: "updateRole", Value: role},
+		{Key: "privileges", Value: privilegesArr},
+		{Key: "roles", Value: rolesArr},
+	}
+
+	res := client.Database("admin").RunCommand(ctx, m)
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "failed to create role")
+	}
+
+	err := res.Decode(&resp)
+	if err != nil {
+		return errors.Wrap(err, "failed to decode response")
+	}
+
+	if resp.OK != 1 {
+		return errors.Errorf("mongo says: %s", resp.Errmsg)
+	}
+
+	return nil
+}
+
+func GetRole(ctx context.Context, client *mongo.Client, role string) (*Role, error) {
+	resp := RoleInfo{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{
+		{Key: "rolesInfo", Value: role},
+		{Key: "showPrivileges", Value: true},
+	})
+	if res.Err() != nil {
+		return nil, errors.Wrap(res.Err(), "run command")
+	}
+
+	err := res.Decode(&resp)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to decode response")
+	}
+	if resp.OK != 1 {
+		return nil, errors.Errorf("mongo says: %s", resp.Errmsg)
+	}
+	if len(resp.Roles) == 0 {
+		return nil, nil
+	}
+	return &resp.Roles[0], nil
+}
+
+func CreateUser(ctx context.Context, client *mongo.Client, user, pwd string, roles ...map[string]interface{}) error {
 	resp := OKResponse{}
 
 	res := client.Database("admin").RunCommand(ctx, bson.D{
@@ -403,6 +463,30 @@ func IsMaster(ctx context.Context, client *mongo.Client) (*IsMasterResp, error) 
 	}
 
 	return &resp, nil
+}
+
+func GetUserInfo(ctx context.Context, client *mongo.Client, username string) (*User, error) {
+	resp := UsersInfo{}
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "usersInfo", Value: username}})
+	if res.Err() != nil {
+		return nil, errors.Wrap(res.Err(), "run command")
+	}
+
+	err := res.Decode(&resp)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to decode response")
+	}
+	if resp.OK != 1 {
+		return nil, errors.Errorf("mongo says: %s", resp.Errmsg)
+	}
+	if len(resp.Users) == 0 {
+		return nil, nil
+	}
+	return &resp.Users[0], nil
+}
+
+func UpdateUserRoles(ctx context.Context, client *mongo.Client, username string, roles []map[string]interface{}) error {
+	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: username}, {Key: "roles", Value: roles}}).Err()
 }
 
 // UpdateUserPass updates user's password
