@@ -2,8 +2,9 @@ package perconaservermongodb
 
 import (
 	"context"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"strconv"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -59,6 +60,10 @@ func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !mcs.IsAvailable() {
+		return nil
+	}
+
 	ls := clusterLabels(cr)
 
 	seList := mcs.ServiceExportList()
@@ -96,12 +101,8 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 
 	svcNames := make(map[string]struct{}, len(svcList.Items))
 	for _, svc := range svcList.Items {
-		se := mcs.ServiceExport(cr.Namespace, svc.Name, ls)
-		if err = setControllerReference(cr, se, r.scheme); err != nil {
-			return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
-		}
-		if err := r.createOrUpdate(ctx, se); err != nil {
-			return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
+		if err := r.exportService(ctx, cr, &svc); err != nil {
+			return errors.Wrapf(err, "export service %s", svc.Name)
 		}
 		svcNames[svc.Name] = struct{}{}
 	}

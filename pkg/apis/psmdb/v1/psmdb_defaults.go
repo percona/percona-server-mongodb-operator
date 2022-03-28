@@ -2,7 +2,6 @@ package v1
 
 import (
 	"fmt"
-	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"strconv"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
