@@ -194,7 +194,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 		Data: data,
 		Type: corev1.SecretTypeTLS,
 	}
-	secretUpdated, err := r.createOrUpdateSSLSecret(ctx, &secretObj, certificateDNSNames)
+	err = r.createOrUpdateSSLSecret(ctx, &secretObj, certificateDNSNames)
 	if err != nil {
 		return errors.Wrap(err, "create TLS secret")
 	}
@@ -215,39 +215,37 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 		Data: data,
 		Type: corev1.SecretTypeTLS,
 	}
-	secretInternalUpdated, err := r.createOrUpdateSSLSecret(ctx, &secretObjInternal, certificateDNSNames)
+	err = r.createOrUpdateSSLSecret(ctx, &secretObjInternal, certificateDNSNames)
 	if err != nil {
 		return errors.Wrap(err, "create TLS internal secret")
-	}
-	if secretUpdated || secretInternalUpdated {
-		return errors.New("ssl secrets updated")
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) createOrUpdateSSLSecret(ctx context.Context, secret *corev1.Secret, DNSNames []string) (updated bool, err error) {
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateSSLSecret(ctx context.Context, secret *corev1.Secret, DNSNames []string) error {
 	oldSecret := new(corev1.Secret)
 
-	err = r.client.Get(ctx, types.NamespacedName{
+	err := r.client.Get(ctx, types.NamespacedName{
 		Name:      secret.GetName(),
 		Namespace: secret.GetNamespace(),
 	}, oldSecret)
 
 	if err != nil && !k8serr.IsNotFound(err) {
-		return false, errors.Wrap(err, "get object")
+		return errors.Wrap(err, "get object")
 	}
 
 	if k8serr.IsNotFound(err) {
-		return false, r.client.Create(ctx, secret)
+		return r.client.Create(ctx, secret)
 	}
 
 	cert, err := tls.ParseTLSCert(oldSecret.Data["tls.crt"])
 	if err != nil {
-		return false, errors.Wrap(err, "parse tls cert")
+		return errors.Wrap(err, "parse tls cert")
 	}
 
 	oldDNSNames := cert.DNSNames
 
+	updated := false
 	if len(oldDNSNames) == len(DNSNames) {
 		for _, oldName := range oldDNSNames {
 			found := false
@@ -267,10 +265,10 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSSLSecret(ctx context.Cont
 	}
 
 	if updated {
-		return updated, r.client.Update(ctx, secret)
+		return r.client.Update(ctx, secret)
 	}
 
-	return
+	return nil
 }
 
 func getShardingSans(cr *api.PerconaServerMongoDB) []string {
