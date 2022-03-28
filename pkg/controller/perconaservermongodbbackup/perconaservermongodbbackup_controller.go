@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -138,6 +137,15 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.GetClusterName())
 	}
 
+	// TODO: Remove after 1.15
+	if cluster.CompareVersion("1.12.0") >= 0 && cr.Spec.ClusterName == "" {
+		cr.Spec.ClusterName = cr.Spec.PSMDBCluster
+		cr.Spec.PSMDBCluster = ""
+		if err := r.client.Update(ctx, cr); err != nil {
+			return rr, errors.Wrap(err, "failed to update clusterName")
+		}
+	}
+
 	svr, err := version.Server()
 	if err != nil {
 		return rr, errors.Wrapf(err, "fetch server version")
@@ -239,7 +247,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		c := &api.PerconaServerMongoDBBackup{}
+		c := &psmdbv1.PerconaServerMongoDBBackup{}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {

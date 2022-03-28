@@ -103,7 +103,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateInit, errors.Wrap(err, "create system users")
 		}
 
-		cr.Status.Replsets[replset.Name].Initialized = true
+		rs := cr.Status.Replsets[replset.Name]
+		rs.Initialized = true
+		cr.Status.Replsets[replset.Name] = rs
+
 		cr.Status.AddCondition(api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.AppStateInit,
@@ -122,7 +125,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	// this can happen if cluster is initialized but status update failed
 	if !cr.Status.Replsets[replset.Name].Initialized {
-		cr.Status.Replsets[replset.Name].Initialized = true
+		rs := cr.Status.Replsets[replset.Name]
+		rs.Initialized = true
+		cr.Status.Replsets[replset.Name] = rs
+
 		cr.Status.AddCondition(api.ClusterCondition{
 			Status:             api.ConditionTrue,
 			Type:               api.AppStateInit,
@@ -175,8 +181,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			log.Info("added to shard", "rs", replset.Name)
 		}
 
+		rs := cr.Status.Replsets[replset.Name]
 		t := true
-		cr.Status.Replsets[replset.Name].AddedAsShard = &t
+		rs.AddedAsShard = &t
+		cr.Status.Replsets[replset.Name] = rs
+
 	}
 
 	cnf, err := mongo.ReadConfig(ctx, cli)

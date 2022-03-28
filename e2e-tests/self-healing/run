@@ -13,138 +13,138 @@ if version_gt "1.19"; then
 fi
 
 setup_cluster() {
-    # create cluster
-    kubectl_bin apply \
-        -f $conf_dir/secrets.yml \
-        -f $conf_dir/pumba.yml \
-        -f $conf_dir/client.yml
+	# create cluster
+	kubectl_bin apply \
+		-f $conf_dir/secrets.yml \
+		-f $conf_dir/pumba.yml \
+		-f $conf_dir/client.yml
 
-    apply_cluster $conf_dir/$cluster.yml
+	apply_cluster $conf_dir/$cluster.yml
 
-    kubectl_bin patch psmdb some-name --type='merge' -p '{"spec":{"backup":{"enabled":true}}}'
+	kubectl_bin patch psmdb some-name --type='merge' -p '{"spec":{"backup":{"enabled":true}}}'
 
-    # check if all 3 Pods started
-    wait_for_running $cluster 3
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
 
-    desc 'check data consistency: write data, read from all'
-    run_mongo \
-        'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-        "userAdmin:userAdmin123456@$cluster.$namespace"
-    sleep 2
-    run_mongo \
-        'use myApp\n db.test.insert({ x: 100500 })' \
-        "myApp:myPass@$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+	desc 'check data consistency: write data, read from all'
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster.$namespace"
+	sleep 2
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 }
 
 pumba_pod() {
-    local action=$1
-    local pod=$2
+	local action=$1
+	local pod=$2
 
-    # run chaos for Pod
-    run_pumba $action "re2:$pod"
-    sleep 2
+	# run chaos for Pod
+	run_pumba $action "re2:$pod"
+	sleep 2
 
-    # check if all 3 Pods started
-    wait_for_running $cluster 3
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
 
-    desc 'check data consistency for chaosed Pod'
-    compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
+	desc 'check data consistency for chaosed Pod'
+	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
 }
 
 pause_pod() {
-    local pod=$1
+	local pod=$1
 
-    # run chaos for Pod
-    kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info pause --duration 1m "re2:$pod" &
-    pid=$!
-    sleep 10
+	# run chaos for Pod
+	kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info pause --duration 1m "re2:$pod" &
+	pid=$!
+	sleep 10
 
-    # write data
-    run_mongo \
-        'use myApp\n db.test.insert({ x: 100501 })' \
-        "myApp:myPass@$cluster.$namespace"
+	# write data
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"myApp:myPass@$cluster.$namespace"
 
-    # wait for unpause
-    wait $pid
+	# wait for unpause
+	wait $pid
 
-    # check if all 3 Pods started
-    wait_for_running $cluster 3
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
 
-    desc 'check data consistency for chaosed Pod'
-    compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
+	desc 'check data consistency for chaosed Pod'
+	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
 }
 
 netem_pod() {
-    local pod=$1
+	local pod=$1
 
-    # run chaos for Pod
-    kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info netem --tc-image 'gaiadocker/iproute2' --duration 1m loss --percent 100 --correlation 100 "re2:$pod" &
-    pid=$!
-    sleep 10
+	# run chaos for Pod
+	kubectl_bin exec -it "$(get_pumba)" -- /pumba -l info netem --tc-image 'gaiadocker/iproute2' --duration 1m loss --percent 100 --correlation 100 "re2:$pod" &
+	pid=$!
+	sleep 10
 
-    # write data
-    run_mongo \
-        'use myApp\n db.test.insert({ x: 100502 })' \
-        "myApp:myPass@$cluster.$namespace"
+	# write data
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100502 })' \
+		"myApp:myPass@$cluster.$namespace"
 
-    # wait for unpause
-    wait $pid || :
+	# wait for unpause
+	wait $pid || :
 
-    # check if all 3 Pods started
-    wait_for_running $cluster 3
+	# check if all 3 Pods started
+	wait_for_running $cluster 3
 
-    desc 'check data consistency for chaosed Pod'
-    compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-3rd"
+	desc 'check data consistency for chaosed Pod'
+	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-3rd"
 }
 
 recreate() {
-    # delete cluster
-    kubectl_bin delete \
-        -f $conf_dir/$cluster.yml
-    wait_for_delete pod/$cluster-2
-    wait_for_delete pod/$cluster-1
-    wait_for_delete pod/$cluster-0
+	# delete cluster
+	kubectl_bin delete \
+		-f $conf_dir/$cluster.yml
+	wait_for_delete pod/$cluster-2
+	wait_for_delete pod/$cluster-1
+	wait_for_delete pod/$cluster-0
 
-    # recreate cluster
-    apply_cluster $conf_dir/$cluster.yml
+	# recreate cluster
+	apply_cluster $conf_dir/$cluster.yml
 
-    wait_for_running $cluster 3
-    sleep 240
+	wait_for_running $cluster 3
+	sleep 240
 
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-    compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 }
 
 main() {
-    create_namespace $namespace
-    deploy_operator
+	create_namespace $namespace
+	deploy_operator
 
-    desc 'start cluster'
-    setup_cluster
+	desc 'start cluster'
+	setup_cluster
 
-    desc 'recreate cluster'
-    recreate
+	desc 'recreate cluster'
+	recreate
 
-    desc 'kill node-0 pod'
-    pumba_pod kill "$cluster-0"
+	desc 'kill node-0 pod'
+	pumba_pod kill "$cluster-0"
 
-    desc 'rm node-0 pod'
-    pumba_pod rm "$cluster-0"
+	desc 'rm node-0 pod'
+	pumba_pod rm "$cluster-0"
 
-    desc 'stop node-0 pod'
-    pumba_pod stop "$cluster-0"
+	desc 'stop node-0 pod'
+	pumba_pod stop "$cluster-0"
 
-    desc 'pause node-0 pod'
-    pause_pod "$cluster-0"
+	desc 'pause node-0 pod'
+	pause_pod "$cluster-0"
 
-    desc 'emulate bad network node-0 pod'
-    netem_pod "$cluster-0"
+	desc 'emulate bad network node-0 pod'
+	netem_pod "$cluster-0"
 
-    destroy $namespace
+	destroy $namespace
 }
 
 main
