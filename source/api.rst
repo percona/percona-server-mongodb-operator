@@ -39,9 +39,9 @@ Prerequisites
 
 1. Create the namespace name you will use, if not exist:
 
-   .. code-block:: yaml
+   .. code-block:: bash
 
-      kubectl create namespace my-namespace-name
+      $ kubectl create namespace my-namespace-name
 
    Trying to create an already-existing namespace will show you a
    self-explanatory error message. Also, you can use the ``defalut`` namespace.
@@ -68,7 +68,7 @@ Create new Percona Server for MongoDB cluster
 
 **Description:**
 
-.. code-block:: bash
+.. code-block:: text
 
    The command to create a new Percona Server for MongoDB cluster
 
@@ -76,17 +76,17 @@ Create new Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   kubectl apply -f percona-server-mongodb-operator/deploy/cr.yaml
+   $ kubectl apply -f percona-server-mongodb-operator/deploy/cr.yaml
 
 **URL:**
 
-.. code-block:: bash
+.. code-block:: text
 
    https://$API_SERVER/apis/psmdb.percona.com/v{{{apiversion}}}/namespaces/default/perconaservermongodbs
 
 **Authentication:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Authorization: Bearer $KUBE_TOKEN
 
@@ -95,7 +95,7 @@ Create new Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v{{{apiversion}}}/namespaces/default/perconaservermongodbs" \
+   $ curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v{{{apiversion}}}/namespaces/default/perconaservermongodbs" \
                -H "Content-Type: application/json" \
                -H "Accept: application/json" \
                -H "Authorization: Bearer $KUBE_TOKEN" \
@@ -176,7 +176,7 @@ List Percona Server for MongoDB clusters
 
 **Description:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Lists all Percona Server for MongoDB clusters that exist in your kubernetes cluster
 
@@ -184,17 +184,17 @@ List Percona Server for MongoDB clusters
 
 .. code-block:: bash
 
-   kubectl get psmdb
+   $ kubectl get psmdb
 
 **URL:**
 
-.. code-block:: bash
+.. code-block:: text
 
    https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs?limit=500
 
 **Authentication:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Authorization: Bearer $KUBE_TOKEN
 
@@ -202,13 +202,13 @@ List Percona Server for MongoDB clusters
 
 .. code-block:: bash
 
-   curl -k -v -XGET "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs?limit=500" \
+   $ curl -k -v -XGET "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs?limit=500" \
                -H "Accept: application/json;as=Table;v=v1;g=meta.k8s.io,application/json;as=Table;v=v1beta1;g=meta.k8s.io,application/json" \
                -H "Authorization: Bearer $KUBE_TOKEN"
 
 **Request Body:**
 
-.. code-block:: bash
+.. code-block:: text
 
    None
 
@@ -227,7 +227,7 @@ Get status of Percona Server for MongoDB cluster
 
 **Description:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Gets all information about specified Percona Server for MongoDB cluster
 
@@ -235,17 +235,17 @@ Get status of Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   kubectl get psmdb/my-cluster-name -o json
+   $ kubectl get psmdb/my-cluster-name -o json
 
 **URL:**
 
-.. code-block:: bash
+.. code-block:: text
 
    https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name
 
 **Authentication:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Authorization: Bearer $KUBE_TOKEN
 
@@ -253,13 +253,13 @@ Get status of Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XGET "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
+   $ curl -k -v -XGET "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
                -H "Accept: application/json" \
                -H "Authorization: Bearer $KUBE_TOKEN"
 
 **Request Body:**
 
-.. code-block:: bash
+.. code-block:: text
 
    None
 
@@ -278,7 +278,7 @@ Scale up/down Percona Server for MongoDB cluster
 
 **Description:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Increase or decrease the size of the Percona Server for MongoDB cluster nodes to fit the current high availability needs
 
@@ -286,19 +286,19 @@ Scale up/down Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   kubectl patch psmdb my-cluster-name --type=merge --patch '{
+   $ kubectl patch psmdb my-cluster-name --type=merge --patch '{
    "spec": {"replsets":{ "size": "5" }
    }}'
 
 **URL:**
 
-.. code-block:: bash
+.. code-block:: text
 
    https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name
 
 **Authentication:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Authorization: Bearer $KUBE_TOKEN
 
@@ -306,7 +306,7 @@ Scale up/down Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPATCH "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
+   $ curl -k -v -XPATCH "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
                -H "Authorization: Bearer $KUBE_TOKEN" \
                -H "Content-Type: application/merge-patch+json" 
                -H "Accept: application/json" \
@@ -347,7 +347,7 @@ Update Percona Server for MongoDB cluster image
 
 **Description:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Change the image of Percona Server for MongoDB containers inside the cluster
 
@@ -355,19 +355,19 @@ Update Percona Server for MongoDB cluster image
 
 .. code-block:: bash
 
-   kubectl patch psmdb my-cluster-name --type=merge --patch '{  
+   $ kubectl patch psmdb my-cluster-name --type=merge --patch '{  
    "spec": {"psmdb":{ "image": "percona/percona-server-mongodb-operator:1.4.0-mongod4.2" }  
    }}'
 
 **URL:**
 
-.. code-block:: bash
+.. code-block:: text
 
    https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name
 
 **Authentication:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Authorization: Bearer $KUBE_TOKEN
 
@@ -376,7 +376,7 @@ Update Percona Server for MongoDB cluster image
 
 .. code-block:: bash
 
-   curl -k -v -XPATCH "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
+   $ curl -k -v -XPATCH "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbs/my-cluster-name" \
                -H "Authorization: Bearer $KUBE_TOKEN" \
                -H "Accept: application/json" \
                -H "Content-Type: application/merge-patch+json" 
@@ -417,7 +417,7 @@ Backup Percona Server for MongoDB cluster
 
 **Description:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Takes a backup of the Percona Server for MongoDB cluster containers data to be able to recover from disasters or make a roll-back later
 
@@ -426,19 +426,19 @@ Backup Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   kubectl apply -f percona-server-mongodb-operator/deploy/backup/backup.yaml
+   $ kubectl apply -f percona-server-mongodb-operator/deploy/backup/backup.yaml
 
 
 **URL:**
 
-.. code-block:: bash
+.. code-block:: text
 
    https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbbackups
 
 
 **Authentication:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Authorization: Bearer $KUBE_TOKEN
 
@@ -447,7 +447,7 @@ Backup Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbbackups" \
+   $ curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbbackups" \
                -H "Accept: application/json" \
                -H "Content-Type: application/json" \
                -d "@backup.json" -H "Authorization: Bearer $KUBE_TOKEN"
@@ -488,7 +488,7 @@ Restore Percona Server for MongoDB cluster
 
 **Description:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Restores Percona Server for MongoDB cluster data to an earlier version to recover from a problem or to make a roll-back
 
@@ -497,18 +497,18 @@ Restore Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   kubectl apply -f percona-server-mongodb-operator/deploy/backup/restore.yaml
+   $ kubectl apply -f percona-server-mongodb-operator/deploy/backup/restore.yaml
 
 
 **URL:**
 
-.. code-block:: bash
+.. code-block:: text
 
    https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbrestores
 
 **Authentication:**
 
-.. code-block:: bash
+.. code-block:: text
 
    Authorization: Bearer $KUBE_TOKEN
 
@@ -517,7 +517,7 @@ Restore Percona Server for MongoDB cluster
 
 .. code-block:: bash
 
-   curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbrestores" \
+   $ curl -k -v -XPOST "https://$API_SERVER/apis/psmdb.percona.com/v1/namespaces/default/perconaservermongodbrestores" \
                -H "Accept: application/json" \
                -H "Content-Type: application/json" \
                -d "@restore.json" \

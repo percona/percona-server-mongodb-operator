@@ -120,6 +120,6 @@ the following steps:
 
    .. code:: bash
 
-      kubectl delete pod/my-cluster-name-rs0-2 pvc/mongod-data-my-cluster-name-rs0-2
+      $ kubectl delete pod/my-cluster-name-rs0-2 pvc/mongod-data-my-cluster-name-rs0-2
 
 The Operator will automatically recreate the needed Pod and PVC after deletion.

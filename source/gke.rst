@@ -77,19 +77,19 @@ Installing the Operator
 
    .. code:: bash
 
-      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
+      $ git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
 
    After the repository is downloaded, change the directory to run the rest of the commands in this document:
 
    .. code:: bash
 
-      cd percona-server-mongodb-operator
+      $ cd percona-server-mongodb-operator
 
 4. Deploy the Operator with the following command:
 
    .. code:: bash
 
-      kubectl apply -f deploy/bundle.yaml
+      $ kubectl apply -f deploy/bundle.yaml
 
    The following confirmation is returned:
 
@@ -154,10 +154,10 @@ If all nodes are up and running, you can try to connect to the cluster.
 First of all, run a container with a MongoDB client and connect its console
 output to your terminal. The following command will do this, naming the new Pod
 ``percona-client``:
-   
+
 .. code:: bash
 
-   kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
+   $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
 
 Executing it may require some time to deploy the correspondent Pod. Now run
 ``mongo`` tool in the percona-client command shell using the login (which is
@@ -165,7 +165,7 @@ Executing it may require some time to deploy the correspondent Pod. Now run
 
 .. code:: bash
 
-   mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
+   $ mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
 
 Troubleshooting
 ===============
@@ -174,7 +174,7 @@ If ``kubectl get pods`` command had shown some errors, you can examine the probl
 
 .. code:: bash
 
-   kubectl describe pod my-cluster-name-rs0-2
+   $ kubectl describe pod my-cluster-name-rs0-2
 
 Review the detailed information for ``Warning`` statements and then correct the configuration. An example of a warning is as follows:
 
@@ -199,7 +199,7 @@ You can clean up the cluster with the ``gcloud`` command as follows:
 
 .. code:: bash
 
-   gcloud container clusters delete <cluster name>
+   $ gcloud container clusters delete <cluster name>
 
 The return statement requests your confirmation of the deletion. Type ``y`` to confirm.
 

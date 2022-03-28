@@ -98,19 +98,19 @@ Install the Operator
 
    .. code:: bash
 
-      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
+      $ git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
 
    After the repository is downloaded, change the directory to run the rest of the commands in this document:
 
    .. code:: bash
 
-      cd percona-server-mongodb-operator
+      $ cd percona-server-mongodb-operator
 
 3. Deploy the Operator with the following command:
 
    .. code:: bash
 
-      kubectl apply -f deploy/bundle.yaml
+      $ kubectl apply -f deploy/bundle.yaml
 
    The following confirmation is returned:
 
@@ -135,7 +135,7 @@ Install the Operator
 
    .. code:: bash
 
-      kubectl get pods
+      $ kubectl get pods
 
    The result should look as follows:
 
@@ -164,7 +164,7 @@ Install the Operator
    
    .. code:: bash
 
-      kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
+      $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
    
    Executing it may require some time to deploy the correspondent Pod. Now run
    ``mongo`` tool in the percona-client command shell using the login (which is
@@ -172,4 +172,4 @@ Install the Operator
    
    .. code:: bash
 
-      mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
+      $ mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
