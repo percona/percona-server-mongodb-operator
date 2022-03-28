@@ -441,7 +441,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
 		}
 
-		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
+		err := replset.SetDefauts(platform, cr, log)
 		if err != nil {
 			return err
 		}
@@ -531,7 +531,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 }
 
 // SetDefauts set default options for the replset
-func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log logr.Logger) error {
+func (rs *ReplsetSpec) SetDefauts(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
 	if rs.VolumeSpec == nil {
 		return fmt.Errorf("replset %s: volumeSpec should be specified", rs.Name)
 	}
@@ -551,8 +551,8 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		rs.Arbiter.MultiAZ.reconcileOpts()
 	}
 
-	if !unsafe {
-		rs.setSafeDefauts(log)
+	if !cr.Spec.UnsafeConf && cr.DeletionTimestamp == nil {
+		rs.setSafeDefaults(log)
 	}
 
 	if err := rs.Configuration.SetDefaults(); err != nil {
@@ -694,7 +694,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	return nil
 }
 
-func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
+func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 	loginfo := func(msg string, args ...interface{}) {
 		log.Info(msg, args...)
 		log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
