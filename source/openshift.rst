@@ -56,9 +56,11 @@ Install the Operator via the command-line interface
 
    This step should be done only once; it does not need to be repeated with other deployments.
 
+   `Apply it <https://kubernetes.io/docs/reference/using-api/server-side-apply/>`_ as follows:
+
    .. code:: bash
 
-      $ oc apply -f deploy/crd.yaml
+      $ oc apply -f deploy/crd.yaml --server-side
 
    .. note::
 

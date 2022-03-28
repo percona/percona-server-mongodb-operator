@@ -32,7 +32,7 @@ Semi-automatic upgrade
 
    .. code:: bash
 
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml --server-side
       $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
 
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
@@ -81,7 +81,7 @@ Manual upgrade
 
    .. code:: bash
 
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml
+      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/crd.yaml --server-side
       $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/rbac.yaml
 
 #. Edit the ``deploy/cr.yaml`` file, setting ``updateStrategy`` key to
