@@ -238,36 +238,6 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSSLSecret(ctx context.Cont
 		return r.client.Create(ctx, secret)
 	}
 
-	cert, err := tls.ParseTLSCert(oldSecret.Data["tls.crt"])
-	if err != nil {
-		return errors.Wrap(err, "parse tls cert")
-	}
-
-	oldDNSNames := cert.DNSNames
-
-	updated := false
-	if len(oldDNSNames) == len(DNSNames) {
-		for _, oldName := range oldDNSNames {
-			found := false
-			for _, name := range DNSNames {
-				if oldName == name {
-					found = true
-					break
-				}
-			}
-			if !found {
-				updated = true
-				break
-			}
-		}
-	} else {
-		updated = true
-	}
-
-	if updated {
-		return r.client.Update(ctx, secret)
-	}
-
 	return nil
 }
 
@@ -285,14 +255,10 @@ func getShardingSans(cr *api.PerconaServerMongoDB) []string {
 		"*." + cr.Name + "-" + api.ConfigReplSetName,
 		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace,
 		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-	}
-	if cr.Spec.MultiCluster.Enabled {
-		sans = append(sans, []string{
-			cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-			"*." + cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-			cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-			"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-		}...)
+		cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		"*." + cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 	}
 	return sans
 }
@@ -305,12 +271,8 @@ func getCertificateSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) 
 		"*." + cr.Name + "-" + replset.Name,
 		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace,
 		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-	}
-	if cr.Spec.MultiCluster.Enabled {
-		sans = append(sans, []string{
-			cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-			"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-		}...)
+		cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 	}
 	return sans
 }

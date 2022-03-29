@@ -531,13 +531,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		return errors.New("SmartUpdate is not allowed on unmanaged clusters, set updateStrategy to RollingUpdate or OnDelete")
 	}
 
-	if cr.Spec.MultiCluster.Enabled {
-		if !mcs.IsAvailable() {
-			return errors.New("MCS is not available on this cluster")
-		}
-		if len(cr.Spec.MultiCluster.DNSSuffix) == 0 {
-			cr.Spec.MultiCluster.DNSSuffix = MultiClusterDefaultDNSSuffix
-		}
+	if len(cr.Spec.MultiCluster.DNSSuffix) == 0 {
+		cr.Spec.MultiCluster.DNSSuffix = MultiClusterDefaultDNSSuffix
+	}
+
+	if !mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled {
+		return errors.New("MCS is not available on this cluster")
 	}
 
 	return nil

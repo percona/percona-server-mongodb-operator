@@ -43,6 +43,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
+		log.Info("Waiting for the pods", "replsetSize", replsetSize, "pods", len(pods.Items))
 		return api.AppStateInit, nil
 	}
 
@@ -72,32 +73,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	if err != nil {
 		if cr.Status.Replsets[replset.Name].Initialized {
 			return api.AppStateError, errors.Wrap(err, "dial:")
-		}
-
-		if cr.Spec.MultiCluster.Enabled {
-			siList := &mcsv1alpha1.ServiceImportList{}
-			err = r.client.List(ctx,
-				siList,
-				&client.ListOptions{
-					Namespace: cr.Namespace,
-				},
-			)
-			if err != nil && !k8serr.IsNotFound(err) {
-				return api.AppStateError, errors.Wrap(err, "failed to retrieve service import list")
-			}
-
-			imported := false
-			for _, si := range siList.Items {
-				for _, pod := range pods.Items {
-					if si.Name == pod.Name {
-						imported = true
-						break
-					}
-				}
-			}
-			if !imported {
-				return api.AppStateInit, nil
-			}
 		}
 
 		err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
