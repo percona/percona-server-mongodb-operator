@@ -9,7 +9,7 @@ import (
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
+	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
@@ -45,13 +46,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateInit, nil
 	}
 
-	if cr.Spec.MultiCluster.Enabled {
-		for _, pod := range pods.Items {
-			imported, err := isServiceImported(ctx, r.client, cr, &pod)
+	if cr.Spec.MultiCluster.Enabled && mcs.IsAvailable() {
+		seList, err := psmdb.GetExportedServices(ctx, r.client, cr)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "get exported services")
+		}
+
+		for _, se := range seList.Items {
+			imported, err := isServiceImported(ctx, r.client, cr, se.Name)
 			if err != nil {
-				return api.AppStateError, errors.Wrapf(err, "check if service is imported for %s", pod.Name)
+				return api.AppStateError, errors.Wrapf(err, "check if service is imported for %s", se.Name)
 			}
 			if !imported {
+				log.Info("waiting for service import", "replset", replset.Name, "serviceExport", se.Name)
 				return api.AppStateInit, nil
 			}
 		}
@@ -68,7 +75,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 
 		if cr.Spec.MultiCluster.Enabled {
-			siList := &mcs.ServiceImportList{}
+			siList := &mcsv1alpha1.ServiceImportList{}
 			err = r.client.List(ctx,
 				siList,
 				&client.ListOptions{
@@ -616,11 +623,11 @@ func isPodReady(pod corev1.Pod) bool {
 	return false
 }
 
-func isServiceImported(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod) (bool, error) {
-	si := new(mcs.ServiceImport)
+func isServiceImported(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, svcName string) (bool, error) {
+	si := new(mcsv1alpha1.ServiceImport)
 	err := k8sclient.Get(ctx, types.NamespacedName{
 		Namespace: cr.Namespace,
-		Name:      pod.Name,
+		Name:      svcName,
 	}, si)
 	if err != nil {
 		if k8serr.IsNotFound(err) {
