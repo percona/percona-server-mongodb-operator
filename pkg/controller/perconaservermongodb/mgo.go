@@ -53,6 +53,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateError, errors.Wrap(err, "get exported services")
 		}
 
+		if len(seList.Items) == 0 {
+			log.Info("waiting for service exports")
+			return api.AppStateInit, nil
+		}
+
 		for _, se := range seList.Items {
 			imported, err := isServiceImported(ctx, r.client, cr, se.Name)
 			if err != nil {
