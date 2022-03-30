@@ -260,8 +260,13 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 			Name:      svcName,
 		}, svc)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", nil
+		}
+
 		return "", errors.Wrap(err, "failed to get mongos service")
 	}
+
 	var host string
 	if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 		for _, i := range svc.Status.LoadBalancer.Ingress {
