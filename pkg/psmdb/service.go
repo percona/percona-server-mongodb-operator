@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,6 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 // Service returns a core/v1 API Service
@@ -237,7 +239,16 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 // MongoHost returns the mongo host for given pod
 func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
 	if rsExposed {
-		if m.Spec.MultiCluster.Enabled {
+		if m.MCSEnabled() {
+			imported, err := IsServiceImported(ctx, cl, m, pod.Name)
+			if err != nil {
+				return "", errors.Wrapf(err, "check if service imported for %s", pod.Name)
+			}
+
+			if !imported {
+				return getExtAddr(ctx, cl, m.Namespace, pod)
+			}
+
 			return GetMCSAddr(m, pod.Name), nil
 		}
 
@@ -321,4 +332,16 @@ func getExtServices(ctx context.Context, cl client.Client, namespace, podName st
 		return svcMeta, nil
 	}
 	return nil, errors.New("failed to fetch service: retries limit reached")
+}
+
+func IsServiceImported(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, svcName string) (bool, error) {
+	si := new(mcsv1alpha1.ServiceImport)
+	err := k8sclient.Get(ctx, types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      svcName,
+	}, si)
+	if err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+	return true, nil
 }

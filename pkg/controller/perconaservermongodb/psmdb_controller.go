@@ -417,7 +417,20 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, err
 		}
 
-		// Create Service
+		// Create headless service
+		service := psmdb.Service(cr, replset)
+
+		err = setControllerReference(cr, service, r.scheme)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "set owner ref for service %s", service.Name)
+		}
+
+		err = r.createOrUpdate(ctx, service)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "create or update service for replset %s", replset.Name)
+		}
+
+		// Create exposed services
 		if replset.Expose.Enabled {
 			srvs, err := r.ensureExternalServices(ctx, cr, replset, &pods)
 			if err != nil {
@@ -432,18 +445,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 					}
 				}
 				srvs = lbsvc
-			}
-		} else {
-			service := psmdb.Service(cr, replset)
-
-			err = setControllerReference(cr, service, r.scheme)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrapf(err, "set owner ref for service %s", service.Name)
-			}
-
-			err = r.createOrUpdate(ctx, service)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrapf(err, "create or update service for replset %s", replset.Name)
 			}
 		}
 
@@ -1014,7 +1015,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
-		host, err := psmdb.MongoHost(ctx, r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, api.ConfigReplSetName, false, pod)
 		if err != nil {
 			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}

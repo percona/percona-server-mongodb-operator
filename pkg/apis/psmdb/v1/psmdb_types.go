@@ -21,6 +21,7 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -846,4 +847,8 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 	}
 
 	return extNodes
+}
+
+func (cr *PerconaServerMongoDB) MCSEnabled() bool {
+    return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }

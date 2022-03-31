@@ -60,7 +60,7 @@ func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if !mcs.IsAvailable() {
+	if !cr.MCSEnabled() {
 		return nil
 	}
 

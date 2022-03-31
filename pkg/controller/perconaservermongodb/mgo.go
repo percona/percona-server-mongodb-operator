@@ -6,18 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
-
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
@@ -47,7 +41,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateInit, nil
 	}
 
-	if cr.Spec.MultiCluster.Enabled && mcs.IsAvailable() {
+	if cr.MCSEnabled() {
 		seList, err := psmdb.GetExportedServices(ctx, r.client, cr)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "get exported services")
@@ -59,7 +53,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 
 		for _, se := range seList.Items {
-			imported, err := isServiceImported(ctx, r.client, cr, se.Name)
+			imported, err := psmdb.IsServiceImported(ctx, r.client, cr, se.Name)
 			if err != nil {
 				return api.AppStateError, errors.Wrapf(err, "check if service is imported for %s", se.Name)
 			}
@@ -202,12 +196,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		case "arbiter":
 			member.ArbiterOnly = true
 			member.Priority = 0
+			member.Tags = mongo.ReplsetTags{
+				"podName": pod.Name,
+			}
 		case "mongod", "cfg":
 			member.Tags = mongo.ReplsetTags{
+				"podName":     pod.Name,
 				"serviceName": cr.Name,
 			}
 		case "nonVoting":
 			member.Tags = mongo.ReplsetTags{
+				"podName":     pod.Name,
 				"serviceName": cr.Name,
 				"nonVoting":   "true",
 			}
@@ -244,10 +243,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
+	if cnf.Members.FixHosts(members) {
+		cnf.Version++
+
+		err = mongo.WriteConfig(ctx, cli, cnf)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "fix hosts: write mongo config")
+		}
+	}
+
 	if cnf.Members.RemoveOld(members) {
 		cnf.Members.SetVotes()
 
 		cnf.Version++
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "delete: write mongo config")
@@ -259,6 +268,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		cnf.Members.SetVotes()
 
 		cnf.Version++
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "add new: write mongo config")
@@ -601,19 +611,4 @@ func isPodReady(pod corev1.Pod) bool {
 		}
 	}
 	return false
-}
-
-func isServiceImported(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, svcName string) (bool, error) {
-	si := new(mcsv1alpha1.ServiceImport)
-	err := k8sclient.Get(ctx, types.NamespacedName{
-		Namespace: cr.Namespace,
-		Name:      svcName,
-	}, si)
-	if err != nil {
-		if k8serr.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
