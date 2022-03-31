@@ -134,6 +134,9 @@ spec:
               readOnly: true
             - mountPath: /etc/mongos-config
               name: config
+            - mountPath: /etc/users-secret
+              name: users-secret-file
+              readOnly: true
           workingDir: /data/db
         - args:
             - -c
@@ -179,6 +182,10 @@ spec:
             secretName: some-name-ssl-internal
         - emptyDir: {}
           name: mongod-data
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-some-name-users
         - configMap:
             defaultMode: 420
             name: some-name-mongos

@@ -48,7 +48,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 	}
 
 	if msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
-		log.Info("waiting for mongos update")
+		log.Info("waiting for mongos update", "updated", msSts.Status.UpdatedReplicas, "replicas", msSts.Status.Replicas)
 		return nil
 	}
 
