@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -64,8 +65,8 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 	}
 
 	murl := fmt.Sprintf("mongodb://%s:%s@%s/",
-		scr.Data["MONGODB_BACKUP_USER"],
-		scr.Data["MONGODB_BACKUP_PASSWORD"],
+		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_USER"])),
+		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_PASSWORD"])),
 		strings.Join(addrs, ","),
 	)
 

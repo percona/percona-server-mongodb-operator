@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -294,13 +295,12 @@ func inShard(ctx context.Context, client *mgo.Client, rsName string) (bool, erro
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
 func mongoInitAdminUser(user, pwd string) string {
-	return fmt.Sprintf(`db.getSiblingDB("admin").createUser(
-		{
-			user: "%s",
-			pwd: "%s",
-			roles: [ "userAdminAnyDatabase" ] 
-		}
-	)`, user, pwd)
+	return fmt.Sprintf("'db.getSiblingDB(\"admin\").createUser( "+
+		"{"+
+		"user: \"%s\","+
+		"pwd: \"%s\","+
+		"roles: [ \"userAdminAnyDatabase\" ]"+
+		"})'", strings.ReplaceAll(user, "'", `'"'"'`), strings.ReplaceAll(pwd, "'", `'"'"'`))
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
@@ -421,10 +421,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
 
-		cmd[2] = fmt.Sprintf(`
-			cat <<-EOF | mongo 
-			%s
-			EOF`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
+		cmd[2] = fmt.Sprintf(`mongo --eval %s`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
