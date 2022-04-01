@@ -115,7 +115,7 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(ctx context.
 	if err != nil {
 		return list, errors.Wrap(err, "get selector requirement")
 	}
-	selectors.Add(*req)
+	selectors = selectors.Add(*req)
 
 	err = r.client.List(ctx,
 		&list,
