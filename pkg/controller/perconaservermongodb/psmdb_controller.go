@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
+	cacheddisk "k8s.io/client-go/discovery/cached/disk"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -75,7 +76,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
 
-	dc, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	dc, err := cacheddisk.NewCachedDiscoveryClientForConfig(mgr.GetConfig(), os.TempDir(), "", 10*time.Minute)
 	if err != nil {
 		return nil, errors.Wrap(err, "get discovery client")
 	}
