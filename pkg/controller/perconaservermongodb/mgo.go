@@ -196,9 +196,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		case "arbiter":
 			member.ArbiterOnly = true
 			member.Priority = 0
-			member.Tags = mongo.ReplsetTags{
-				"podName": pod.Name,
-			}
 		case "mongod", "cfg":
 			member.Tags = mongo.ReplsetTags{
 				"podName":     pod.Name,
