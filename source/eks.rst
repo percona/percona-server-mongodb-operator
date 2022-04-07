@@ -106,11 +106,11 @@ Install the Operator
 
       $ cd percona-server-mongodb-operator
 
-3. Deploy the Operator with the following command:
+3. Deploy the Operator `using <https://kubernetes.io/docs/reference/using-api/server-side-apply/>`_ the following command:
 
    .. code:: bash
 
-      $ kubectl apply -f deploy/bundle.yaml
+      $ kubectl apply -f deploy/bundle.yaml --server-side
 
    The following confirmation is returned:
 
