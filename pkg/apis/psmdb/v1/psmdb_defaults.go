@@ -441,7 +441,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
 		}
 
-		err := replset.SetDefauts(platform, cr, log)
+		err := replset.SetDefaults(platform, cr, log)
 		if err != nil {
 			return err
 		}
@@ -530,8 +530,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	return nil
 }
 
-// SetDefauts set default options for the replset
-func (rs *ReplsetSpec) SetDefauts(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
+// SetDefaults set default options for the replset
+func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
 	if rs.VolumeSpec == nil {
 		return fmt.Errorf("replset %s: volumeSpec should be specified", rs.Name)
 	}
