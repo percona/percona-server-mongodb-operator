@@ -59,7 +59,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
 	}
 
-	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, rs.Name, rs.Expose.Enabled, pods.Items)
+	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, rs.Name, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo addr")
 	}
@@ -272,7 +272,7 @@ func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
 
 var errNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
 
-func (b *PBM) GetLastPITRChunk() (*pbm.PITRChunk, error) {
+func (b *PBM) GetLastPITRChunk() (*pbm.OplogChunk, error) {
 	nodeInfo, err := b.C.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
@@ -299,7 +299,7 @@ func (b *PBM) GetTimelinesPITR() ([]pbm.Timeline, error) {
 		timelines [][]pbm.Timeline
 	)
 
-	shards, err := b.C.ClusterMembers(nil)
+	shards, err := b.C.ClusterMembers()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting cluster members")
 	}
@@ -331,7 +331,7 @@ func (b *PBM) GetLatestTimelinePITR() (pbm.Timeline, error) {
 
 // PITRGetChunkContains returns a pitr slice chunk that belongs to the
 // given replica set and contains the given timestamp
-func (p *PBM) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.Timestamp) (*pbm.PITRChunk, error) {
+func (p *PBM) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.Timestamp) (*pbm.OplogChunk, error) {
 	res := p.C.Conn.Database(pbm.DB).Collection(pbm.PITRChunksCollection).FindOne(
 		ctx,
 		bson.D{
@@ -344,12 +344,12 @@ func (p *PBM) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.
 		return nil, errors.Wrap(res.Err(), "get")
 	}
 
-	chnk := new(pbm.PITRChunk)
+	chnk := new(pbm.OplogChunk)
 	err := res.Decode(chnk)
 	return chnk, errors.Wrap(err, "decode")
 }
 
-func (b *PBM) GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.PITRChunk, error) {
+func (b *PBM) GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.OplogChunk, error) {
 	nodeInfo, err := b.C.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")

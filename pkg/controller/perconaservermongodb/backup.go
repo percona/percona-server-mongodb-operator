@@ -4,11 +4,11 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"reflect"
 	"strconv"
 
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -35,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context
 
 			err := setControllerReference(cr, &cjob, r.scheme)
 			if err != nil {
-				return errors.Wrap(err, "set owner reference for backup task "+cjob.Name)
+				return errors.Wrapf(err, "set owner reference for backup task %s", cjob.Name)
 			}
 
 			err = r.createOrUpdate(ctx, &cjob)
