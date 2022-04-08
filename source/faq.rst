@@ -20,7 +20,7 @@ benefits brought by Kubernetes to databases in `this blog post <https://www.perc
 
 The architecture of state-centric applications (like databases) should be
 composed in a right way to avoid crashes, data loss, or data inconsistencies
-during hardware failure. Percona Distribution for MongoDB Operator provides
+during hardware failure. |operator| provides
 out-of-the-box functionality to automate provisioning and
 management of highly available MongoDB database clusters on Kubernetes.
 
@@ -30,7 +30,7 @@ How can I contact the developers?
 The best place to discuss Percona Distribution for
 MongoDB Operator with developers and other community members is the `community forum <https://forums.percona.com/categories/kubernetes-operator-percona-server-mongodb>`_.
 
-If you would like to report a bug, use the `Percona Distribution for MongoDB Operator project in JIRA <https://jira.percona.com/projects/K8SPSMDB>`_.
+If you would like to report a bug, use the |operator| `project in JIRA <https://jira.percona.com/projects/K8SPSMDB>`_.
 
 What is the difference between the Operator quickstart and advanced installation ways?
 =======================================================================================
@@ -55,7 +55,7 @@ Operator as a whole.
 Which versions of MongoDB the Operator supports?
 ================================================================================
 
-Percona Distribution for MongoDB Operator provides a ready-to-use
+|operator| provides a ready-to-use
 installation of the MongoDB-based database cluster inside your Kubernetes
 installation. It works with Percona Server for MongoDB 4.0, 4.2, and 4.4,
 and the exact version is determined by the Docker image in use.

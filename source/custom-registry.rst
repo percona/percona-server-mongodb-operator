@@ -95,5 +95,5 @@ Operator deployed in the OpenShift environment demonstrates the process:
       will try using the image recommended by the Version Service instead of the
       custom one.
 
-9. Now follow the standard `Percona Distribution for MongoDB Operator installation instruction <./openshift.html>`_
+9. Now follow the standard |operator| `installation instruction <./openshift.html>`_
 

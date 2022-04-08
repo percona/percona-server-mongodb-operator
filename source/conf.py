@@ -44,8 +44,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Percona Distribution for MongoDB Operator'
-copyright = u'Percona LLC and/or its affiliates 2009-2021'
+project = u'Percona Operator for MongoDB'
+copyright = u'Percona LLC and/or its affiliates 2009-2022'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -97,6 +97,8 @@ pygments_style = 'sphinx'
 
 
 rst_prolog = '''
+.. |operator|  replace:: Percona Operator for MongoDB
+
 .. |check|  replace:: ``|[[---CHECK---]]|``
 
 .. |xtrabackup|  replace:: :program:`xtrabackup`
@@ -175,10 +177,10 @@ html_theme_path = ['.', './percona-theme']
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
-html_title = 'Percona Distribution for MongoDB Operator Documentation'
+html_title = 'Percona Operator for MongoDB Documentation'
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
-html_short_title = 'Percona Distribution for MongoDB Operator Documentation'
+html_short_title = 'Percona Operator for MongoDB Documentation'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
@@ -251,8 +253,8 @@ htmlhelp_basename = 'PSMDBOperator'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'PerconaDistributionMongoDBOperator.tex', u'Percona Distribution for MongoDB Operator Documentation',
-   u'Percona LLC and/or its affiliates 2009-2021', 'manual'),
+  ('index', 'PerconaOperatorMongoDB'+release+'.tex', u'Percona Operator for MongoDB Documentation',
+   u'Percona LLC and/or its affiliates 2009-2022', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -285,8 +287,8 @@ latex_toplevel_sectioning = 'part'
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'PerconaDistributionMongoDBOperator.tex', u'Percona Distribution for MongoDB Operator Documentation',
-     [u'Percona LLC and/or its affiliates 2009-2021'], 1)
+    ('index', 'PerconaOperatorMongoDB'+release+'.tex', u'Percona Operator for MongoDB Documentation',
+     [u'Percona LLC and/or its affiliates 2009-2022'], 1)
 ]
 
 def ultimateReplace(app, docname, source):

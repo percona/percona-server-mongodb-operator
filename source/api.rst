@@ -1,4 +1,4 @@
-Percona Distribution for MongoDB Operator API Documentation
+|operator| API Documentation
 ===========================================================
 
 .. raw:: html
@@ -28,7 +28,7 @@ Percona Distribution for MongoDB Operator API Documentation
    }
    </style>
 
-Percona Distribution for MongoDB Operator provides an `aggregation-layer extension for the Kubernetes API <https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/>`_. Please refer to the
+|operator| provides an `aggregation-layer extension for the Kubernetes API <https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/>`_. Please refer to the
 `official Kubernetes API documentation <https://kubernetes.io/docs/reference/>`_ on the API access and usage details.
 The following subsections describe the Percona XtraDB Cluster API provided by the Operator.
 
