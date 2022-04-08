@@ -3,6 +3,7 @@ package pbm
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -10,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readconcern"
 )
 
 type Node struct {
@@ -21,13 +23,13 @@ type Node struct {
 	dumpConns int
 }
 
-// ReplRole is a replicaset role in sharded cluster
-type ReplRole string
+// ReplsetRole is a replicaset role in sharded cluster
+type ReplsetRole string
 
 const (
-	ReplRoleUnknown   = "unknown"
-	ReplRoleShard     = "shard"
-	ReplRoleConfigSrv = "configsrv"
+	RoleUnknown   ReplsetRole = "unknown"
+	RoleShard     ReplsetRole = "shard"
+	RoleConfigSrv ReplsetRole = "configsrv"
 
 	// TmpUsersCollection and TmpRoles are tmp collections used to avoid
 	// user related issues while resoring on new cluster and preserving UUID
@@ -275,6 +277,37 @@ func LastWrite(cn *mongo.Client, majority bool) (primitive.Timestamp, error) {
 	return lw, nil
 }
 
+// OplogStartTime returns either the oldest active transaction timestamp or the
+// current oplog time if there are no active transactions.
+// taken from https://github.com/mongodb/mongo-tools/blob/1b496c4a8ff7415abc07b9621166d8e1fac00c91/mongodump/oplog_dump.go#L68
+func (n *Node) OplogStartTime() (primitive.Timestamp, error) {
+	coll := n.cn.Database("config").Collection("transactions", options.Collection().SetReadConcern(readconcern.Local()))
+	filter := bson.D{{"state", bson.D{{"$in", bson.A{"prepared", "inProgress"}}}}}
+	opts := options.FindOne().SetSort(bson.D{{"startOpTime", 1}})
+
+	var result bson.Raw
+	res := coll.FindOne(context.Background(), filter, opts)
+	err := res.Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return LastWrite(n.cn, true)
+		}
+		return primitive.Timestamp{}, fmt.Errorf("config.transactions.findOne error: %v", err)
+	}
+
+	rawTS, err := result.LookupErr("startOpTime", "ts")
+	if err != nil {
+		return primitive.Timestamp{}, fmt.Errorf("config.transactions row had no startOpTime.ts field")
+	}
+
+	t, i, ok := rawTS.TimestampOK()
+	if !ok {
+		return primitive.Timestamp{}, fmt.Errorf("config.transactions startOpTime.ts was not a BSON timestamp")
+	}
+
+	return primitive.Timestamp{T: t, I: i}, nil
+}
+
 func (n *Node) CopyUsersNRolles() (lastWrite primitive.Timestamp, err error) {
 	cn, err := n.connect(false)
 	if err != nil {
@@ -306,4 +339,34 @@ func (n *Node) CopyUsersNRolles() (lastWrite primitive.Timestamp, err error) {
 	}
 
 	return LastWrite(cn, false)
+}
+
+func (n *Node) GetOpts() (*MongodOpts, error) {
+	opts := struct {
+		Parsed MongodOpts `bson:"parsed" json:"parsed"`
+	}{}
+	err := n.cn.Database("admin").RunCommand(n.ctx, bson.D{{"getCmdLineOpts", 1}}).Decode(&opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "run mongo command")
+	}
+	return &opts.Parsed, nil
+}
+
+func (n *Node) GetRSconf() (*RSConfig, error) {
+	rsc := struct {
+		Conf RSConfig `bson:"config" json:"config"`
+	}{}
+	err := n.cn.Database("admin").RunCommand(n.ctx, bson.D{{"replSetGetConfig", 1}}).Decode(&rsc)
+	if err != nil {
+		return nil, errors.Wrap(err, "run mongo command")
+	}
+	return &rsc.Conf, nil
+}
+
+func (n *Node) Shutdown() error {
+	err := n.cn.Database("admin").RunCommand(n.ctx, bson.D{{"shutdown", 1}}).Err()
+	if err == nil || strings.Contains(err.Error(), "socket was unexpectedly closed") {
+		return nil
+	}
+	return err
 }

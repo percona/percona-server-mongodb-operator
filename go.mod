@@ -14,7 +14,7 @@ require (
 	github.com/hashicorp/go-version v1.2.0
 	github.com/jetstack/cert-manager v1.6.1
 	github.com/mitchellh/go-ps v1.0.0
-	github.com/percona/percona-backup-mongodb v1.6.1-0.20220306055702-373054ff37e4
+	github.com/percona/percona-backup-mongodb v1.6.1-0.20220404145705-2252d9cba467
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.8.1
@@ -24,6 +24,7 @@ require (
 	go.mongodb.org/mongo-driver v1.7.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
+	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.23.2
 	k8s.io/apimachinery v0.23.2
 	k8s.io/client-go v0.23.2
@@ -113,7 +114,6 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/apiextensions-apiserver v0.23.2 // indirect
 	k8s.io/component-base v0.23.2 // indirect
