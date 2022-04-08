@@ -3,16 +3,21 @@ package pbm
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/version"
 )
 
-const StorInitFile = ".pbm.init"
+const (
+	StorInitFile    = ".pbm.init"
+	PhysRestoresDir = ".pbm.restore"
+)
 
 // ResyncStorage updates PBM metadata (snapshots and pitr) according to the data in the storage
 func (p *PBM) ResyncStorage(l *log.Event) error {
@@ -27,6 +32,34 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 	}
 	if err != nil {
 		return errors.Wrap(err, "init storage")
+	}
+
+	rstrs, err := stg.List(PhysRestoresDir, ".json")
+	if err != nil {
+		return errors.Wrap(err, "get a backups list from the storage")
+	}
+	l.Debug("got physical restores list: %v", len(rstrs))
+	for _, rs := range rstrs {
+		src, err := stg.SourceReader(filepath.Join(PhysRestoresDir, rs.Name))
+		if err != nil {
+			return errors.Wrapf(err, "get file %s", rs.Name)
+		}
+
+		rmeta := RestoreMeta{}
+		err = json.NewDecoder(src).Decode(&rmeta)
+		if err != nil {
+			return errors.Wrapf(err, "decode meta %s", rs.Name)
+		}
+
+		_, err = p.Conn.Database(DB).Collection(RestoresCollection).ReplaceOne(
+			p.ctx,
+			bson.D{{"name", rmeta.Name}},
+			rmeta,
+			options.Replace().SetUpsert(true),
+		)
+		if err != nil {
+			return errors.Wrapf(err, "upsert restore %s/%s", rmeta.Name, rmeta.Backup)
+		}
 	}
 
 	bcps, err := stg.List("", MetadataFileSuffix)
@@ -109,6 +142,11 @@ func (p *PBM) ResyncStorage(l *log.Event) error {
 }
 
 func checkBackupFiles(bcp *BackupMeta, stg storage.Storage) error {
+	// !!! TODO: Check physical files ?
+	if bcp.Type == PhysicalBackup {
+		return nil
+	}
+
 	for _, rs := range bcp.Replsets {
 		f, err := stg.FileStat(rs.DumpName)
 		if err != nil {

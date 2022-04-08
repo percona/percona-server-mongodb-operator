@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -22,6 +23,8 @@ type Logger struct {
 	out  io.Writer
 	rs   string
 	node string
+
+	pauseMgo int32
 }
 
 type Entry struct {
@@ -125,9 +128,12 @@ func New(cn *mongo.Collection, rs, node string) *Logger {
 	}
 }
 
-// SetOut set io output for the logs
-func (l *Logger) SetOut(w io.Writer) {
-	l.out = w
+func (l *Logger) PauseMgo() {
+	atomic.StoreInt32(&l.pauseMgo, 1)
+
+}
+func (l *Logger) ResumeMgo() {
+	atomic.StoreInt32(&l.pauseMgo, 0)
 }
 
 func (l *Logger) output(s Severity, event string, obj, opid string, epoch primitive.Timestamp, msg string, args ...interface{}) {
@@ -186,7 +192,7 @@ func (l *Logger) Fatal(event string, obj, opid string, epoch primitive.Timestamp
 func (l *Logger) Output(e *Entry) error {
 	var rerr error
 
-	if l.cn != nil {
+	if l.cn != nil && atomic.LoadInt32(&l.pauseMgo) == 0 {
 		_, err := l.cn.InsertOne(context.TODO(), e)
 		if err != nil {
 			rerr = errors.Wrap(err, "db")
