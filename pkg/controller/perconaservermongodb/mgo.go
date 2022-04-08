@@ -467,6 +467,7 @@ func getRoles(cr *api.PerconaServerMongoDB, role UserRole) []map[string]interfac
 	return roles
 }
 
+// compareResources compares two map[string]interface{} values and returns true if they are equal
 func compareResources(x, y map[string]interface{}) bool {
 	if len(x) != len(y) {
 		return false
@@ -479,6 +480,7 @@ func compareResources(x, y map[string]interface{}) bool {
 	return true
 }
 
+// compareSlices compares two non-sorted string slices, returns true if they have the same values
 func compareSlices(x, y []string) bool {
 	if len(x) != len(y) {
 		return false
@@ -495,16 +497,13 @@ func compareSlices(x, y []string) bool {
 	return true
 }
 
+// comparePrivileges compares 2 RolePrivilege arrays and returns true if they are equal
 func comparePrivileges(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
-	for _, i := range x {
-		found := false
-		for _, j := range y {
-			if compareResources(i.Resource, j.Resource) && compareSlices(i.Actions, j.Actions) {
-				found = true
-				break
-			}
-		}
-		if !found {
+	if len(x) != len(y) {
+		return false
+	}
+	for i := range x {
+		if !(compareResources(x[i].Resource, y[i].Resource) && compareSlices(x[i].Actions, y[i].Actions)) {
 			return false
 		}
 	}
@@ -527,19 +526,13 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Co
 	return nil
 }
 
+// compareRoles compares 2 role arrays and returns true if they are equal
 func compareRoles(x []map[string]interface{}, y []map[string]interface{}) bool {
 	if len(x) != len(y) {
 		return false
 	}
-	for _, i := range x {
-		found := false
-		for _, j := range y {
-			if reflect.DeepEqual(i, j) {
-				found = true
-				break
-			}
-		}
-		if !found {
+	for i := range x {
+		if !reflect.DeepEqual(x[i], y[i]) {
 			return false
 		}
 	}
