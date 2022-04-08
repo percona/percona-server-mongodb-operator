@@ -787,6 +787,15 @@ spec:
                           type: object
                       type: object
                   type: object
+                multiCluster:
+                  properties:
+                    DNSSuffix:
+                      type: string
+                    enabled:
+                      type: boolean
+                  required:
+                    - enabled
+                  type: object
                 pause:
                   type: boolean
                 platform:
