@@ -237,7 +237,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             golang:1.17 sh -c '
-                                go install github.com/google/go-licenses@latest;
+                                go install github.com/google/go-licenses@v1.0.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
                                     | cut -d , -f 3 \
                                     | sort -u \
