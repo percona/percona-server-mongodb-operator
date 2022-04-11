@@ -109,6 +109,21 @@ rules:
   - patch
   - delete
   - deletecollection
+- apiGroups:
+  - net.gke.io
+  - multicluster.x-k8s.io
+  resources:
+  - serviceexports
+  - serviceimports
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - deletecollection
 ---
 apiVersion: v1
 kind: ServiceAccount

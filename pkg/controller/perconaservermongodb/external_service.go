@@ -4,11 +4,14 @@ import (
 	"context"
 	"strconv"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 )
@@ -20,18 +23,98 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 		service := psmdb.ExternalService(cr, replset, pod.Name)
 		err := setControllerReference(cr, service, r.scheme)
 		if err != nil {
-			return nil, errors.Wrap(err, "set owner ref for Service "+service.Name)
+			return nil, errors.Wrapf(err, "set owner ref for Service %s", service.Name)
 		}
 
 		err = r.createOrUpdate(ctx, service)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create external service for replset "+replset.Name)
+			return nil, errors.Wrapf(err, "failed to create external service for replset %s", replset.Name)
+		}
+
+		if cr.Spec.MultiCluster.Enabled {
+			err = r.exportService(ctx, cr, service)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to export service %s", service.Name)
+			}
 		}
 
 		services = append(services, *service)
 	}
 
 	return services, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service) error {
+	ls := clusterLabels(cr)
+	if !cr.Spec.MultiCluster.Enabled {
+		return nil
+	}
+	se := mcs.ServiceExport(cr.Namespace, svc.Name, ls)
+	if err := setControllerReference(cr, se, r.scheme); err != nil {
+		return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
+	}
+	if err := r.createOrUpdate(ctx, se); err != nil {
+		return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.MCSEnabled() {
+		return nil
+	}
+
+	ls := clusterLabels(cr)
+
+	seList := mcs.ServiceExportList()
+	err := r.client.List(ctx,
+		seList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(ls),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get service export list")
+	}
+	if !cr.Spec.MultiCluster.Enabled {
+		for _, se := range seList.Items {
+			err = r.client.Delete(ctx, &se)
+			if err != nil {
+				return errors.Wrapf(err, "delete service export %s", se.Name)
+			}
+		}
+		return nil
+	}
+
+	svcList := &corev1.ServiceList{}
+	err = r.client.List(ctx,
+		svcList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(ls),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get service list")
+	}
+
+	svcNames := make(map[string]struct{}, len(svcList.Items))
+	for _, svc := range svcList.Items {
+		if err := r.exportService(ctx, cr, &svc); err != nil {
+			return errors.Wrapf(err, "export service %s", svc.Name)
+		}
+		svcNames[svc.Name] = struct{}{}
+	}
+
+	for _, se := range seList.Items {
+		if _, ok := svcNames[se.Name]; !ok {
+			if err := r.client.Delete(ctx, &se); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrap(err, "delete service export")
+			}
+		}
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
