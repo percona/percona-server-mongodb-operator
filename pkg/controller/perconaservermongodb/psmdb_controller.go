@@ -426,7 +426,20 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, err
 		}
 
-		// Create Service
+		// Create headless service
+		service := psmdb.Service(cr, replset)
+
+		err = setControllerReference(cr, service, r.scheme)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "set owner ref for service %s", service.Name)
+		}
+
+		err = r.createOrUpdate(ctx, service)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "create or update service for replset %s", replset.Name)
+		}
+
+		// Create exposed services
 		if replset.Expose.Enabled {
 			srvs, err := r.ensureExternalServices(ctx, cr, replset, &pods)
 			if err != nil {
@@ -441,18 +454,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 					}
 				}
 				srvs = lbsvc
-			}
-		} else {
-			service := psmdb.Service(cr, replset)
-
-			err = setControllerReference(cr, service, r.scheme)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrap(err, "set owner ref for service "+service.Name)
-			}
-
-			err = r.createOrUpdate(ctx, service)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrap(err, "create or update service for replset "+replset.Name)
 			}
 		}
 
@@ -497,6 +498,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	err = r.deleteCfgIfNeeded(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "delete config server")
+	}
+
+	err = r.exportServices(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "export services")
 	}
 
 	err = r.sheduleEnsureVersion(ctx, cr, VersionServiceClient{})
@@ -1018,7 +1024,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
-		host, err := psmdb.MongoHost(ctx, r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, api.ConfigReplSetName, false, pod)
 		if err != nil {
 			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}
@@ -1584,29 +1590,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, spec *
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj client.Object) error {
-	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
-	if !ok {
-		return errors.New("can't convert object to ObjectMetaAccessor")
+	if obj.GetAnnotations() == nil {
+		obj.SetAnnotations(make(map[string]string))
 	}
 
-	objectMeta := metaAccessor.GetObjectMeta()
-
-	if objectMeta.GetAnnotations() == nil {
-		objectMeta.SetAnnotations(make(map[string]string))
-	}
-
-	objAnnotations := objectMeta.GetAnnotations()
+	objAnnotations := obj.GetAnnotations()
 	delete(objAnnotations, "percona.com/last-config-hash")
-	objectMeta.SetAnnotations(objAnnotations)
+	obj.SetAnnotations(objAnnotations)
 
 	hash, err := getObjectHash(obj)
 	if err != nil {
 		return errors.Wrap(err, "calculate object hash")
 	}
 
-	objAnnotations = objectMeta.GetAnnotations()
+	objAnnotations = obj.GetAnnotations()
 	objAnnotations["percona.com/last-config-hash"] = hash
-	objectMeta.SetAnnotations(objAnnotations)
+	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
@@ -1615,8 +1614,8 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 	oldObject := reflect.New(val.Type()).Interface().(client.Object)
 
 	err = r.client.Get(ctx, types.NamespacedName{
-		Name:      objectMeta.GetName(),
-		Namespace: objectMeta.GetNamespace(),
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
 	}, oldObject)
 
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -1627,20 +1626,18 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 		return r.client.Create(ctx, obj)
 	}
 
-	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
-
 	updateObject := false
-	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!compareMaps(oldObjectMeta.GetLabels(), objectMeta.GetLabels()) {
+	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+		!compareMaps(oldObject.GetLabels(), obj.GetLabels()) {
 		updateObject = true
 	} else if _, ok := obj.(*corev1.Service); !ok {
 		// ignore annotations changes for Service object
 		// in case NodePort, to avoid port changing
-		updateObject = !compareMaps(oldObjectMeta.GetAnnotations(), objectMeta.GetAnnotations())
+		updateObject = !compareMaps(oldObject.GetAnnotations(), obj.GetAnnotations())
 	}
 
 	if updateObject {
-		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
+		obj.SetResourceVersion(oldObject.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
 			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
@@ -1661,6 +1658,8 @@ func getObjectHash(obj client.Object) (string, error) {
 		dataToMarshall = object.Spec
 	case *corev1.Service:
 		dataToMarshall = object.Spec
+	case *corev1.Secret:
+		dataToMarshall = object.Data
 	default:
 		dataToMarshall = obj
 	}

@@ -290,7 +290,7 @@ func reEnablePITR(pbm *backup.PBM, backup psmdbv1.BackupSpec) (err error) {
 }
 
 func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
-	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResyncBackupList), "", "", primitive.Timestamp{})
+	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResync), "", "", primitive.Timestamp{})
 	err := pbmc.C.ResyncStorage(e)
 	if err != nil {
 		return "", errors.Wrap(err, "set resync backup list from the store")

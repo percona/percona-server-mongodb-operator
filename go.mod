@@ -14,7 +14,7 @@ require (
 	github.com/hashicorp/go-version v1.2.0
 	github.com/jetstack/cert-manager v1.6.1
 	github.com/mitchellh/go-ps v1.0.0
-	github.com/percona/percona-backup-mongodb v1.6.1-0.20220306055702-373054ff37e4
+	github.com/percona/percona-backup-mongodb v1.6.1-0.20220404145705-2252d9cba467
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.8.1
@@ -29,6 +29,7 @@ require (
 	k8s.io/apimachinery v0.23.5
 	k8s.io/client-go v0.23.5
 	sigs.k8s.io/controller-runtime v0.11.0
+	sigs.k8s.io/mcs-api v0.1.0
 )
 
 require (
