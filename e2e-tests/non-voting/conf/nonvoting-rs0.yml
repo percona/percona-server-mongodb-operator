@@ -8,10 +8,14 @@ spec:
   mongod:
     security:
       enableEncryption: true
+  schedulerName: default-scheduler
   replsets:
   - name: rs0
     affinity:
       antiAffinityTopologyKey: none
+    configuration: |
+      security:
+        enableEncryption: true
     nonvoting:
       enabled: true
       size: 3
@@ -48,7 +52,6 @@ spec:
           resources:
             requests:
               storage: 2Gi
-      schedulerName: default-scheduler
     volumeSpec:
       persistentVolumeClaim:
         resources:

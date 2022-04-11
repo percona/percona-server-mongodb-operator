@@ -2,7 +2,8 @@ apiVersion: psmdb.percona.com/v1-12-0
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
-#  finalizers:
+  finalizers:
+    - delete-psmdb-pods-in-order
 #    - delete-psmdb-pvc
 spec:
 #  platform: openshift
@@ -12,11 +13,17 @@ spec:
   crVersion: 1.12.0
   image: percona/percona-server-mongodb:4.4.10-11
   imagePullPolicy: Always
+#  tls:
+#    # 90 days in hours
+#    certValidityDuration: 2160h
 #  imagePullSecrets:
 #    - name: private-registry-credentials
 #  runUid: 1001
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+#  multiCluster:
+#    enabled: true
+#    DNSSuffix: svc.clusterset.local
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: 4.4-recommended
@@ -140,7 +147,6 @@ spec:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#    schedulerName: "default"
     resources:
       limits:
         cpu: "300m"
@@ -193,7 +199,6 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-#    schedulerName: "default"
       podDisruptionBudget:
         maxUnavailable: 1
 #        minAvailable: 0
@@ -401,6 +406,7 @@ spec:
           memory: "0.5G"
       expose:
         exposeType: ClusterIP
+#        servicePerPod: true
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
@@ -410,44 +416,12 @@ spec:
 #        format: BSON
 #        filter: '{}'
 
-  mongod:
-    net:
-      port: 27017
-      hostPort: 0
-    security:
-      redactClientLogData: false
-      enableEncryption: true
-      encryptionCipherMode: AES256-CBC
-    setParameter:
-      ttlMonitorSleepSecs: 60
-      wiredTigerConcurrentReadTransactions: 128
-      wiredTigerConcurrentWriteTransactions: 128
-    storage:
-      engine: wiredTiger
-      inMemory:
-        engineConfig:
-          inMemorySizeRatio: 0.9
-      wiredTiger:
-        engineConfig:
-          cacheSizeRatio: 0.5
-          directoryForIndexes: false
-          journalCompressor: snappy
-        collectionConfig:
-          blockCompressor: snappy
-        indexConfig:
-          prefixCompression: true
-    operationProfiling:
-      mode: slowOp
-      slowOpThresholdMs: 100
-      rateLimit: 100
-#    auditLog:
-#      destination: file
-#      format: BSON
-#      filter: '{}'
+#  mongod:
+#    security:
+#      encryptionKeySecret: "my-cluster-name-mongodb-encryption-key"
 
   backup:
     enabled: true
-    restartOnFailure: true
     image: perconalab/percona-server-mongodb-operator:main-backup
     serviceAccountName: percona-server-mongodb-operator
 #    annotations:

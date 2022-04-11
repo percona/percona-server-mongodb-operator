@@ -2,6 +2,7 @@ package pbm
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -58,8 +59,18 @@ func (c Config) String() string {
 
 // PITRConf is a Point-In-Time Recovery options
 type PITRConf struct {
-	Enabled      bool    `bson:"enabled" json:"enabled" yaml:"enabled"`
-	OplogSpanMin float64 `bson:"oplogSpanMin" json:"oplogSpanMin" yaml:"oplogSpanMin"`
+	Enabled          bool            `bson:"enabled" json:"enabled" yaml:"enabled"`
+	OplogSpanMin     float64         `bson:"oplogSpanMin" json:"oplogSpanMin" yaml:"oplogSpanMin"`
+	Compression      CompressionType `bson:"compression,omitempty" json:"compression,omitempty" yaml:"compression,omitempty"`
+	CompressionLevel *int            `bson:"compressionLevel,omitempty" json:"compressionLevel,omitempty" yaml:"compressionLevel,omitempty"`
+}
+
+func (c *PITRConf) Cast() error {
+	if c.Compression == "" {
+		c.Compression = CompressionTypeS2
+	}
+
+	return nil
 }
 
 // StorageType represents a type of the destination storage for backups
@@ -178,6 +189,10 @@ func (p *PBM) SetConfig(cfg Config) error {
 		if err != nil {
 			return errors.Wrap(err, "cast storage")
 		}
+
+		// call the function for notification purpose.
+		// warning about unsupported levels will be printed
+		s3.SDKLogLevel(cfg.Storage.S3.DebugLogLevels, os.Stderr)
 	case StorageFilesystem:
 		err := cfg.Storage.Filesystem.Cast()
 		if err != nil {
@@ -212,8 +227,8 @@ func (p *PBM) SetConfigVar(key, val string) error {
 	// just check if config was set
 	_, err := p.GetConfig()
 	if err != nil {
-		if errors.Cause(err) == mongo.ErrNoDocuments {
-			return errors.New("config doesn't set")
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.New("config is not set")
 		}
 		return err
 	}
@@ -241,12 +256,36 @@ func (p *PBM) SetConfigVar(key, val string) error {
 		if v.(string) == "" {
 			return errors.New("storage.filesystem.path can't be empty")
 		}
+	case "storage.s3.debugLogLevels":
+		s3.SDKLogLevel(v.(string), os.Stderr)
 	}
 
 	_, err = p.Conn.Database(DB).Collection(ConfigCollection).UpdateOne(
 		p.ctx,
 		bson.D{},
 		bson.M{"$set": bson.M{key: v}},
+	)
+
+	return errors.Wrap(err, "write to db")
+}
+
+func (p *PBM) DeleteConfigVar(key string) error {
+	if !ValidateConfigKey(key) {
+		return errors.New("invalid config key")
+	}
+
+	_, err := p.GetConfig()
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.New("config is not set")
+		}
+		return err
+	}
+
+	_, err = p.Conn.Database(DB).Collection(ConfigCollection).UpdateOne(
+		p.ctx,
+		bson.D{},
+		bson.M{"$unset": bson.M{key: 1}},
 	)
 
 	return errors.Wrap(err, "write to db")
@@ -277,6 +316,9 @@ func (p *PBM) GetConfigVar(key string) (interface{}, error) {
 		return nil, errors.Wrap(err, "get from db")
 	}
 	v, err := bts.LookupErr(strings.Split(key, ".")...)
+	if err != nil {
+		return nil, errors.Wrap(err, "lookup in document")
+	}
 	switch v.Type {
 	case bson.TypeBoolean:
 		return v.Boolean(), nil
@@ -287,7 +329,7 @@ func (p *PBM) GetConfigVar(key string) (interface{}, error) {
 	case bson.TypeDouble:
 		return v.Double(), nil
 	case bson.TypeString:
-		return v.String(), nil
+		return v.StringValue(), nil
 	default:
 		return nil, errors.Errorf("unexpected type %v", v.Type)
 	}
@@ -334,7 +376,14 @@ func (p *PBM) GetConfig() (Config, error) {
 		return Config{}, errors.Wrap(res.Err(), "get")
 	}
 	err := res.Decode(&c)
-	return c, errors.Wrap(err, "decode")
+	if err != nil {
+		return c, errors.Wrap(err, "decode")
+	}
+	err = c.PITR.Cast()
+	if err != nil {
+		return c, errors.Wrap(err, "cast options")
+	}
+	return c, nil
 }
 
 // ErrStorageUndefined is an error for undefined storage

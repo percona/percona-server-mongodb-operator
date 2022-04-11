@@ -4,20 +4,23 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 
 	"go.mongodb.org/mongo-driver/mongo"
-	batchv1b "k8s.io/api/batch/v1beta1"
+	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
+	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/pkg/errors"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/pkg/errors"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	ctasks := make(map[string]api.BackupTaskSpec)
 	ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
 
@@ -32,10 +35,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 
 			err := setControllerReference(cr, &cjob, r.scheme)
 			if err != nil {
-				return errors.Wrap(err, "set owner reference for backup task "+cjob.Name)
+				return errors.Wrapf(err, "set owner reference for backup task %s", cjob.Name)
 			}
 
-			err = r.createOrUpdate(&cjob)
+			err = r.createOrUpdate(ctx, &cjob)
 			if err != nil {
 				return errors.Wrap(err, "create or update backup job")
 			}
@@ -43,8 +46,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	}
 
 	// Remove old/unused tasks
-	tasksList := &batchv1b.CronJobList{}
-	err := r.client.List(context.TODO(),
+	tasksList := &batchv1beta1.CronJobList{}
+	err := r.client.List(ctx,
 		tasksList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -58,20 +61,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 	for _, t := range tasksList.Items {
 		if spec, ok := ctasks[t.Name]; ok {
 			if spec.Keep > 0 {
-				oldjobs, err := r.oldScheduledBackups(cr, t.Name, spec.Keep)
+				oldjobs, err := r.oldScheduledBackups(ctx, cr, t.Name, spec.Keep)
 				if err != nil {
 					return fmt.Errorf("remove old backups: %v", err)
 				}
 
 				for _, todel := range oldjobs {
-					err = r.client.Delete(context.TODO(), &todel)
+					err = r.client.Delete(ctx, &todel)
 					if err != nil {
 						return fmt.Errorf("failed to delete backup object: %v", err)
 					}
 				}
 			}
 		} else {
-			err := r.client.Delete(context.TODO(), &t)
+			err := r.client.Delete(ctx, &t)
 			if err != nil && !k8sErrors.IsNotFound(err) {
 				return fmt.Errorf("delete backup task %s: %v", t.Name, err)
 			}
@@ -82,10 +85,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(cr *api.PerconaServ
 }
 
 // oldScheduledBackups returns list of the most old psmdb-bakups that execeed `keep` limit
-func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(cr *api.PerconaServerMongoDB,
+func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context, cr *api.PerconaServerMongoDB,
 	ancestor string, keep int) ([]api.PerconaServerMongoDBBackup, error) {
 	bcpList := api.PerconaServerMongoDBBackupList{}
-	err := r.client.List(context.TODO(),
+	err := r.client.List(ctx,
 		&bcpList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
@@ -146,9 +149,9 @@ func (h *minHeap) Pop() interface{} {
 	return x
 }
 
-func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(cr *api.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	restores := api.PerconaServerMongoDBRestoreList{}
-	if err := r.client.List(context.TODO(), &restores, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.client.List(ctx, &restores, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -167,9 +170,9 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(cr *api.PerconaServerMo
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	bcps := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(context.TODO(), &bcps, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.client.List(ctx, &bcps, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -187,9 +190,9 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(cr *api.PerconaServerMon
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) hasFullBackup(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	backups := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(context.TODO(), &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.client.List(ctx, &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -205,13 +208,13 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(cr *api.PerconaServerMongo
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Backup.Enabled {
 		return nil
 	}
 
 	// pitr is disabled right before restore so it must not be re-enabled during restore
-	isRestoring, err := r.isRestoreRunning(cr)
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "checking if restore running on pbm update")
 	}
@@ -220,14 +223,14 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		return nil
 	}
 
-	pbm, err := backup.NewPBM(r.client, cr)
+	pbm, err := backup.NewPBM(ctx, r.client, cr)
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
-	defer pbm.Close()
+	defer pbm.Close(ctx)
 
 	if cr.Spec.Backup.PITR.Enabled {
-		hasFullBackup, err := r.hasFullBackup(cr)
+		hasFullBackup, err := r.hasFullBackup(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "check full backup")
 		}
@@ -273,12 +276,68 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(cr *api.PerconaServerMongoDB)
 		return errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
 	}
 
-	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin {
-		val := strconv.FormatFloat(cr.Spec.Backup.PITR.OplogSpanMin, 'f', -1, 64)
+	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin.Float64() {
+		val := cr.Spec.Backup.PITR.OplogSpanMin.String()
 		if err := pbm.C.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
 			return errors.Wrap(err, "update pitr.oplogSpanMin")
 		}
 	}
 
+	val, err = pbm.C.GetConfigVar("pitr.compression")
+	var compression = ""
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil
+		} else if !errors.Is(err, bsoncore.ErrElementNotFound) {
+			return errors.Wrap(err, "get pitr.compression")
+		}
+	} else {
+		compression, ok = val.(string)
+		if !ok {
+			return errors.Wrap(err, "unexpected value of pitr.compression")
+		}
+	}
+
+	if compression != string(cr.Spec.Backup.PITR.Compression) {
+		if string(cr.Spec.Backup.PITR.Compression) == "" {
+			if err := pbm.C.DeleteConfigVar("pitr.compression"); err != nil {
+				return errors.Wrap(err, "delete pitr.compression")
+			}
+		} else if err := pbm.C.SetConfigVar("pitr.compression", string(cr.Spec.Backup.PITR.Compression)); err != nil {
+			return errors.Wrap(err, "update pitr.compression")
+		}
+	}
+
+	val, err = pbm.C.GetConfigVar("pitr.compressionLevel")
+	var compressionLevel *int64 = nil
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil
+		} else if !errors.Is(err, bsoncore.ErrElementNotFound) {
+			return errors.Wrap(err, "get pitr.compressionLevel")
+		}
+	} else {
+		tmpCompressionLevel, ok := val.(int64)
+		if !ok {
+			return errors.Wrap(err, "unexpected value of pitr.compressionLevel")
+		}
+		compressionLevel = Int64(tmpCompressionLevel)
+	}
+
+	if !reflect.DeepEqual(compressionLevel, cr.Spec.Backup.PITR.CompressionLevel) {
+		if cr.Spec.Backup.PITR.CompressionLevel == nil {
+			if err := pbm.C.DeleteConfigVar("pitr.compressionLevel"); err != nil {
+				return errors.Wrap(err, "delete pitr.compressionLevel")
+			}
+		} else if err := pbm.C.SetConfigVar("pitr.compressionLevel", strconv.FormatInt(*(cr.Spec.Backup.PITR.CompressionLevel), 10)); err != nil {
+			return errors.Wrap(err, "update pitr.compressionLevel")
+		}
+	}
+
 	return nil
+}
+
+// Int64 returns a pointer to the int64 value passed in.
+func Int64(v int64) *int64 {
+	return &v
 }

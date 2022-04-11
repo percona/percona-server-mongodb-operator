@@ -9,22 +9,22 @@ import (
 
 const defaultScore = 1.0
 
-// NodesPriority groupes nodes by priority according to
+// NodesPriority groups nodes by priority according to
 // provided scores. Basically nodes are grouped and sorted by
 // descending order by score
 type NodesPriority struct {
-	m map[string]nscores
+	m map[string]nodeScores
 }
 
 func NewNodesPriority() *NodesPriority {
-	return &NodesPriority{make(map[string]nscores)}
+	return &NodesPriority{make(map[string]nodeScores)}
 }
 
 // Add node with its score
 func (n *NodesPriority) Add(rs, node string, sc float64) {
 	s, ok := n.m[rs]
 	if !ok {
-		s = nscores{m: make(map[float64][]string)}
+		s = nodeScores{m: make(map[float64][]string)}
 	}
 	s.add(node, sc)
 	n.m[rs] = s
@@ -44,7 +44,7 @@ func (p *PBM) BcpNodesPriority() (*NodesPriority, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "get config")
 	}
-	agnts, err := p.AgentsStatus()
+	agents, err := p.AgentsStatus()
 	if err != nil {
 		return nil, errors.Wrap(err, "get agents list")
 	}
@@ -72,29 +72,29 @@ func (p *PBM) BcpNodesPriority() (*NodesPriority, error) {
 		}
 	}
 
-	return bcpNodesPriority(agnts, f), nil
+	return bcpNodesPriority(agents, f), nil
 }
 
 func bcpNodesPriority(agents []AgentStat, f agentScore) *NodesPriority {
-	scrs := NewNodesPriority()
+	scores := NewNodesPriority()
 
 	for _, a := range agents {
 		if ok, _ := a.OK(); !ok {
 			continue
 		}
 
-		scrs.Add(a.RS, a.Node, f(a))
+		scores.Add(a.RS, a.Node, f(a))
 	}
 
-	return scrs
+	return scores
 }
 
-type nscores struct {
+type nodeScores struct {
 	idx []float64
 	m   map[float64][]string
 }
 
-func (s *nscores) add(node string, sc float64) {
+func (s *nodeScores) add(node string, sc float64) {
 	nodes, ok := s.m[sc]
 	if !ok {
 		s.idx = append(s.idx, sc)
@@ -102,7 +102,7 @@ func (s *nscores) add(node string, sc float64) {
 	s.m[sc] = append(nodes, node)
 }
 
-func (s nscores) list() [][]string {
+func (s nodeScores) list() [][]string {
 	ret := make([][]string, len(s.idx))
 	sort.Sort(sort.Reverse(sort.Float64Slice(s.idx)))
 

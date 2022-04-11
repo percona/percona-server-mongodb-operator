@@ -52,22 +52,10 @@ spec:
             - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --shardsvr
-            - --slowms=100
-            - --profile=1
-            - --rateLimit=100
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-            - --encryptionCipherMode=AES256-CBC
             - --wiredTigerCacheSizeGB=0.25
-            - --wiredTigerCollectionBlockCompressor=snappy
-            - --wiredTigerJournalCompressor=snappy
             - --wiredTigerIndexPrefixCompression=true
-            - --setParameter
-            - ttlMonitorSleepSecs=60
-            - --setParameter
-            - wiredTigerConcurrentReadTransactions=128
-            - --setParameter
-            - wiredTigerConcurrentWriteTransactions=128
           command:
             - /data/db/ps-entry.sh
           env:

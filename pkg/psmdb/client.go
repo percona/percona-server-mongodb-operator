@@ -1,8 +1,7 @@
 package psmdb
 
 import (
-	"strconv"
-	"strings"
+	"context"
 
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
@@ -18,13 +17,13 @@ type Credentials struct {
 	Password string
 }
 
-func MongoClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (*mgo.Client, error) {
-	pods, err := GetRSPods(k8sclient, cr, rs.Name)
+func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (*mgo.Client, error) {
+	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
-	rsAddrs, err := GetReplsetAddrs(k8sclient, cr, rs.Name, rs.Expose.Enabled, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, rs.Name, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
@@ -37,7 +36,7 @@ func MongoClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.R
 	}
 
 	if !cr.Spec.UnsafeConf {
-		tlsCfg, err := tls.Config(k8sclient, cr)
+		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}
@@ -48,16 +47,19 @@ func MongoClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.R
 	return mongo.Dial(conf)
 }
 
-func MongosClient(k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
+func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
+	hosts, err := GetMongosAddrs(ctx, k8sclient, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get mongos addrs")
+	}
 	conf := mongo.Config{
-		Hosts: []string{strings.Join([]string{cr.Name + "-mongos", cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-			":" + strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port))},
+		Hosts:    hosts,
 		Username: c.Username,
 		Password: c.Password,
 	}
 
 	if !cr.Spec.UnsafeConf {
-		tlsCfg, err := tls.Config(k8sclient, cr)
+		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}

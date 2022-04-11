@@ -53,7 +53,12 @@ func (i *NodeInfo) IsSharded() bool {
 
 // IsLeader returns true if node can act as backup leader (it's configsrv or non shareded rs)
 func (i *NodeInfo) IsLeader() bool {
-	return !i.IsSharded() || i.ReplsetRole() == ReplRoleConfigSrv
+	return !i.IsSharded() || i.ReplsetRole() == RoleConfigSrv
+}
+
+// IsConfigSrv returns true if node belongs to the CSRS in a sharded cluster
+func (i *NodeInfo) IsConfigSrv() bool {
+	return i.IsSharded() && i.ReplsetRole() == RoleConfigSrv
 }
 
 // IsClusterLeader - cluster leader is a primary node on configsrv
@@ -63,14 +68,14 @@ func (i *NodeInfo) IsClusterLeader() bool {
 }
 
 // ReplsetRole returns replset role in sharded clister
-func (i *NodeInfo) ReplsetRole() ReplRole {
+func (i *NodeInfo) ReplsetRole() ReplsetRole {
 	switch {
 	case i.ConfigSvr == 2:
-		return ReplRoleConfigSrv
+		return RoleConfigSrv
 	case i.ConfigServerState != nil:
-		return ReplRoleShard
+		return RoleShard
 	default:
-		return ReplRoleUnknown
+		return RoleUnknown
 	}
 }
 
@@ -168,6 +173,8 @@ type ReplsetStatus struct {
 }
 
 // Shard represent config.shard https://docs.mongodb.com/manual/reference/config-database/#config.shards
+// _id may differ from the rs name, so extract rs name from the host (format like "rs2/localhost:27017")
+// see https://jira.percona.com/browse/PBM-595
 type Shard struct {
 	ID   string `bson:"_id"`
 	RS   string `bson:"-"`
@@ -219,4 +226,40 @@ type BalancerStatus struct {
 
 func (b *BalancerStatus) IsOn() bool {
 	return b.Mode == BalancerModeOn
+}
+
+type MongodOpts struct {
+	Net struct {
+		BindIp string `bson:"bindIp" json:"bindIp"`
+		Port   int    `bson:"port" json:"port"`
+	} `bson:"net" json:"net"`
+	Storage struct {
+		DBpath string `bson:"dbPath" json:"dbPath"`
+	} `bson:"storage" json:"storage"`
+}
+
+type RSConfig struct {
+	ID                      string     `bson:"_id" json:"_id"`
+	CSRS                    bool       `bson:"configsvr,omitempty" json:"configsvr"`
+	Protocol                int64      `bson:"protocolVersion,omitempty" json:"protocolVersion"`
+	Version                 int        `bson:"version" json:"version"`
+	Members                 []RSMember `bson:"members" json:"members"`
+	WConcernMajorityJournal bool       `bson:"writeConcernMajorityJournalDefault,omitempty" json:"writeConcernMajorityJournalDefault"`
+	Settings                struct {
+		ChainingAllowed         bool `bson:"chainingAllowed,omitempty" json:"chainingAllowed"`
+		HeartbeatIntervalMillis int  `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis"`
+		HeartbeatTimeoutSecs    int  `bson:"heartbeatTimeoutSecs,omitempty" json:"heartbeatTimeoutSecs"`
+		ElectionTimeoutMillis   int  `bson:"electionTimeoutMillis,omitempty" json:"electionTimeoutMillis"`
+		CatchUpTimeoutMillis    int  `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis"`
+	} `bson:"settings,omitempty" json:"settings"`
+}
+
+type RSMember struct {
+	ID           int               `bson:"_id" json:"_id"`
+	Host         string            `bson:"host" json:"host"`
+	ArbiterOnly  bool              `bson:"arbiterOnly,omitempty" json:"arbiterOnly"`
+	BuildIndexes bool              `bson:"buildIndexes,omitempty" json:"buildIndexes"`
+	Hidden       bool              `bson:"hidden,omitempty" json:"hidden"`
+	Priority     float64           `bson:"priority,omitempty" json:"priority"`
+	Tags         map[string]string `bson:"tags,omitempty" json:"tags"`
 }

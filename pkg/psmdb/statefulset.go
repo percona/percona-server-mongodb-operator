@@ -3,6 +3,8 @@ package psmdb
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/go-logr/logr"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,30 +33,13 @@ var secretFileMode int32 = 288
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
-	ls map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
+	ls map[string]string, customLabels map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
 	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
-	resourcesSpec *api.ResourcesSpec, podSecurityContext *corev1.PodSecurityContext,
+	resources corev1.ResourceRequirements, podSecurityContext *corev1.PodSecurityContext,
 	containerSecurityContext *corev1.SecurityContext, livenessProbe *api.LivenessProbeExtended,
-	readinessProbe *corev1.Probe, configuration string, configName string) (appsv1.StatefulSetSpec, error) {
+	readinessProbe *corev1.Probe, configName string) (appsv1.StatefulSetSpec, error) {
 
 	fvar := false
-
-	// TODO: do as the backup - serialize resources straight via cr.yaml
-	resources, err := CreateResources(resourcesSpec)
-	if err != nil {
-		return appsv1.StatefulSetSpec{}, fmt.Errorf("resource creation: %v", err)
-	}
-
-	customLabels := make(map[string]string, len(ls))
-	for k, v := range ls {
-		customLabels[k] = v
-	}
-
-	for k, v := range multiAZ.Labels {
-		if _, ok := customLabels[k]; !ok {
-			customLabels[k] = v
-		}
-	}
 
 	volumes := []corev1.Volume{
 		{
@@ -69,14 +54,18 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
-	if customConf.Type.IsUsable() {
+	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: customConf.Type.VolumeSource(configName),
 		})
 	}
+	encryptionEnabled, err := isEncryptionEnabled(m, replset)
+	if err != nil {
+		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
+	}
 
-	if *m.Spec.Mongod.Security.EnableEncryption {
+	if encryptionEnabled {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: m.Spec.EncryptionKeySecretName(),
@@ -98,8 +87,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	}
 
 	for i := range initContainers {
-		initContainers[i].Resources.Limits = c.Resources.Limits
-		initContainers[i].Resources.Requests = c.Resources.Requests
+		initContainers[i].Resources = c.Resources
 	}
 
 	containers, ok := multiAZ.WithSidecars(c)
@@ -112,7 +100,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		annotations = make(map[string]string)
 	}
 
-	if customConf.Type.IsUsable() {
+	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
@@ -155,7 +143,7 @@ func MongosCustomConfigName(clusterName string) string {
 }
 
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
-func PersistentVolumeClaim(name, namespace string, labels map[string]string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
+func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -164,7 +152,6 @@ func PersistentVolumeClaim(name, namespace string, labels map[string]string, spe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Labels:    labels,
 		},
 		Spec: *spec,
 	}
@@ -208,4 +195,15 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 	}
 
 	return nil
+}
+
+func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+	if cr.CompareVersion("1.12.0") >= 0 {
+		enabled, err := replset.Configuration.IsEncryptionEnabled()
+		if err != nil {
+			return false, errors.Wrap(err, "failed to parse replset configuration")
+		}
+		return enabled, nil
+	}
+	return *cr.Spec.Mongod.Security.EnableEncryption, nil
 }

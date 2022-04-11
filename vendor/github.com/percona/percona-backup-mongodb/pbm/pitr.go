@@ -22,8 +22,8 @@ const (
 	PITRfsPrefix = "pbmPitr"
 )
 
-// PITRChunk is index metadata for the oplog chunks
-type PITRChunk struct {
+// OplogChunk is index metadata for the oplog chunks
+type OplogChunk struct {
 	RS          string              `bson:"rs"`
 	FName       string              `bson:"fname"`
 	Compression CompressionType     `bson:"compression"`
@@ -73,16 +73,16 @@ func (p *PBM) PITRrun() (bool, error) {
 }
 
 // PITRLastChunkMeta returns the most recent PITR chunk for the given Replset
-func (p *PBM) PITRLastChunkMeta(rs string) (*PITRChunk, error) {
+func (p *PBM) PITRLastChunkMeta(rs string) (*OplogChunk, error) {
 	return p.pitrChunk(rs, -1)
 }
 
 // PITRFirstChunkMeta returns the oldest PITR chunk for the given Replset
-func (p *PBM) PITRFirstChunkMeta(rs string) (*PITRChunk, error) {
+func (p *PBM) PITRFirstChunkMeta(rs string) (*OplogChunk, error) {
 	return p.pitrChunk(rs, 1)
 }
 
-func (p *PBM) pitrChunk(rs string, sort int) (*PITRChunk, error) {
+func (p *PBM) pitrChunk(rs string, sort int) (*OplogChunk, error) {
 	res := p.Conn.Database(DB).Collection(PITRChunksCollection).FindOne(
 		p.ctx,
 		bson.D{{"rs", rs}},
@@ -95,27 +95,31 @@ func (p *PBM) pitrChunk(rs string, sort int) (*PITRChunk, error) {
 		return nil, errors.Wrap(res.Err(), "get")
 	}
 
-	chnk := new(PITRChunk)
+	chnk := new(OplogChunk)
 	err := res.Decode(chnk)
 	return chnk, errors.Wrap(err, "decode")
 }
 
 // PITRGetChunksSlice returns slice of PITR oplog chunks which Start TS
 // lies in a given time frame. Returns all chunks if `to` is 0.
-func (p *PBM) PITRGetChunksSlice(rs string, from, to primitive.Timestamp) ([]PITRChunk, error) {
+func (p *PBM) PITRGetChunksSlice(rs string, from, to primitive.Timestamp) ([]OplogChunk, error) {
 	q := bson.D{}
 	if rs != "" {
 		q = bson.D{{"rs", rs}}
 	}
 	if to.T > 0 {
-		q = append(q, bson.E{"start_ts", bson.M{"$gte": from, "$lte": to}})
+		// q = append(q, bson.E{"start_ts", bson.M{"$gte": from, "$lte": to}})
+		q = append(q, bson.D{
+			{"start_ts", bson.M{"$lte": to}},
+			{"end_ts", bson.M{"$gte": from}},
+		}...)
 	}
 
 	return p.pitrGetChunksSlice(rs, q)
 }
 
 // PITRGetChunksSliceUntil returns slice of PITR oplog chunks that starts up until timestamp (exclusively)
-func (p *PBM) PITRGetChunksSliceUntil(rs string, t primitive.Timestamp) ([]PITRChunk, error) {
+func (p *PBM) PITRGetChunksSliceUntil(rs string, t primitive.Timestamp) ([]OplogChunk, error) {
 	q := bson.D{}
 	if rs != "" {
 		q = bson.D{{"rs", rs}}
@@ -126,21 +130,20 @@ func (p *PBM) PITRGetChunksSliceUntil(rs string, t primitive.Timestamp) ([]PITRC
 	return p.pitrGetChunksSlice(rs, q)
 }
 
-func (p *PBM) pitrGetChunksSlice(rs string, q bson.D) ([]PITRChunk, error) {
+func (p *PBM) pitrGetChunksSlice(rs string, q bson.D) ([]OplogChunk, error) {
 	cur, err := p.Conn.Database(DB).Collection(PITRChunksCollection).Find(
 		p.ctx,
 		q,
 		options.Find().SetSort(bson.D{{"start_ts", 1}}),
 	)
-
 	if err != nil {
 		return nil, errors.Wrap(err, "get cursor")
 	}
 	defer cur.Close(p.ctx)
 
-	chnks := []PITRChunk{}
+	chnks := []OplogChunk{}
 	for cur.Next(p.ctx) {
-		var chnk PITRChunk
+		var chnk OplogChunk
 		err := cur.Decode(&chnk)
 		if err != nil {
 			return nil, errors.Wrap(err, "decode chunk")
@@ -154,7 +157,7 @@ func (p *PBM) pitrGetChunksSlice(rs string, q bson.D) ([]PITRChunk, error) {
 
 // PITRGetChunkStarts returns a pitr slice chunk that belongs to the
 // given replica set and start from the given timestamp
-func (p *PBM) PITRGetChunkStarts(rs string, ts primitive.Timestamp) (*PITRChunk, error) {
+func (p *PBM) PITRGetChunkStarts(rs string, ts primitive.Timestamp) (*OplogChunk, error) {
 	res := p.Conn.Database(DB).Collection(PITRChunksCollection).FindOne(
 		p.ctx,
 		bson.D{
@@ -166,13 +169,13 @@ func (p *PBM) PITRGetChunkStarts(rs string, ts primitive.Timestamp) (*PITRChunk,
 		return nil, errors.Wrap(res.Err(), "get")
 	}
 
-	chnk := new(PITRChunk)
+	chnk := new(OplogChunk)
 	err := res.Decode(chnk)
 	return chnk, errors.Wrap(err, "decode")
 }
 
 // PITRAddChunk stores PITR chunk metadata
-func (p *PBM) PITRAddChunk(c PITRChunk) error {
+func (p *PBM) PITRAddChunk(c OplogChunk) error {
 	_, err := p.Conn.Database(DB).Collection(PITRChunksCollection).InsertOne(p.ctx, c)
 
 	return err
@@ -223,7 +226,7 @@ func (p *PBM) PITRGetValidTimelines(rs string, until primitive.Timestamp, flist 
 
 // PITRTimelines returns cluster-wide time ranges valid for PITR restore
 func (p *PBM) PITRTimelines() (tlines []Timeline, err error) {
-	shards, err := p.ClusterMembers(nil)
+	shards, err := p.ClusterMembers()
 	if err != nil {
 		return nil, errors.Wrap(err, "get cluster members")
 	}
@@ -247,7 +250,7 @@ func (p *PBM) PITRTimelines() (tlines []Timeline, err error) {
 	return MergeTimelines(tlns...), nil
 }
 
-func gettimelines(slices []PITRChunk) (tlines []Timeline) {
+func gettimelines(slices []OplogChunk) (tlines []Timeline) {
 	var tl Timeline
 	var prevEnd primitive.Timestamp
 	for _, s := range slices {
@@ -344,7 +347,7 @@ func MergeTimelines(tlns ...[]Timeline) []Timeline {
 	}
 	sort.Sort(g)
 
-	// if no gaps, just return avaliable range
+	// if no gaps, just return available range
 	if len(g) == 0 {
 		return []Timeline{{Start: start, End: end}}
 	}
@@ -373,7 +376,7 @@ func MergeTimelines(tlns ...[]Timeline) []Timeline {
 		}
 	}
 
-	// split avaliable timeline with gaps
+	// split available timeline with gaps
 	var ret []Timeline
 	for _, g := range g2 {
 		if start < g.s {
@@ -393,12 +396,12 @@ func MergeTimelines(tlns ...[]Timeline) []Timeline {
 // current fromat is 20200715155939-0.20200715160029-1.oplog.snappy
 //
 // !!! should be agreed with pbm/pitr.chunkPath()
-func PITRmetaFromFName(f string) *PITRChunk {
+func PITRmetaFromFName(f string) *OplogChunk {
 	ppath := strings.Split(f, "/")
 	if len(ppath) < 2 {
 		return nil
 	}
-	chnk := &PITRChunk{}
+	chnk := &OplogChunk{}
 	chnk.RS = ppath[0]
 	chnk.FName = path.Join(PITRfsPrefix, f)
 
