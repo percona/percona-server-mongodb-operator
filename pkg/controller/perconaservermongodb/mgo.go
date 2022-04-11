@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
