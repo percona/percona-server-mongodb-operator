@@ -276,7 +276,7 @@ func (s *S3) Save(name string, data io.Reader, sizeb int) error {
 			partSize = s.opts.UploadPartSize
 		}
 		if sizeb > 0 {
-			ps := sizeb / s.opts.MaxUploadParts * 9 / 10 // shed 10% just in case
+			ps := sizeb / s3manager.MaxUploadParts * 11 / 10 // add 10% just in case
 			if ps > partSize {
 				partSize = ps
 			}

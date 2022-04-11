@@ -12,12 +12,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
 const DefaultDNSSuffix = "svc.cluster.local"
+
+// MultiClusterDefaultDNSSuffix is a default dns suffix for multi-cluster service
+const MultiClusterDefaultDNSSuffix = "svc.clusterset.local"
 
 const (
 	MongodRESTencryptDir = "/etc/mongodb-encryption"
@@ -36,7 +40,7 @@ var (
 	defaultMongodSize               int32 = 3
 	defaultReplsetName                    = "rs"
 	defaultStorageEngine                  = StorageEngineWiredTiger
-	defaultMongodPort               int32 = 27017
+	DefaultMongodPort               int32 = 27017
 	defaultWiredTigerCacheSizeRatio       = numstr.MustParse("0.5")
 	defaultInMemorySizeRatio              = numstr.MustParse("0.9")
 	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
@@ -81,7 +85,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Mongod.Net = &MongodSpecNet{}
 		}
 		if cr.Spec.Mongod.Net.Port == 0 {
-			cr.Spec.Mongod.Net.Port = defaultMongodPort
+			cr.Spec.Mongod.Net.Port = DefaultMongodPort
 		}
 		if cr.Spec.Mongod.Storage == nil {
 			cr.Spec.Mongod.Storage = &MongodSpecStorage{}
@@ -441,7 +445,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
 		}
 
-		err := replset.SetDefauts(platform, cr.Spec.UnsafeConf, log)
+		err := replset.SetDefaults(platform, cr, log)
 		if err != nil {
 			return err
 		}
@@ -527,11 +531,19 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		return errors.New("SmartUpdate is not allowed on unmanaged clusters, set updateStrategy to RollingUpdate or OnDelete")
 	}
 
+	if len(cr.Spec.MultiCluster.DNSSuffix) == 0 {
+		cr.Spec.MultiCluster.DNSSuffix = MultiClusterDefaultDNSSuffix
+	}
+
+	if !mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled {
+		return errors.New("MCS is not available on this cluster")
+	}
+
 	return nil
 }
 
-// SetDefauts set default options for the replset
-func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log logr.Logger) error {
+// SetDefaults set default options for the replset
+func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
 	if rs.VolumeSpec == nil {
 		return fmt.Errorf("replset %s: volumeSpec should be specified", rs.Name)
 	}
@@ -551,8 +563,8 @@ func (rs *ReplsetSpec) SetDefauts(platform version.Platform, unsafe bool, log lo
 		rs.Arbiter.MultiAZ.reconcileOpts()
 	}
 
-	if !unsafe {
-		rs.setSafeDefauts(log)
+	if !cr.Spec.UnsafeConf && cr.DeletionTimestamp == nil {
+		rs.setSafeDefaults(log)
 	}
 
 	if err := rs.Configuration.SetDefaults(); err != nil {
@@ -694,7 +706,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	return nil
 }
 
-func (rs *ReplsetSpec) setSafeDefauts(log logr.Logger) {
+func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 	loginfo := func(msg string, args ...interface{}) {
 		log.Info(msg, args...)
 		log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
@@ -792,7 +804,7 @@ func (v *VolumeSpec) reconcileOpts() error {
 
 func MongodPort(cr *PerconaServerMongoDB) int32 {
 	if cr.CompareVersion("1.12.0") >= 0 {
-		return defaultMongodPort
+		return DefaultMongodPort
 	}
 	return cr.Spec.Mongod.Net.Port
 }

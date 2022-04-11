@@ -7,8 +7,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 )
@@ -82,4 +84,22 @@ func GetMongosServices(ctx context.Context, cl client.Client, cr *api.PerconaSer
 		return nil, errors.Wrap(err, "failed to list mongos services")
 	}
 	return list, nil
+}
+
+func GetExportedServices(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*mcsv1alpha1.ServiceExportList, error) {
+	ls := clusterLabels(cr)
+
+	seList := mcs.ServiceExportList()
+	err := cl.List(ctx,
+		seList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(ls),
+		},
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "get service export list")
+	}
+
+	return seList, nil
 }

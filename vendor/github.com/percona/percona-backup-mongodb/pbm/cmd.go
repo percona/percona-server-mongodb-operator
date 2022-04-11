@@ -16,7 +16,7 @@ func (c ErrorCursor) Error() string {
 	return fmt.Sprintln("cursor was closed with:", c.cerr)
 }
 
-func (p *PBM) ListenCmd() (<-chan Cmd, <-chan error, error) {
+func (p *PBM) ListenCmd(cl <-chan struct{}) (<-chan Cmd, <-chan error) {
 	cmd := make(chan Cmd)
 	errc := make(chan error)
 
@@ -28,6 +28,11 @@ func (p *PBM) ListenCmd() (<-chan Cmd, <-chan error, error) {
 		var lastTs int64
 		var lastCmd Command
 		for {
+			select {
+			case <-cl:
+				return
+			default:
+			}
 			cur, err := p.Conn.Database(DB).Collection(CmdStreamCollection).Find(
 				p.ctx,
 				bson.M{"ts": bson.M{"$gte": ts}},
@@ -72,7 +77,7 @@ func (p *PBM) ListenCmd() (<-chan Cmd, <-chan error, error) {
 		}
 	}()
 
-	return cmd, errc, nil
+	return cmd, errc
 }
 
 func (p *PBM) SendCmd(cmd Cmd) error {

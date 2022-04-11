@@ -23,6 +23,8 @@ const (
 	defaultUploadMaxBuff = 5
 
 	defaultRetries = 10
+
+	maxBlocks = 50_000
 )
 
 type Conf struct {
@@ -64,11 +66,23 @@ func New(opts Conf, l *log.Event) (*Blob, error) {
 }
 
 func (b *Blob) Save(name string, data io.Reader, sizeb int) error {
+	bufsz := defaultUploadBuff
+	if sizeb > 0 {
+		ps := sizeb / maxBlocks * 11 / 10 // add 10% just in case
+		if ps > bufsz {
+			bufsz = ps
+		}
+	}
+
+	if b.log != nil {
+		b.log.Debug("BufferSize is set to %d (~%dMb) | %d", bufsz, bufsz>>20, sizeb)
+	}
+
 	_, err := azblob.UploadStreamToBlockBlob(
 		context.TODO(),
 		data,
 		b.c.NewBlockBlobURL(path.Join(b.opts.Prefix, name)),
-		azblob.UploadStreamToBlockBlobOptions{BufferSize: defaultUploadBuff, MaxBuffers: defaultUploadMaxBuff},
+		azblob.UploadStreamToBlockBlobOptions{BufferSize: bufsz, MaxBuffers: defaultUploadMaxBuff},
 	)
 
 	return err
