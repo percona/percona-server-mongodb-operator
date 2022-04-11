@@ -601,7 +601,7 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 		return errors.Wrap(err, "get standalone client")
 	}
 
-	cnf, err := mongo.ReadConfig(context.TODO(), cli)
+	cnf, err := mongo.ReadConfig(ctx, cli)
 	if err != nil {
 		return errors.Wrap(err, "get mongo config")
 	}
@@ -618,7 +618,7 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 
 	log.Info("Writing replicaset config", "config", cnf)
 
-	if err := mongo.WriteConfig(context.TODO(), cli, cnf); err != nil {
+	if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
 		return errors.Wrap(err, "write mongo config")
 	}
 
