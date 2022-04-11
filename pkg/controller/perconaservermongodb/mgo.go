@@ -37,7 +37,31 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
+		log.Info("Waiting for the pods", "replsetSize", replsetSize, "pods", len(pods.Items))
 		return api.AppStateInit, nil
+	}
+
+	if cr.MCSEnabled() {
+		seList, err := psmdb.GetExportedServices(ctx, r.client, cr)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "get exported services")
+		}
+
+		if len(seList.Items) == 0 {
+			log.Info("waiting for service exports")
+			return api.AppStateInit, nil
+		}
+
+		for _, se := range seList.Items {
+			imported, err := psmdb.IsServiceImported(ctx, r.client, cr, se.Name)
+			if err != nil {
+				return api.AppStateError, errors.Wrapf(err, "check if service is imported for %s", se.Name)
+			}
+			if !imported {
+				log.Info("waiting for service import", "replset", replset.Name, "serviceExport", se.Name)
+				return api.AppStateInit, nil
+			}
+		}
 	}
 
 	if cr.Spec.Unmanaged {
@@ -174,10 +198,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			member.Priority = 0
 		case "mongod", "cfg":
 			member.Tags = mongo.ReplsetTags{
+				"podName":     pod.Name,
 				"serviceName": cr.Name,
 			}
 		case "nonVoting":
 			member.Tags = mongo.ReplsetTags{
+				"podName":     pod.Name,
 				"serviceName": cr.Name,
 				"nonVoting":   "true",
 			}
@@ -214,10 +240,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
+	if cnf.Members.FixHosts(members) {
+		cnf.Version++
+
+		err = mongo.WriteConfig(ctx, cli, cnf)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "fix hosts: write mongo config")
+		}
+	}
+
 	if cnf.Members.RemoveOld(members) {
 		cnf.Members.SetVotes()
 
 		cnf.Version++
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "delete: write mongo config")
@@ -229,6 +265,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		cnf.Members.SetVotes()
 
 		cnf.Version++
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "add new: write mongo config")
@@ -389,11 +426,12 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
+		var errb, outb bytes.Buffer
 
-		cmd := []string{
-			"sh", "-c",
-			fmt.Sprintf(
-				`
+		cmd := []string{"sh", "-c", ""}
+
+		cmd[2] = fmt.Sprintf(
+			`
 				cat <<-EOF | mongo 
 				rs.initiate(
 					{
@@ -405,10 +443,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 					}
 				)
 				EOF
-			`, replset.Name, host),
-		}
-
-		var errb, outb bytes.Buffer
+			`, replset.Name, host)
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())

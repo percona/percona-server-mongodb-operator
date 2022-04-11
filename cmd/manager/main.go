@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"k8s.io/client-go/discovery"
 	"os"
 	"runtime"
 
@@ -75,7 +77,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		setupLog.Error(err, "failed to get config")
+		os.Exit(1)
+	}
+
+	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
@@ -99,6 +107,18 @@ func main() {
 	if err := certmgrscheme.AddToScheme(mgr.GetScheme()); err != nil {
 		setupLog.Error(err, "")
 		os.Exit(1)
+	}
+
+	if err := mcs.Register(discovery.NewDiscoveryClientForConfigOrDie(config)); err != nil {
+		setupLog.Error(err, "failed to register multicluster service")
+		os.Exit(1)
+	}
+
+	if mcs.IsAvailable() {
+		if err := mcs.AddToScheme(mgr.GetScheme()); err != nil {
+			setupLog.Error(err, "")
+			os.Exit(1)
+		}
 	}
 
 	// Setup all Controllers

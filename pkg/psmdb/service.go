@@ -2,11 +2,11 @@ package psmdb
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -14,6 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 // Service returns a core/v1 API Service
@@ -26,7 +29,7 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
 
-	return &corev1.Service{
+	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
@@ -48,6 +51,12 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			LoadBalancerSourceRanges: replset.Expose.LoadBalancerSourceRanges,
 		},
 	}
+
+	if m.CompareVersion("1.12.0") >= 0 {
+		svc.Labels = ls
+	}
+
+	return svc
 }
 
 // ExternalService returns a Service object needs to serve external connections
@@ -230,6 +239,19 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 // MongoHost returns the mongo host for given pod
 func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
 	if rsExposed {
+		if m.MCSEnabled() {
+			imported, err := IsServiceImported(ctx, cl, m, pod.Name)
+			if err != nil {
+				return "", errors.Wrapf(err, "check if service imported for %s", pod.Name)
+			}
+
+			if !imported {
+				return getExtAddr(ctx, cl, m.Namespace, pod)
+			}
+
+			return GetMCSAddr(m, pod.Name), nil
+		}
+
 		return getExtAddr(ctx, cl, m.Namespace, pod)
 	}
 
@@ -290,6 +312,11 @@ func GetAddr(m *api.PerconaServerMongoDB, pod, replset string) string {
 		":" + strconv.Itoa(int(api.MongodPort(m)))
 }
 
+// GetMCSAddr returns ReplicaSet pod address using MultiCluster FQDN
+func GetMCSAddr(m *api.PerconaServerMongoDB, pod string) string {
+	return fmt.Sprintf("%s.%s.%s:%d", pod, m.Namespace, m.Spec.MultiCluster.DNSSuffix, api.DefaultMongodPort)
+}
+
 func getExtServices(ctx context.Context, cl client.Client, namespace, podName string) (*corev1.Service, error) {
 	svcMeta := &corev1.Service{}
 
@@ -305,4 +332,16 @@ func getExtServices(ctx context.Context, cl client.Client, namespace, podName st
 		return svcMeta, nil
 	}
 	return nil, errors.New("failed to fetch service: retries limit reached")
+}
+
+func IsServiceImported(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, svcName string) (bool, error) {
+	si := new(mcsv1alpha1.ServiceImport)
+	err := k8sclient.Get(ctx, types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      svcName,
+	}, si)
+	if err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+	return true, nil
 }
