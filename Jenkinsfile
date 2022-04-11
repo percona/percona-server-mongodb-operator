@@ -288,8 +288,9 @@ pipeline {
                     !skipBranchBuilds
                 }
             }
+//          Temporally increase build timeout. Should be return to 3 hours in K8SPXC-630
             options {
-                timeout(time: 3, unit: 'HOURS')
+                timeout(time: 4, unit: 'HOURS')
             }
             parallel {
                 stage('E2E Scaling') {
