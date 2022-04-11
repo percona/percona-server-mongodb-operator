@@ -466,6 +466,36 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) (changes bool) {
 	return changes
 }
 
+func (m *ConfigMembers) FixHosts(compareWith ConfigMembers) (changes bool) {
+	if len(*m) < 1 {
+		return changes
+	}
+
+	cm := make(map[string]string, len(compareWith))
+
+	for _, member := range compareWith {
+		name, ok := member.Tags["podName"]
+		if !ok {
+			continue
+		}
+		cm[name] = member.Host
+	}
+
+	for i := 0; i < len(*m); i++ {
+		member := []ConfigMember(*m)[i]
+		podName, ok := member.Tags["podName"]
+		if !ok {
+			continue
+		}
+		if host, ok := cm[podName]; ok && host != member.Host {
+			changes = true
+			[]ConfigMember(*m)[i].Host = host
+		}
+	}
+
+	return changes
+}
+
 // FixTags corrects the tags of any member if they changed.
 // Especially the "external" tag can change if cluster is switched from
 // unmanaged to managed.

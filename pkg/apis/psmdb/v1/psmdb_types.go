@@ -21,6 +21,7 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -81,6 +82,7 @@ type PerconaServerMongoDBSpec struct {
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 	Sharding                Sharding                             `json:"sharding,omitempty"`
 	InitImage               string                               `json:"initImage,omitempty"`
+	MultiCluster            MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                     *TLSSpec                             `json:"tls,omitempty"`
 }
 
@@ -141,6 +143,11 @@ type ReplsetStatus struct {
 	Ready        int32    `json:"ready"`
 	Status       AppState `json:"status,omitempty"`
 	Message      string   `json:"message,omitempty"`
+}
+
+type MultiCluster struct {
+	Enabled   bool   `json:"enabled"`
+	DNSSuffix string `json:"DNSSuffix,omitempty"`
 }
 
 type AppState string
@@ -856,4 +863,8 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 	}
 
 	return extNodes
+}
+
+func (cr *PerconaServerMongoDB) MCSEnabled() bool {
+    return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }
