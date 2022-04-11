@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/pkg/errors"
@@ -97,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateInit, errors.Wrap(err, "handleReplsetInit")
 		}
 
-		err = r.createSystemUsers(ctx, cr, replset)
+		err = r.createOrUpdateSystemUsers(ctx, cr, replset)
 		if err != nil {
 			return api.AppStateInit, errors.Wrap(err, "create system users")
 		}
@@ -114,6 +115,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		})
 
 		return api.AppStateInit, nil
+	}
+	err = r.createOrUpdateSystemUsers(ctx, cr, replset)
+	if err != nil {
+		return api.AppStateInit, errors.Wrap(err, "create system users")
 	}
 
 	defer func() {
@@ -497,7 +502,101 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 	return errNoRunningMongodContainers
 }
 
-func (r *ReconcilePerconaServerMongoDB) createSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+func getRoles(cr *api.PerconaServerMongoDB, role UserRole) []map[string]interface{} {
+	roles := make([]map[string]interface{}, 0)
+	switch role {
+	case roleClusterMonitor:
+		if cr.CompareVersion("1.12.0") >= 0 {
+			roles = []map[string]interface{}{
+				{"db": "admin", "role": "explainRole"},
+				{"db": "local", "role": "read"},
+			}
+		}
+	case roleBackup:
+		roles = []map[string]interface{}{
+			{"db": "admin", "role": "readWrite"},
+			{"db": "admin", "role": string(roleClusterMonitor)},
+			{"db": "admin", "role": "restore"},
+			{"db": "admin", "role": "pbmAnyAction"},
+		}
+	}
+	roles = append(roles, map[string]interface{}{"db": "admin", "role": string(role)})
+	return roles
+}
+
+// compareResources compares two map[string]interface{} values and returns true if they are equal
+func compareResources(x, y map[string]interface{}) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	for k, v := range x {
+		if !reflect.DeepEqual(y[k], v) {
+			return false
+		}
+	}
+	return true
+}
+
+// compareSlices compares two non-sorted string slices, returns true if they have the same values
+func compareSlices(x, y []string) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	xMap := make(map[string]struct{}, len(x))
+	for _, v := range x {
+		xMap[v] = struct{}{}
+	}
+	for _, v := range y {
+		if _, ok := xMap[v]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// comparePrivileges compares 2 RolePrivilege arrays and returns true if they are equal
+func comparePrivileges(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	for i := range x {
+		if !(compareResources(x[i].Resource, y[i].Resource) && compareSlices(x[i].Actions, y[i].Actions)) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Context, cli *mgo.Client, role string, privileges []mongo.RolePrivilege) error {
+	roleInfo, err := mongo.GetRole(ctx, cli, role)
+	if err != nil {
+		return errors.Wrap(err, "mongo get role")
+	}
+	if roleInfo == nil {
+		err = mongo.CreateRole(ctx, cli, role, privileges, []interface{}{})
+		return errors.Wrapf(err, "create role %s", role)
+	}
+	if !comparePrivileges(privileges, roleInfo.Privileges) {
+		err = mongo.UpdateRole(ctx, cli, role, privileges, []interface{}{})
+		return errors.Wrapf(err, "update role")
+	}
+	return nil
+}
+
+// compareRoles compares 2 role arrays and returns true if they are equal
+func compareRoles(x []map[string]interface{}, y []map[string]interface{}) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	for i := range x {
+		if !reflect.DeepEqual(x[i], y[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleUserAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
@@ -510,83 +609,59 @@ func (r *ReconcilePerconaServerMongoDB) createSystemUsers(ctx context.Context, c
 		}
 	}()
 
-	clusterAdmin, err := r.getInternalCredentials(ctx, cr, roleClusterAdmin)
-	if err != nil {
-		return errors.Wrap(err, "failed to get cluster admin")
-	}
-
-	err = mongo.CreateUser(ctx, cli, clusterAdmin.Username, clusterAdmin.Password, roleClusterAdmin)
-	if err != nil {
-		return errors.Wrap(err, "failed to create clusterAdmin")
-	}
-
-	monitorUser, err := r.getInternalCredentials(ctx, cr, roleClusterMonitor)
-	if err != nil {
-		return errors.Wrap(err, "failed to get cluster admin")
-	}
-
-	var roles []interface{}
 	if cr.CompareVersion("1.12.0") >= 0 {
-		err = mongo.CreateRole(ctx, cli, "explainRole",
-			[]interface{}{
-				map[string]interface{}{
-					"resource": map[string]string{
-						"db":         "",
-						"collection": "system.profile",
-					},
-					"actions": []string{
-						"listIndexes",
-						"listCollections",
-						"dbStats",
-						"dbHash",
-						"collStats",
-						"find",
-					},
+		err = r.createOrUpdateSystemRoles(ctx, cli, "explainRole",
+			[]mongo.RolePrivilege{{
+				Resource: map[string]interface{}{
+					"db":         "",
+					"collection": "system.profile",
 				},
-			}, []interface{}{})
+				Actions: []string{
+					"listIndexes",
+					"listCollections",
+					"dbStats",
+					"dbHash",
+					"collStats",
+					"find",
+				},
+			}})
 		if err != nil {
-			return errors.Wrap(err, "failed to create role")
+			return errors.Wrap(err, "create or update system role")
 		}
-		roles = []interface{}{
-			map[string]string{"db": "admin", "role": "explainRole"},
-			map[string]string{"db": "admin", "role": string(roleClusterMonitor)},
-			map[string]string{"db": "local", "role": "read"},
+	}
+
+	err = r.createOrUpdateSystemRoles(ctx, cli, "pbmAnyAction",
+		[]mongo.RolePrivilege{{
+			Resource: map[string]interface{}{"anyResource": true},
+			Actions:  []string{"anyAction"},
+		}})
+	if err != nil {
+		return errors.Wrap(err, "create or update system role")
+	}
+
+	for _, role := range []UserRole{roleClusterAdmin, roleClusterMonitor, roleBackup} {
+		creds, err := r.getInternalCredentials(ctx, cr, role)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get credentials for %s", role)
 		}
-	} else {
-		roles = []interface{}{roleClusterMonitor}
+		user, err := mongo.GetUserInfo(ctx, cli, creds.Username)
+		if err != nil {
+			return errors.Wrap(err, "get user info")
+		}
+		if user == nil {
+			err = mongo.CreateUser(ctx, cli, creds.Username, creds.Password, getRoles(cr, role)...)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create user %s", role)
+			}
+			continue
+		}
+		if !compareRoles(user.Roles, getRoles(cr, role)) {
+			err = mongo.UpdateUserRoles(ctx, cli, creds.Username, getRoles(cr, role))
+			if err != nil {
+				return errors.Wrapf(err, "failed to create user %s", role)
+			}
+		}
 	}
-	err = mongo.CreateUser(ctx, cli, monitorUser.Username, monitorUser.Password, roles...)
-	if err != nil {
-		return errors.Wrap(err, "failed to create monitorUser")
-	}
-
-	err = mongo.CreateRole(ctx, cli, "pbmAnyAction",
-		[]interface{}{
-			map[string]interface{}{
-				"resource": map[string]bool{"anyResource": true},
-				"actions":  []string{"anyAction"},
-			},
-		}, []interface{}{})
-	if err != nil {
-		return errors.Wrap(err, "failed to create role")
-	}
-
-	backupUser, err := r.getInternalCredentials(ctx, cr, roleBackup)
-	if err != nil {
-		return errors.Wrap(err, "failed to get cluster admin")
-	}
-
-	err = mongo.CreateUser(ctx, cli, backupUser.Username, backupUser.Password,
-		map[string]string{"db": "admin", "role": "readWrite", "collection": ""},
-		map[string]string{"db": "admin", "role": string(roleBackup)},
-		map[string]string{"db": "admin", "role": string(roleClusterMonitor)},
-		map[string]string{"db": "admin", "role": "restore"},
-		map[string]string{"db": "admin", "role": "pbmAnyAction"},
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to create backup")
-	}
-
 	return nil
 }
 
