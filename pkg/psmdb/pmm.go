@@ -26,7 +26,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 			Name: "MONGODB_USER",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_MONITOR_USER",
+					Key: "MONGODB_CLUSTER_MONITOR_USER_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: secrets,
 					},
@@ -37,7 +37,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 			Name: "MONGODB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
+					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: secrets,
 					},

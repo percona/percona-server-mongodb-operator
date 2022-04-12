@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"net/url"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
 
 const (
@@ -71,8 +72,6 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(ctx context.Context, cr *
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}
 
-	creds.Password = url.QueryEscape(creds.Password)
-
 	return creds, nil
 }
 
@@ -86,7 +85,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 		&secretObj,
 	)
 	if err == nil {
-		return nil
+		if cr.CompareVersion("1.2.0") < 0 {
+			shouldUpdate := false
+			for _, v := range []string{envMongoDBClusterMonitorUser, envMongoDBClusterMonitorPassword} {
+				escaped, ok := secretObj.Data[v+"_ESCAPED"]
+				if !ok || url.QueryEscape(string(secretObj.Data[v])) != string(escaped) {
+					secretObj.Data[v+"_ESCAPED"] = []byte(url.QueryEscape(string(secretObj.Data[v])))
+					shouldUpdate = true
+				}
+			}
+			if shouldUpdate {
+				err = r.client.Update(ctx, &secretObj)
+			}
+		}
+		return errors.Wrap(err, "escape users secret")
 	} else if k8serrors.IsNotFound(err) && cr.Spec.Unmanaged {
 		return errors.Errorf("users secret '%s' is required for unmanaged clusters", cr.Spec.Secrets.Users)
 	} else if !k8serrors.IsNotFound(err) {
@@ -108,6 +120,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	data["MONGODB_CLUSTER_MONITOR_PASSWORD"], err = secret.GeneratePassword()
 	if err != nil {
 		return fmt.Errorf("create cluster monitor users pass: %v", err)
+	}
+	if cr.CompareVersion("1.2.0") < 0 {
+		data["MONGODB_CLUSTER_MONITOR_PASSWORD_ESCAPED"] = []byte(url.QueryEscape(string(data["MONGODB_CLUSTER_MONITOR_PASSWORD"])))
 	}
 	data["MONGODB_USER_ADMIN_USER"] = []byte(roleUserAdmin)
 	data["MONGODB_USER_ADMIN_PASSWORD"], err = secret.GeneratePassword()

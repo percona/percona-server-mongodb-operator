@@ -5,10 +5,13 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/description"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -72,7 +75,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 	if err != nil {
 		if cr.Status.Replsets[replset.Name].Initialized {
-			return api.AppStateError, errors.Wrap(err, "dial:")
+			// If an exposed replset is initialized but connection fails with ReplicaSetNoPrimary,
+			// we'll change the member hosts to local FQDNs and reconfig to recover.
+			serverSelectionError, ok := errors.Cause(err).(topology.ServerSelectionError)
+			if ok && replset.Expose.Enabled {
+				if serverSelectionError.Desc.Kind != description.ReplicaSetNoPrimary {
+					return api.AppStateError, errors.Wrap(err, "dial")
+				}
+
+				log.Error(err, "Cluster crashed, trying to recover", "cluster", cr.Name)
+				if err := r.recoverReplsetNoPrimary(ctx, cr, replset, pods.Items[0]); err != nil {
+					return api.AppStateError, errors.Wrap(err, "force reconfig to recover")
+				}
+
+				return api.AppStateInit, nil
+			}
+
+			return api.AppStateError, errors.Wrap(err, "dial")
 		}
 
 		err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
@@ -195,6 +214,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			ID:           key,
 			Host:         host,
 			BuildIndexes: true,
+			Priority:     mongo.DefaultPriority,
 		}
 
 		switch pod.Labels["app.kubernetes.io/component"] {
@@ -336,13 +356,12 @@ func inShard(ctx context.Context, client *mgo.Client, rsName string) (bool, erro
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
 func mongoInitAdminUser(user, pwd string) string {
-	return fmt.Sprintf(`db.getSiblingDB("admin").createUser(
-		{
-			user: "%s",
-			pwd: "%s",
-			roles: [ "userAdminAnyDatabase" ] 
-		}
-	)`, user, pwd)
+	return fmt.Sprintf("'db.getSiblingDB(\"admin\").createUser( "+
+		"{"+
+		"user: \"%s\","+
+		"pwd: \"%s\","+
+		"roles: [ \"userAdminAnyDatabase\" ]"+
+		"})'", strings.ReplaceAll(user, "'", `'"'"'`), strings.ReplaceAll(pwd, "'", `'"'"'`))
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
@@ -461,10 +480,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
 
-		cmd[2] = fmt.Sprintf(`
-			cat <<-EOF | mongo 
-			%s
-			EOF`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
+		cmd[2] = fmt.Sprintf(`mongo --eval %s`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
@@ -640,6 +656,41 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			}
 		}
 	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) error {
+	host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+	if err != nil {
+		return errors.Wrapf(err, "get mongo hostname for pod/%s", pod.Name)
+	}
+
+	cli, err := r.standaloneClientWithRole(ctx, cr, roleClusterAdmin, host)
+	if err != nil {
+		return errors.Wrap(err, "get standalone client")
+	}
+
+	cnf, err := mongo.ReadConfig(ctx, cli)
+	if err != nil {
+		return errors.Wrap(err, "get mongo config")
+	}
+
+	for i := 0; i < len(cnf.Members); i++ {
+		tags := []mongo.ConfigMember(cnf.Members)[i].Tags
+		podName, ok := tags["podName"]
+		if !ok {
+			continue
+		}
+
+		[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
+	}
+
+	log.Info("Writing replicaset config", "config", cnf)
+
+	if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
+		return errors.Wrap(err, "write mongo config")
+	}
+
 	return nil
 }
 
