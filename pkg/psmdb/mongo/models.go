@@ -10,6 +10,7 @@ const (
 	MinVotingMembers = 1
 	MaxVotingMembers = 7
 	MaxMembers       = 50
+	DefaultPriority  = 2
 )
 
 // Replica Set tags: https://docs.mongodb.com/manual/tutorial/configure-replica-set-tag-sets/#add-tag-sets-to-a-replica-set
@@ -228,4 +229,29 @@ func (s *Status) Primary() *Member {
 		return primary[0]
 	}
 	return nil
+}
+
+type RolePrivilege struct {
+	Resource map[string]interface{} `bson:"resource" json:"resource"`
+	Actions  []string               `bson:"actions" json:"actions"`
+}
+
+type Role struct {
+	Role       string                   `bson:"role" json:"role"`
+	Roles      []map[string]interface{} `bson:"roles" json:"roles"`
+	Privileges []RolePrivilege          `bson:"privileges" json:"privileges"`
+}
+
+type RoleInfo struct {
+	Roles      []Role `bson:"roles" json:"roles"`
+	OKResponse `bson:",inline"`
+}
+
+type User struct {
+	Roles []map[string]interface{} `bson:"roles" json:"roles"`
+}
+
+type UsersInfo struct {
+	Users      []User `bson:"users" json:"users"`
+	OKResponse `bson:",inline"`
 }
