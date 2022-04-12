@@ -435,6 +435,22 @@ type ReplsetSpec struct {
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 }
 
+func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
+	return cr.Name + "-" + r.Name
+}
+
+func (r *ReplsetSpec) PodFQDN(cr *PerconaServerMongoDB, podName string) string {
+	if r.Expose.Enabled {
+		return fmt.Sprintf("%s.%s.%s", podName, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix)
+	}
+
+	return fmt.Sprintf("%s.%s.%s.%s", podName, r.ServiceName(cr), cr.Namespace, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func (r *ReplsetSpec) PodFQDNWithPort(cr *PerconaServerMongoDB, podName string) string {
+	return fmt.Sprintf("%s:%d", r.PodFQDN(cr, podName), MongodPort(cr))
+}
+
 type LivenessProbeExtended struct {
 	corev1.Probe        `json:",inline"`
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
