@@ -236,7 +236,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	err = r.safeDownscale(ctx, cr)
+	isDownscale, err := r.safeDownscale(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "safe downscale")
 	}
@@ -491,6 +491,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "delete config server")
 	}
 
+	// clean orphan PVCs if downscale
+	if isDownscale {
+		err = r.deleteOrphanPVCs(ctx, cr)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to delete orphan PVCs: %v", err)
+		}
+	}
+  
 	err = r.exportServices(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "export services")
@@ -536,11 +544,13 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(ctx context.Context, 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+// safeDownscale ensures replica set pods downscaled one by one and returns true if a downscale is in progress
+func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	isDownscale := false
 	for _, rs := range cr.Spec.Replsets {
 		sf, err := r.getRsStatefulset(ctx, cr, rs.Name)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "get rs statefulset")
+			return false, errors.Wrap(err, "get rs statefulset")
 		}
 
 		if k8serrors.IsNotFound(err) {
@@ -550,10 +560,11 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *a
 		// downscale 1 pod on each reconciliation
 		if *sf.Spec.Replicas-rs.Size > 1 {
 			rs.Size = *sf.Spec.Replicas - 1
+			isDownscale = true
 		}
 	}
 
-	return nil
+	return isDownscale, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
@@ -665,6 +676,41 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(ctx context.Context, c
 	}
 
 	return created, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-psmdb-pvc":
+			// remove orphan pvc
+			mongodPVCs, err := r.getMongodPVCs(ctx, cr)
+			if err != nil {
+				return err
+			}
+			mongodPods, err := r.getMongodPods(ctx, cr)
+			if err != nil {
+				return err
+			}
+			mongodPodsMap := make(map[string]bool)
+			for _, pod := range mongodPods.Items {
+				mongodPodsMap[pod.Name] = true
+			}
+			for _, pvc := range mongodPVCs.Items {
+				if strings.HasPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-") {
+					podName := strings.TrimPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-")
+					if _, ok := mongodPodsMap[podName]; !ok {
+						// remove the orphan pvc
+						log.Info("remove orphan pvc", "pvc", pvc.Name)
+						err := r.client.Delete(ctx, &pvc)
+						if err != nil {
+							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
