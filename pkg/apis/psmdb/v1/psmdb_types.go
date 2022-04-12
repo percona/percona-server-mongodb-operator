@@ -80,6 +80,7 @@ type PerconaServerMongoDBSpec struct {
 	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName           string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	ClusterServiceDNSMode   DnsMode                              `json:"clusterServiceDNSMode,omitempty"`
 	Sharding                Sharding                             `json:"sharding,omitempty"`
 	InitImage               string                               `json:"initImage,omitempty"`
 	MultiCluster            MultiCluster                         `json:"multiCluster,omitempty"`
@@ -106,6 +107,20 @@ func (spec *PerconaServerMongoDBSpec) EncryptionKeySecretName() string {
 
 const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
+)
+
+// DNS Mode string describes the mode used to generate fqdn/ip for communication between nodes
+// +enum
+type DnsMode string
+
+const (
+	// DnsModeServiceMesh means a FQDN will be generated, assumming the FQDN is resolvable
+	// and available in all clusters
+	DnsModeServiceMesh DnsMode = "ServiceMesh"
+
+	// DnsModeInternal means a FQDN (svc.cluster.local), a ClusterIP or a public IP will be used
+	// depending on how the service is exposed
+	DnsModeInternal DnsMode = "Internal"
 )
 
 type Sharding struct {
