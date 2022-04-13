@@ -367,20 +367,21 @@ func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interfac
 	return options, nil
 }
 
-func (conf MongoConfiguration) IsEncryptionEnabled() (bool, error) {
+// IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
+func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
 	m, err := conf.GetOptions("security")
 	if err != nil || m == nil {
-		return true, err // true by default
+		return nil, err
 	}
 	enabled, ok := m["enableEncryption"]
 	if !ok {
-		return true, nil // true by default
+		return nil, nil
 	}
 	b, ok := enabled.(bool)
 	if !ok {
-		return false, errors.New("enableEncryption value is not bool")
+		return nil, errors.New("enableEncryption value is not bool")
 	}
-	return b, nil
+	return &b, nil
 }
 
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
@@ -881,5 +882,5 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 }
 
 func (cr *PerconaServerMongoDB) MCSEnabled() bool {
-    return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
+	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }
