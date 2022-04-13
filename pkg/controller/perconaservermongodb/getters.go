@@ -169,6 +169,20 @@ func (r *ReconcilePerconaServerMongoDB) getAllPVCs(ctx context.Context, cr *api.
 	return list, err
 }
 
+func (r *ReconcilePerconaServerMongoDB) getMongodPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
+	list := corev1.PersistentVolumeClaimList{}
+
+	err := r.client.List(ctx,
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+		},
+	)
+
+	return list, err
+}
+
 func clusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
