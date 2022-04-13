@@ -84,7 +84,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTempl
 	}
 }
 
-func MongosTemplateSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
 	ls := mongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
@@ -98,7 +98,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, lo
 		return corev1.PodTemplateSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := InitContainers(cr, operatorPod)
+	initContainers := InitContainers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
 	}
@@ -139,13 +139,13 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, lo
 	}, nil
 }
 
-func InitContainers(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod) []corev1.Container {
+func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Container {
 	image := cr.Spec.InitImage
 	if len(image) == 0 {
 		if cr.CompareVersion(version.Version) != 0 {
-			image = strings.Split(operatorPod.Spec.Containers[0].Image, ":")[0] + ":" + cr.Spec.CRVersion
+			image = strings.Split(initImage, ":")[0] + ":" + cr.Spec.CRVersion
 		} else {
-			image = operatorPod.Spec.Containers[0].Image
+			image = initImage
 		}
 	}
 	return []corev1.Container{EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)}

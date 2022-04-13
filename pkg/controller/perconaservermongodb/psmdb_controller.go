@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -74,6 +75,11 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
 
+	initImage, err := getOperatorPodImage(context.TODO())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator pod image")
+	}
+
 	return &ReconcilePerconaServerMongoDB{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
@@ -82,8 +88,37 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		crons:         NewCronRegistry(),
 		lockers:       newLockStore(),
 
+		initImage: initImage,
+
 		clientcmd: cli,
 	}, nil
+}
+
+func getOperatorPodImage(ctx context.Context) (string, error) {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return "", err
+	}
+
+	c, err := client.New(cfg, client.Options{})
+	if err != nil {
+		return "", err
+	}
+
+	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+
+	ns := strings.TrimSpace(string(nsBytes))
+
+	pod := &corev1.Pod{}
+	err = c.Get(ctx, types.NamespacedName{Namespace: ns, Name: os.Getenv("HOSTNAME")}, pod)
+	if err != nil {
+		return "", err
+	}
+
+	return pod.Spec.Containers[0].Image, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -137,6 +172,8 @@ type ReconcilePerconaServerMongoDB struct {
 	clientcmd     *clientcmd.Client
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
+
+	initImage string
 
 	lockers lockStore
 }
@@ -1039,11 +1076,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		mongos = msDepl
 	}
 
-	opPod, err := r.operatorPod(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to get operator pod")
-	}
-
 	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
 	if err != nil {
 		return errors.Wrap(err, "check if mongos custom configuration exists")
@@ -1072,7 +1104,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		cfgInstances = append(cfgInstances, ext.Host)
 	}
 
-	templateSpec, err := psmdb.MongosTemplateSpec(cr, opPod, log, customConfig, cfgInstances)
+	templateSpec, err := psmdb.MongosTemplateSpec(cr, r.initImage, log, customConfig, cfgInstances)
 	if err != nil {
 		return errors.Wrapf(err, "create template spec for mongos")
 	}
@@ -1349,11 +1381,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 
 	inits := []corev1.Container{}
 	if cr.CompareVersion("1.5.0") >= 0 {
-		operatorPod, err := r.operatorPod(ctx)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get operator pod")
-		}
-		inits = append(inits, psmdb.InitContainers(cr, operatorPod)...)
+		inits = append(inits, psmdb.InitContainers(cr, r.initImage)...)
 	}
 
 	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, configName)
@@ -1552,26 +1580,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, l
 	}
 
 	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) operatorPod(ctx context.Context) (corev1.Pod, error) {
-	operatorPod := corev1.Pod{}
-
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return operatorPod, err
-	}
-
-	ns := strings.TrimSpace(string(nsBytes))
-
-	if err := r.client.Get(ctx, types.NamespacedName{
-		Namespace: ns,
-		Name:      os.Getenv("HOSTNAME"),
-	}, &operatorPod); err != nil {
-		return operatorPod, err
-	}
-
-	return operatorPod, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getTLSHash(ctx context.Context, cr *api.PerconaServerMongoDB, secretName string) (string, error) {
