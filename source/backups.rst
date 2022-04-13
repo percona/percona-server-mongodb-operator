@@ -24,6 +24,16 @@ Backup for MongoDB <https://github.com/percona/percona-backup-mongodb>`_ tool.
 Making scheduled backups
 ------------------------
 
+Backups schedule is defined in the ``backup`` section of the
+`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
+file. This section contains :ref:`backup.enabled<backup-enabled>` key (it should
+be set to ``true`` to enable scheduled backups), and the following subsections:
+
+* ``storages`` subsection contains data needed to access the S3-compatible cloud
+  to store backups,
+* ``tasks`` subsection allows to actually schedule backups (the schedule is
+  specified in `crontab format <https://en.wikipedia.org/wiki/Cron>`_).
+
 .. _backups.scheduled-s3:
 
 Backups on Amazon S3 or S3-compatible storage
@@ -58,16 +68,11 @@ possible). To have effect secrets file should be applied with the
 appropriate command to create the secret object,
 e.g. ``kubectl apply -f deploy/backup-s3.yaml`` (for Kubernetes).
 
-Backups schedule is defined in the ``backup`` section of the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
-file. This section contains following subsections:
-
-* ``storages`` subsection contains data needed to access the S3-compatible cloud
-  to store backups.
-* ``tasks`` subsection allows to actually schedule backups (the schedule is
-  specified in crontab format).
-
-Here is an example of `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__ which uses Amazon S3 storage for backups:
+All the data needed to access the S3-compatible cloud to store backups should be
+put into the ``backup.storages`` subsection, and ``backup.tasks`` subsection
+should actually schedule backups in crontab-compatible way. Here is an example
+of `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
+which uses Amazon S3 storage for backups:
 
 .. code:: yaml
 
@@ -112,9 +117,6 @@ for backups. Value of this key should be the same as the name used to
 create the secret object (``my-cluster-name-backup-s3`` in the last
 example).
 
-The schedule is specified in crontab format as explained in
-:ref:`Operator Custom Resource options<operator.backup-section>`.
-
 .. _backups.scheduled-azure:
 
 Backups on Microsoft Azure Blob storage
@@ -149,16 +151,11 @@ possible). To have effect secrets file should be applied with the appropriate
 command to create the secret object, e.g.
 ``kubectl apply -f deploy/backup-azure.yaml`` (for Kubernetes).
 
-Backups schedule is defined in the ``backup`` section of the
-`deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
-file. This section contains following subsections:
-
-* ``storages`` subsection contains data needed to access the Azure Blob storage
-  to store backups.
-* ``tasks`` subsection allows to actually schedule backups (the schedule is
-  specified in crontab format).
-
-Here is an example of `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__ which uses Azure Blob storage for backups:
+All the data needed to access the Azure Blob storage to store backups should be
+put into the ``backup.storages`` subsection, and ``backup.tasks`` subsection
+should actually schedule backups in crontab-compatible way. Here is an example
+of `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
+which uses Azure Blob storage for backups:
 
 .. code:: yaml
 
@@ -195,9 +192,6 @@ example).
 You can use :ref:`prefix<backup-storages-azure-prefix>` option to specify the
 path (sub-folder) to the backups inside the container. If prefix is not set,
 backups will be stored in the root directory of the container.
-
-The schedule is specified in crontab format as explained in
-:ref:`Operator Custom Resource options<operator.backup-section>`.
 
 .. _backups-manual:
 
