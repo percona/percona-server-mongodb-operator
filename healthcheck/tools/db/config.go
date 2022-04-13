@@ -21,7 +21,6 @@ import (
 
 	"github.com/alecthomas/kingpin"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/dcos"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 )
@@ -41,15 +40,6 @@ type Config struct {
 
 func getDefaultMongoDBAddress() string {
 	hostname := DefaultMongoDBHost
-
-	// use the full hostname when using SSL mode
-	if os.Getenv(pkg.EnvMongoDBNetSSLEnabled) == "true" {
-		frameworkHost := os.Getenv(dcos.EnvFrameworkHost)
-		taskName := os.Getenv(dcos.EnvTaskName)
-		if taskName != "" && frameworkHost != "" {
-			hostname = taskName + "." + frameworkHost
-		}
-	}
 
 	mongodbPort := os.Getenv(pkg.EnvMongoDBPort)
 	if mongodbPort != "" {
