@@ -203,7 +203,13 @@ func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to parse replset configuration")
 		}
-		return enabled, nil
+		if enabled == nil {
+			if cr.Spec.Mongod.Security != nil && cr.Spec.Mongod.Security.EnableEncryption != nil {
+				return *cr.Spec.Mongod.Security.EnableEncryption, nil
+			}
+			return true, nil // true by default
+		}
+		return *enabled, nil
 	}
 	return *cr.Spec.Mongod.Security.EnableEncryption, nil
 }
