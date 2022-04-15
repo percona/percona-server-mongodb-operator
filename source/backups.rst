@@ -27,7 +27,7 @@ Making scheduled backups
 Backups schedule is defined in the ``backup`` section of the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__
 file. This section contains :ref:`backup.enabled<backup-enabled>` key (it should
-be set to ``true`` to enable scheduled backups), and the following subsections:
+be set to ``true`` to enable backups), and the following subsections:
 
 * ``storages`` subsection contains data needed to access the S3-compatible cloud
   to store backups,
@@ -198,12 +198,12 @@ backups will be stored in the root directory of the container.
 Making on-demand backup
 -----------------------
 
-To make an on-demand backup, the user should first configure the backup storage
-in the ``backup.storages`` subsection of the ``deploy/cr.yaml`` configuration
-file in a same way it was done for scheduled backups. When the
-``deploy/cr.yaml`` file contains correctly configured storage and is applied
-with ``kubectl`` command, use *a special backup configuration YAML file* with
-the following contents:
+To make an on-demand backup, the user should first make changes in the 
+``deploy/cr.yaml`` configuration file: set the ``backup.enabled`` key to
+``true`` and configure backup storage in the ``backup.storages`` subsection in
+a same way it was done for scheduled backups. When the ``deploy/cr.yaml`` file
+contains correctly configured keys and is applied with ``kubectl`` command, use
+*a special backup configuration YAML file* with the following contents:
 
 * **backup name** in the ``metadata.name`` key,
 * **Percona Server for MongoDB Cluster name** in the ``spec.psmdbCluster`` key,
