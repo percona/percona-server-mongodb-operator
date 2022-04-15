@@ -18,18 +18,33 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	secretObj := corev1.Secret{}
-	err := r.client.Get(ctx,
+	secretInternalObj := corev1.Secret{}
+	errSecret := r.client.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.Secrets.SSL,
 		},
 		&secretObj,
 	)
-	// don't create secret ssl-internal if secret ssl is not created by operator
-	if err == nil && !metav1.IsControlledBy(&secretObj, cr) {
+	errInternalSecret := r.client.Get(ctx,
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Spec.Secrets.SSL + "-internal",
+		},
+		&secretInternalObj,
+	)
+	if errSecret == nil && errInternalSecret == nil {
 		return nil
+	} else if errSecret == nil && k8serr.IsNotFound(errInternalSecret) && !metav1.IsControlledBy(&secretObj, cr) {
+		// don't create secret ssl-internal if secret ssl is not created by operator
+		return nil
+	} else if errSecret != nil && !k8serr.IsNotFound(errSecret) {
+		return errors.Wrap(errSecret, "get SSL secret")
+	} else if errInternalSecret != nil && !k8serr.IsNotFound(errInternalSecret) {
+		return errors.Wrap(errInternalSecret, "get internal SSL secret")
 	}
-	err = r.createSSLByCertManager(ctx, cr)
+
+	err := r.createSSLByCertManager(ctx, cr)
 	if err != nil {
 		log.Error(err, "issue cert with cert-manager")
 		err = r.createSSLManually(ctx, cr)
@@ -54,7 +69,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		return err
 	}
 	ownerReferences := []metav1.OwnerReference{owner}
-	err = r.createOrUpdate(ctx, &cm.Issuer{
+	err = r.client.Create(ctx, &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            issuerName,
 			Namespace:       cr.Namespace,
@@ -66,11 +81,11 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 			},
 		},
 	})
-	if err != nil {
+	if err != nil && !k8serr.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
 
-	err = r.createOrUpdate(ctx, &cm.Certificate{
+	err = r.client.Create(ctx, &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Name + "-ssl",
 			Namespace:       cr.Namespace,
@@ -91,14 +106,14 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 			},
 		},
 	})
-	if err != nil {
+	if err != nil && !k8serr.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create certificate")
 	}
 	if cr.Spec.Secrets.SSL == cr.Spec.Secrets.SSLInternal {
 		return r.waitForCerts(ctx, cr, cr.Namespace, cr.Spec.Secrets.SSL)
 	}
 
-	err = r.createOrUpdate(ctx, &cm.Certificate{
+	err = r.client.Create(ctx, &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Name + "-ssl-internal",
 			Namespace:       cr.Namespace,
@@ -119,7 +134,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 			},
 		},
 	})
-	if err != nil {
+	if err != nil && !k8serr.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create internal certificate")
 	}
 
@@ -194,7 +209,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 		Data: data,
 		Type: corev1.SecretTypeTLS,
 	}
-	err = r.createOrUpdateSSLSecret(ctx, &secretObj, certificateDNSNames)
+	err = r.createSSLSecret(ctx, &secretObj, certificateDNSNames)
 	if err != nil {
 		return errors.Wrap(err, "create TLS secret")
 	}
@@ -215,14 +230,14 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 		Data: data,
 		Type: corev1.SecretTypeTLS,
 	}
-	err = r.createOrUpdateSSLSecret(ctx, &secretObjInternal, certificateDNSNames)
+	err = r.createSSLSecret(ctx, &secretObjInternal, certificateDNSNames)
 	if err != nil {
 		return errors.Wrap(err, "create TLS internal secret")
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) createOrUpdateSSLSecret(ctx context.Context, secret *corev1.Secret, DNSNames []string) error {
+func (r *ReconcilePerconaServerMongoDB) createSSLSecret(ctx context.Context, secret *corev1.Secret, DNSNames []string) error {
 	oldSecret := new(corev1.Secret)
 
 	err := r.client.Get(ctx, types.NamespacedName{
