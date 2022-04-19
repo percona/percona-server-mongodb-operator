@@ -232,6 +232,22 @@ const (
 	CompressionTypeZstandard CompressionType = "zstd"
 )
 
+func isValidCompressionType(s string) bool {
+	switch CompressionType(s) {
+	case
+		CompressionTypeNone,
+		CompressionTypeGZIP,
+		CompressionTypePGZIP,
+		CompressionTypeSNAPPY,
+		CompressionTypeLZ4,
+		CompressionTypeS2,
+		CompressionTypeZstandard:
+		return true
+	}
+
+	return false
+}
+
 func (c CompressionType) Suffix() string {
 	switch c {
 	case CompressionTypeGZIP, CompressionTypePGZIP:
