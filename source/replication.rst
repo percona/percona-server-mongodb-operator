@@ -219,7 +219,7 @@ supported `by Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernete
 
 Configuring your cluster for multi-cluster Services includes two parts:
 
-* configure MSC with your cloud provider,
+* configure MCS with your cloud provider,
 * make needed preparations with the Operator.
 
 To set up MCS for a specific cloud provider you should follow official guides,
