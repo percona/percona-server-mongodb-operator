@@ -2743,7 +2743,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``gzip``											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The backup compression format, `can be gzip, snappy, lz4, pgzip, or none			|
+| **Description** | The backup compression format, `can be gzip, snappy, lz4, pgzip, zstd, s2, or none		|
 |                 | <https://docs.percona.com/percona-backup-mongodb/running.html#starting-a-backup>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 
