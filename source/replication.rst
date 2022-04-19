@@ -215,7 +215,7 @@ useful to separate logically standalone parts (i.e. stateful and stateless
 ones), or to address privacy and scalability requirements, etc.
 
 Multi-cluster Services should be supported by the cloud provider. It is
-supported `by Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`__, and `by Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/ru/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
+supported `by Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`__, and `by Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
 
 Configuring your cluster for multi-cluster Services includes two parts:
 
