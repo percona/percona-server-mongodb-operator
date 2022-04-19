@@ -36,6 +36,14 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - Pause/resume: setting it to ``true`` gracefully stops the cluster, and
        setting it to ``false`` after shut down starts the cluster back.
 
+   * - unmanaged
+     - boolean
+     - ``false``
+     - Unmanaged site in :ref:`cross-site replication<operator-replication>`:
+       setting it to ``true`` forces the Operator to to run the cluster
+       :ref:`as a Replica site<operator-replication-replica>`, in unmanaged
+       state
+
    * - crVersion
      - string
      - ``{{{release}}}``
@@ -75,7 +83,18 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
    * - updateStrategy
      - string
      - ``SmartUpdate``
-     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are :ref:`SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
+     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are :ref:`SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_
+
+   * - multiCluster.enabled
+     - boolean
+     - ``false``
+     - :ref:`Multi-cluster Services (MCS)<operator-replication-mcs>`: setting it to
+       ``true`` enables `MCS cluster mode <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`_ 
+
+   * - multiCluster.DNSSuffix
+     - string
+     - ``svc.clusterset.local``
+     - The cluster domain to be used as a suffix for :ref:`multi-cluster Services<operator-replication-mcs>`
 
    * - upgradeOptions
      - :ref:`subdoc<operator.upgradeoptions-section>`

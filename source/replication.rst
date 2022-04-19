@@ -157,7 +157,10 @@ When the Operator creates a new cluster, a lot of things are happening, such as
 electing the Primary, generating certificates, and picking specific names. This
 should not happen if we want the Operator to run the *Replica* site, so first
 of all the cluster should be put into unmanaged state by setting the
-``unmanaged`` key in the ``deploy/cr.yaml`` configuration file to true.
+``unmanaged`` key in the ``deploy/cr.yaml`` configuration file to true. Also you
+should set ``updateStrategy`` key to ``OnDelete`` and ``backup.enabled`` to
+``false``, because :ref:`Smart Updates<operator-update-smartupdates>` and
+:ref:`backups<backups>` are not allowed on unmanaged clusters.
 
 .. note:: Setting ``unmanaged`` to true will not only prevent the Operator from
    controlling the Replica Set configuration, but it will also result in not
@@ -169,10 +172,14 @@ Here is an example:
 
    spec:
      unmanaged: true
+     updateStrategy: OnDelete
      replsets:
      - name: rs0
        size: 3
        ...
+     backup:
+       enabled: false
+     ...
 
 .. _operator-replication-replica-secrets:
 
@@ -195,3 +202,43 @@ The *Replica* site will be ready for replication when you apply changes as usual
 
    $ kubectl apply -f deploy/cr.yaml
 
+.. _operator-replication-mcs:
+
+Enabling multi-cluster Services
+--------------------------------------------
+
+Kubernetes `multi-cluster Services (MCS) <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`_
+is a cross-cluster discovery and invocation of Services. MCS-enabled Services become discoverable and accessible across clusters with a virtual IP address.
+
+This feature allows splitting applications into multiple clusters, which can be
+useful to separate logically standalone parts (i.e. stateful and stateless
+ones), or to address privacy and scalability requirements, etc.
+
+Multi-cluster Services should be supported by the cloud provider. It is
+supported `by Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`__, and `by Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/ru/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
+
+Configuring your cluster for multi-cluster Services includes two parts:
+
+* configure MSC with your cloud provider,
+* make needed preparations with the Operator.
+
+To set up MCS for a specific cloud provider you should follow official guides,
+for example ones `from Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`__, or `from Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/ru/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
+
+Setting up the Operator for MCS involves two options in the ``multiCluster``
+subsection of the ``deploy/cr.yaml`` configuration file:
+
+* ``multiCluster.enabled`` should be set to ``true``,
+* ``multiCluster.DNSSuffix`` string should be a cluster domain suffix for
+  the multi-cluster Services.
+
+The following example in the ``deploy/cr.yaml`` configuration file is rather
+straightforward: 
+
+.. code:: yaml
+
+   ...
+   multiCluster:
+     enabled: true
+     DNSSuffix: svc.clusterset.local
+   ...
