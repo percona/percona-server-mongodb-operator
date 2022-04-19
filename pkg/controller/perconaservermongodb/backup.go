@@ -298,12 +298,12 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		}
 	}
 
-	if compression != string(cr.Spec.Backup.PITR.Compression) {
-		if string(cr.Spec.Backup.PITR.Compression) == "" {
+	if compression != string(cr.Spec.Backup.PITR.CompressionType) {
+		if string(cr.Spec.Backup.PITR.CompressionType) == "" {
 			if err := pbm.C.DeleteConfigVar("pitr.compression"); err != nil {
 				return errors.Wrap(err, "delete pitr.compression")
 			}
-		} else if err := pbm.C.SetConfigVar("pitr.compression", string(cr.Spec.Backup.PITR.Compression)); err != nil {
+		} else if err := pbm.C.SetConfigVar("pitr.compression", string(cr.Spec.Backup.PITR.CompressionType)); err != nil {
 			return errors.Wrap(err, "update pitr.compression")
 		}
 	}

@@ -687,7 +687,7 @@ type BackupStorageSpec struct {
 type PITRSpec struct {
 	Enabled          bool                `json:"enabled,omitempty"`
 	OplogSpanMin     numstr.NumberString `json:"oplogSpanMin,omitempty"`
-	Compression      pbm.CompressionType `json:"compression,omitempty"`
+	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int64              `json:"compressionLevel,omitempty"`
 }
 

@@ -7,3 +7,5 @@ metadata:
 spec:
   clusterName: my-cluster-name
   storageName: s3-us-west
+#  compressionType: gzip
+#  compressionLevel: 6
