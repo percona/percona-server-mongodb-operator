@@ -216,15 +216,15 @@ one *fleet*, which can be useful to separate logically standalone parts
 requirements, etc.
 
 Multi-cluster Services should be supported by the cloud provider. It is
-supported `by Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`__, and `by Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/ru/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
+supported `by Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`__, and `by Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
 
 Configuring your cluster for multi-cluster Services includes two parts:
 
-* configure MSC with your cloud provider,
+* configure MCS with your cloud provider,
 * make needed preparations with the Operator.
 
 To set up MCS for a specific cloud provider you should follow official guides,
-for example ones `from Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`__, or `from Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/ru/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
+for example ones `from Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`__, or `from Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
 
 Setting up the Operator for MCS makes it registering a Services for export to
 other clusters `with a ServiceExport object <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_.
