@@ -13,7 +13,7 @@ require (
 	github.com/go-openapi/validate v0.19.10
 	github.com/hashicorp/go-version v1.2.0
 	github.com/jetstack/cert-manager v1.6.1
-	github.com/percona/percona-backup-mongodb v1.6.1-0.20220404145705-2252d9cba467
+	github.com/percona/percona-backup-mongodb v1.7.0
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.8.1

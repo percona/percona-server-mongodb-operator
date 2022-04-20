@@ -199,6 +199,11 @@ func (p *PBM) SetConfig(cfg Config) error {
 			return errors.Wrap(err, "check config")
 		}
 	}
+
+	if c := string(cfg.PITR.Compression); c != "" && !isValidCompressionType(c) {
+		return errors.Errorf("unsupported compression type: %q", c)
+	}
+
 	ct, err := p.ClusterTime()
 	if err != nil {
 		return errors.Wrap(err, "get cluster time")
@@ -252,6 +257,10 @@ func (p *PBM) SetConfigVar(key, val string) error {
 	switch key {
 	case "pitr.enabled":
 		return errors.Wrap(p.confSetPITR(key, v.(bool)), "write to db")
+	case "pitr.compression":
+		if c := v.(string); c != "" && !isValidCompressionType(c) {
+			return errors.Errorf("unsupported compression type: %q", c)
+		}
 	case "storage.filesystem.path":
 		if v.(string) == "" {
 			return errors.New("storage.filesystem.path can't be empty")

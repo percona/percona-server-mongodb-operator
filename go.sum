@@ -1014,8 +1014,8 @@ github.com/pelletier/go-toml v1.4.0/go.mod h1:PN7xzY2wHTK0K9p34ErDQMlFxa51Fk0OUr
 github.com/pelletier/go-toml v1.7.0/go.mod h1:vwGMzjaWMwyfHwgIBhI2YUM4fB6nL6lVAvS1LBMMhTE=
 github.com/pelletier/go-toml v1.8.1/go.mod h1:T2/BmBdy8dvIRq1a/8aqjN41wvWlN4lrapLU/GW4pbc=
 github.com/pelletier/go-toml v1.9.3/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
-github.com/percona/percona-backup-mongodb v1.6.1-0.20220404145705-2252d9cba467 h1:NPY8gA6v0RtXe27I3EJHyNEGYoFd/CH604j42a9Stv8=
-github.com/percona/percona-backup-mongodb v1.6.1-0.20220404145705-2252d9cba467/go.mod h1:KcY2y93p+gcYF1iMJgcxbsWEpZdUJWsDA59aAL3zqPY=
+github.com/percona/percona-backup-mongodb v1.7.0 h1:1VJdj+9iAM7OSH2bIbrQdJNwFXnW2R8mCnyRhcMNYR0=
+github.com/percona/percona-backup-mongodb v1.7.0/go.mod h1:KcY2y93p+gcYF1iMJgcxbsWEpZdUJWsDA59aAL3zqPY=
 github.com/peterbourgon/diskv v2.0.1+incompatible/go.mod h1:uqqh8zWWbv1HBMNONnaR/tNboyR3/BZd58JJSHlUSCU=
 github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2/go.mod h1:iIss55rKnNBTvrwdmkUpLnDpZoAHvWaiq5+iMmen4AE=
 github.com/pierrec/lz4 v2.0.5+incompatible/go.mod h1:pdkljMzZIN41W+lC3N2tnIh5sFi+IEE17M5jbnwPHcY=

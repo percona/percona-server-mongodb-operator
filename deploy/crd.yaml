@@ -469,11 +469,11 @@ spec:
                       type: object
                     pitr:
                       properties:
-                        compression:
-                          type: string
                         compressionLevel:
                           format: int64
                           type: integer
+                        compressionType:
+                          type: string
                         enabled:
                           type: boolean
                         oplogSpanMin:
@@ -663,6 +663,9 @@ spec:
                   required:
                     - enabled
                   type: object
+                clusterServiceDNSMode:
+                  description: DNS Mode string describes the mode used to generate fqdn/ip for communication between nodes
+                  type: string
                 clusterServiceDNSSuffix:
                   type: string
                 crVersion:
