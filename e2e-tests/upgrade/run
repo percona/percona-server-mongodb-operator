@@ -60,8 +60,14 @@ function compare_generation() {
 }
 
 function wait_cluster_consistency() {
+	local retry=0
 	until [[ "$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')" == "ready" &&
 	"$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.replsets.rs0.ready}')" == "${CLUSTER_SIZE}" ]]; do
+		let retry+=1
+		if [ $retry -ge 32 ]; then
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
 		echo 'waiting for cluster readyness'
 		sleep 20
 	done
