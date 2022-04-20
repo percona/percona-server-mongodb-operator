@@ -264,7 +264,8 @@ wait_deployment() {
 	set +o xtrace
 	retry=0
 	echo -n $name
-	until [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
+	until kubectl_bin get deployment $name >/dev/null \
+		&& [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
