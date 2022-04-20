@@ -630,7 +630,6 @@ spec:
                             required:
                               - bucket
                               - credentialsSecret
-                              - insecureSkipTLSVerify
                             type: object
                           type:
                             type: string
@@ -20721,7 +20720,6 @@ spec:
                   required:
                     - bucket
                     - credentialsSecret
-                    - insecureSkipTLSVerify
                   type: object
                 start:
                   format: date-time
@@ -20841,7 +20839,6 @@ spec:
                       required:
                         - bucket
                         - credentialsSecret
-                        - insecureSkipTLSVerify
                       type: object
                     start:
                       format: date-time

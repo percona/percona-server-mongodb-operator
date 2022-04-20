@@ -630,7 +630,6 @@ spec:
                             required:
                               - bucket
                               - credentialsSecret
-                              - insecureSkipTLSVerify
                             type: object
                           type:
                             type: string
