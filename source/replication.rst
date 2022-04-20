@@ -272,4 +272,4 @@ Additional actions are needed to turn on MCS for the
 * If you are enabling MCS for a running cluster after upgrading from the
   Operator version ``1.11.0`` or below, you need rotating multi-domain (SAN)
   certificates. Do this by :ref:`pausing the cluster<operator-pause>` and
-  deleting TLS secrets (you can find more in :ref:`TLS documentation<tls>`).
+  deleting :ref:`TLS Secrets<tls>`.
