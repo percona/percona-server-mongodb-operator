@@ -688,7 +688,7 @@ type PITRSpec struct {
 	Enabled          bool                `json:"enabled,omitempty"`
 	OplogSpanMin     numstr.NumberString `json:"oplogSpanMin,omitempty"`
 	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int64              `json:"compressionLevel,omitempty"`
+	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {

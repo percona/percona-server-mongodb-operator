@@ -134,7 +134,9 @@ func (b *PBM) GetPriorities(ctx context.Context, k8sclient client.Client, cluste
 func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api.PITRSpec, priority map[string]float64) error {
 	conf := pbm.Config{
 		PITR: pbm.PITRConf{
-			Enabled: pitr.Enabled,
+			Enabled:          pitr.Enabled,
+			Compression:      pitr.CompressionType,
+			CompressionLevel: pitr.CompressionLevel,
 		},
 		Backup: pbm.BackupConf{
 			Priority: priority,
