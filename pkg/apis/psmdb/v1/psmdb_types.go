@@ -661,7 +661,7 @@ type BackupStorageS3Spec struct {
 	UploadPartSize        int    `json:"uploadPartSize,omitempty"`
 	MaxUploadParts        int    `json:"maxUploadParts,omitempty"`
 	StorageClass          string `json:"storageClass,omitempty"`
-	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify"`
+	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 type BackupStorageAzureSpec struct {
