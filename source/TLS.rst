@@ -63,7 +63,7 @@ The following commands perform all the needed actions:
 
 .. code:: bash
 
-   $ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.15.1/cert-manager.yaml --validate=false
+   $ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v{{{certmanagerrecommended}}}/cert-manager.yaml --validate=false
 
 After the installation, you can verify the *cert-manager* by running the
 following command:
