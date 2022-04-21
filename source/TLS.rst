@@ -1,7 +1,8 @@
 .. _tls:
 
+================================================================================
 Transport Layer Security (TLS)
-******************************
+================================================================================
 
 The Percona Distribution for MongoDB Operator uses Transport Layer Security (TLS) cryptographic protocol for the following types of communication:
 
@@ -10,14 +11,13 @@ The Percona Distribution for MongoDB Operator uses Transport Layer Security (TLS
 
 The internal certificate is also used as an authorization method.
 
-Certificates for TLS security can be generated in several ways:
+Certificates for TLS security can be generated in several ways. By default, the
+Operator generates long-term certificates automatically if there are no
+certificate secrets available. Other options are the following ones:
 
 * the Operator can use a specifically installed *cert-manager*, which will
   automatically generate and renew short-term TLS certificates,
-* certificates can be generated manually and presented to the Operator in a
-  Secrets object,
-* if there are no certificate secrets available, and no *cert-manager*, the
-  Operator will automatically generate and use long-term certificates.
+* certificates can be generated manually.
 
 You can also use pre-generated certificates available in the
 ``deploy/ssl-secrets.yaml`` file for test purposes, but we strongly recommend
@@ -72,7 +72,19 @@ following command:
 
    $ kubectl get pods -n cert-manager
 
-The result should display the *cert-manager* and webhook active and running.
+The result should display the *cert-manager* and webhook active and running:
+
+.. code:: text
+
+   NAME                                       READY   STATUS    RESTARTS   AGE
+   cert-manager-7d59dd4888-tmjqq              1/1     Running   0          3m8s
+   cert-manager-cainjector-85899d45d9-8ncw9   1/1     Running   0          3m8s
+   cert-manager-webhook-84fcdcd5d-697k4       1/1     Running   0          3m8s
+
+Now, whenever you :ref:`check certificates for expiration<tls.certs.update.check>`,
+you will find that they are valid and short-term.
+
+.. _tls.certs.manual:
 
 Generate certificates manually
 ==============================
@@ -95,7 +107,7 @@ be added to the ``spec.secrets.ssl`` key of the ``deploy/cr.yaml`` file. A
 certificate generated for internal communications must be added to the
 ``spec.secrets.sslInternal`` key of the ``deploy/cr.yaml`` file.
 
-Supposing that your cluster name is ``my-cluster-name-rs0``, the instructions to
+Supposing that your cluster name is ``my-cluster-name``, the instructions to
 generate certificates manually are as follows:
 
 .. code:: bash
@@ -179,6 +191,56 @@ generate certificates manually are as follows:
 	EOF
 
 	$ kubectl create secret generic my-cluster-name-ssl --from-file=tls.crt=client.pem --from-file=tls.key=client-key.pem --from-file=ca.crt=ca.pem --type=kubernetes.io/tls
+
+.. _tls.certs.update.check:
+
+Check your certificates for expiration
+================================================================================
+
+#. First, check the necessary secrets names (``my-cluster-name-ssl`` and 
+   ``my-cluster-name-ssl-internal`` by default):
+
+   .. code:: bash
+
+      $ kubectl get certificate
+
+   You will have the following response:
+
+   .. code:: text
+
+      NAME                           READY   SECRET                         AGE
+      my-cluster-name-ssl            True    my-cluster-name-ssl            49m
+      my-cluster-name-ssl-internal   True    my-cluster-name-ssl-internal   49m
+
+#. Optionally you can also check that the certificates issuer is up and running:
+
+   .. code:: bash
+
+      $ kubectl get issuer
+
+   The response should be as follows:
+
+   .. code:: text
+
+      NAME                       READY   AGE
+      my-cluster-name-psmdb-ca   True    61s
+
+#. Now use the following command to find out the certificates validity dates,
+   substituting Secrets names if necessary:
+
+   .. code:: bash
+
+      $ {
+        kubectl get secret/my-cluster-name-ssl-internal -o jsonpath='{.data.tls\.crt}' | base64 --decode | openssl x509 -inform pem -noout -text | grep "Not After"
+        kubectl get secret/my-cluster-name-ssl -o jsonpath='{.data.ca\.crt}' | base64 --decode | openssl x509 -inform pem -noout -text | grep "Not After"
+        }
+
+   The resulting output will be self-explanatory:
+
+   .. code:: text
+
+      Not After : Jun  1 08:51:01 2022 GMT
+      Not After : Jun  1 08:51:00 2022 GMT
 
 .. _tls.no.tls:
 
