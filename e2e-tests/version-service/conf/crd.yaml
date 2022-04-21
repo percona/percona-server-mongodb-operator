@@ -470,7 +470,6 @@ spec:
                     pitr:
                       properties:
                         compressionLevel:
-                          format: int64
                           type: integer
                         compressionType:
                           type: string

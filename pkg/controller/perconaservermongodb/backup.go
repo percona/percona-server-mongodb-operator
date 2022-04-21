@@ -306,10 +306,18 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		} else if err := pbm.C.SetConfigVar("pitr.compression", string(cr.Spec.Backup.PITR.CompressionType)); err != nil {
 			return errors.Wrap(err, "update pitr.compression")
 		}
+
+		// PBM needs to disabling and enabling PITR to change compression type
+		if err := pbm.C.SetConfigVar("pitr.enabled", "false"); err != nil {
+			return errors.Wrap(err, "disable pitr")
+		}
+		if err := pbm.C.SetConfigVar("pitr.enabled", "true"); err != nil {
+			return errors.Wrap(err, "enable pitr")
+		}
 	}
 
 	val, err = pbm.C.GetConfigVar("pitr.compressionLevel")
-	var compressionLevel *int64 = nil
+	var compressionLevel *int = nil
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil
@@ -317,11 +325,11 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 			return errors.Wrap(err, "get pitr.compressionLevel")
 		}
 	} else {
-		tmpCompressionLevel, ok := val.(int64)
+		tmpCompressionLevel, ok := val.(int)
 		if !ok {
 			return errors.Wrap(err, "unexpected value of pitr.compressionLevel")
 		}
-		compressionLevel = Int64(tmpCompressionLevel)
+		compressionLevel = &tmpCompressionLevel
 	}
 
 	if !reflect.DeepEqual(compressionLevel, cr.Spec.Backup.PITR.CompressionLevel) {
@@ -329,8 +337,16 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 			if err := pbm.C.DeleteConfigVar("pitr.compressionLevel"); err != nil {
 				return errors.Wrap(err, "delete pitr.compressionLevel")
 			}
-		} else if err := pbm.C.SetConfigVar("pitr.compressionLevel", strconv.FormatInt(*(cr.Spec.Backup.PITR.CompressionLevel), 10)); err != nil {
+		} else if err := pbm.C.SetConfigVar("pitr.compressionLevel", strconv.FormatInt(int64(*cr.Spec.Backup.PITR.CompressionLevel), 10)); err != nil {
 			return errors.Wrap(err, "update pitr.compressionLevel")
+		}
+
+		// PBM needs to disabling and enabling PITR to change compression level
+		if err := pbm.C.SetConfigVar("pitr.enabled", "false"); err != nil {
+			return errors.Wrap(err, "disable pitr")
+		}
+		if err := pbm.C.SetConfigVar("pitr.enabled", "true"); err != nil {
+			return errors.Wrap(err, "enable pitr")
 		}
 	}
 
