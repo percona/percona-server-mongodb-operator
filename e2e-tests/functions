@@ -264,7 +264,8 @@ wait_deployment() {
 	set +o xtrace
 	retry=0
 	echo -n $name
-	until [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
+	until kubectl_bin get deployment $name >/dev/null \
+		&& [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -289,8 +290,7 @@ simple_data_check() {
 
 	if [ $isSharded -eq 1 ]; then
 		sleep 10 # give time for start mongos
-		wait_deployment "$cluster_name-mongos"
-		sleep 10
+		wait_cluster_consistency "${cluster_name}"
 		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace"
 	else
 		for i in $(seq 0 $last_pod); do
