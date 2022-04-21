@@ -7,7 +7,7 @@ Install Percona server for MongoDB on Kubernetes
 
    .. code:: bash
 
-      git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
+      $ git clone -b v{{{release}}} https://github.com/percona/percona-server-mongodb-operator
       cd percona-server-mongodb-operator
 
    .. note:: It is crucial to specify the right branch with ``-b``
@@ -16,11 +16,11 @@ Install Percona server for MongoDB on Kubernetes
 #. The Custom Resource Definition for Percona Server for MongoDB should be
    created from the ``deploy/crd.yaml`` file. The Custom Resource Definition
    extends the standard set of resources which Kubernetes “knows” about with the
-   new items, in our case these items are the core of the operator.
+   new items, in our case these items are the core of the operator. `Apply it <https://kubernetes.io/docs/reference/using-api/server-side-apply/>`_ as follows:
 
    .. code:: bash
 
-      $ kubectl apply -f deploy/crd.yaml
+      $ kubectl apply -f deploy/crd.yaml --server-side
 
    This step should be done only once; the step does not need to be repeated
    with any other Operator deployments.

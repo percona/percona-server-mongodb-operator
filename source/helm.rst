@@ -21,14 +21,14 @@ Installation
 
    .. code:: bash
 
-      helm repo add percona https://percona.github.io/percona-helm-charts/
-      helm repo update
+      $ helm repo add percona https://percona.github.io/percona-helm-charts/
+      $ helm repo update
 
 #. Install Percona Distribution for MongoDB Operator:
 
    .. code:: bash
 
-      helm install my-op percona/psmdb-operator
+      $ helm install my-op percona/psmdb-operator
 
    The ``my-op`` parameter in the above example is the name of `a new release object <https://helm.sh/docs/intro/using_helm/#three-big-concepts>`_ 
    which is created for the Operator when you install its Helm chart (use any
@@ -42,7 +42,7 @@ Installation
 
    .. code:: bash
 
-      helm install my-db percona/psmdb-db
+      $ helm install my-db percona/psmdb-db
 
    The ``my-db`` parameter in the above example is the name of `a new release object <https://helm.sh/docs/intro/using_helm/#three-big-concepts>`_ 
    which is created for the Percona Server for MongoDB when you install its Helm
@@ -67,7 +67,7 @@ The following example will deploy a Percona Server for MongoDB Cluster in the
 
 .. code:: bash
 
-   helm install my-db percona/psmdb-db --namespace psmdb \
+   $ helm install my-db percona/psmdb-db --namespace psmdb \
      --set "replsets[0].name=rs0" --set "replsets[0].size=3" \
      --set "replsets[0].volumeSpec.pvc.resources.requests.storage=20Gi" \
      --set backup.enabled=false --set sharding.enabled=false

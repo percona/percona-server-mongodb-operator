@@ -62,7 +62,7 @@ processes of your replica set.
 
    .. code:: bash
 
-      kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
+      $ kubectl run -i --rm --tty percona-client --image=percona/percona-server-mongodb:{{{mongodb44recommended}}} --restart=Never -- bash -il
 
 2. Find the password for the admin user, which you will need to access the
    cluster. Use ``kubectl get secrets`` to see the list of Secrets objects (by
@@ -92,7 +92,7 @@ processes of your replica set.
    
      .. code:: bash
 
-        mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
+        $ mongo "mongodb://userAdmin:userAdminPassword@my-cluster-name-mongos.<namespace name>.svc.cluster.local/admin?ssl=false"
 
    - If sharding is turned off, the command will look as follows (with your
      database cluster namespace instead of the ``<namespace name>``
@@ -100,4 +100,4 @@ processes of your replica set.
    
      .. code:: bash
 
-        mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.<namespace name>.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
+        $ mongo "mongodb+srv://userAdmin:userAdminPassword@my-cluster-name-rs0.<namespace name>.svc.cluster.local/admin?replicaSet=rs0&ssl=false"
