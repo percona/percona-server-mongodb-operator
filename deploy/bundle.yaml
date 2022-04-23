@@ -20600,132 +20600,439 @@ spec:
       subresources:
         status: {}
 ---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.8.0
+  creationTimestamp: null
+  name: perconaservermongodbbackups.psmdb.percona.com
+spec:
+  group: psmdb.percona.com
+  names:
+    kind: PerconaServerMongoDBBackup
+    listKind: PerconaServerMongoDBBackupList
+    plural: perconaservermongodbbackups
+    shortNames:
+      - psmdb-backup
+    singular: perconaservermongodbbackup
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: Cluster name
+          jsonPath: .spec.clusterName
+          name: Cluster
+          type: string
+        - description: Storage name
+          jsonPath: .spec.storageName
+          name: Storage
+          type: string
+        - description: Backup destination
+          jsonPath: .status.destination
+          name: Destination
+          type: string
+        - description: Job status
+          jsonPath: .status.state
+          name: Status
+          type: string
+        - description: Completed time
+          jsonPath: .status.completed
+          name: Completed
+          type: date
+        - description: Created time
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1
+      schema:
+        openAPIV3Schema:
+          description: PerconaServerMongoDBBackup is the Schema for the perconaservermongodbbackups API
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
+              properties:
+                clusterName:
+                  type: string
+                compressionLevel:
+                  type: integer
+                compressionType:
+                  type: string
+                psmdbCluster:
+                  type: string
+                storageName:
+                  type: string
+              type: object
+            status:
+              description: PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
+              properties:
+                azure:
+                  properties:
+                    container:
+                      type: string
+                    credentialsSecret:
+                      type: string
+                    prefix:
+                      type: string
+                  required:
+                    - credentialsSecret
+                  type: object
+                completed:
+                  format: date-time
+                  type: string
+                destination:
+                  type: string
+                error:
+                  type: string
+                lastTransition:
+                  format: date-time
+                  type: string
+                pbmName:
+                  type: string
+                s3:
+                  properties:
+                    bucket:
+                      type: string
+                    credentialsSecret:
+                      type: string
+                    endpointUrl:
+                      type: string
+                    insecureSkipTLSVerify:
+                      type: boolean
+                    maxUploadParts:
+                      type: integer
+                    prefix:
+                      type: string
+                    region:
+                      type: string
+                    storageClass:
+                      type: string
+                    uploadPartSize:
+                      type: integer
+                  required:
+                    - bucket
+                    - credentialsSecret
+                  type: object
+                start:
+                  format: date-time
+                  type: string
+                state:
+                  type: string
+                storageName:
+                  type: string
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.8.0
+  creationTimestamp: null
+  name: perconaservermongodbrestores.psmdb.percona.com
+spec:
+  group: psmdb.percona.com
+  names:
+    kind: PerconaServerMongoDBRestore
+    listKind: PerconaServerMongoDBRestoreList
+    plural: perconaservermongodbrestores
+    shortNames:
+      - psmdb-restore
+    singular: perconaservermongodbrestore
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: Cluster name
+          jsonPath: .spec.clusterName
+          name: Cluster
+          type: string
+        - description: Job status
+          jsonPath: .status.state
+          name: Status
+          type: string
+        - description: Created time
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1
+      schema:
+        openAPIV3Schema:
+          description: PerconaServerMongoDBRestore is the Schema for the perconaservermongodbrestores API
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: PerconaServerMongoDBRestoreSpec defines the desired state of PerconaServerMongoDBRestore
+              properties:
+                backupName:
+                  type: string
+                backupSource:
+                  description: PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
+                  properties:
+                    azure:
+                      properties:
+                        container:
+                          type: string
+                        credentialsSecret:
+                          type: string
+                        prefix:
+                          type: string
+                      required:
+                        - credentialsSecret
+                      type: object
+                    completed:
+                      format: date-time
+                      type: string
+                    destination:
+                      type: string
+                    error:
+                      type: string
+                    lastTransition:
+                      format: date-time
+                      type: string
+                    pbmName:
+                      type: string
+                    s3:
+                      properties:
+                        bucket:
+                          type: string
+                        credentialsSecret:
+                          type: string
+                        endpointUrl:
+                          type: string
+                        insecureSkipTLSVerify:
+                          type: boolean
+                        maxUploadParts:
+                          type: integer
+                        prefix:
+                          type: string
+                        region:
+                          type: string
+                        storageClass:
+                          type: string
+                        uploadPartSize:
+                          type: integer
+                      required:
+                        - bucket
+                        - credentialsSecret
+                      type: object
+                    start:
+                      format: date-time
+                      type: string
+                    state:
+                      type: string
+                    storageName:
+                      type: string
+                  type: object
+                clusterName:
+                  type: string
+                pitr:
+                  properties:
+                    date:
+                      type: string
+                    type:
+                      type: string
+                  type: object
+                replset:
+                  type: string
+                storageName:
+                  type: string
+              type: object
+            status:
+              description: PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore
+              properties:
+                completed:
+                  format: date-time
+                  type: string
+                error:
+                  type: string
+                lastTransition:
+                  format: date-time
+                  type: string
+                pbmName:
+                  type: string
+                state:
+                  description: RestoreState is for restore status states
+                  type: string
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: percona-server-mongodb-operator
 rules:
-  - apiGroups:
-      - psmdb.percona.com
-    resources:
-      - perconaservermongodbs
-      - perconaservermongodbs/status
-      - perconaservermongodbbackups
-      - perconaservermongodbbackups/status
-      - perconaservermongodbrestores
-      - perconaservermongodbrestores/status
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups:
-      - ""
-    resources:
-      - pods
-      - pods/exec
-      - services
-      - persistentvolumeclaims
-      - secrets
-      - configmaps
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups:
-      - apps
-    resources:
-      - deployments
-      - replicasets
-      - statefulsets
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups:
-      - batch
-    resources:
-      - cronjobs
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups:
-      - policy
-    resources:
-      - poddisruptionbudgets
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups:
-      - coordination.k8s.io
-    resources:
-      - leases
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups:
-      - ""
-    resources:
-      - events
-    verbs:
-      - create
-      - patch
-  - apiGroups:
-      - certmanager.k8s.io
-      - cert-manager.io
-    resources:
-      - issuers
-      - certificates
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-      - deletecollection
-  - apiGroups:
-      - net.gke.io
-      - multicluster.x-k8s.io
-    resources:
-      - serviceexports
-      - serviceimports
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-      - deletecollection
+- apiGroups:
+  - psmdb.percona.com
+  resources:
+  - perconaservermongodbs
+  - perconaservermongodbs/status
+  - perconaservermongodbbackups
+  - perconaservermongodbbackups/status
+  - perconaservermongodbrestores
+  - perconaservermongodbrestores/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/exec
+  - services
+  - persistentvolumeclaims
+  - secrets
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - replicasets
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - certmanager.k8s.io
+  - cert-manager.io
+  resources:
+  - issuers
+  - certificates
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - deletecollection
+- apiGroups:
+  - net.gke.io
+  - multicluster.x-k8s.io
+  resources:
+  - serviceexports
+  - serviceimports
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - deletecollection
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: percona-server-mongodb-operator
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: service-account-percona-server-mongodb-operator
+subjects:
+- kind: ServiceAccount
+  name: percona-server-mongodb-operator
+roleRef:
+  kind: Role
+  name: percona-server-mongodb-operator
+  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -20744,12 +21051,12 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: percon/percona-server-mongodb-operator:1.12.0
           ports:
-            - containerPort: 60000
-              name: metrics
+          - containerPort: 60000
+            name: metrics
           command:
-            - percona-server-mongodb-operator
+          - percona-server-mongodb-operator
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
