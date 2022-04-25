@@ -3,7 +3,7 @@
 Transport Layer Security (TLS)
 ******************************
 
-The Percona Distribution for MongoDB Operator uses Transport Layer Security (TLS) cryptographic protocol for the following types of communication:
+The |operator| uses Transport Layer Security (TLS) cryptographic protocol for the following types of communication:
 
 * Internal - communication between Percona Server for MongoDB instances in the cluster
 * External - communication between the client application and the cluster

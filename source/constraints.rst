@@ -33,17 +33,17 @@ same availability zone or even the same node or, on the contrary, to
 spread the pods on different nodes or even different availability zones
 for high availability and balancing purposes.
 
-Percona Distribution for MongoDB Operator provides two approaches for doing
+|operator| provides two approaches for doing
 this:
 
 -  simple way to set anti-affinity for Pods, built-in into the Operator,
 -  more advanced approach based on using standard Kubernetes
    constraints.
 
-Simple approach - use antiAffinityTopologyKey of the Percona Distribution for MongoDB Operator
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Simple approach - use antiAffinityTopologyKey of the |operator|
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Percona Distribution for MongoDB Operator provides an
+|operator| provides an
 ``antiAffinityTopologyKey`` option, which may have one of the following
 values:
 

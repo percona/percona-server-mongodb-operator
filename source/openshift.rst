@@ -5,24 +5,24 @@ Percona Operator for Percona Server for MongoDB is a `Red Hat Certified Operator
 
 Installing Percona Server for MongoDB on OpenShift includes two steps:
 
-* Installing the Percona Distribution for MongoDB Operator,
+* Installing the |operator|,
 * Install Percona Server for MongoDB using the Operator.
 
 Install the Operator
 --------------------
 
-You can install Percona Distribution for MongoDB Operator on OpenShift using the `Red Hat Marketplace <https://marketplace.redhat.com>`_ web interface or using the command line interface.
+You can install |operator| on OpenShift using the `Red Hat Marketplace <https://marketplace.redhat.com>`_ web interface or using the command line interface.
 
 Install the Operator via the Red Hat Marketplace
 ************************************************
 
 1. login to the Red Hat Marketplace and register your cluster `following the official instructions <https://marketplace.redhat.com/en-us/workspace/clusters/add/register>`_.
 
-2. Go to the `Percona Distribution for MongoDB Operator <https://marketplace.redhat.com/en-us/products/percona-server-for-mongodb>`_ page and click the `Free trial` button:
+2. Go to the |operator| `page <https://marketplace.redhat.com/en-us/products/percona-server-for-mongodb>`_ and click the `Free trial` button:
 
    .. image:: img/marketplace-operator-page.png
       :align: center
-      :alt: Percona Distribution for MongoDB Operator on Red Hat Marketplace
+      :alt: Percona Operator for MongoDB on Red Hat Marketplace
 
    Here you can "purchase" the Operator for 0.0 USD.
 

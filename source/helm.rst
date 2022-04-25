@@ -24,7 +24,7 @@ Installation
       $ helm repo add percona https://percona.github.io/percona-helm-charts/
       $ helm repo update
 
-#. Install Percona Distribution for MongoDB Operator:
+#. Install |operator|:
 
    .. code:: bash
 

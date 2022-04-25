@@ -1,9 +1,9 @@
 .. _operator-updates:
 
-Update Percona Distribution for MongoDB Operator
-================================================
+Update |operator|
+================================================================================
 
-Starting from the version 1.1.0 the Percona Distribution for MongoDB Operator
+Starting from the version 1.1.0 the |operator|
 allows upgrades to newer versions. This includes upgrades of the
 Operator itself, and upgrades of the Percona Server for MongoDB.
 

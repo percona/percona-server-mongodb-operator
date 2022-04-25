@@ -2303,7 +2303,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | Sets the `auditLog.destination option							|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
-|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in**		|
+|                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
 |                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2320,7 +2320,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | Sets the `auditLog.format option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
-|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in**		|
+|                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
 |                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2337,7 +2337,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 | **Description** | Sets the `auditLog.filter option								|
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
-|                 | **Deprecated in Percona Distribution for MongoDB Operator v1.9.0+, unavailable in**		|
+|                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
 |                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2348,7 +2348,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 ----------------------------------------------------------
 
 This section contains the Mongod configuration options.
-**This section is deprecated in Percona Distribution for MongoDB Operator**
+**This section is deprecated in |operator|**
 **v1.12.0+, and will be unavailable in v1.14.0+. Options were moved to**
 :ref:`replsets.configuration<replsets-configuration>`
 
