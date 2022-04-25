@@ -232,14 +232,20 @@ Set the following options in the ``multiCluster`` subsection of the ``deploy/cr.
 configuration file to make it happened:
 
 * ``multiCluster.enabled`` should be set to ``true``,
-* ``multiCluster.DNSSuffix`` string should be a cluster domain suffix for
-  the multi-cluster Services.
+* ``multiCluster.DNSSuffix`` string should be equal to the cluster domain suffix
+  for multi-cluster Services used by Kubernetes (``svc.clusterset.local``
+  `by default <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_).
 
-.. note:: The initial ServiceExport creation and sync with the clusters of
-   the fleet takes approximately five minutes.
+The initial ServiceExport creation and sync with the clusters of the fleet takes
+approximately five minutes. After ServiceExport object is created, exported
+Services can be resolved from any Pod in any fleet cluster as
+``SERVICE_EXPORT_NAME.NAMESPACE.svc.clusterset.local``.
+
+.. note:: This means that ServiceExports with the same name and namespace will
+   be considered the same Service.
 
 The following example in the ``deploy/cr.yaml`` configuration file is rather
-straightforward: 
+straightforward:
 
 .. code:: yaml
 
@@ -253,7 +259,9 @@ Apply changes as usual with the ``kubectl apply -f deploy/cr.yaml`` command.
 
 .. note:: MCS can charge cross-site replication with additional limitations
    specific to the cloud provider. For example, GKE demands all participating
-   Pods to be in the same `project <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_.
+   Pods to be in the same `project <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_. Also, if we use the same Namespace  name, we will export all services from all available clusters with the same Namespace.
+I plan to duplicate this info in blogpost but I believe it could be helpful in this doc too.
+ServiceExports with the same name and namespace, these will be considered the same service and will be combined at the clusterset level.
 
 Applying MCS to an already-exiting cluster
 ********************************************************************************

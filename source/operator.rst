@@ -95,6 +95,7 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - string
      - ``svc.clusterset.local``
      - The cluster domain to be used as a suffix for :ref:`multi-cluster Services<operator-replication-mcs>`
+       used by Kubernetes (``svc.clusterset.local`` `by default <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_)
 
    * - upgradeOptions
      - :ref:`subdoc<operator.upgradeoptions-section>`
