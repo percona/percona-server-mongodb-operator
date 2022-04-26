@@ -29,10 +29,22 @@ sys.path.append(os.path.abspath('ext'))
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 
 extensions = ['sphinx.ext.intersphinx', 'sphinx.ext.todo',
-              'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.extlinks', 'sphinx-prompt', ]
+              'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.extlinks', 'sphinx_gitstamp', 
+              'sphinx_copybutton', 'sphinx_tabs.tabs', 'tab_or_note', 'sphinx-prompt', ]
+
+#Extensions Configuration
+#gitstamp format
+gitstamp_fmt = "%b %d, %Y"
+# Specify the text pattern that won't be copied with the code block contents
+copybutton_prompt_text = '$'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+
+# Path to custom css files. These will override the default css attribute if they exist
+html_css_files = [
+    '../_static/css/material.css',
+]
 
 # The suffix of source filenames.
 source_suffix = '.rst'
@@ -173,7 +185,22 @@ html_theme = 'percona-theme'
 #html_theme_options = {}
 
 # Add any paths that contain custom themes here, relative to this directory.
-html_theme_path = ['.', './percona-theme']
+#html_theme_path = ['.', './percona-theme']
+html_theme = 'sphinx_material'
+
+html_theme_options = {
+    'base_url': 'http://bashtage.github.io/sphinx-material/',
+    'repo_url': 'https://github.com/percona/percona-server-mongodb-operator',
+    'repo_name': 'percona/percona-server-mongodb-operator',
+    'color_accent': 'grey',
+    'color_primary': 'orange',
+    'globaltoc_collapse': True,
+    'version_dropdown': False,
+}
+
+html_context = {
+   'edit_uri': 'edit/K8s-PSMDB-docs/source'
+}
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
@@ -207,6 +234,10 @@ html_static_path = ['_static']
 
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}
+html_sidebars = {
+		'**': ['globaltoc.html', 'searchbox.html', 'localtoc.html', 'logo-text.html', 'sourcelink.html'],
+		'using/windows': ['windowssidebar.html'],
+				}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
