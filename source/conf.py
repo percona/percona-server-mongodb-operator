@@ -30,7 +30,7 @@ sys.path.append(os.path.abspath('ext'))
 
 extensions = ['sphinx.ext.intersphinx', 'sphinx.ext.todo',
               'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.extlinks', 'sphinx_gitstamp', 
-              'sphinx_copybutton', 'tab_or_note', 'sphinx-prompt', ]
+              'sphinx_copybutton', 'sphinx-prompt', ]
 
 #Extensions Configuration
 #gitstamp format
