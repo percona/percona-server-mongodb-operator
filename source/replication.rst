@@ -226,23 +226,15 @@ Configuring your cluster for multi-cluster Services includes two parts:
 To set up MCS for a specific cloud provider you should follow official guides,
 for example ones `from Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`__, or `from Amazon Elastic Kubernetes Service (EKS) <https://aws.amazon.com/blogs/opensource/introducing-the-aws-cloud-map-multicluster-service-controller-for-k8s-for-kubernetes-multicluster-service-discovery/>`__.
 
-Setting up the Operator for MCS makes it registering a Services for export to
-other clusters `with a ServiceExport object <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_.
-Set the following options in the ``multiCluster`` subsection of the ``deploy/cr.yaml``
+Setting up the Operator for MCS results in registering Services for export to
+other clusters `using the ServiceExport object <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_,
+and using ServiceImport one to import external services. Set the following options in the ``multiCluster`` subsection of the ``deploy/cr.yaml``
 configuration file to make it happened:
 
 * ``multiCluster.enabled`` should be set to ``true``,
 * ``multiCluster.DNSSuffix`` string should be equal to the cluster domain suffix
   for multi-cluster Services used by Kubernetes (``svc.clusterset.local``
   `by default <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_).
-
-The initial ServiceExport creation and sync with the clusters of the fleet takes
-approximately five minutes. After ServiceExport object is created, exported
-Services can be resolved from any Pod in any fleet cluster as
-``SERVICE_EXPORT_NAME.NAMESPACE.svc.clusterset.local``.
-
-.. note:: This means that ServiceExports with the same name and namespace will
-   be considered the same Service.
 
 The following example in the ``deploy/cr.yaml`` configuration file is rather
 straightforward:
@@ -257,9 +249,46 @@ straightforward:
 
 Apply changes as usual with the ``kubectl apply -f deploy/cr.yaml`` command.
 
-.. note:: MCS can charge cross-site replication with additional limitations
-   specific to the cloud provider. For example, GKE demands all participating
-   Pods to be in the same `project <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_. Also, if we use the same Namespace  name, we will export all services from all available clusters with the same Namespace.
+The initial ServiceExport creation and sync with the clusters of the fleet takes
+approximately five minutes. You can check the list of services for export and
+import with the following commands:
+
+.. code:: bash
+
+   $ kubectl get serviceimport
+   NAME                     TYPE           IP                  AGE
+   my-cluster-name-cfg      Headless                           22m
+   my-cluster-name-cfg-0    ClusterSetIP   ["10.73.200.89"]    22m
+   my-cluster-name-cfg-1    ClusterSetIP   ["10.73.192.104"]   22m
+   my-cluster-name-cfg-2    ClusterSetIP   ["10.73.207.254"]   22m
+   my-cluster-name-mongos   ClusterSetIP   ["10.73.196.213"]   22m
+   my-cluster-name-rs0      Headless                           22m
+   my-cluster-name-rs0-0    ClusterSetIP   ["10.73.206.24"]    22m
+   my-cluster-name-rs0-1    ClusterSetIP   ["10.73.207.20"]    22m
+   my-cluster-name-rs0-2    ClusterSetIP   ["10.73.193.92"]    22m
+
+   $ kubectl get serviceexport
+   NAME                     AGE
+   my-cluster-name-cfg      22m
+   my-cluster-name-cfg-0    22m
+   my-cluster-name-cfg-1    22m
+   my-cluster-name-cfg-2    22m
+   my-cluster-name-mongos   22m
+   my-cluster-name-rs0      22m
+   my-cluster-name-rs0-0    22m
+   my-cluster-name-rs0-1    22m
+   my-cluster-name-rs0-2    22m
+
+After ServiceExport object is created, exported Services can be resolved from
+any Pod in any fleet cluster as
+``SERVICE_EXPORT_NAME.NAMESPACE.svc.clusterset.local``.
+
+.. note:: This means that ServiceExports with the same name and namespace will
+   be recignized as a single combined Service.
+
+MCS can charge cross-site replication with additional limitations specific to
+the cloud provider. For example, GKE demands all participating Pods to be in the
+same `project <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_.
 
 Applying MCS to an already-exiting cluster
 ********************************************************************************
