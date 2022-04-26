@@ -169,6 +169,8 @@ spec:
 
     nonvoting:
       enabled: false
+#      podSecurityContext: {}
+#      containerSecurityContext: {}
       size: 3
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
