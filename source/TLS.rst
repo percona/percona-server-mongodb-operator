@@ -231,16 +231,16 @@ Check your certificates for expiration
    .. code:: bash
 
       $ {
-        kubectl get secret/my-cluster-name-ssl-internal -o jsonpath='{.data.tls\.crt}' | base64 --decode | openssl x509 -inform pem -noout -text | grep "Not After"
-        kubectl get secret/my-cluster-name-ssl -o jsonpath='{.data.ca\.crt}' | base64 --decode | openssl x509 -inform pem -noout -text | grep "Not After"
+        kubectl get secret/my-cluster-name-ssl-internal -o jsonpath='{.data.tls\.crt}' | base64 --decode | openssl x509 -noout -dates
+        kubectl get secret/my-cluster-name-ssl -o jsonpath='{.data.ca\.crt}' | base64 --decode | openssl x509 -noout -dates
         }
 
    The resulting output will be self-explanatory:
 
    .. code:: text
 
-      Not After : Jun  1 08:51:01 2022 GMT
-      Not After : Jun  1 08:51:00 2022 GMT
+      notBefore=Apr 25 12:09:38 2022 GMT notAfter=Jul 24 12:09:38 2022 GMT
+      notBefore=Apr 25 12:09:38 2022 GMT notAfter=Jul 24 12:09:38 2022 GMT
 
 .. _tls.no.tls:
 
