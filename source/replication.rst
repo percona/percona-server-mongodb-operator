@@ -260,8 +260,6 @@ Apply changes as usual with the ``kubectl apply -f deploy/cr.yaml`` command.
 .. note:: MCS can charge cross-site replication with additional limitations
    specific to the cloud provider. For example, GKE demands all participating
    Pods to be in the same `project <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_. Also, if we use the same Namespace  name, we will export all services from all available clusters with the same Namespace.
-I plan to duplicate this info in blogpost but I believe it could be helpful in this doc too.
-ServiceExports with the same name and namespace, these will be considered the same service and will be combined at the clusterset level.
 
 Applying MCS to an already-exiting cluster
 ********************************************************************************
