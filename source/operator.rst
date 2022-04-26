@@ -70,6 +70,12 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - The (non-standard) cluster domain to be used as a suffix of the Service
        name
 
+   * - clusterServiceDNSMode
+     - string
+     - ``Internal``
+     - Can be either ``Internal`` (use ``pod.statefulset.namespace.clusterServiceDNSSuffix`` internal DNS name for non-exposed MongoDB instances, and use internal IP for instances exposed with ClusterIP), or ``ServiceMesh`` (use ``service.namespace.clusterServiceDNSSuffix`` Service :abbr:`FQDN (fully qualified domain name)` when generating host names for exposed MongoDB instances).
+
+
    * - runUid
      - int
      - 1001
