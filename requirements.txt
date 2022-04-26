@@ -2,7 +2,7 @@ Sphinx==4.2.0
 sphinx-autobuild
 sphinx-copybutton
 sphinx-gitstamp
-sphinx-material=
+sphinx-material
 sphinxcontrib-applehelp
 sphinxcontrib-contentui
 sphinxcontrib-devhelp
