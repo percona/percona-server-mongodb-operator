@@ -18,6 +18,7 @@ spec:
           image: perconalab/percona-server-mongodb-operator:main
           ports:
           - containerPort: 60000
+            protocol: TCP
             name: metrics
           command:
           - percona-server-mongodb-operator
