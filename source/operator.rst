@@ -40,9 +40,9 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - boolean
      - ``false``
      - Unmanaged site in :ref:`cross-site replication<operator-replication>`:
-       setting it to ``true`` forces the Operator to to run the cluster
-       :ref:`as a Replica site<operator-replication-replica>`, in unmanaged
-       state
+       setting it to ``true`` forces the Operator to run the cluster
+       in unmanaged state - nodes do not form replica sets, operator does
+       not control TLS certificates
 
    * - crVersion
      - string
