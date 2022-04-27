@@ -5,7 +5,7 @@ How to integrate |operator| with OpenLDAP
 
 LDAP services provided by software like OpenLDAP, Microsoft Active Directory, etc. are widely used by enterprises to control information about users, systems, networks, services and applications and the corresponding access rights for the authentication/authorization process in a centralized way.
 
-The following guide covers a simple integration of the already-installed OpenLDAP server with Percona Distribution for MongoDB and the Operator. You can know more about LDAP concepts and `LDIF <https://en.wikipedia.org/wiki/LDAP_Data_Interchange_Format>`_ files used to configure it, and find how to install and configure OpenLDAP in `its official documentation <https://www.openldap.org/doc/admin26/>`_.
+The following guide covers a simple integration of the already-installed OpenLDAP server with Percona Distribution for MongoDB and the Operator. You can know more about LDAP concepts and `LDIF <https://en.wikipedia.org/wiki/LDAP_Data_Interchange_Format>`_ files used to configure it, and find how to install and configure OpenLDAP in the official `OpenLDAP <https://www.openldap.org/doc/admin26/>`_ and `Percona Server for MongoDB <https://docs.percona.com/percona-server-for-mongodb/latest/authentication.html>`_ documentation.
 
 The OpenLDAP side
 -----------------
