@@ -36,7 +36,7 @@ Install and use the *cert-manager*
 About the *cert-manager*
 ------------------------
 
-A `cert-manager <https://cert-manager.io/docs/>`_ is a Kubernetes certificate
+The `cert-manager <https://cert-manager.io/docs/>`_ is a Kubernetes certificate
 management controller which widely used to automate the management and issuance
 of TLS certificates. It is community-driven, and open source. 
 
