@@ -48,7 +48,7 @@ is created because Percona Server for MongoDB requires all certificates issued
 by the same :abbr:`CA (Certificate authority)`.
 
 Self-signed issuer allows you to deploy and use the Percona
-Operator without creating a clusterissuer separately.
+Operator without creating a cluster issuer separately.
 
 Installation of the *cert-manager*
 ----------------------------------
