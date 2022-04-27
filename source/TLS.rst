@@ -81,7 +81,8 @@ The result should display the *cert-manager* and webhook active and running:
    cert-manager-cainjector-85899d45d9-8ncw9   1/1     Running   0          3m8s
    cert-manager-webhook-84fcdcd5d-697k4       1/1     Running   0          3m8s
 
-Now, whenever you :ref:`check certificates for expiration<tls.certs.update.check>`,
+Once you create the database with the Operator, it will automatically trigger 
+cert-manager to create certificates. Whenever you :ref:`check certificates for expiration<tls.certs.update.check>`,
 you will find that they are valid and short-term.
 
 .. _tls.certs.manual:
