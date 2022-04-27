@@ -284,7 +284,7 @@ any Pod in any fleet cluster as
 ``SERVICE_EXPORT_NAME.NAMESPACE.svc.clusterset.local``.
 
 .. note:: This means that ServiceExports with the same name and namespace will
-   be recignized as a single combined Service.
+   be recognized as a single combined Service.
 
 MCS can charge cross-site replication with additional limitations specific to
 the cloud provider. For example, GKE demands all participating Pods to be in the
