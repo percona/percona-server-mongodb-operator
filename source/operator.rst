@@ -73,8 +73,7 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
    * - clusterServiceDNSMode
      - string
      - ``Internal``
-     - Can be either ``Internal`` (use ``pod.statefulset.namespace.clusterServiceDNSSuffix`` internal DNS name for non-exposed MongoDB instances, and use internal IP for instances exposed with ClusterIP), or ``ServiceMesh`` (use ``service.namespace.clusterServiceDNSSuffix`` Service :abbr:`FQDN (fully qualified domain name)` when generating host names for exposed MongoDB instances).
-
+     - Can be either ``internal`` (exposed MongoDB instances will use ClusterIP addresses) or ``ServiceMesh`` (turns on :abbr:`FQDN (fully qualified domain name)` for the exposed Services). Being set, ``ServiceMesh`` value suprecedes multiCluster settings.
 
    * - runUid
      - int
