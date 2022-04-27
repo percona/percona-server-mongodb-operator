@@ -290,7 +290,7 @@ MCS can charge cross-site replication with additional limitations specific to
 the cloud provider. For example, GKE demands all participating Pods to be in the
 same `project <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_.
 
-Applying MCS to an already-exiting cluster
+Applying MCS to an existing cluster
 ********************************************************************************
 
 Additional actions are needed to turn on MCS for the
