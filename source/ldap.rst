@@ -84,6 +84,8 @@ Put the snippet on you local machine and create a Kubernetes Secret object named
 
    $ kubectl create secret generic my-cluster-name-rs0-mongod --from-file=mongod.conf=<path-to-mongod-ldap-configuration>
 
+.. note:: `LDAP over TLS <https://www.openldap.org/faq/data/cache/185.html>`_  is not yet supproted by the Operator.
+
 Next step is to start the MongoDB cluster up as it’s described in :ref:`operator.kubernetes`. On successful completion of the steps from this doc, we are to proceed with setting the LDAP user roles inside the MongoDB. For this, log into MongoDB as administrator and execute the following:
 
 .. code:: json
