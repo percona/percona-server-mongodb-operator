@@ -68,6 +68,14 @@ Management
    sidecar
    debug
 
+HOWTOs
+=============
+
+.. toctree::
+   :maxdepth: 1
+
+   ldap
+
 Reference
 =========
 
