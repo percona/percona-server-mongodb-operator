@@ -38,6 +38,14 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - Pause/resume: setting it to ``true`` gracefully stops the cluster, and
        setting it to ``false`` after shut down starts the cluster back.
 
+   * - unmanaged
+     - boolean
+     - ``false``
+     - Unmanaged site in :ref:`cross-site replication<operator-replication>`:
+       setting it to ``true`` forces the Operator to run the cluster
+       in unmanaged state - nodes do not form replica sets, operator does
+       not control TLS certificates
+
    * - crVersion
      - string
      - ``{{{release}}}``
@@ -64,6 +72,11 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - The (non-standard) cluster domain to be used as a suffix of the Service
        name
 
+   * - clusterServiceDNSMode
+     - string
+     - ``Internal``
+     - Can be either ``internal`` (exposed MongoDB instances will use ClusterIP addresses) or ``ServiceMesh`` (turns on :abbr:`FQDN (fully qualified domain name)` for the exposed Services). Being set, ``ServiceMesh`` value suprecedes multiCluster settings, and therefore these two modes cannot be combined together.
+
    * - runUid
      - int
      - 1001
@@ -77,7 +90,19 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
    * - updateStrategy
      - string
      - ``SmartUpdate``
-     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are :ref:`SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_.
+     - A strategy the Operator uses for :ref:`upgrades<operator-update>`. Possible values are :ref:`SmartUpdate<operator-update-smartupdates>`, `RollingUpdate <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#rolling-updates>`_ and `OnDelete <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#on-delete>`_
+
+   * - multiCluster.enabled
+     - boolean
+     - ``false``
+     - :ref:`Multi-cluster Services (MCS)<operator-replication-mcs>`: setting it to
+       ``true`` enables `MCS cluster mode <https://cloud.google.com/kubernetes-engine/docs/concepts/multi-cluster-services>`_ 
+
+   * - multiCluster.DNSSuffix
+     - string
+     - ``svc.clusterset.local``
+     - The cluster domain to be used as a suffix for :ref:`multi-cluster Services<operator-replication-mcs>`
+       used by Kubernetes (``svc.clusterset.local`` `by default <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_)
 
    * - upgradeOptions
      - :ref:`subdoc<operator.upgradeoptions-section>`
