@@ -10,7 +10,7 @@
 New Features
 ================================================================================
 
-* :jirabug:`K8SPSMDB-185`: allow using AWS EC2 instances for backups with IAM roles assigned to the instance instead of using stored IAM credentials (Thanks to Oleksii for reporting this issue)
+* :jirabug:`K8SPSMDB-185`: allow using AWS EC2 instances for backups :ref:`with IAM roles assigned to the instance<backups.scheduled-s3-iam>` instead of using stored IAM credentials (Thanks to Oleksii for reporting this issue)
 * :jirabug:`K8SPSMDB-625`: Integrate the Operator with Multi Cluster Services (MCS)
 * :jirabug:`K8SPSMDB-668`: Adding support for enabling replication over a service mesh (Thanks to Jo Lyshoel  for contribution)
 
