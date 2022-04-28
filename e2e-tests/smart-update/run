@@ -6,11 +6,35 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
+function check_pod_update() {
+	local pod_name=$1
+	local img=""
+
+	echo "wait for ${pod_name} update"
+	set +o xtrace
+	retry=0
+	while true; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		img=$(kubectl get pod/${pod_name} -o jsonpath='{.spec.containers[0].image}')
+		if [ "${img}" == "${IMAGE_MONGOD_TO_UPDATE}" ]; then
+			echo "OK: Image ${img} was updated for pod ${pod_name}!"
+			break
+		elif [ ${retry} -ge 60 ]; then
+			echo "ERROR: Image was not updated for pod ${pod_name}! Image is ${img}, but should be ${IMAGE_MONGOD_TO_UPDATE}."
+			exit 1
+		fi
+	done
+	set -o xtrace
+	wait_pod "${pod_name}"
+}
+
 cluster="smart-update"
-create_namespace $namespace
+create_namespace ${namespace}
 deploy_operator
 
-kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+kubectl_bin apply -f ${conf_dir}/secrets.yml -f ${conf_dir}/client.yml
 
 IMAGE_MONGOD_TO_UPDATE=${IMAGE_MONGOD}
 if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
@@ -18,57 +42,38 @@ if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
 else
 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 fi
-IMAGE_MONGOD="percona:psmdb-$MONGO_VER"
+IMAGE_MONGOD="percona:psmdb-${MONGO_VER}"
 
 desc 'create first PSMDB cluster'
-spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
+spinup_psmdb ${cluster}-rs0 ${test_dir}/conf/${cluster}-rs0.yml
 compare_kubectl "statefulset/${cluster}-rs0"
 compare_kubectl "statefulset/${cluster}-rs0-arbiter"
 sleep 10
 
-initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@$cluster-rs0.$namespace" "$cluster")
-pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name | grep -v arbiter | sed 's/pod\///g' | sed "s/$initial_primary//g" | sort -r))
+initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@${cluster}-rs0.${namespace}" "${cluster}")
+pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name | grep -v arbiter | sed 's/pod\///g' | sed "s/${initial_primary}//g" | sort -r))
 
-kubectl_bin patch psmdb "${cluster}" --type=merge --patch '{ "spec": { "image": "'"$IMAGE_MONGOD_TO_UPDATE"'" }}'
+kubectl_bin patch psmdb "${cluster}" --type=merge --patch '{ "spec": { "image": "'"${IMAGE_MONGOD_TO_UPDATE}"'" }}'
 
 for pod in "${pods[@]}"; do
-	echo "wait for $pod update"
-	sleep 20
-	wait_pod "$pod"
-	img=$(kubectl get pod/$pod -o jsonpath='{.spec.containers[0].image}')
-	if [ "$img" != "$IMAGE_MONGOD_TO_UPDATE" ]; then
-		echo "image was not updated"
-		exit 1
-	fi
+	check_pod_update "${pod}"
 done
 
 desc "check primary should have old image"
 img=$(kubectl get pod/$initial_primary -o jsonpath='{.spec.containers[0].image}')
-if [ "$img" != "$IMAGE_MONGOD" ]; then
+if [ "${img}" != "${IMAGE_MONGOD}" ]; then
 	echo "image should be old on primary pod at that moment"
 	exit 1
 fi
 
-desc "wait for primary $initial_primary update"
-sleep 15
-wait_pod "$initial_primary"
-img=$(kubectl get pod/$initial_primary -o jsonpath='{.spec.containers[0].image}')
-if [ "$img" != "$IMAGE_MONGOD_TO_UPDATE" ]; then
-	echo "image was not updated"
-	exit 1
-fi
+desc "wait for primary ${initial_primary} update"
+check_pod_update "${initial_primary}"
 
 desc "wait for arbiter pod update"
-sleep 15
-wait_pod "smart-update-rs0-arbiter-0"
-img=$(kubectl get pod/smart-update-rs0-arbiter-0 -o jsonpath='{.spec.containers[0].image}')
-if [ "$img" != "$IMAGE_MONGOD_TO_UPDATE" ]; then
-	echo "image was not updated"
-	exit 1
-fi
+check_pod_update "smart-update-rs0-arbiter-0"
 
 restarted_pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name --sort-by=.status.startTime | sed 's/pod\///g'))
-pods+=("$initial_primary")
+pods+=("${initial_primary}")
 
 for i in "${!pods[@]}"; do
 	if [ "${pods[i]}" != "${restarted_pods[i]}" ]; then
@@ -77,4 +82,4 @@ for i in "${!pods[@]}"; do
 	fi
 done
 
-destroy $namespace
+destroy ${namespace}
