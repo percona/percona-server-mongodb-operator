@@ -22,8 +22,8 @@ Improvements
 * :jirabug:`K8SPSMDB-473`: Allow to :ref:`skip TLS verification for backup storage<backup-storages-verifytls>`, useful for self-hosted S3-compatible storage with a self-issued certificate
 * :jirabug:`K8SPSMDB-644`: Helm chart psmdb-db-1.11.0 - cacheSizeRatio parameter not available as custom value (Thanks to Richard CARRE for reporting this issue)
 * :jirabug:`K8SPSMDB-574`: Allow user to :ref:`choose the validity duration of the external certificate<tls-certvalidityduration>` for cert manager
-* :jirabug:`K8SPSMDB-634`: Support :ref:`point-in-time recovery compression levels<backup-pitr-compression>` for backups (Thanks to Damiano Albani for reporting this issue)
-* :jirabug:`K8SPSMDB-570`: The Operator documentation now includes a How-To on :ref:`using Percona Server for MongoDB with LDAP authentication and authorization<operator-ldap>`
+* :jirabug:`K8SPSMDB-634`: Support :ref:`point-in-time recovery compression levels<backup-pitr-compressiontype>` for backups (Thanks to Damiano Albani for reporting this issue)
+* :jirabug:`K8SPSMDB-570`: The Operator documentation now includes a How-To on :ref:`using Percona Server for MongoDB with LDAP authentication and authorization<howto-ldap>`
 * :jirabug:`K8SPSMDB-537`: PMM container does not cause the crash of the whole database Pod if pmm-agent is not working properly
 
 Bugs Fixed

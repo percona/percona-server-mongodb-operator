@@ -12,7 +12,7 @@ The OpenLDAP side
 
 You can add needed OpenLDAP settings will the following LDIF portions:
 
-.. code:: ldif
+.. code:: yaml
 
    0-percona-ous.ldif: |-
      dn: ou=perconadba,dc=ldap,dc=local
@@ -74,7 +74,7 @@ As for mongod you may use the following code snippet:
              }
       ]'
    setParameter:
-     authenticationMechanisms: 'PLAIN,SCRAM-SHA-1'%
+     authenticationMechanisms: 'PLAIN,SCRAM-SHA-1'
 
 This fragment provides mongod with LDAP-specific parameters, such as FQDN of the LDAP server (``server``), explicit lookup user, domain rules, etc.
 
@@ -88,7 +88,7 @@ Put the snippet on you local machine and create a Kubernetes Secret object named
 
 Next step is to start the MongoDB cluster up as it’s described in :ref:`operator.kubernetes`. On successful completion of the steps from this doc, we are to proceed with setting the LDAP user roles inside the MongoDB. For this, log into MongoDB as administrator and execute the following:
 
-.. code:: json
+.. code:: gdscript
 
    var admin = db.getSiblingDB("admin")
    admin.createRole(

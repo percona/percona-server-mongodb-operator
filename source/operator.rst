@@ -61,6 +61,15 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - ``Always``
      - The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/#updating-images>`_
 
+   * - .. _tls-certvalidityduration:
+
+       tls.certValidityDuration
+     - string
+     - ``2160h``
+     - The validity duration of the external certificate for cert manager (90
+       days by default). This value is used only at cluster creation time and
+       can't be changed for existing clusters
+
    * - imagePullSecrets.name
      - string
      - ``private``-``registry``-``credentials``
@@ -2377,7 +2386,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 This section contains the Mongod configuration options.
 **This section is deprecated in |operator|**
 **v1.12.0+, and will be unavailable in v1.14.0+. Options were moved to**
-:ref:`replsets.configuration<replsets-configuration>`
+:ref:`replsets.configuration<replsets-configuration>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
