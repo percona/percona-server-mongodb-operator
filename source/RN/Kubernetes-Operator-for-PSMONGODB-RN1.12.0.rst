@@ -34,7 +34,7 @@ Bugs Fixed
 * :jirabug:`K8SPSMDB-583`: Fix a bug which caused backup crashing if ``spec.mongod.net.port`` not set or set to zero
 * :jirabug:`K8SPSMDB-540` and :jirabug:`K8SPSMDB-563`: Fix a bug which could cause a cluster crash when reducing the configured Replicaset size between deletion and re-creation of the cluster
 * :jirabug:`K8SPSMDB-608`:  Fix a bug due to which the password of backup user was printed in backup agent logs (Thanks to Antoine Ozenne for reporting this issue)
-* :jirabug:`K8SPSMDB-599`: A new :ref:`mongos.expose.servicePerPod<mongos-expose-serviceperpod>` option allows to deploy a separate ClusterIP Service for each mongos instance, which prevents the failure of a multi-threaded transaction executed with the same driver instance and ended up on a different mongos
+* :jirabug:`K8SPSMDB-599`: A new :ref:`mongos.expose.servicePerPod<sharding-mongos-expose-serviceperpod>` option allows to deploy a separate ClusterIP Service for each mongos instance, which prevents the failure of a multi-threaded transaction executed with the same driver instance and ended up on a different mongos
 * :jirabug:`K8SPSMDB-656`: Fix a bug which caused cluster name not displayed in the backup Custom Resource output with psmdbCluster set in the backup spec
 * :jirabug:`K8SPSMDB-653`: Fix a bug due to which ``spec.ImagePullPolicy`` options from ``deploy/cr.yaml`` wasn’t applied to backup and pmm-client images
 * :jirabug:`K8SPSMDB-632`: Fix a bug which caused the Operator to performs Smart Update on the initial deployment
