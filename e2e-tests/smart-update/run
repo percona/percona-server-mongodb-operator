@@ -22,6 +22,7 @@ function check_pod_update() {
 			echo "OK: Image ${img} was updated for pod ${pod_name}!"
 			break
 		elif [ ${retry} -ge 60 ]; then
+			echo "Max retry count ${retry} reached."
 			echo "ERROR: Image was not updated for pod ${pod_name}! Image is ${img}, but should be ${IMAGE_MONGOD_TO_UPDATE}."
 			exit 1
 		fi
