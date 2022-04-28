@@ -64,14 +64,14 @@ copyright = u'Percona LLC and/or its affiliates 2009-2022'
 # built documents.
 #
 # The short X.Y version.
-version = '1.11.0'
+version = '1.12.0'
 # The full version, including alpha/beta/rc tags.
-release = '1.11.0'
+release = '1.12.0'
 
 # the MongoDB recommended versions to be used in docs
 mongodb44recommended = '4.4.10-11'
 mongodb42recommended = '4.2.17-17'
-pmm2recommended = '2.24.0'
+pmm2recommended = '2.27.0'
 gkerecommended = '1.22'
 certmanagerrecommended = '1.6.1'
 

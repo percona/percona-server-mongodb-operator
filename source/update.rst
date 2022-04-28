@@ -168,23 +168,23 @@ updates:
 
    * ``Recommended`` - automatic upgrade will choose the most recent version
      of software flagged as Recommended (for clusters created from scratch,
-     the Percona Server for MongoDB 4.4 version will be selected instead of the
-     Percona Server for MongoDB 4.2 or 4.0 version regardless of the image
-     path; for already existing clusters, the 4.4 vs. 4.2 or 4.0 branch
+     the Percona Server for MongoDB 5.0 version will be selected instead of the
+     Percona Server for MongoDB 4.4 or 4.2 version regardless of the image
+     path; for already existing clusters, the 5.0 vs. 4.4 or 4.2 branch
      choice will be preserved),
-   * ``4.4-recommended``, ``4.2-recommended``, ``4.0-recommended`` -
+   * ``5.0-recommended``, ``4.4-recommended``, ``4.2-recommended`` -
      same as above, but preserves specific major MongoDB
-     version for newly provisioned clusters (ex. 4.4 will not be automatically
-     used instead of 4.2),
+     version for newly provisioned clusters (ex. 5.0 will not be automatically
+     used instead of 4.4),
    * ``Latest`` - automatic upgrade will choose the most recent version of
      the software available (for clusters created from scratch,
-     the Percona Server for MongoDB 4.4 version will be selected instead of the
-     Percona Server for MongoDB 4.2 or 4.0 version regardless of the image
-     path; for already existing clusters, the 4.4 vs. 4.2 or 4.0 branch
+     the Percona Server for MongoDB 5.0 version will be selected instead of the
+     Percona Server for MongoDB 4.4 or 4.2 version regardless of the image
+     path; for already existing clusters, the 5.0 vs. 4.4 or 4.2 branch
      choice will be preserved),
-   * ``4.4-latest``, ``4.2-latest``, ``4.0-latest`` - same as
+   * ``5.0-latest``, ``4.4-latest``, ``4.2-latest`` - same as
      above, but preserves specific major MongoDB version for newly provisioned
-     clusters (ex. 4.4 will not be automatically used instead of 4.2),
+     clusters (ex. 5.0 will not be automatically used instead of 4.4),
    * *version number* - specify the desired version explicitly
      (version numbers are specified as {{{mongodb44recommended}}},
      {{{mongodb42recommended}}}, etc.),
@@ -242,9 +242,9 @@ complicated task which might potentially affect how data is stored and how
 applications interacts with the database (in case of some API changes). 
 
 Such upgrade is supported by the Operator within one major version at a time:
-for example, to change Percona Server for MongoDB major version from 4.0 to 4.4,
-you should first upgrade it to 4.2, and later make a separate upgrade from 4.2
-to 4.4. The same is true for major version downgrades.
+for example, to change Percona Server for MongoDB major version from 4.2 to 5.0,
+you should first upgrade it to 4.4, and later make a separate upgrade from 4.4
+to 5.0. The same is true for major version downgrades.
 
 .. note:: It is recommended to take a backup before upgrade, as well as to
    perform upgrade on staging environment.
