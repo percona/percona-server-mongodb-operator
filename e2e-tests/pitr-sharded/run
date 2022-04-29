@@ -60,7 +60,7 @@ check_recovery() {
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
 		| $sed -e "s/type:/type: $restore_type/" \
-		| $sed -e "s/date:/date: $restore_date/" \
+		| if [ -z "$restore_date" ]; then $sed -e "/date:/d";else $sed -e "s/date:/date: $restore_date/"; fi  \
 		| kubectl_bin apply -f -
 
 	wait_restore_object "$backup_name"
