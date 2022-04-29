@@ -81,7 +81,9 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - The (non-standard) cluster domain to be used as a suffix of the Service
        name
 
-   * - clusterServiceDNSMode
+   * - .. _clusterservicednsmode:
+
+       clusterServiceDNSMode
      - string
      - ``Internal``
      - Can be either ``internal`` (exposed MongoDB instances will use ClusterIP addresses) or ``ServiceMesh`` (turns on :abbr:`FQDN (fully qualified domain name)` for the exposed Services). Being set, ``ServiceMesh`` value suprecedes multiCluster settings, and therefore these two modes cannot be combined together.

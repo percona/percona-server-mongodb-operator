@@ -4,17 +4,30 @@
 *Percona Kubernetes Operator for Percona Server for MongoDB* 1.12.0
 ================================================================================
 
-:Date: April 28, 2022
+:Date: May 5, 2022
 :Installation: `Installing Percona Kubernetes Operator for Percona Server for MongoDB <https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html#installation>`_
+
+Release Highlights
+================================================================================
+
+* The Operator is able now to use the Amazon Web Services feature of
+  authenticating applications running on EC2 instances based on
+  :ref:`Identity and Access Management (IAM) roles assigned to the instance<backups.scheduled-s3-iam>`;
+  this  makes it possible to configure S3 backup on AWS without using IAM keys
+  saved in Secrets
+* This release brings :ref:`support for the Multi Cluster Services (MCS)<operator-replication-mcs>`. This allows
+  users to deploy MongoDB with Percona Operator across multiple Kubernetes
+  clusters using MCS, which extends the reach of the Service object beyond one
+  cluster, so one Service can be used across multiple clusters.
+* The OpenAPI schema is now generated for the Operator :abbr:`CRD (Custom Resource Definition)`,
+  which allows Kubernetes to perform Custom Resource validation. 
 
 New Features
 ================================================================================
 
-* :jirabug:`K8SPSMDB-185`: allow using AWS EC2 instances for backups :ref:`with IAM roles assigned to the instance<backups.scheduled-s3-iam>` instead of using stored IAM credentials (Thanks to Oleksii for reporting this issue)
-* :jirabug:`K8SPSMDB-625`: Integrate the Operator with Multi Cluster Services (MCS)
-* :jirabug:`K8SPSMDB-668`: Adding support for enabling replication over a service mesh (Thanks to Jo Lyshoel  for contribution)
-
-
+* :jirabug:`K8SPSMDB-185`: :ref:Allow using AWS EC2 instances for backups with IAM roles assigned to the instance instead of using stored IAM credentials (Thanks to Oleksii for reporting this issue)
+* :jirabug:`K8SPSMDB-625`: Integrate the Operator with :ref:`Multi Cluster Services (MCS)<operator-replication-mcs>`
+* :jirabug:`K8SPSMDB-668`: Adding :ref:`support<clusterservicednsmode>` for enabling replication over a service mesh (Thanks to Jo Lyshoel  for contribution)
 
 Improvements
 ================================================================================
@@ -25,6 +38,7 @@ Improvements
 * :jirabug:`K8SPSMDB-634`: Support :ref:`point-in-time recovery compression levels<backup-pitr-compressiontype>` for backups (Thanks to Damiano Albani for reporting this issue)
 * :jirabug:`K8SPSMDB-570`: The Operator documentation now includes a How-To on :ref:`using Percona Server for MongoDB with LDAP authentication and authorization<howto-ldap>`
 * :jirabug:`K8SPSMDB-537`: PMM container does not cause the crash of the whole database Pod if pmm-agent is not working properly
+* :jirabug:`K8SPSMDB-684`: Generate OpenAPI schema for CRD and validate Custom Resource
 
 Bugs Fixed
 ================================================================================
@@ -34,12 +48,12 @@ Bugs Fixed
 * :jirabug:`K8SPSMDB-583`: Fix a bug which caused backup crashing if ``spec.mongod.net.port`` not set or set to zero
 * :jirabug:`K8SPSMDB-540` and :jirabug:`K8SPSMDB-563`: Fix a bug which could cause a cluster crash when reducing the configured Replicaset size between deletion and re-creation of the cluster
 * :jirabug:`K8SPSMDB-608`:  Fix a bug due to which the password of backup user was printed in backup agent logs (Thanks to Antoine Ozenne for reporting this issue)
-* :jirabug:`K8SPSMDB-599`: A new :ref:`mongos.expose.servicePerPod<sharding-mongos-expose-serviceperpod>` option allows to deploy a separate ClusterIP Service for each mongos instance, which prevents the failure of a multi-threaded transaction executed with the same driver instance and ended up on a different mongos
+* :jirabug:`K8SPSMDB-599`: A new :ref:`mongos.expose.servicePerPod<sharding-mongos-expose-serviceperpod>` option allows to deploy a separate ClusterIP Service for each mongos instance, which prevents the failure of a multi-threaded transaction executed with the same driver instance and ended up on a different mongos. Starting from this release mongos is deployed by StatefulSet instead of Deployment object
 * :jirabug:`K8SPSMDB-656`: Fix a bug which caused cluster name not displayed in the backup Custom Resource output with psmdbCluster set in the backup spec
 * :jirabug:`K8SPSMDB-653`: Fix a bug due to which ``spec.ImagePullPolicy`` options from ``deploy/cr.yaml`` wasn’t applied to backup and pmm-client images
 * :jirabug:`K8SPSMDB-632`: Fix a bug which caused the Operator to performs Smart Update on the initial deployment
 * :jirabug:`K8SPSMDB-624`: Fix a bug due to which the Operator didn't grant enough permissions to the Cluster Monitor user necessary for Percona Monitoring and Management (PMM) (Thanks to Richard CARRE for reporting this issue)
-* :jirabug:`K8SPSMDB-618`: Build MongoDB operator based on UBI8
+* :jirabug:`K8SPSMDB-618`: Improve security and meet compliance requirements by building MongoDB Operator based on Red Hat Universal Base Image (UBI) 8 instead of UBI 7
 * :jirabug:`K8SPSMDB-602`: Fix a thread leak in a mongod container of the Replica Set Pods which occurred when setting ``setFCV`` flag to ``true`` in Custom Resource
 * :jirabug:`K8SPSMDB-560`: Fix a bug due to which ``serviceName`` tag was not set to all members in the Replica Set
 * :jirabug:`K8SPSMDB-533`: Fix a bug due to which setting password with a special character for a system user was breaking the cluster
@@ -47,5 +61,17 @@ Bugs Fixed
 Deprecation, Rename and Removal
 ================================================================================
 
-* :jirabug:`K8SPSMDB-596`: The ``spec.mongod`` section is removed from the Custom Resource configuration except the ``mongod.security.encryptionKeySecret`` key, left in a deprecated state in favor of the new ``spec.secrets.encryptionKey`` option. This reorganization involves using ``spec.replsets.[].configuration`` to specify mongod options to Replica Sets
+* :jirabug:`K8SPSMDB-596`: The ``spec.mongod`` section is removed from the Custom Resource configuration except the ``mongod.security.encryptionKeySecret`` key, left in a deprecated state in favor of the new ``spec.secrets.encryptionKey`` option. This reorganization involves using ``spec.replsets.[].configuration`` to specify mongod options to Replica Sets. Before the upgrade please ensure that you move custom MongoDB parameters to the corresponding spec.replsets.[].configuration sections
 * :jirabug:`K8SPSMDB-228`: The ``spec.psmdbCluster`` option in the example on-demand backup configuration file ``backup/backup.yaml`` was renamed to ``spec.clusterName`` (``psmdbCluster`` will be valid till 1.15 version)
+
+Supported Platforms
+================================================================================
+
+The following platforms were tested and are officially supported by the Operator 1.12.0:
+
+* OpenShift 4.7 - 4.10
+* Google Kubernetes Engine (GKE) 1.19 - 1.22
+* Amazon Elastic Container Service for Kubernetes (EKS) 1.19 - 1.22
+* Minikube 1.23
+
+This list only includes the platforms that the Percona Operators are specifically tested on as part of the release process. Other Kubernetes flavors and versions depend on the backward compatibility offered by Kubernetes itself.
