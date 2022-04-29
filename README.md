@@ -48,7 +48,7 @@ It usually takes two steps to deploy Percona Server for MongoDB on Kubernetes:
 Deploy the operator from `deploy/bundle.yaml`:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/main/deploy/bundle.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/main/deploy/bundle.yaml
 ```
 
 Deploy the database cluster itself from `deploy/cr.yaml
