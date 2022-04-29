@@ -47,11 +47,11 @@ mv "$crd_file" "deploy/crd.yaml"
 # deploy/bundle.yaml
 bundle_file=$(mktemp)
 
-yq r "deploy/crd.yaml" >"$bundle_file"
+cat "deploy/crd.yaml" >"$bundle_file"
 echo "---" >>"$bundle_file"
-yq r "deploy/rbac.yaml" >>"$bundle_file"
+cat "deploy/rbac.yaml" >>"$bundle_file"
 echo "---" >>"$bundle_file"
-yq r "deploy/operator.yaml" >>"$bundle_file"
+cat "deploy/operator.yaml" >>"$bundle_file"
 
 mv "$bundle_file" "deploy/bundle.yaml"
 
