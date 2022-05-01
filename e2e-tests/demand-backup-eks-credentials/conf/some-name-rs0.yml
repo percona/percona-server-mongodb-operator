@@ -62,4 +62,3 @@ spec:
             prefixCompression: true
   secrets:
     users: some-users
-#    ssl: some-users-ssl
