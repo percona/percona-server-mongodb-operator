@@ -61,5 +61,5 @@ spec:
           indexConfig:
             prefixCompression: true
   secrets:
-    key: some-key
     users: some-users
+#    ssl: some-users-ssl

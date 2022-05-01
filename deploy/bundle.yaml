@@ -628,7 +628,6 @@ spec:
                                 type: integer
                             required:
                               - bucket
-                              - credentialsSecret
                             type: object
                           type:
                             type: string
@@ -20718,7 +20717,6 @@ spec:
                       type: integer
                   required:
                     - bucket
-                    - credentialsSecret
                   type: object
                 start:
                   format: date-time
@@ -20837,7 +20835,6 @@ spec:
                           type: integer
                       required:
                         - bucket
-                        - credentialsSecret
                       type: object
                     start:
                       format: date-time
