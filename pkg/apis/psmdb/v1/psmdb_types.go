@@ -657,7 +657,7 @@ type BackupStorageS3Spec struct {
 	Prefix                string `json:"prefix,omitempty"`
 	Region                string `json:"region,omitempty"`
 	EndpointURL           string `json:"endpointUrl,omitempty"`
-	CredentialsSecret     string `json:"credentialsSecret"`
+	CredentialsSecret     string `json:"credentialsSecret,omitempty"`
 	UploadPartSize        int    `json:"uploadPartSize,omitempty"`
 	MaxUploadParts        int    `json:"maxUploadParts,omitempty"`
 	StorageClass          string `json:"storageClass,omitempty"`
