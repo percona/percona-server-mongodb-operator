@@ -289,6 +289,8 @@ any Pod in any fleet cluster as
 MCS can charge cross-site replication with additional limitations specific to
 the cloud provider. For example, GKE demands all participating Pods to be in the
 same `project <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_.
+Also, ``default`` Namespace should be used with caution: your cloud provider `may not allow <https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services>`_
+exporting Services from it to other clusters.
 
 Applying MCS to an existing cluster
 ********************************************************************************
