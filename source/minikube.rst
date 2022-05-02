@@ -31,7 +31,7 @@ The following steps are needed to run |operator| on minikube:
 
    .. code-block:: bash
 
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/bundle.yaml --server-side
+      $ kubectl apply --server-side -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v{{{release}}}/deploy/bundle.yaml
 
 #. Deploy MongoDB cluster with:
 
