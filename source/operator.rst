@@ -2508,8 +2508,8 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 ----------------------------------------------------------
 
 This section contains the Mongod configuration options.
-**This section is deprecated in |operator|**
-**v1.12.0+, and will be unavailable in v1.14.0+. Options were moved to**
+This section is **deprecated** in |operator|
+v1.12.0+, **and will be unavailable** in v1.14.0+. Options were moved to
 :ref:`replsets.configuration<replsets-configuration>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
@@ -2526,7 +2526,7 @@ This section contains the Mongod configuration options.
 | **Description** | Specifies a secret object with the `encryption key 						|
 |                 | <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_	|
 |                 | **Please note that this option is deprecated;**						|
-|                 | **use :ref:`spec.secrets.encryptionKey<secrets-encryptionkey>` instead**			|
+|                 | **use** :ref:`spec.secrets.encryptionKey<secrets-encryptionkey>` **instead**		|
 +-----------------+---------------------------------------------------------------------------------------------+
 
 .. _operator.backup-section:
@@ -2843,8 +2843,8 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The point-in-time-recovery chunks compression format,					|
 |                 | `can be gzip, snappy, lz4, pgzip, zstd, s2, or none						|
-|                 |<https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
-|                 |incremental-backups>`_									|
+|                 | <https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
+|                 | incremental-backups>`_									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2858,8 +2858,8 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The point-in-time-recovery chunks compression level						|
 |                 | (`higher values result in better but slower compression 					|
-|                 |<https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
-|                 |incremental-backups>`_)									|
+|                 | <https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
+|                 | incremental-backups>`_)									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
