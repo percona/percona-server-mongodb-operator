@@ -2859,7 +2859,7 @@ Percona Server for MongoDB backups.
 | **Description** | The point-in-time-recovery chunks compression level						|
 |                 | (`higher values result in better but slower compression 					|
 |                 | <https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
-|                 | incremental-backups>`_)									|
+|                 | incremental-backups>`__)									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2947,6 +2947,6 @@ Percona Server for MongoDB backups.
 | **Example**     | ``6``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The backup compression level (`higher values result in better but slower compression	|
-|                 | <https://docs.percona.com/percona-backup-mongodb/running.html#starting-a-backup>`_)		|
+|                 | <https://docs.percona.com/percona-backup-mongodb/running.html#starting-a-backup>`__)	|
 +-----------------+---------------------------------------------------------------------------------------------+
 
