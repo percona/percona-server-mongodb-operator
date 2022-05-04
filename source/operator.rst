@@ -495,6 +495,116 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-engine:								|
+|                 |												|
+| **Key**         | `replsets.storage.engine <operator.html#replsets-storage-engine>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``wiredTiger``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.engine option								|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine>`_`	|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-engineconfig-cachesizeratio:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.engineConfig.cacheSizeRatio					|
+|                 | <operator.html#replsets-storage-wiredtiger-engineconfig-cachesizeratio>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | float											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.5``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The ratio used to compute the `storage.wiredTiger.engineConfig.cacheSizeGB option		|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.engineConfig.cacheSizeGB>`_				|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-engineconfig-directoryforindexes:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.engineConfig.directoryForIndexes				|
+|                 | <operator.html#replsets-storage-wiredtiger-engineconfig-directoryforindexes>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.engineConfig.directoryForIndexes option			|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.engineConfig.directoryForIndexes>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-engineconfig-journalcompressor:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.engineConfig.journalCompressor					|
+|                 | <operator.html#replsets-storage-wiredtiger-engineconfig-journalcompressor>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``snappy``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.engineConfig.journalCompressor option				|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.engineConfig.journalCompressor>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-collectionconfig-blockcompressor:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.collectionConfig.blockCompressor				|
+|                 | <operator.html#replsets-storage-wiredtiger-collectionconfig-blockcompressor>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``snappy``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.collectionConfig.blockCompressor option			|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.collectionConfig.blockCompressor>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-indexconfig-prefixcompression:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.indexConfig.prefixCompression					|
+|                 | <operator.html#replsets-storage-wiredtiger-indexconfig-prefixcompression>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.indexConfig.prefixCompression option				|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.indexConfig.prefixCompression>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-inmemory-engineconfig-inmemorysizeratio:				|
+|                 |												|
+| **Key**         | `replsets.storage.inMemory.engineConfig.inMemorySizeRatio					|
+|                 | <operator.html#replsets-storage-inmemory-engineconfig-inmemorysizeratio>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | float											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.9``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The ratio used to compute the `storage.engine.inMemory.inMemorySizeGb option		|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.inMemory.engineConfig.inMemorySizeGB>`_				|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-livenessprobe-failurethreshold:						|
 |                 |												|
 | **Key**         | `replsets.livenessProbe.failureThreshold							|
