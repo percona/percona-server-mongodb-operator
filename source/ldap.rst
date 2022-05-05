@@ -1,4 +1,4 @@
-.. _howto_ldap:
+.. _howto-ldap:
 
 How to integrate |operator| with OpenLDAP
 ====================================================================================

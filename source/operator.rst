@@ -2464,7 +2464,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
 |                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
-|                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
+|                 | **v1.13.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2481,7 +2481,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
 |                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
-|                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
+|                 | **v1.13.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2498,7 +2498,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
 |                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
-|                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
+|                 | **v1.13.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
 
