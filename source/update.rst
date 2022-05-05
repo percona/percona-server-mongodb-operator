@@ -12,9 +12,12 @@ Operator itself, and upgrades of the Percona Server for MongoDB.
 Upgrading the Operator
 ----------------------
 
-This upgrade can be done either in semi-automatic or in manual mode.
+This upgrade can be done either in semi-automatic or in manual mode. **Manual
+update mode is the recommended way for a production cluster**.
 
-.. note:: Manual update mode is the recommended way for a production cluster.
+.. note:: Operational support is provided for the last 3 minor versions of the
+   Operator. Customers will get complete support for the latest minor version.
+   Bug fixes and improvements are not backported to older minor versions.
 
 .. _operator-update-semi-auto-updates:
 
