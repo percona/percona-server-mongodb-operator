@@ -1,7 +1,7 @@
 .. _rel_notes:
 
 ================================================================
-Percona Distribution for MongoDB Operator Release Notes
+Percona Operator for MongoDB Release Notes
 ================================================================
 
 .. toctree::
