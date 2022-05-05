@@ -180,6 +180,7 @@
           "listShards",
           "logRotate",
           "netstat",
+          "oidReset",
           "removeShard",
           "replSetConfigure",
           "replSetGetConfig",

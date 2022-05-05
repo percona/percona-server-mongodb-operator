@@ -571,7 +571,6 @@ spec:
                                 type: integer
                             required:
                               - bucket
-                              - credentialsSecret
                             type: object
                           type:
                             type: string
@@ -15966,7 +15965,6 @@ spec:
                       type: integer
                   required:
                     - bucket
-                    - credentialsSecret
                   type: object
                 start:
                   format: date-time
@@ -16085,7 +16083,6 @@ spec:
                           type: integer
                       required:
                         - bucket
-                        - credentialsSecret
                       type: object
                     start:
                       format: date-time
@@ -16299,7 +16296,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: percona/percona-server-mongodb-operator:1.12.0
           ports:
           - containerPort: 60000
             protocol: TCP

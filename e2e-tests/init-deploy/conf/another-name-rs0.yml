@@ -9,8 +9,8 @@ spec:
   allowUnsafeConfigurations: true
   backup:
     enabled: false
-    storages:
-    tasks:
+#    storages:
+#    tasks:
   replsets:
   - name: rs0
     configuration: |

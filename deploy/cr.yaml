@@ -12,7 +12,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.12.0
-  image: percona/percona-server-mongodb:4.4.10-11
+  image: percona/percona-server-mongodb:5.0.7-6
   imagePullPolicy: Always
 #  tls:
 #    # 90 days in hours
@@ -27,7 +27,7 @@ spec:
 #    DNSSuffix: svc.clusterset.local
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
-    apply: 4.4-recommended
+    apply: 5.0-recommended
     schedule: "0 2 * * *"
     setFCV: false
   secrets:
@@ -35,7 +35,7 @@ spec:
     encryptionKey: my-cluster-name-mongodb-encryption-key
   pmm:
     enabled: false
-    image: percona/pmm-client:2.24.0
+    image: percona/pmm-client:2.27.0
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -58,12 +58,8 @@ spec:
 #        verbosity: 1
 #      storage:
 #        engine: wiredTiger
-#        inMemory:
-#          engineConfig:
-#            inMemorySizeRatio: 0.9
 #        wiredTiger:
 #          engineConfig:
-#            cacheSizeRatio: 0.5
 #            directoryForIndexes: false
 #            journalCompressor: snappy
 #          collectionConfig:
@@ -94,6 +90,20 @@ spec:
 #      rack: rack-22
 #    nodeSelector:
 #      disktype: ssd
+#    storage:
+#      engine: wiredTiger
+#      wiredTiger:
+#        engineConfig:
+#          cacheSizeRatio: 0.5
+#          directoryForIndexes: false
+#          journalCompressor: snappy
+#        collectionConfig:
+#          blockCompressor: snappy
+#        indexConfig:
+#          prefixCompression: true
+#      inMemory:
+#        engineConfig:
+#           inMemorySizeRatio: 0.5
 #    livenessProbe:
 #      failureThreshold: 4
 #      initialDelaySeconds: 60
@@ -169,6 +179,8 @@ spec:
 
     nonvoting:
       enabled: false
+#      podSecurityContext: {}
+#      containerSecurityContext: {}
       size: 3
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
@@ -291,17 +303,6 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-#      storage:
-#        engine: wiredTiger
-#        wiredTiger:
-#          engineConfig:
-#            cacheSizeRatio: 0.5
-#            directoryForIndexes: false
-#            journalCompressor: snappy
-#          collectionConfig:
-#            blockCompressor: snappy
-#          indexConfig:
-#            prefixCompression: true
 #      livenessProbe:
 #        failureThreshold: 4
 #        initialDelaySeconds: 60
@@ -423,7 +424,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-backup-mongodb:1.7.0
     serviceAccountName: percona-server-mongodb-operator
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
@@ -434,7 +435,7 @@ spec:
 #      requests:
 #        cpu: "300m"
 #        memory: "0.5G"
-    storages:
+#    storages:
 #      s3-us-west:
 #        type: s3
 #        s3:
@@ -466,7 +467,7 @@ spec:
 #      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6
-    tasks:
+#    tasks:
 #      - name: daily-s3-us-west
 #        enabled: true
 #        schedule: "0 0 * * *"

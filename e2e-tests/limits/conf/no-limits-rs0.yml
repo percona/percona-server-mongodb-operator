@@ -8,8 +8,8 @@ spec:
   imagePullPolicy: Always
   backup:
     enabled: false
-    storages:
-    tasks:
+#    storages:
+#    tasks:
   replsets:
   - name: rs0
     resources:
