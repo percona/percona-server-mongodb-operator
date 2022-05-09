@@ -1,4 +1,4 @@
-apiVersion: psmdb.percona.com/v1
+apiVersion: psmdb.percona.com/v1-10-0
 kind: PerconaServerMongoDB
 metadata:
   name: some-name
