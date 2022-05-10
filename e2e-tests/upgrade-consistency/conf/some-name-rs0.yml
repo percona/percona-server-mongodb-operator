@@ -4,6 +4,7 @@ metadata:
   name: some-name
 spec:
   #platform: openshift
+  crVersion: 1.10.0
   image:
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
