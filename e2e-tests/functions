@@ -551,7 +551,7 @@ compare_kubectl() {
 			yq d -i ${new_result} 'metadata.generation'
 		fi
 	fi
-  cat ${new_result}
+	cat ${new_result}
 	diff -u "$expected_result" "$new_result"
 }
 
