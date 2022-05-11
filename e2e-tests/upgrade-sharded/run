@@ -103,7 +103,7 @@ function check_applied_images() {
 
 function deploy_operator_gh() {
 	desc 'start operator'
-	kubectl_bin apply --server-side -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
+	kubectl_bin apply --server-side --force-conflicts -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
 	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/rbac.yaml"
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/operator.yaml" >"${tmp_dir}/operator_${GIT_TAG}.yaml"
 	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/operator_${GIT_TAG}.yaml"
