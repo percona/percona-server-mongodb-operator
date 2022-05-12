@@ -209,7 +209,7 @@ function main() {
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 	check_applied_images "all"
 	compare_generation "3" "statefulset" "${cluster}-rs0"
-	compare_generation "3" "psmdb" "${cluster}"
+	compare_generation "2" "psmdb" "${cluster}"
 
 	desc 'drop collection and do restore with new version'
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
