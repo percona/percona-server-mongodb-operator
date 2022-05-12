@@ -217,6 +217,8 @@ function main() {
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
 	check_applied_images "operator"
+	sleep 30
+	kubectl_bin get pods
 	compare_generation "2" "statefulset" "${cluster}-rs0"
 	compare_generation "2" "statefulset" "${cluster}-cfg"
 	compare_generation "2" "deployment" "${cluster}-mongos"
