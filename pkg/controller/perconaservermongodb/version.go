@@ -281,7 +281,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		cr.Spec.PMM.Image = newVersion.PMMImage
 	}
 
-	err = r.client.Patch(ctx, cr, patch)
+	err = r.client.Patch(ctx, cr.DeepCopy(), patch)
 	if err != nil {
 		return errors.Wrap(err, "failed to update CR")
 	}
