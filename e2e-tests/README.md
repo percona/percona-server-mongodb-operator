@@ -45,8 +45,8 @@ Install [Docker](https://docs.docker.com/docker-for-mac/install/), and run the f
 
 ```
 brew install coreutils gnu-sed jq kubernetes-cli openshift-cli kubernetes-helm
-brew install yq@3
-brew link yq@3
+wget https://github.com/mikefarah/yq/releases/download/3.4.1/yq_darwin_amd64 -O /usr/local/bin/yq &&    chmod +x /usr/local/bin/yq
+cp /usr/local/bin/yq /opt/homebrew/bin
 curl https://sdk.cloud.google.com | bash
 ```
 
