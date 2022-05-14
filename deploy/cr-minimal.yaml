@@ -1,9 +1,9 @@
-apiVersion: psmdb.percona.com/v1-12-0
+apiVersion: psmdb.percona.com/v1-13-0
 kind: PerconaServerMongoDB
 metadata:
   name: minimal-cluster
 spec:
-  crVersion: 1.12.0
+  crVersion: 1.13.0
   image: percona/percona-server-mongodb:5.0.7-6
   allowUnsafeConfigurations: true
   upgradeOptions:

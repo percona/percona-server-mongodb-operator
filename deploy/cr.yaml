@@ -1,4 +1,4 @@
-apiVersion: psmdb.percona.com/v1-12-0
+apiVersion: psmdb.percona.com/v1-13-0
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
@@ -11,7 +11,7 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.12.0
+  crVersion: 1.13.0
   image: percona/percona-server-mongodb:5.0.7-6
   imagePullPolicy: Always
 #  tls:
@@ -424,7 +424,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:1.7.0
+    image: perconalab/percona-server-mongodb-operator:main-backup
     serviceAccountName: percona-server-mongodb-operator
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
