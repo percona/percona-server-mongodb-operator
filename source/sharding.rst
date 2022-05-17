@@ -25,7 +25,9 @@ A MongoDB Sharding involves the following components:
    a MongoDB cluster; still, this limited sharding support allowed using
    ``mongos`` as an entry point instead of provisioning a load-balancer per
    replica set node. Multiple shards are supported starting from the Operator
-   1.7.0.
+   1.7.0. Also, before the Operator 1.12.0 mongos were deployed by the `Deployment <https://kubernetes.io/docs/concepts/workloads/controllers/deployment/>`_
+   object, and starting from 1.12.0 they are deployed by the `StatefulSet <https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/>`_ one.
+   
 
 Turning sharding on and off
 ---------------------------

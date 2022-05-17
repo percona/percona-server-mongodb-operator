@@ -89,7 +89,7 @@ Installing the Operator
 
    .. code:: bash
 
-      $ kubectl apply -f deploy/bundle.yaml --server-side
+      $ kubectl apply --server-side -f deploy/bundle.yaml
 
    The following confirmation is returned:
 

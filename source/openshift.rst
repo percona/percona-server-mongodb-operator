@@ -60,7 +60,7 @@ Install the Operator via the command-line interface
 
    .. code:: bash
 
-      $ oc apply -f deploy/crd.yaml --server-side
+      $ oc apply --server-side -f deploy/crd.yaml
 
    .. note::
 

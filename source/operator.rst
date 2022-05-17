@@ -61,6 +61,15 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - ``Always``
      - The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/#updating-images>`_
 
+   * - .. _tls-certvalidityduration:
+
+       tls.certValidityDuration
+     - string
+     - ``2160h``
+     - The validity duration of the external certificate for cert manager (90
+       days by default). This value is used only at cluster creation time and
+       can't be changed for existing clusters
+
    * - imagePullSecrets.name
      - string
      - ``private``-``registry``-``credentials``
@@ -72,7 +81,9 @@ The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-
      - The (non-standard) cluster domain to be used as a suffix of the Service
        name
 
-   * - clusterServiceDNSMode
+   * - .. _clusterservicednsmode:
+
+       clusterServiceDNSMode
      - string
      - ``Internal``
      - Can be either ``internal`` (exposed MongoDB instances will use ClusterIP addresses) or ``ServiceMesh`` (turns on :abbr:`FQDN (fully qualified domain name)` for the exposed Services). Being set, ``ServiceMesh`` value suprecedes multiCluster settings, and therefore these two modes cannot be combined together.
@@ -268,9 +279,9 @@ has only two of them:
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _secrets-encryptionkey:							|
+|                 | .. _secrets-encryptionkey:									|
 |                 |												|
-| **Key**         | `secrets.encryptionKey <operator.html#secrets-encryptionkey>`_	|
+| **Key**         | `secrets.encryptionKey <operator.html#secrets-encryptionkey>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -481,6 +492,116 @@ The replsets section controls the MongoDB Replica Set.
 | **Description** | The `Kubernetes nodeSelector								|
 |                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_		|
 |                 | affinity constraint  for the Replica Set nodes						|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-engine:								|
+|                 |												|
+| **Key**         | `replsets.storage.engine <operator.html#replsets-storage-engine>`_				|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``wiredTiger``										|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.engine option								|
+|                 | <https://docs.mongodb.com/manual/reference/configuration-options/#storage.engine>`_`	|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-engineconfig-cachesizeratio:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.engineConfig.cacheSizeRatio					|
+|                 | <operator.html#replsets-storage-wiredtiger-engineconfig-cachesizeratio>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | float											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.5``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The ratio used to compute the `storage.wiredTiger.engineConfig.cacheSizeGB option		|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.engineConfig.cacheSizeGB>`_				|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-engineconfig-directoryforindexes:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.engineConfig.directoryForIndexes				|
+|                 | <operator.html#replsets-storage-wiredtiger-engineconfig-directoryforindexes>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.engineConfig.directoryForIndexes option			|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.engineConfig.directoryForIndexes>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-engineconfig-journalcompressor:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.engineConfig.journalCompressor					|
+|                 | <operator.html#replsets-storage-wiredtiger-engineconfig-journalcompressor>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``snappy``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.engineConfig.journalCompressor option				|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.engineConfig.journalCompressor>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-collectionconfig-blockcompressor:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.collectionConfig.blockCompressor				|
+|                 | <operator.html#replsets-storage-wiredtiger-collectionconfig-blockcompressor>`_		|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | string											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``snappy``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.collectionConfig.blockCompressor option			|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.collectionConfig.blockCompressor>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-wiredtiger-indexconfig-prefixcompression:				|
+|                 |												|
+| **Key**         | `replsets.storage.wiredTiger.indexConfig.prefixCompression					|
+|                 | <operator.html#replsets-storage-wiredtiger-indexconfig-prefixcompression>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | bool											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``true``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | Sets the `storage.wiredTiger.indexConfig.prefixCompression option				|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.wiredTiger.indexConfig.prefixCompression>`_			|
+|                 | for the Replica Set nodes									|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _replsets-storage-inmemory-engineconfig-inmemorysizeratio:				|
+|                 |												|
+| **Key**         | `replsets.storage.inMemory.engineConfig.inMemorySizeRatio					|
+|                 | <operator.html#replsets-storage-inmemory-engineconfig-inmemorysizeratio>`_			|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | float											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``0.9``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | The ratio used to compute the `storage.engine.inMemory.inMemorySizeGb option		|
+|                 | <https://www.mongodb.com/docs/manual/reference/configuration-options/			|
+|                 | #mongodb-setting-storage.inMemory.engineConfig.inMemorySizeGB>`_				|
+|                 | for the Replica Set nodes									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2290,6 +2411,18 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
+|                 | .. _sharding-mongos-expose-serviceperpod:							|
+|                 |												|
+| **Key**         | `sharding.mongos.expose.servicePerPod <operator.html#sharding-mongos-expose-serviceperpod>`_|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Example**     | ``false``											|
++-----------------+---------------------------------------------------------------------------------------------+
+| **Description** | If set to ``true``, a separate ClusterIP Service is created for each mongos instance	|
++-----------------+---------------------------------------------------------------------------------------------+
+|														|
++-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _sharding-mongos-expose-loadbalancersourceranges:					|
 |                 |												|
 | **Key**         | `sharding.mongos.expose.loadBalancerSourceRanges						|
@@ -2331,7 +2464,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
 |                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
-|                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
+|                 | **v1.13.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2348,7 +2481,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
 |                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
-|                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
+|                 | **v1.13.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
@@ -2365,7 +2498,7 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 |                 | <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/audit-logging.html>`_	|
 |                 | for the MongoDB mongos daemon.								|
 |                 | **Deprecated in the Operator version 1.9.0+, unavailable in**				|
-|                 | **v1.12.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
+|                 | **v1.13.0+; use** :ref:`sharding.mongos.configuration<sharding-mongos-configuration>`	|
 |                 | **instead**											|
 +-----------------+---------------------------------------------------------------------------------------------+
 
@@ -2375,9 +2508,9 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 ----------------------------------------------------------
 
 This section contains the Mongod configuration options.
-**This section is deprecated in |operator|**
-**v1.12.0+, and will be unavailable in v1.14.0+. Options were moved to**
-:ref:`replsets.configuration<replsets-configuration>`
+This section is **deprecated** in |operator|
+v1.12.0+, **and will be unavailable** in v1.14.0+. Options were moved to
+:ref:`replsets.configuration<replsets-configuration>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -2393,7 +2526,7 @@ This section contains the Mongod configuration options.
 | **Description** | Specifies a secret object with the `encryption key 						|
 |                 | <https://docs.mongodb.com/manual/tutorial/configure-encryption/#local-key-management>`_	|
 |                 | **Please note that this option is deprecated;**						|
-|                 | **use :ref:`spec.secrets.encryptionKey<secrets-encryptionkey>` instead**			|
+|                 | **use** :ref:`spec.secrets.encryptionKey<secrets-encryptionkey>` **instead**		|
 +-----------------+---------------------------------------------------------------------------------------------+
 
 .. _operator.backup-section:
@@ -2418,30 +2551,6 @@ Percona Server for MongoDB backups.
 | **Example**     | ``true``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | Enables or disables making backups					 			|
-+-----------------+---------------------------------------------------------------------------------------------+
-|														|
-+-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-debug:										|
-|                 |												|
-| **Key**         | `backup.debug <operator.html#backup-debug>`_						|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | boolean											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``true``											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables or disables debug mode for backups							|
-+-----------------+---------------------------------------------------------------------------------------------+
-|														|
-+-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _backup-restartonfailure:								|
-|                 |												|
-| **Key**         | `backup.restartOnFailure <operator.html#backup-restartonfailure>`_				|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | boolean											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``true``											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | Enables or disables restarting the previously failed backup process				|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2702,7 +2811,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-pitr-compressiontype:								|
 |                 |												|
-| **Key**         | `backup.pitr.compressionType <operator.html#backup-pitr-compressiontype>`_		|
+| **Key**         | `backup.pitr.compressionType <operator.html#backup-pitr-compressiontype>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2710,23 +2819,23 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The point-in-time-recovery chunks compression format,					|
 |                 | `can be gzip, snappy, lz4, pgzip, zstd, s2, or none						|
-|                 |<https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
-|                 |incremental-backups>`_									|
+|                 | <https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
+|                 | incremental-backups>`_									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-pitr-compressionlevel:								|
 |                 |												|
-| **Key**         | `backup.pitr.compressionLevel <operator.html#pitr-tasks-compressionlevel>`_		|
+| **Key**         | `backup.pitr.compressionLevel <operator.html#pitr-tasks-compressionlevel>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | int											|
+| **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``6``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The point-in-time-recovery chunks compression level						|
 |                 | (`higher values result in better but slower compression 					|
-|                 |<https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
-|                 |incremental-backups>`_)									|
+|                 | <https://docs.percona.com/percona-backup-mongodb/point-in-time-recovery.html#		|
+|                 | incremental-backups>`__)									|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2809,11 +2918,11 @@ Percona Server for MongoDB backups.
 |                 |												|
 | **Key**         | `backup.tasks.compressionLevel <operator.html#backup-tasks-compressionlevel>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | int											|
+| **Value Type**  | int												|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Example**     | ``6``											|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Description** | The backup compression level (`higher values result in better but slower compression	|
-|                 | <https://docs.percona.com/percona-backup-mongodb/running.html#starting-a-backup>`_)		|
+|                 | <https://docs.percona.com/percona-backup-mongodb/running.html#starting-a-backup>`__)	|
 +-----------------+---------------------------------------------------------------------------------------------+
 

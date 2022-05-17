@@ -97,7 +97,24 @@ which uses Amazon S3 storage for backups:
         storageName: s3-us-west
      ...
 
-if you use some S3-compatible storage instead of the original
+.. note::
+
+   .. _backups.scheduled-s3-iam:
+
+   Using AWS EC2 instances for backups makes it possible to automate
+   access to AWS S3 buckets based on IAM Roles for Service Accounts with no need
+   to specify the S3 credentials explicitly. Following steps are needed to turn
+   this feature on:
+   
+   * Create the `IAM instance profile <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>`_
+     and the permission policy within where you specify the access level that
+     grants the access to S3 buckets.
+   * Attach the IAM profile to an EC2 instance.
+   * Configure an S3 storage bucket and verify the connection from the EC2
+     instance to it.
+   * Do not provide ``s3.credentialsSecret`` for the storage in ``deploy/cr.yaml``.
+
+If you use some S3-compatible storage instead of the original
 Amazon S3, the `endpointURL <https://docs.min.io/docs/aws-cli-with-minio.html>`_ is needed in the ``s3`` subsection which points to the actual cloud used for backups and
 is specific to the cloud provider. For example, using `Google Cloud <https://cloud.google.com>`_ involves the `following <https://storage.googleapis.com>`_ endpointUrl:
 

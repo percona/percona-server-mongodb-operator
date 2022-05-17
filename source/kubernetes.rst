@@ -20,7 +20,7 @@ Install Percona server for MongoDB on Kubernetes
 
    .. code:: bash
 
-      $ kubectl apply -f deploy/crd.yaml --server-side
+      $ kubectl apply --server-side -f deploy/crd.yaml
 
    This step should be done only once; the step does not need to be repeated
    with any other Operator deployments.

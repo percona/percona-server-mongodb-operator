@@ -57,7 +57,27 @@ Kubernetes-based environment:
          .. code:: bash
 
             kubectl patch secret/my-cluster-name-secrets -p '{"data":{"PMM_SERVER_PASSWORD": '$(echo -n new_password | base64)'}}'
-      
+
+   Apply changes with the ``kubectl apply -f deploy/secrets.yaml`` command.
+
+   - Starting from the Operator version 1.12.0, MongoDB operation profiling is
+     disabled by default, and you `should enable it <https://docs.percona.com/percona-monitoring-and-management/setting-up/client/mongodb.html#set-profiling-in-the-configuration-file>`_ to make `PMM Query Analytics <https://docs.percona.com/percona-monitoring-and-management/using/query-analytics.html>`_
+     work. You can pass options to MongoDB :ref:`in several ways<operator-configmaps>`,
+     for example in the ``configuration`` subsection of the ``deploy/cr.yaml``:
+
+     .. code:: yaml
+
+        spec:
+          ...
+          replsets:
+            - name: rs0
+              size: 3
+              configuration: |
+                operationProfiling:
+                  slowOpThresholdMs: 200
+                  mode: slowOp
+                  rateLimit: 100
+
    -  you can also use ``pmm.mongodParams`` and ``pmm.mongosParams`` keys to
       specify additional parameters for the `pmm-admin add mongodb <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mongodb.html#adding-mongodb-service-monitoring>`_ command for ``mongod`` and
       ``mongos`` Pods respectively, if needed.
@@ -68,7 +88,6 @@ Kubernetes-based environment:
          to these parameters is not recommended and can negatively affect the
          functionality of the PMM setup carried out by the Operator.
 
-   Apply changes with the ``kubectl apply -f deploy/secrets.yaml`` command.
 
    When done, apply the edited ``deploy/cr.yaml`` file:
 

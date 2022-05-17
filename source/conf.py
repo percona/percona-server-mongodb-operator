@@ -29,8 +29,9 @@ sys.path.append(os.path.abspath('ext'))
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 
 extensions = ['sphinx.ext.intersphinx', 'sphinx.ext.todo',
-              'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.extlinks', 'sphinx_gitstamp', 
-              'sphinx_copybutton', 'sphinx-prompt', ]
+              'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.extlinks',
+#              'sphinx_gitstamp', 'sphinx_copybutton',
+              'sphinx-prompt', 'psdom', ]
 
 #Extensions Configuration
 #gitstamp format
@@ -64,14 +65,15 @@ copyright = u'Percona LLC and/or its affiliates 2009-2022'
 # built documents.
 #
 # The short X.Y version.
-version = '1.11.0'
+version = '1.12.0'
 # The full version, including alpha/beta/rc tags.
-release = '1.11.0'
+release = '1.12.0'
 
 # the MongoDB recommended versions to be used in docs
-mongodb44recommended = '4.4.10-11'
-mongodb42recommended = '4.2.17-17'
-pmm2recommended = '2.24.0'
+mongodb50recommended = '5.0.7-6'
+mongodb44recommended = '4.4.13-13'
+mongodb42recommended = '4.2.19-19'
+pmm2recommended = '2.27.0'
 gkerecommended = '1.22'
 certmanagerrecommended = '1.6.1'
 
@@ -186,22 +188,22 @@ html_theme = 'percona-theme'
 #html_theme_options = {}
 
 # Add any paths that contain custom themes here, relative to this directory.
-#html_theme_path = ['.', './percona-theme']
-html_theme = 'sphinx_material'
+html_theme_path = ['.', './percona-theme']
+#html_theme = 'sphinx_material'
 
-html_theme_options = {
-    'base_url': 'http://bashtage.github.io/sphinx-material/',
-    'repo_url': 'https://github.com/percona/percona-server-mongodb-operator',
-    'repo_name': 'percona/percona-server-mongodb-operator',
-    'color_accent': 'grey',
-    'color_primary': 'orange',
-    'globaltoc_collapse': True,
-    'version_dropdown': False,
-}
+#html_theme_options = {
+#    'base_url': 'http://bashtage.github.io/sphinx-material/',
+#    'repo_url': 'https://github.com/percona/percona-server-mongodb-operator',
+#    'repo_name': 'percona/percona-server-mongodb-operator',
+#    'color_accent': 'grey',
+#    'color_primary': 'orange',
+#    'globaltoc_collapse': True,
+#    'version_dropdown': False,
+#}
 
-html_context = {
-   'edit_uri': 'edit/K8s-PSMDB-docs/source'
-}
+#html_context = {
+#   'edit_uri': 'edit/K8s-PSMDB-docs/source'
+#}
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
@@ -235,10 +237,10 @@ html_static_path = ['_static']
 
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}
-html_sidebars = {
-		'**': ['globaltoc.html', 'searchbox.html', 'localtoc.html', 'logo-text.html', 'sourcelink.html'],
-		'using/windows': ['windowssidebar.html'],
-				}
+#html_sidebars = {
+#		'**': ['globaltoc.html', 'searchbox.html', 'localtoc.html', 'logo-text.html', 'sourcelink.html'],
+#		'using/windows': ['windowssidebar.html'],
+#				}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -332,6 +334,7 @@ def ultimateReplace(app, docname, source):
 ultimate_replacements = {
     "{{{release}}}" : release,
     "{{{apiversion}}}" : release.replace(".", "-", 2),
+    "{{{mongodb50recommended}}}" : mongodb50recommended,
     "{{{mongodb44recommended}}}" : mongodb44recommended,
     "{{{mongodb42recommended}}}" : mongodb42recommended,
     "{{{pmm2recommended}}}" : pmm2recommended,
