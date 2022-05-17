@@ -102,10 +102,10 @@ which uses Amazon S3 storage for backups:
    .. _backups.scheduled-s3-iam:
 
    Using AWS EC2 instances for backups makes it possible to automate
-   access to AWS S3 buckets based on IAM Roles for Service Accounts with no need
-   to specify the S3 credentials explicitly. Following steps are needed to turn
-   this feature on:
-   
+   access to AWS S3 buckets based on `IAM roles <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`
+   for Service Accounts with no need to specify the S3 credentials explicitly.
+   Following steps are needed to turn this feature on:
+
    * Create the `IAM instance profile <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>`_
      and the permission policy within where you specify the access level that
      grants the access to S3 buckets.

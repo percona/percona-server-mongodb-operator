@@ -455,15 +455,15 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-annotations:									|
 |                 |												|
-| **Key**         | `replsets.annotations.iam.amazonaws.com/role <operator.html#replsets-annotations>`_		|
+| **Key**         | `replsets.annotations <operator.html#replsets-annotations>`_				|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``role-arn``										|
+| **Example**     | ``iam.amazonaws.com/role: role-arn``							|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The `AWS IAM role 										|
-|                 | <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_  for the	|
-|                 | Replica Set nodes										|
+| **Description** | The `Kubernetes annotations									|
+|                 | <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/>`_		|
+|                 | metadata for the Replica Set nodes								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1110,16 +1110,15 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-nonvoting-annotations:								|
 |                 |												|
-| **Key**         | `replsets.nonvoting.annotations.iam.amazonaws.com/role					|
-|                 | <operator.html#replsets-nonvoting-annotations>`_						|
+| **Key**         | `replsets.nonvoting.annotations <operator.html#replsets-nonvoting-annotations>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``role-arn``										|
+| **Example**     | ``iam.amazonaws.com/role: role-arn``							|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The `AWS IAM role										|
-|                 | <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_		|
-|                 | for the non-voting nodes									|
+| **Description** | The `Kubernetes annotations									|
+|                 | <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/>`_		|
+|                 | metadata for the non-voting nodes								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -1282,16 +1281,15 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-arbiter-annotations:								|
 |                 |												|
-| **Key**         | `replsets.arbiter.annotations.iam.amazonaws.com/role					|
-|                 | <operator.html#replsets-arbiter-annotations>`_						|
+| **Key**         | `replsets.arbiter.annotations <operator.html#replsets-arbiter-annotations>`_		|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``role-arn``										|
+| **Example**     | ``iam.amazonaws.com/role: role-arn``							|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The `AWS IAM role										|
-|                 | <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_		|
-|                 | for the Arbiter nodes									|
+| **Description** | The `Kubernetes annotations									|
+|                 | <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/>`_		|
+|                 | metadata for the Arbiter nodes								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2072,16 +2070,15 @@ options for Percona Server for MondoDB :ref:`sharding<operator.sharding>`.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _sharding-mongos-annotations:								|
 |                 |												|
-| **Key**         | `sharding.mongos.annotations.iam.amazonaws.com/role						|
-|                 | <operator.html#sharding-mongos-annotations>`_						|
+| **Key**         | `sharding.mongos.annotations <operator.html#sharding-mongos-annotations>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``role-arn``										|
+| **Example**     | ``iam.amazonaws.com/role: role-arn``							|
 +-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The `AWS IAM role										|
-|                 | <https://kubernetes-on-aws.readthedocs.io/en/latest/user-guide/iam-roles.html>`_		|
-|                 | for mongos instances									|
+| **Description** | The `Kubernetes annotations									|
+|                 | <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/>`_		|
+|                 | metadata for the mongos instances								|
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2568,7 +2565,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-serviceaccountname:								|
 |                 |												|
-| **Key**         | `backup.serviceAccountName <operator.html#backup-serviceaccountname?>`_			|
+| **Key**         | `backup.serviceAccountName <operator.html#backup-serviceaccountname>`_			|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2580,7 +2577,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-annotations:									|
 |                 |												|
-| **Key**         | `backup.annotations <operator.html#backup-annotations?>`_					|
+| **Key**         | `backup.annotations <operator.html#backup-annotations>`_					|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value Type**  | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
