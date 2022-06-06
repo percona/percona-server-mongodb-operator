@@ -88,7 +88,7 @@ Put the snippet on you local machine and create a Kubernetes Secret object named
 
 Next step is to start the MongoDB cluster up as it’s described in :ref:`operator.kubernetes`. On successful completion of the steps from this doc, we are to proceed with setting the LDAP user roles inside the MongoDB. For this, log into MongoDB as administrator and execute the following:
 
-.. code:: gdscript
+.. code:: bash
 
    var admin = db.getSiblingDB("admin")
    admin.createRole(
