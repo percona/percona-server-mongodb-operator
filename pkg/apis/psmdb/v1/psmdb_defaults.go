@@ -35,7 +35,6 @@ const (
 )
 
 var (
-	defaultRunUID                   int64 = 1001
 	defaultUsersSecretName                = "percona-server-mongodb-users"
 	defaultMongodSize               int32 = 3
 	defaultReplsetName                    = "rs"
@@ -459,10 +458,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.Arbiter.Enabled = false
 			replset.NonVoting.Enabled = false
 		}
-	}
-
-	if cr.Spec.RunUID == 0 && platform != version.PlatformOpenshift {
-		cr.Spec.RunUID = defaultRunUID
 	}
 
 	// there is shouldn't be any backups while pause
