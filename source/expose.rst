@@ -4,20 +4,19 @@ Exposing cluster nodes with dedicated IP addresses
 Using single entry point vs. accessing MongoDB Instances
 --------------------------------------------------------
 
-Percona Distribution for MongoDB Operator provides two scenarios for
-accessing the database.
+|operator| provides two scenarios for accessing the database.
 
 #. If :ref:`operator.sharding` mode is turned **on** (default behavior), then
    database cluster runs special ``mongos`` Pods - query routers, which acts as
    an entry point for client applications,
    
    .. image:: ./assets/images/mongos_espose.png
-      :alt: Percona Distribution for MongoDB Operator, sharding on
+      :alt: Percona Operator for MongoDB, sharding on
 #. If :ref:`operator.sharding` mode is turned **off**, the application needs
    access to all MongoDB Pods of the replica set:
 
    .. image:: assets/images/mongod_espose.png
-      :alt: Percona Distribution for MongoDB Operator, sharding off
+      :alt: Percona Operator for MongoDB, sharding off
 
 You can find more on sharding in the `official MongoDB documentation <https://docs.mongodb.com/manual/reference/glossary/#term-sharding>`_.
 
@@ -35,8 +34,7 @@ MongoDB via Kubernetes internal DNS names in URI
 URI-based access is strictly recommended.
 
 Sometimes you cannot communicate with the Pods using the Kubernetes internal DNS
-names. To make Pods of the Replica Set accessible, Percona Distribution for
-MongoDB Operator can assign a `Kubernetes
+names. To make Pods of the Replica Set accessible, |operator| can assign a `Kubernetes
 Service <https://kubernetes.io/docs/concepts/services-networking/service/>`_
 to each Pod.
 

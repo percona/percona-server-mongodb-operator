@@ -27,8 +27,8 @@ management of highly available MongoDB database clusters on Kubernetes.
 How can I contact the developers?
 ================================================================================
 
-The best place to discuss Percona Distribution for
-MongoDB Operator with developers and other community members is the `community forum <https://forums.percona.com/categories/kubernetes-operator-percona-server-mongodb>`_.
+The best place to discuss |operator| with developers and other community members
+is the `community forum <https://forums.percona.com/categories/kubernetes-operator-percona-server-mongodb>`_.
 
 If you would like to report a bug, use the |operator| `project in JIRA <https://jira.percona.com/projects/K8SPSMDB>`_.
 
@@ -49,8 +49,7 @@ going to use (Minikube, Google Kubernetes Engine, etc.) and therefore include
 some additional steps needed for these platforms.
 
 Generally, rely on the quickstart guide if you are a beginner user of the
-specific platform and/or you are new to the Percona Distribution for MongoDB
-Operator as a whole.
+specific platform and/or you are new to the |operator| as a whole.
 
 Which versions of MongoDB the Operator supports?
 ================================================================================

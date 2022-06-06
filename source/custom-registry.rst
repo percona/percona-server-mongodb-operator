@@ -4,8 +4,8 @@ Use Docker images from a custom registry
 ========================================
 
 Using images from a private Docker registry may required for
-privacy, security or other reasons. In these cases, Percona Distribution for
-MongoDB Operator allows the use of a custom registry This following example of the
+privacy, security or other reasons. In these cases, |operator|
+allows the use of a custom registry This following example of the
 Operator deployed in the OpenShift environment demonstrates the process:
 
 1. Log into the OpenShift and create a project.
