@@ -22664,9 +22664,6 @@ spec:
                       - size
                     type: object
                   type: array
-                runUid:
-                  format: int64
-                  type: integer
                 schedulerName:
                   type: string
                 secrets:

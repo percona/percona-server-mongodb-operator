@@ -19,7 +19,6 @@ spec:
 #    certValidityDuration: 2160h
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  runUid: 1001
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
 #  multiCluster:
