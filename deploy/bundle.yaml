@@ -18566,6 +18566,10 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          serviceLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
                         required:
                           - enabled
                         type: object
@@ -24966,6 +24970,10 @@ spec:
                               additionalProperties:
                                 type: string
                               type: object
+                            serviceLabels:
+                              additionalProperties:
+                                type: string
+                              type: object
                           required:
                             - enabled
                           type: object
@@ -29514,6 +29522,10 @@ spec:
                               additionalProperties:
                                 type: string
                               type: object
+                            serviceLabels:
+                              additionalProperties:
+                                type: string
+                              type: object
                             servicePerPod:
                               type: boolean
                           type: object
@@ -31356,7 +31368,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
   name: perconaservermongodbbackups.psmdb.percona.com
 spec:
@@ -31479,18 +31491,12 @@ spec:
       storage: true
       subresources:
         status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
   name: perconaservermongodbrestores.psmdb.percona.com
 spec:
@@ -31621,12 +31627,6 @@ spec:
       storage: true
       subresources:
         status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1

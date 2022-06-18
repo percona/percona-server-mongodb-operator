@@ -408,12 +408,13 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 		svc.Labels = mongosLabels(cr)
 	}
 
-	if cr.CompareVersion("1.12.0") >= 0 {
-		svc.Labels = mongosLabels(cr)
-	}
-
 	if cr.Spec.Sharding.Mongos != nil {
 		svc.Annotations = cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations
+		for k, v := range cr.Spec.Sharding.Mongos.Expose.ServiceLabels {
+			if _, ok := svc.Labels[k]; !ok {
+				svc.Labels[k] = v
+			}
+		}
 	}
 
 	return svc

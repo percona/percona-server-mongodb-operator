@@ -732,6 +732,7 @@ type MongosExpose struct {
 	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
+	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
 type Expose struct {
@@ -739,6 +740,7 @@ type Expose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
+	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
 // ServerVersion represents info about k8s / openshift server version
