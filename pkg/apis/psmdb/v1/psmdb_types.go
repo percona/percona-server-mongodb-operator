@@ -731,6 +731,7 @@ type MongosExpose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
 	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
+	LoadBalancerIP           string             `json:"loadBalancerIP,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 }
 
