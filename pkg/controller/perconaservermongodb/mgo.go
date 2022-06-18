@@ -499,6 +499,15 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 func getRoles(cr *api.PerconaServerMongoDB, role UserRole) []map[string]interface{} {
 	roles := make([]map[string]interface{}, 0)
 	switch role {
+	case rolePerconaAdmin:
+		return []map[string]interface{}{
+			{"role": "readWriteAnyDatabase", "db": "admin"},
+			{"role": "readAnyDatabase", "db": "admin"},
+			{"role": "restore", "db": "admin"},
+			{"role": "backup", "db": "admin"},
+			{"role": "dbAdminAnyDatabase", "db": "admin"},
+			{"role": string(roleClusterMonitor), "db": "admin"},
+		}
 	case roleClusterMonitor:
 		if cr.CompareVersion("1.12.0") >= 0 {
 			roles = []map[string]interface{}{
@@ -633,7 +642,12 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	for _, role := range []UserRole{roleClusterAdmin, roleClusterMonitor, roleBackup} {
+	users := []UserRole{roleClusterAdmin, roleClusterMonitor, roleBackup}
+	if cr.CompareVersion("1.13.0") >= 0 {
+		users = append(users, rolePerconaAdmin)
+	}
+
+	for _, role := range users {
 		creds, err := r.getInternalCredentials(ctx, cr, role)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get credentials for %s", role)
