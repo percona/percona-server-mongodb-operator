@@ -16,8 +16,7 @@ unlabel_node() {
 	kubectl_bin label nodes "${LABELED_NODE}" backupWorker- --overwrite
 }
 
-create_namespace "$namespace"
-deploy_operator
+create_infra "$namespace"
 
 desc 'install Minio'
 deploy_minio

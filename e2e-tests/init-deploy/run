@@ -8,8 +8,7 @@ test_dir=$(realpath $(dirname $0))
 
 max_conn=10
 
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"

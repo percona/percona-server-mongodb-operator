@@ -41,7 +41,7 @@ no_storage() {
 	apply_cluster $test_dir/conf/$cluster.yml
 	sleep 20
 
-	kubectl_bin logs $(get_operator_pod) \
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 		| grep "volumeSpec should be specified"
 
 	# delete cluster
@@ -50,8 +50,7 @@ no_storage() {
 }
 
 main() {
-	create_namespace $namespace
-	deploy_operator
+	create_infra $namespace
 	kubectl_bin apply -f $conf_dir/secrets.yml
 
 	desc 'check if possible to create cluster without CPU/Memory limits'

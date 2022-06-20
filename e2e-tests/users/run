@@ -9,8 +9,7 @@ test_dir=$(realpath $(dirname $0))
 newpass="test-password"
 newpassencrypted=$(echo -n "$newpass" | base64)
 
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 
 deploy_minio
 

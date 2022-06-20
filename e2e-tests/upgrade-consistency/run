@@ -9,8 +9,7 @@ test_dir=$(realpath $(dirname $0))
 CLUSTER='some-name'
 
 main() {
-	create_namespace $namespace
-	deploy_operator
+	create_infra $namespace
 
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${conf_dir}/secrets.yml"
