@@ -499,7 +499,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 func getRoles(cr *api.PerconaServerMongoDB, role UserRole) []map[string]interface{} {
 	roles := make([]map[string]interface{}, 0)
 	switch role {
-	case rolePerconaAdmin:
+	case roleDatabaseAdmin:
 		return []map[string]interface{}{
 			{"role": "readWriteAnyDatabase", "db": "admin"},
 			{"role": "readAnyDatabase", "db": "admin"},
@@ -644,7 +644,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 
 	users := []UserRole{roleClusterAdmin, roleClusterMonitor, roleBackup}
 	if cr.CompareVersion("1.13.0") >= 0 {
-		users = append(users, rolePerconaAdmin)
+		users = append(users, roleDatabaseAdmin)
 	}
 
 	for _, role := range users {

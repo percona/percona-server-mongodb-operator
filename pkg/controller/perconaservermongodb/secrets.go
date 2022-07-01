@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	envMongoDBPerconaAdminUser       = "MONGODB_PERCONA_ADMIN_USER"
-	envMongoDBPerconaAdminPassword   = "MONGODB_PERCONA_ADMIN_PASSWORD"
+	envMongoDBDatabaseAdminUser      = "MONGODB_DATABASE_ADMIN_USER"
+	envMongoDBDatabaseAdminPassword  = "MONGODB_DATABASE_ADMIN_PASSWORD"
 	envMongoDBClusterAdminUser       = "MONGODB_CLUSTER_ADMIN_USER"
 	envMongoDBClusterAdminPassword   = "MONGODB_CLUSTER_ADMIN_PASSWORD"
 	envMongoDBUserAdminUser          = "MONGODB_USER_ADMIN_USER"
@@ -34,7 +34,7 @@ const (
 type UserRole string
 
 const (
-	rolePerconaAdmin   UserRole = "perconaAdmin"
+	roleDatabaseAdmin  UserRole = "databaseAdmin"
 	roleClusterAdmin   UserRole = "clusterAdmin"
 	roleUserAdmin      UserRole = "userAdmin"
 	roleClusterMonitor UserRole = "clusterMonitor"
@@ -59,9 +59,9 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(ctx context.Context, cr *
 	}
 
 	switch role {
-	case rolePerconaAdmin:
-		creds.Username = string(usersSecret.Data[envMongoDBPerconaAdminUser])
-		creds.Password = string(usersSecret.Data[envMongoDBPerconaAdminPassword])
+	case roleDatabaseAdmin:
+		creds.Username = string(usersSecret.Data[envMongoDBDatabaseAdminUser])
+		creds.Password = string(usersSecret.Data[envMongoDBDatabaseAdminPassword])
 	case roleClusterAdmin:
 		creds.Username = string(usersSecret.Data[envMongoDBClusterAdminUser])
 		creds.Password = string(usersSecret.Data[envMongoDBClusterAdminPassword])
@@ -136,8 +136,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 		return fmt.Errorf("create admin users pass: %v", err)
 	}
 	if cr.CompareVersion("1.13.0") >= 0 {
-		data["MONGODB_PERCONA_ADMIN_USER"] = []byte(rolePerconaAdmin)
-		data["MONGODB_PERCONA_ADMIN_PASSWORD"], err = secret.GeneratePassword()
+		data["MONGODB_DATABASE_ADMIN_USER"] = []byte(roleDatabaseAdmin)
+		data["MONGODB_DATABASE_ADMIN_PASSWORD"], err = secret.GeneratePassword()
 	}
 	if err != nil {
 		return fmt.Errorf("create percona admin pass: %v", err)
