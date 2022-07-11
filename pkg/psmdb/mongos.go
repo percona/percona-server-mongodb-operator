@@ -422,8 +422,10 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.ServiceSpec {
 	ls := mongosLabels(cr)
 
+	loadBalancerIP := cr.Spec.Sharding.Mongos.Expose.LoadBalancerIP
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		ls["statefulset.kubernetes.io/pod-name"] = podName
+		loadBalancerIP = ""
 	}
 	spec := corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
@@ -435,7 +437,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 		},
 		Selector:                 ls,
 		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges,
-		LoadBalancerIP:           cr.Spec.Sharding.Mongos.Expose.LoadBalancerIP,
+		LoadBalancerIP:           loadBalancerIP,
 	}
 
 	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
