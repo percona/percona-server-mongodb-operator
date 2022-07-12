@@ -32,6 +32,7 @@ spec:
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
+#    vault: my-cluster-name-vault
   pmm:
     enabled: false
     image: percona/pmm-client:2.27.0

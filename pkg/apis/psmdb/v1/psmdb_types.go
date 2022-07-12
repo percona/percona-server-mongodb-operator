@@ -383,29 +383,54 @@ func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
 	return &b, nil
 }
 
+// VaultEnabled returns whether mongo config has vault section under security
+func (conf MongoConfiguration) VaultEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return false
+	}
+	_, ok := m["vault"]
+	if !ok {
+		return false
+	}
+
+	return true
+}
+
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
 func (conf *MongoConfiguration) setEncryptionDefaults() error {
 	m := make(map[string]interface{})
+
 	err := yaml.Unmarshal([]byte(*conf), m)
 	if err != nil {
 		return err
 	}
+
 	val, ok := m["security"]
 	if !ok {
 		return nil
 	}
+
 	security, ok := val.(map[interface{}]interface{})
 	if !ok {
 		return errors.New("security configuration section is invalid")
 	}
+
+	if _, ok := security["vault"]; ok {
+		return nil
+	}
+
 	if _, ok = security["enableEncryption"]; ok {
 		security["encryptionKeyFile"] = MongodRESTencryptDir + "/" + EncryptionKeyName
 	}
+
 	res, err := yaml.Marshal(m)
 	if err != nil {
 		return err
 	}
+
 	*conf = MongoConfiguration(res)
+
 	return nil
 }
 
@@ -489,6 +514,7 @@ type SecretsSpec struct {
 	SSL           string `json:"ssl,omitempty"`
 	SSLInternal   string `json:"sslInternal,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
+	Vault         string `json:"vault,omitempty"`
 }
 
 type MongosSpec struct {
