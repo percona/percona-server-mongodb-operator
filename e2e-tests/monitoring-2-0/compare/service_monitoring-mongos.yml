@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    test: monitoring
+  labels:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: monitoring
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    test: monitoring
+  name: monitoring-mongos
+  ownerReferences:
+    - controller: true
+      kind: PerconaServerMongoDB
+      name: monitoring
+spec:
+  ports:
+    - name: mongos
+      port: 27017
+      protocol: TCP
+      targetPort: 27017
+  selector:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: monitoring
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  sessionAffinity: None
+  type: ClusterIP
