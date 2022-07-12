@@ -54,7 +54,10 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 	}
 
 	if m.CompareVersion("1.12.0") >= 0 {
-		svc.Labels = ls
+		svc.Labels = make(map[string]string)
+		for k, v := range ls {
+			svc.Labels[k] = v
+		}
 		for k, v := range replset.Expose.ServiceLabels {
 			if _, ok := svc.Labels[k]; !ok {
 				svc.Labels[k] = v
