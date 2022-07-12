@@ -46,6 +46,10 @@ spec:
     expose:
       enabled: false
       exposeType: LoadBalancer
+      serviceLabels:
+        test: one-pod
+      serviceAnnotations:
+        test: one-pod
     arbiter:
       enabled: false
       size: 1
