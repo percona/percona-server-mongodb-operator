@@ -418,10 +418,6 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        serviceLabels:
 #          rack: rack-22
-#      auditLog:
-#        destination: file
-#        format: BSON
-#        filter: '{}'
 
 #  mongod:
 #    security:

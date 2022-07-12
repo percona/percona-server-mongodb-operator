@@ -2,12 +2,12 @@ package psmdb
 
 import (
 	"fmt"
-	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -291,7 +291,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		}
 	}
 
-	if msSpec.AuditLog != nil && msSpec.AuditLog.Destination == api.AuditLogDestinationFile {
+	if cr.CompareVersion("1.13.0") < 0 && msSpec.AuditLog != nil && msSpec.AuditLog.Destination == api.AuditLogDestinationFile {
 		if msSpec.AuditLog.Filter == "" {
 			msSpec.AuditLog.Filter = "{}"
 		}
