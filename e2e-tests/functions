@@ -77,7 +77,7 @@ create_namespace() {
 
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
 		kubectl_bin get ns \
-			| egrep -v "^kube-|^default|Terminating|pxc-operator|openshift|^NAME" \
+			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^NAME" \
 			| awk '{print$1}' \
 			| xargs kubectl delete ns &
 	fi
@@ -1029,13 +1029,13 @@ create_infra() {
 	local ns="$1"
 
 	if [ -n "$OPERATOR_NS" ]; then
-		kubectl get pxc --all-namespaces -o wide \
+		kubectl get psmdb --all-namespaces -o wide \
 			| grep -v 'NAMESPACE' \
-			| xargs -L 1 sh -xc 'kubectl patch pxc -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
+			| xargs -L 1 sh -xc 'kubectl patch psmdb -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
 			|| :
-		kubectl_bin delete pxc --all --all-namespaces || :
-		kubectl_bin delete pxc-backup --all --all-namespaces || :
-		kubectl_bin delete pxc-restore --all --all-namespaces || :
+		kubectl_bin delete psmdb --all --all-namespaces || :
+		kubectl_bin delete psmdb-backup --all --all-namespaces || :
+		kubectl_bin delete psmdb-restore --all --all-namespaces || :
 
 		create_namespace $OPERATOR_NS
 		deploy_operator
