@@ -7,13 +7,13 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-const (
-	PMMUserKey     = "PMM_SERVER_USER"
-	PMMPasswordKey = "PMM_SERVER_PASSWORD"
-)
-
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool, clusterName string, v120OrGreater bool, v160OrGreater bool, customAdminParams string) corev1.Container {
+func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) corev1.Container {
+	_, oka := secret.Data[api.PMMAPIKey]
+	_, okl := secret.Data[api.PMMUserKey]
+	_, okp := secret.Data[api.PMMPasswordKey]
+	customLogin := oka || (okl && okp)
+
 	spec := cr.Spec.PMM
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 
@@ -28,7 +28,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "MONGODB_CLUSTER_MONITOR_USER_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secrets,
+						Name: secret.Name,
 					},
 				},
 			},
@@ -39,7 +39,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secrets,
+						Name: secret.Name,
 					},
 				},
 			},
@@ -56,7 +56,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "MONGODB_CLUSTER_MONITOR_USER",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secrets,
+						Name: secret.Name,
 					},
 				},
 			},
@@ -67,7 +67,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secrets,
+						Name: secret.Name,
 					},
 				},
 			},
@@ -78,7 +78,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 		},
 		{
 			Name:  "DB_CLUSTER",
-			Value: clusterName,
+			Value: cr.Name,
 		},
 		{
 			Name:  "DB_PORT",
@@ -110,41 +110,47 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 		Ports: ports,
 	}
 
-	switch v120OrGreater {
-	case true:
+	if cr.CompareVersion("1.2.0") >= 0 {
 		pmm.Env = append(pmm.Env, dbEnv...)
-	default:
+	} else {
 		pmm.Env = append(pmm.Env, dbArgsEnv...)
 	}
 
 	if customLogin {
-		pmm.Env = append(pmm.Env, []corev1.EnvVar{
-			{
+		pmmPassKey := api.PMMAPIKey
+		if spec.UseAPI(secret) {
+			pmm.Env = append(pmm.Env, corev1.EnvVar{
+				Name:  "PMM_USER",
+				Value: "api_key",
+			})
+		} else {
+			pmmPassKey = api.PMMPasswordKey
+			pmm.Env = append(pmm.Env, corev1.EnvVar{
 				Name: "PMM_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: PMMUserKey,
+						Key: api.PMMUserKey,
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secrets,
+							Name: secret.Name,
 						},
 					},
 				},
-			},
-			{
-				Name: "PMM_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: PMMPasswordKey,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secrets,
-						},
+			})
+		}
+		pmm.Env = append(pmm.Env, corev1.EnvVar{
+			Name: "PMM_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: pmmPassKey,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secret.Name,
 					},
 				},
 			},
-		}...)
+		})
 	}
 
-	if v160OrGreater {
+	if cr.CompareVersion("1.6.0") >= 0 {
 		pmm.LivenessProbe = &corev1.Probe{
 			InitialDelaySeconds: 60,
 			TimeoutSeconds:      5,
@@ -156,13 +162,13 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secrets string, customLogin bool
 				},
 			},
 		}
-		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec.ServerHost, customLogin, secrets, customAdminParams)...)
+		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec, secret, customLogin, customAdminParams)...)
 	}
 
 	return pmm
 }
 
-func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets, customAdminParams string) []corev1.EnvVar {
+func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, customAdminParams string) []corev1.EnvVar {
 	pmmAgentEnvs := []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -182,7 +188,7 @@ func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets, customAdminPa
 		},
 		{
 			Name:  "PMM_AGENT_SERVER_ADDRESS",
-			Value: pmmServerHost,
+			Value: spec.ServerHost,
 		},
 		{
 			Name:  "PMM_AGENT_LISTEN_PORT",
@@ -235,30 +241,37 @@ func pmmAgentEnvs(pmmServerHost string, customLogin bool, secrets, customAdminPa
 	}
 
 	if customLogin {
-		pmmAgentEnvs = append(pmmAgentEnvs, []corev1.EnvVar{
-			{
+		pmmPassKey := api.PMMAPIKey
+		if spec.UseAPI(secret) {
+			pmmAgentEnvs = append(pmmAgentEnvs, corev1.EnvVar{
+				Name:  "PMM_AGENT_SERVER_USERNAME",
+				Value: "api_key",
+			})
+		} else {
+			pmmPassKey = api.PMMPasswordKey
+			pmmAgentEnvs = append(pmmAgentEnvs, corev1.EnvVar{
 				Name: "PMM_AGENT_SERVER_USERNAME",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: PMMUserKey,
+						Key: api.PMMUserKey,
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secrets,
+							Name: secret.Name,
 						},
 					},
 				},
-			},
-			{
-				Name: "PMM_AGENT_SERVER_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: PMMPasswordKey,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secrets,
-						},
+			})
+		}
+		pmmAgentEnvs = append(pmmAgentEnvs, corev1.EnvVar{
+			Name: "PMM_AGENT_SERVER_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: pmmPassKey,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secret.Name,
 					},
 				},
 			},
-		}...)
+		})
 	}
 
 	return pmmAgentEnvs
@@ -278,13 +291,9 @@ func PMMAgentScript() []corev1.EnvVar {
 }
 
 // AddPMMContainer creates the container object for a pmm-client
-func AddPMMContainer(cr *api.PerconaServerMongoDB, usersSecretName string, pmmsec corev1.Secret, customAdminParams string) (corev1.Container, error) {
-	_, okl := pmmsec.Data[PMMUserKey]
-	_, okp := pmmsec.Data[PMMPasswordKey]
-	is120 := cr.CompareVersion("1.2.0") >= 0
-
-	pmmC := PMMContainer(cr, usersSecretName, okl && okp, cr.Name, is120, cr.CompareVersion("1.6.0") >= 0, customAdminParams)
-	if is120 {
+func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) (corev1.Container, error) {
+	pmmC := PMMContainer(cr, secret, customAdminParams)
+	if cr.CompareVersion("1.2.0") >= 0 {
 		pmmC.Resources = cr.Spec.PMM.Resources
 	}
 	if cr.CompareVersion("1.6.0") >= 0 {

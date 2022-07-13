@@ -49,6 +49,11 @@ apply_cluster $test_dir/conf/$cluster-rs0.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
 
+API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:$ADMIN_PASSWORD@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
+kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": '$API_KEY'}}'
+sleep 5
+wait_for_running $cluster-rs0 3
+
 # wait for prometheus
 sleep 90
 desc 'check if pmm-client container enabled'

@@ -25,8 +25,9 @@ const (
 	envMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
 	envMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
 	envMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	envPMMServerUser                 = "PMM_SERVER_USER"
-	envPMMServerPassword             = "PMM_SERVER_PASSWORD"
+	envPMMServerUser                 = api.PMMUserKey
+	envPMMServerPassword             = api.PMMPasswordKey
+	envPMMServerAPIKey               = api.PMMAPIKey
 )
 
 type UserRole string

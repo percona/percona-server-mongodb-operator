@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 1
+  generation: 2
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: monitoring
@@ -153,14 +153,11 @@ spec:
             - name: DB_PORT_MAX
               value: "30105"
             - name: PMM_USER
-              valueFrom:
-                secretKeyRef:
-                  key: PMM_SERVER_USER
-                  name: internal-monitoring-users
+              value: api_key
             - name: PMM_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  key: PMM_SERVER_PASSWORD
+                  key: PMM_SERVER_API_KEY
                   name: internal-monitoring-users
             - name: POD_NAME
               valueFrom:
@@ -199,14 +196,11 @@ spec:
             - name: PMM_ADMIN_CUSTOM_PARAMS
               value: --environment=dev-mongod
             - name: PMM_AGENT_SERVER_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  key: PMM_SERVER_USER
-                  name: internal-monitoring-users
+              value: api_key
             - name: PMM_AGENT_SERVER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  key: PMM_SERVER_PASSWORD
+                  key: PMM_SERVER_API_KEY
                   name: internal-monitoring-users
             - name: CLUSTER_NAME
               value: monitoring
