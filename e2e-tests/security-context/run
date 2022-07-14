@@ -29,7 +29,6 @@ apply_cluster $test_dir/conf/${cluster}-rs0$postfix.yml
 sleep 20
 wait_for_running "${cluster}-rs0" "3"
 compare_kubectl "statefulset/${cluster}-rs0" $postfix
-compare_kubectl "cronjob.batch/${cluster}-backup-each-hour"
 
 if [[ -n ${OPENSHIFT} ]]; then
 	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator-workload
