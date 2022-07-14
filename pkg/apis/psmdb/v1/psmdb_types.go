@@ -390,11 +390,7 @@ func (conf MongoConfiguration) VaultEnabled() bool {
 		return false
 	}
 	_, ok := m["vault"]
-	if !ok {
-		return false
-	}
-
-	return true
+	return ok
 }
 
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
