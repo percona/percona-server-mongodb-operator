@@ -68,12 +68,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	if cr.Spec.Unmanaged {
-		return api.AppStateReady, nil
-	}
-
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 	if err != nil {
+		if cr.Spec.Unmanaged {
+			return api.AppStateInit, nil
+		}
 		if cr.Status.Replsets[replset.Name].Initialized {
 			// If an exposed replset is initialized but connection fails with ReplicaSetNoPrimary,
 			// we'll change the member hosts to local FQDNs and reconfig to recover.
@@ -116,6 +115,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		})
 
 		return api.AppStateInit, nil
+	}
+
+	if cr.Spec.Unmanaged {
+		status, err := mongo.RSStatus(ctx, cli)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "failed to get rs status")
+		}
+		if status.Primary() == nil {
+			return api.AppStateInit, nil
+		}
+		return api.AppStateReady, nil
 	}
 	err = r.createOrUpdateSystemUsers(ctx, cr, replset)
 	if err != nil {
