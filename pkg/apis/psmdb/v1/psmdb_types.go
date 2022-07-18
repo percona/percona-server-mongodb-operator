@@ -185,16 +185,18 @@ func OneOfUpgradeStrategy(a string) bool {
 
 	return us == UpgradeStrategyLatest ||
 		us == UpgradeStrategyRecommended ||
-		us == UpgradeStrategyDiasbled ||
+		us == UpgradeStrategyDisabled ||
 		us == UpgradeStrategyNever
 }
 
 const (
-	UpgradeStrategyDiasbled    UpgradeStrategy = "disabled"
+	UpgradeStrategyDisabled    UpgradeStrategy = "disabled"
 	UpgradeStrategyNever       UpgradeStrategy = "never"
 	UpgradeStrategyRecommended UpgradeStrategy = "recommended"
 	UpgradeStrategyLatest      UpgradeStrategy = "latest"
 )
+
+const DefaultVersionServiceEndpoint = "https://check.percona.com"
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
