@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/models"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/version_service"
@@ -14,9 +15,9 @@ import (
 
 const productName = "psmdb-operator"
 
-func (vs VersionServiceClient) GetExactVersion(endpoint string, vm VersionMeta) (DepVersion, error) {
+func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm VersionMeta) (DepVersion, error) {
 	if strings.Contains(endpoint, "https://check.percona.com/versions") {
-		endpoint = "https://check.percona.com"
+		endpoint = api.DefaultVersionServiceEndpoint
 	}
 
 	requestURL, err := url.Parse(endpoint)
@@ -100,7 +101,7 @@ type DepVersion struct {
 }
 
 type VersionService interface {
-	GetExactVersion(endpoint string, vm VersionMeta) (DepVersion, error)
+	GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm VersionMeta) (DepVersion, error)
 }
 
 type VersionServiceClient struct{}
