@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync/atomic"
 
@@ -22,12 +23,9 @@ func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServe
 	delete(r.crons.jobs, jobName(cr))
 }
 
-func (r *ReconcilePerconaServerMongoDB) sheduleEnsureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
 	schedule, ok := r.crons.jobs[jobName(cr)]
-	if cr.Spec.UpdateStrategy != v1.SmartUpdateStatefulSetStrategyType ||
-		cr.Spec.UpgradeOptions.Schedule == "" ||
-		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyNever ||
-		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyDiasbled {
+	if cr.Spec.UpgradeOptions.Schedule == "" || !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		if ok {
 			r.deleteEnsureVersion(cr, schedule.ID)
 		}
@@ -143,9 +141,7 @@ func MajorMinor(ver *v.Version) string {
 }
 
 func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeRequest, error) {
-	if len(cr.Spec.UpgradeOptions.Apply) == 0 ||
-		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyLatest ||
-		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyRecommended {
+	if len(cr.Spec.UpgradeOptions.Apply) == 0 || v1.OneOfUpgradeStrategy(string(cr.Spec.UpgradeOptions.Apply)) {
 		return UpgradeRequest{false, "", ""}, nil
 	}
 
@@ -199,11 +195,17 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 	return UpgradeRequest{false, "", ""}, nil
 }
 
+func telemetryEnabled() bool {
+	return os.Getenv("DISABLE_TELEMETRY") == "false"
+}
+
+func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
+	return cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyNever &&
+		cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyDisabled
+}
+
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
-	if cr.Spec.UpdateStrategy != v1.SmartUpdateStatefulSetStrategyType ||
-		cr.Spec.UpgradeOptions.Schedule == "" ||
-		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyNever ||
-		cr.Spec.UpgradeOptions.Apply.Lower() == api.UpgradeStrategyDiasbled {
+	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		return nil
 	}
 
@@ -248,12 +250,23 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		}
 	}
 
-	patch := client.MergeFrom(cr.DeepCopy())
-	newVersion, err := vs.GetExactVersion(cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
+	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != api.DefaultVersionServiceEndpoint) {
+		_, err = vs.GetExactVersion(cr, api.DefaultVersionServiceEndpoint, vm)
+		if err != nil {
+			log.Error(err, "failed to send telemetry to "+api.DefaultVersionServiceEndpoint)
+		}
+	}
+
+	if !versionUpgradeEnabled(cr) {
+		return nil
+	}
+
+	newVersion, err := vs.GetExactVersion(cr, cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
 	if err != nil {
 		return errors.Wrap(err, "failed to check version")
 	}
 
+	patch := client.MergeFrom(cr.DeepCopy())
 	if cr.Spec.Image != newVersion.MongoImage {
 		if cr.Status.MongoVersion == "" {
 			log.Info(fmt.Sprintf("set Mongo version to %s", newVersion.MongoVersion))

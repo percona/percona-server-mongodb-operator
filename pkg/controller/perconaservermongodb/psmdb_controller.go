@@ -541,7 +541,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "export services")
 	}
 
-	err = r.sheduleEnsureVersion(ctx, cr, VersionServiceClient{})
+	err = r.scheduleEnsureVersion(ctx, cr, VersionServiceClient{})
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 	}
