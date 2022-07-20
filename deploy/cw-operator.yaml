@@ -36,16 +36,3 @@ spec:
               value: 5s
             - name: LOG_VERBOSE
               value: "false"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: percona-server-mongodb-operator
-  labels:
-    name: percona-server-mongodb-operator
-spec:
-  ports:
-    - port: 443
-      targetPort: 9443
-  selector:
-    app.kubernetes.io/name: percona-server-mongodb-operator
