@@ -31802,3 +31802,5 @@ spec:
               value: 5s
             - name: LOG_VERBOSE
               value: "false"
+            - name: DISABLE_TELEMETRY
+              value: "false"
