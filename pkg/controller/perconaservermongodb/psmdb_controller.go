@@ -755,11 +755,19 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(ctx context.Context, c
 		return nil
 	}
 
+	upToDate, err := r.isAllSfsUpToDate(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check is all sfs up to date")
+	}
+
+	if !upToDate {
+		return nil
+	}
+
 	sfsName := cr.Name + "-" + api.ConfigReplSetName
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
 
-	err := r.client.Delete(ctx, sfs)
-	if err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.client.Delete(ctx, sfs); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
 	}
 
@@ -869,6 +877,15 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongos(ctx context.Context, cr *ap
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	upToDate, err := r.isAllSfsUpToDate(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check is all sfs up to date")
+	}
+
+	if !upToDate {
 		return nil
 	}
 
