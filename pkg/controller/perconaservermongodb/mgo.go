@@ -41,7 +41,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
-		log.Info("Waiting for the pods", "replsetSize", replsetSize, "pods", len(pods.Items))
+		log.Info("Waiting for the pods", "replset", replset.Name, "size", replsetSize, "pods", len(pods.Items))
 		return api.AppStateInit, nil
 	}
 
@@ -225,6 +225,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			Host:         host,
 			BuildIndexes: true,
 			Priority:     mongo.DefaultPriority,
+			Votes:        mongo.DefaultVotes,
 		}
 
 		switch pod.Labels["app.kubernetes.io/component"] {
@@ -285,25 +286,36 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if cnf.Members.RemoveOld(members) {
-		cnf.Members.SetVotes()
-
 		cnf.Version++
-
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
-	if cnf.Members.AddNew(members) || cnf.Members.ExternalNodesChanged(members) {
-		cnf.Members.RemoveOld(members)
-		cnf.Members.SetVotes()
-
+	if cnf.Members.AddNew(members) {
 		cnf.Version++
-
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "add new: write mongo config")
+		}
+	}
+
+	if cnf.Members.ExternalNodesChanged(members) {
+		cnf.Version++
+		err = mongo.WriteConfig(ctx, cli, cnf)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "update external nodes: write mongo config")
+		}
+	}
+
+	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
+	cnf.Members.SetVotes()
+	if !reflect.DeepEqual(currMembers, cnf.Members) {
+		cnf.Version++
+		err = mongo.WriteConfig(ctx, cli, cnf)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "set votes: write mongo config")
 		}
 	}
 
