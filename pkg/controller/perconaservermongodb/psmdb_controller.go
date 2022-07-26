@@ -535,13 +535,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, fmt.Errorf("failed to delete orphan PVCs: %v", err)
 		}
 	}
-  
+
 	err = r.exportServices(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "export services")
 	}
 
-	err = r.sheduleEnsureVersion(ctx, cr, VersionServiceClient{})
+	err = r.scheduleEnsureVersion(ctx, cr, VersionServiceClient{})
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 	}
@@ -1398,11 +1398,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	}
 	if sfsSpec.Template.Annotations == nil {
 		sfsSpec.Template.Annotations = make(map[string]string)
-	}
-	for k, v := range sfs.Spec.Template.Annotations {
-		if _, ok := sfsSpec.Template.Annotations[k]; !ok {
-			sfsSpec.Template.Annotations[k] = v
-		}
 	}
 
 	if cr.CompareVersion("1.8.0") < 0 {

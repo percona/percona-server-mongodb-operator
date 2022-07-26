@@ -26,7 +26,7 @@ spec:
 #    DNSSuffix: svc.clusterset.local
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
-    apply: 5.0-recommended
+    apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
   secrets:
@@ -412,10 +412,6 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#      auditLog:
-#        destination: file
-#        format: BSON
-#        filter: '{}'
 
 #  mongod:
 #    security:
