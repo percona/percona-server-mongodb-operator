@@ -1,0 +1,48 @@
+[
+  {
+    "op": "add",
+    "path": "/spec/versions/1",
+    "value": {
+      "additionalPrinterColumns": [
+        {
+          "jsonPath": ".status.host",
+          "name": "ENDPOINT",
+          "type": "string"
+        },
+        {
+          "jsonPath": ".status.state",
+          "name": "Status",
+          "type": "string"
+        },
+        {
+          "jsonPath": ".metadata.creationTimestamp",
+          "name": "Age",
+          "type": "date"
+        }
+      ],
+      "deprecated": true,
+      "deprecationWarning": "psmdb.percona.com/v1-11-0 PerconaServerMongoDB is deprecated; see v1.13.0 release notes for instructions to migrate to psmdb.percona.com/v1",
+      "name": "v1-11-0",
+      "schema": {
+        "openAPIV3Schema": {
+          "properties": {
+            "spec": {
+              "type": "object",
+              "x-kubernetes-preserve-unknown-fields": true
+            },
+            "status": {
+              "type": "object",
+              "x-kubernetes-preserve-unknown-fields": true
+            }
+          },
+          "type": "object"
+        }
+      },
+      "served": true,
+      "storage": false,
+      "subresources": {
+        "status": {}
+      }
+    }
+  }
+]

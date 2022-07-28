@@ -1,4 +1,4 @@
-apiVersion: psmdb.percona.com/v1-13-0
+apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
