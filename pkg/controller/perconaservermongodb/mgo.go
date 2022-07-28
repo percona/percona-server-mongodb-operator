@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -180,6 +181,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			}
 		}()
 
+		err = mongo.SetDefaultRWConcern(ctx, mongosSession, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "set default RW concern")
+		}
+
 		in, err := inShard(ctx, mongosSession, replset.Name)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "get shard")
@@ -201,6 +207,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		rs.AddedAsShard = &t
 		cr.Status.Replsets[replset.Name] = rs
 
+	}
+
+	if replset.Arbiter.Enabled && !cr.Spec.Sharding.Enabled {
+		err := mongo.SetDefaultRWConcern(ctx, cli, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "set default RW concern")
+		}
 	}
 
 	cnf, err := mongo.ReadConfig(ctx, cli)
@@ -247,6 +260,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 		members = append(members, member)
 	}
+
+	// sort config members by priority, descending
+	sort.Slice(members, func(i, j int) bool {
+		return members[i].Priority > members[j].Priority
+	})
 
 	memberC := len(members)
 	for i, extNode := range replset.ExternalNodes {

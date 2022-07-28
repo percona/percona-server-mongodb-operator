@@ -67,6 +67,21 @@ func Dial(conf *Config) (*mongo.Client, error) {
 	return client, nil
 }
 
+func SetDefaultRWConcern(ctx context.Context, client *mongo.Client, readConcern, writeConcern string) error {
+	cmd := bson.D{
+		{Key: "setDefaultRWConcern", Value: 1},
+		{Key: "defaultReadConcern", Value: bson.D{{Key: "level", Value: readConcern}}},
+		{Key: "defaultWriteConcern", Value: bson.D{{Key: "w", Value: writeConcern}}},
+	}
+
+	res := client.Database("admin").RunCommand(ctx, cmd)
+	if res.Err() != nil {
+		return errors.Wrap(res.Err(), "setDefaultRWConcern")
+	}
+
+	return nil
+}
+
 func ReadConfig(ctx context.Context, client *mongo.Client) (RSConfig, error) {
 	resp := ReplSetGetConfig{}
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetGetConfig", Value: 1}})
