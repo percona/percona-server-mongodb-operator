@@ -135,7 +135,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	return nil
 }
 
-func fillSecretData(cr *api.PerconaServerMongoDB, data map[string][]byte) (changes bool, err error) {
+func fillSecretData(cr *api.PerconaServerMongoDB, data map[string][]byte) (bool, error) {
 	if data == nil {
 		data = make(map[string][]byte)
 	}
@@ -155,13 +155,16 @@ func fillSecretData(cr *api.PerconaServerMongoDB, data map[string][]byte) (chang
 		userMap[envMongoDBDatabaseAdminUser] = string(roleDatabaseAdmin)
 		passKeys = append(passKeys, envMongoDBDatabaseAdminPassword)
 	}
-	for k, defaultValue := range userMap {
-		if _, ok := data[k]; !ok {
-			data[k] = []byte(defaultValue)
+
+	changes := false
+	for user, role := range userMap {
+		if _, ok := data[user]; !ok {
+			data[user] = []byte(role)
 			changes = true
 		}
 	}
 
+	var err error
 	for _, k := range passKeys {
 		if _, ok := data[k]; !ok {
 			data[k], err = secret.GeneratePassword()
