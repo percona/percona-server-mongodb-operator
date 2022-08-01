@@ -337,6 +337,7 @@ deploy_operator() {
 
 	cat ${src_dir}/deploy/operator.yaml \
 		| sed -e "s^image: .*^image: ${IMAGE}^" \
+		| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' \
 		| kubectl_bin apply -f -
 
 	sleep 2
