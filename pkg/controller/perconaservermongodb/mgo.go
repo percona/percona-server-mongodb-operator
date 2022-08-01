@@ -68,12 +68,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	if cr.Spec.Unmanaged {
-		return api.AppStateReady, nil
-	}
-
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 	if err != nil {
+		if cr.Spec.Unmanaged {
+			return api.AppStateInit, nil
+		}
 		if cr.Status.Replsets[replset.Name].Initialized {
 			// If an exposed replset is initialized but connection fails with ReplicaSetNoPrimary,
 			// we'll change the member hosts to local FQDNs and reconfig to recover.
@@ -116,6 +115,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		})
 
 		return api.AppStateInit, nil
+	}
+
+	if cr.Spec.Unmanaged {
+		status, err := mongo.RSStatus(ctx, cli)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "failed to get rs status")
+		}
+		if status.Primary() == nil {
+			return api.AppStateInit, nil
+		}
+		return api.AppStateReady, nil
 	}
 	err = r.createOrUpdateSystemUsers(ctx, cr, replset)
 	if err != nil {
@@ -499,6 +509,15 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 func getRoles(cr *api.PerconaServerMongoDB, role UserRole) []map[string]interface{} {
 	roles := make([]map[string]interface{}, 0)
 	switch role {
+	case roleDatabaseAdmin:
+		return []map[string]interface{}{
+			{"role": "readWriteAnyDatabase", "db": "admin"},
+			{"role": "readAnyDatabase", "db": "admin"},
+			{"role": "restore", "db": "admin"},
+			{"role": "backup", "db": "admin"},
+			{"role": "dbAdminAnyDatabase", "db": "admin"},
+			{"role": string(roleClusterMonitor), "db": "admin"},
+		}
 	case roleClusterMonitor:
 		if cr.CompareVersion("1.12.0") >= 0 {
 			roles = []map[string]interface{}{
@@ -633,7 +652,12 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	for _, role := range []UserRole{roleClusterAdmin, roleClusterMonitor, roleBackup} {
+	users := []UserRole{roleClusterAdmin, roleClusterMonitor, roleBackup}
+	if cr.CompareVersion("1.13.0") >= 0 {
+		users = append(users, roleDatabaseAdmin)
+	}
+
+	for _, role := range users {
 		creds, err := r.getInternalCredentials(ctx, cr, role)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get credentials for %s", role)
