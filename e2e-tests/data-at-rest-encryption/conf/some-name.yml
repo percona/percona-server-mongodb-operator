@@ -9,7 +9,7 @@ spec:
 
   backup:
     enabled: true
-    image:
+    image: perconalab/percona-server-mongodb-operator:main-backup
     storages:
       aws-s3:
         type: s3
