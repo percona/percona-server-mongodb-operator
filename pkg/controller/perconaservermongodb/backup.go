@@ -171,6 +171,7 @@ func (r *ReconcilePerconaServerMongoDB) createBackupTask(ctx context.Context, cr
 		bcp, err := backup.BackupFromTask(cr, &task)
 		if err != nil {
 			log.Error(err, "failed to create backup")
+			return
 		}
 		bcp.Namespace = cr.Namespace
 		err = r.client.Create(ctx, bcp)
