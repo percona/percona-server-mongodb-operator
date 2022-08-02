@@ -12,4 +12,5 @@ There are multiple ways to deploy and manage MongoDB in Kubernetes. This article
 
 
 .. image:: ./img/table1.svg
+   :width: 800
    :align: center
