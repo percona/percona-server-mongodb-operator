@@ -3,1193 +3,1193 @@
 
 <svg
    version="1.1"
-   id="svg2"
-   width="426.49225"
-   height="385.00293"
-   viewBox="0 0 426.49225 385.00293"
+   id="svg2616"
+   width="660.31476"
+   height="596.0791"
+   viewBox="0 0 660.31476 596.07908"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs6">
+     id="defs2620">
     <clipPath
        clipPathUnits="userSpaceOnUse"
-       id="clipPath20">
+       id="clipPath2634">
       <path
          d="M -2,-2 H 956 V 863 H -2 Z"
-         id="path18" />
+         id="path2632" />
     </clipPath>
   </defs>
   <g
-     id="g10"
-     transform="matrix(1.3333333,0,0,-1.3333333,-66.753878,721.77943)">
+     id="g2624"
+     transform="matrix(1.3333333,0,0,-1.3333333,-66.509297,1051.3573)">
     <g
-       id="g12"
-       transform="matrix(1,0,0,-1,0,595)">
+       id="g2626"
+       transform="matrix(1,0,0,-1,0,842)">
       <g
-         id="g14"
-         transform="matrix(0.3345912,0,0,0.3345912,50.400001,54.000002)">
+         id="g2628"
+         transform="matrix(0.51802935,0,0,0.51802935,50.400003,53.999999)">
         <g
-           id="g16"
-           clip-path="url(#clipPath20)">
+           id="g2630"
+           clip-path="url(#clipPath2634)">
           <path
              d="M 0,56 H 955 V 189 H 0 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path22" />
+             id="path2636" />
           <path
              d="M 0,210 H 955 V 358 H 0 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path24" />
+             id="path2638" />
           <path
              d="M 0,379 H 955 V 526 H 0 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path26" />
+             id="path2640" />
           <path
              d="m 0,547 h 955 v 84 H 0 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path28" />
+             id="path2642" />
           <path
              d="m 0,652 h 955 v 91 H 0 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path30" />
+             id="path2644" />
           <path
              d="m 0,764 h 955 v 56 H 0 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path32" />
+             id="path2646" />
           <path
              d="m 0,820 h 754 v 42 H 0 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path34" />
+             id="path2648" />
           <path
              d="m 754,841 h 201 v 21 H 754 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path36" />
+             id="path2650" />
           <path
              d="M -1,-1 H 151 V 35 H -1 Z"
              style="fill:#b6d7a8;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path38" />
+             id="path2652" />
           <path
              d="M 150,-1 H 352 V 35 H 150 Z"
              style="fill:#f6b26b;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path40" />
+             id="path2654" />
           <path
              d="M 351,-1 H 955 V 35 H 351 Z"
              style="fill:#b6d7a8;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path42" />
+             id="path2656" />
           <path
              d="M -1,34 H 955 V 56 H -1 Z"
              style="fill:#d9ead3;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path44" />
+             id="path2658" />
           <path
              d="m -1,188 h 956 v 22 H -1 Z"
              style="fill:#d9ead3;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path46" />
+             id="path2660" />
           <path
              d="m -1,357 h 956 v 22 H -1 Z"
              style="fill:#d9ead3;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path48" />
+             id="path2662" />
           <path
              d="m -1,525 h 956 v 22 H -1 Z"
              style="fill:#d9ead3;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path50" />
+             id="path2664" />
           <path
              d="m -1,630 h 956 v 22 H -1 Z"
              style="fill:#d9ead3;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path52" />
+             id="path2666" />
           <path
              d="m -1,742 h 956 v 22 H -1 Z"
              style="fill:#d9ead3;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path54" />
+             id="path2668" />
           <path
              d="m 753,819 h 202 v 22 H 753 Z"
              style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="path56" />
+             id="path2670" />
           <g
-             id="g58">
+             id="g2672">
             <path
                d="M 0,0 V 0 34 H -1 V 0 Z m 0,35 v 0 20 H -1 V 35 Z m 0,21 v 0 20 H -1 V 56 Z m 0,21 v 0 34 H -1 V 77 Z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 49 h -1 v -49 z m 0,50 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 H -1 V 841 Z M 151,0 v 0 34 h -1 V 0 Z m 0,35 v 0 20 h -1 V 35 Z m 0,21 v 0 20 h -1 V 56 Z m 0,21 v 0 34 h -1 V 77 Z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 49 h -1 v -49 z m 0,50 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 V 841 Z M 352,0 v 0 34 h -1 V 0 Z m 0,35 v 0 20 h -1 V 35 Z m 0,21 v 0 20 h -1 V 56 Z m 0,21 v 0 34 h -1 V 77 Z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 49 h -1 v -49 z m 0,50 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 V 841 Z M 553,0 v 0 34 h -1 V 0 Z m 0,35 v 0 20 h -1 V 35 Z m 0,21 v 0 20 h -1 V 56 Z m 0,21 v 0 34 h -1 V 77 Z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 49 h -1 v -49 z m 0,50 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 V 841 Z M 754,0 v 0 34 h -1 V 0 Z m 0,35 v 0 20 h -1 V 35 Z m 0,21 v 0 20 h -1 V 56 Z m 0,21 v 0 34 h -1 V 77 Z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 49 h -1 v -49 z m 0,50 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 V 841 Z M 955,0 v 0 34 h -1 V 0 Z m 0,35 v 0 20 h -1 V 35 Z m 0,21 v 0 20 h -1 V 56 Z m 0,21 v 0 34 h -1 V 77 Z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 49 h -1 v -49 z m 0,50 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 34 h -1 v -34 z m 0,35 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 v -20 z m 0,21 v 0 20 h -1 V 841 Z M -1,-1 v 0 H 955 V 0 H -1 Z m 0,35 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,35 v 0 h 956 v 1 H -1 Z m 0,35 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,50 v 0 h 956 v 1 H -1 Z m 0,35 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,35 v 0 h 956 v 1 H -1 Z m 0,35 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,35 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z m 0,21 v 0 h 956 v 1 H -1 Z"
                style="fill:#000000;fill-opacity:0.14902;fill-rule:nonzero;stroke:none"
-               id="path60" />
+               id="path2674" />
           </g>
           <text
              xml:space="preserve"
              transform="translate(3,29.245117)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text64"><tspan
+             id="text2678"><tspan
                x="0 7.9299998 15.158 22.386 26.715 34.645 39.702 46.93 50.530998 59.188999 64.246002 72.176003 80.106003 88.036003 95.264"
                y="0"
-               id="tspan62">Feature/Product</tspan></text>
+               id="tspan2676">Feature/Product</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(183,14.296387)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text68"><tspan
+             id="text2682"><tspan
                x="0 8.658 15.886 20.943001 28.171 36.101002 44.030998 51.258999 54.860001 64.960999 72.890999 80.119003 85.176003 92.403999 96.733002 104.663 109.72 113.321 117.65 125.58 130.63699"
                y="0"
-               id="tspan66">Percona Operator for </tspan></text>
+               id="tspan2680">Percona Operator for </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(220,29.245117)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text72"><tspan
+             id="text2686"><tspan
                x="0 10.829 18.759001 26.688999 34.618999 42.549 51.935001"
                y="0"
-               id="tspan70">MongoDB</tspan></text>
+               id="tspan2684">MongoDB</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(391,29.245117)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text76"><tspan
+             id="text2690"><tspan
                x="0 9.3859997 12.987 17.316 25.246 32.473999 44.030998 47.632 51.233002 60.618999 67.847 71.447998 83.004997 86.606003 95.991997 103.922 111.15 116.207"
                y="0"
-               id="tspan74">Bitnami Helm Chart</tspan></text>
+               id="tspan2688">Bitnami Helm Chart</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(584,29.245117)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text80"><tspan
+             id="text2694"><tspan
                x="0 9.3859997 17.316 25.246 32.473999 41.860001 51.245998 54.847 59.175999 67.106003 72.163002 75.764 86.593002 94.523003 102.453 110.383 118.313 127.699"
                y="0"
-               id="tspan78">KubeDB for MongoDB</tspan></text>
+               id="tspan2692">KubeDB for MongoDB</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(783,14.296387)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text84"><tspan
+             id="text2698"><tspan
                x="0 10.829 18.759001 26.688999 34.618999 42.549 51.935001 61.320999 64.921997 74.307999 82.237999 93.794998 105.352 113.282 121.212 124.813 129.142 136.37"
                y="0"
-               id="tspan82">MongoDB Community </tspan></text>
+               id="tspan2696">MongoDB Community </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(826,29.245117)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text88"><tspan
+             id="text2702"><tspan
                x="0 10.101 18.031 25.259001 30.316 37.543999 41.873001 49.803001"
                y="0"
-               id="tspan86">Operator</tspan></text>
+               id="tspan2700">Operator</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,50.245117)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text92"><tspan
+             id="text2706"><tspan
                x="0 10.101 17.329 25.259001 32.487 37.543999 41.145"
                y="0"
-               id="tspan90">Generic</tspan></text>
+               id="tspan2704">Generic</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,71.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text96"><tspan
+             id="text2710"><tspan
                x="0 10.101 17.329 24.556999 31.785 35.386002 41.886002 49.113998 56.341999 60.671001 67.170998 74.399002 78 88.829002 96.056999 103.285 110.513"
                y="0"
-               id="tspan94">Open source model</tspan></text>
+               id="tspan2708">Open source model</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(218,71.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text100"><tspan
+             id="text2714"><tspan
                x="0 8.658 15.886 23.114 29.614 36.841999 44.07 47.671001 54.898998 58.5"
                y="0"
-               id="tspan98">Apache 2.0</tspan></text>
+               id="tspan2712">Apache 2.0</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(419,71.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text104"><tspan
+             id="text2718"><tspan
                x="0 8.658 15.886 23.114 29.614 36.841999 44.07 47.671001 54.898998 58.5"
                y="0"
-               id="tspan102">Apache 2.0</tspan></text>
+               id="tspan2716">Apache 2.0</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(622,71.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text108"><tspan
+             id="text2722"><tspan
                x="0 10.101 17.329 24.556999 31.785 35.386002 41.886002 49.113998 53.443001"
                y="0"
-               id="tspan106">Open core</tspan></text>
+               id="tspan2720">Open core</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(823,71.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text112"><tspan
+             id="text2726"><tspan
                x="0 10.101 17.329 24.556999 31.785 35.386002 41.886002 49.113998 53.443001"
                y="0"
-               id="tspan110">Open core</tspan></text>
+               id="tspan2724">Open core</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,106.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text116"><tspan
+             id="text2730"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001 49.126999 57.785 61.386002 67.886002 75.113998 79.443001 85.943001 88.829002 96.056999 103.285"
                y="0"
-               id="tspan114">MongoDB versions</tspan></text>
+               id="tspan2728">MongoDB versions</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(191,106.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text120"><tspan
+             id="text2734"><tspan
                x="0 8.658 17.316 28.145 37.530998 46.188999 49.790001 57.018002 60.618999 67.847 71.447998 75.049004 82.277 85.877998 93.106003 96.707001 100.308 107.536 111.137"
                y="0"
-               id="tspan118">PSMDB 4.2, 4.4, 5.0</tspan></text>
+               id="tspan2732">PSMDB 4.2, 4.4, 5.0</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(412,106.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text124"><tspan
+             id="text2738"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001 49.126999 57.785 61.386002 68.613998 72.214996"
                y="0"
-               id="tspan122">MongoDB 5.0</tspan></text>
+               id="tspan2736">MongoDB 5.0</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(562,91.29639)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text128"><tspan
+             id="text2742"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001 49.126999 57.785 61.386002 68.613998 72.214996 79.443001 83.043999 86.644997 93.873001 97.473999 104.702 108.303 111.904 119.132 122.733 129.961 133.562 137.16299 144.39101 147.992 155.22 158.821 162.422 169.64999 173.25101"
                y="0"
-               id="tspan126">MongoDB 3.4, 3.6. 4.0, 4.1, 4.2</tspan></text>
+               id="tspan2740">MongoDB 3.4, 3.6. 4.0, 4.1, 4.2</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(593,106.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text132"><tspan
+             id="text2746"><tspan
                x="0 8.658 17.316 28.145 37.530998 46.188999 49.790001 57.018002 60.618999 67.847 71.447998 75.049004 82.277 85.877998 93.106003 96.707001 100.308 107.536 111.137"
                y="0"
-               id="tspan130">PSMDB 3.6, 4.0, 4.2</tspan></text>
+               id="tspan2744">PSMDB 3.6, 4.0, 4.2</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(788,106.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text136"><tspan
+             id="text2750"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001 49.126999 57.785 61.386002 68.613998 72.214996 79.443001 83.043999 86.644997 93.873001 97.473999 104.702 108.303 111.904 119.132 122.733"
                y="0"
-               id="tspan134">MongoDB 4.2, 4.4, 5.0</tspan></text>
+               id="tspan2748">MongoDB 4.2, 4.4, 5.0</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,126.29639)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text140"><tspan
+             id="text2754"><tspan
                x="0 8.658 15.886 23.114 30.341999 34.671001 41.898998 49.126999 52.728001 59.956001 66.456001"
                y="0"
-               id="tspan138">Kubernetes </tspan></text>
+               id="tspan2752">Kubernetes </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,141.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text144"><tspan
+             id="text2758"><tspan
                x="0 6.5 13.728 20.955999 24.556999 31.785 36.113998 46.943001 54.171001 61.398998 67.899002"
                y="0"
-               id="tspan142">conformance</tspan></text>
+               id="tspan2756">conformance</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(172,141.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text148"><tspan
+             id="text2762"><tspan
                x="0 7.6960001 14.924 19.253 22.139 29.367001 36.595001 43.095001 46.695999 53.195999 60.424 64.752998 71.252998 74.139 81.366997 88.595001 95.095001 98.695999 105.924 110.253 117.481 121.082 124.683 131.911 138.411 142.01199 149.24001"
                y="0"
-               id="tspan146">Various versions are tested</tspan></text>
+               id="tspan2760">Various versions are tested</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(412,141.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text152"><tspan
+             id="text2766"><tspan
                x="0 9.3859997 16.614 20.215 27.443001 34.671001 41.898998 46.228001 53.456001 60.683998 64.285004 71.513"
                y="0"
-               id="tspan150">No guarantee</tspan></text>
+               id="tspan2764">No guarantee</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(613,141.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text156"><tspan
+             id="text2770"><tspan
                x="0 9.3859997 16.614 20.215 27.443001 34.671001 41.898998 46.228001 53.456001 60.683998 64.285004 71.513"
                y="0"
-               id="tspan154">No guarantee</tspan></text>
+               id="tspan2768">No guarantee</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(814,141.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text160"><tspan
+             id="text2774"><tspan
                x="0 9.3859997 16.614 20.215 27.443001 34.671001 41.898998 46.228001 53.456001 60.683998 64.285004 71.513"
                y="0"
-               id="tspan158">No guarantee</tspan></text>
+               id="tspan2772">No guarantee</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,204.24512)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text164"><tspan
+             id="text2778"><tspan
                x="0 10.829 18.056999 21.658001 29.587999 33.917 41.145 49.075001 56.303001 64.233002 71.460999"
                y="0"
-               id="tspan162">Maintenance</tspan></text>
+               id="tspan2776">Maintenance</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,225.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text168"><tspan
+             id="text2782"><tspan
                x="0 9.3859997 16.614 23.841999 28.171 35.398998 42.626999 49.855 53.456001 63.556999 70.785004 78.013 82.342003 89.57 93.170998 100.399"
                y="0"
-               id="tspan166">Upgrade Operator</tspan></text>
+               id="tspan2780">Upgrade Operator</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,225.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text172"><tspan
+             id="text2786"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan170">Yes</tspan></text>
+               id="tspan2784">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(411,225.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text176"><tspan
+             id="text2790"><tspan
                x="0 9.3859997 16.614 19.5 30.329 33.93 41.158001 48.386002 55.613998 59.943001 67.170998 74.399002"
                y="0"
-               id="tspan174">Helm upgrade</tspan></text>
+               id="tspan2788">Helm upgrade</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(611,225.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text180"><tspan
+             id="text2794"><tspan
                x="0 3.6010001 14.43 21.658001 28.886 36.113998 39.715 46.215 53.443001 60.671001 67.899002 75.126999"
                y="0"
-               id="tspan178">Image change</tspan></text>
+               id="tspan2792">Image change</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(843,225.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text184"><tspan
+             id="text2798"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan182">Yes</tspan></text>
+               id="tspan2796">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,275.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text188"><tspan
+             id="text2802"><tspan
                x="0 9.3859997 16.614 23.841999 28.171 35.398998 42.626999 49.855 53.456001 62.841999"
                y="0"
-               id="tspan186">Upgrade DB</tspan></text>
+               id="tspan2800">Upgrade DB</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(176,245.34766)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text192"><tspan
+             id="text2806"><tspan
                x="0 8.658 15.886 19.487 26.715 37.543999 44.771999 48.373001 55.601002 62.828999 66.43 77.259003 80.144997 87.373001 94.600998 98.93 102.531 109.031 116.259 120.588 127.088 129.974 137.202 144.42999"
                y="0"
-               id="tspan190">Automated minor version </tspan></text>
+               id="tspan2804">Automated minor version </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(154,260.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text196"><tspan
+             id="text2810"><tspan
                x="0 7.2280002 14.456 21.684 26.013 33.241001 40.469002 47.696999 51.298 54.898998 62.126999 66.456001 73.683998 80.912003 88.139999 95.367996 98.969002 105.469 112.697 117.026 123.526 126.412 133.64 140.868 144.46899 150.96899 158.19701 162.526 169.026 171.912 178.412 185.64 189.241"
                y="0"
-               id="tspan194">upgrade through version service. </tspan></text>
+               id="tspan2808">upgrade through version service. </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(186,275.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text200"><tspan
+             id="text2814"><tspan
                x="0 10.829 18.056999 20.943001 28.171 32.5 36.101002 42.601002 49.828999 54.158001 60.658001 63.543999 70.772003 78 81.600998 88.829002 96.056999 103.285 107.614 114.842 122.07"
                y="0"
-               id="tspan198">major version upgrade</tspan></text>
+               id="tspan2812">major version upgrade</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(573,245.34766)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text204"><tspan
+             id="text2818"><tspan
                x="0 7.4749999 14.703 21.202999 24.804001 28.405001 39.234001 46.462002 53.689999 60.917999 68.146004 71.031998 74.633003 78.234001 89.063004 96.291 99.177002 106.405 110.734 114.335 120.835 128.063 132.392 138.892 141.778 149.006 156.23399"
                y="0"
-               id="tspan202">Yes, manual. Major version </tspan></text>
+               id="tspan2816">Yes, manual. Major version </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(555,260.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text208"><tspan
+             id="text2822"><tspan
                x="0 7.2280002 14.456 21.684 26.013 33.241001 40.469002 47.696999 51.298 54.183998 60.683998 64.285004 67.170998 74.399002 80.899002 84.5 88.100998 91.702003 98.93 106.158 109.759 112.645 123.474 130.702 137.92999 145.158 148.759 155.259 162.487 169.715 176.94299 184.17101 191.399"
                y="0"
-               id="tspan206">upgrade is just the image change </tspan></text>
+               id="tspan2820">upgrade is just the image change </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(631,275.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text212"><tspan
+             id="text2826"><tspan
                x="0 4.329 7.9299998 17.316 24.544001 27.43 31.759001 38.987"
                y="0"
-               id="tspan210">- weird.</tspan></text>
+               id="tspan2824">- weird.</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(778,260.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text216"><tspan
+             id="text2830"><tspan
                x="0 8.658 15.886 19.487 26.715 30.316 41.145 44.030998 51.258999 58.487 62.816002 66.417 73.644997 80.873001 88.100998 91.702003 102.531 109.759 112.645 119.873 124.202 127.803 135.03101 139.36 146.588"
                y="0"
-               id="tspan214">Both minor and major are </tspan></text>
+               id="tspan2828">Both minor and major are </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(826,275.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text220"><tspan
+             id="text2834"><tspan
                x="0 7.2280002 13.728 20.955999 23.841999 26.728001 33.956001 41.183998 44.07 51.298"
                y="0"
-               id="tspan218">available.</tspan></text>
+               id="tspan2832">available.</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,310.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text224"><tspan
+             id="text2838"><tspan
                x="0 9.3859997 16.614 27.443001 34.671001 41.898998 45.5 52.728001 56.328999 62.828999 69.329002 76.556999 79.443001 82.329002 89.556999"
                y="0"
-               id="tspan222">Compute scaling</tspan></text>
+               id="tspan2836">Compute scaling</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(213,295.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text228"><tspan
+             id="text2842"><tspan
                x="0 7.9429998 15.171 19.5 23.101 25.987 32.487 39.715 42.601002 46.202 50.530998 54.132 60.632 67.860001"
                y="0"
-               id="tspan226">Vertical - yes</tspan></text>
+               id="tspan2840">Vertical - yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(205,310.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text232"><tspan
+             id="text2846"><tspan
                x="0 9.3859997 16.614 20.943001 23.829 30.329 37.556999 44.785 48.386002 55.613998 58.5 62.101002 66.43 70.030998 76.530998 83.759003"
                y="0"
-               id="tspan230">Horizontal - yes</tspan></text>
+               id="tspan2844">Horizontal - yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(414,295.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text236"><tspan
+             id="text2850"><tspan
                x="0 7.9429998 15.171 19.5 23.101 25.987 32.487 39.715 42.601002 46.202 50.530998 54.132 60.632 67.860001"
                y="0"
-               id="tspan234">Vertical - yes</tspan></text>
+               id="tspan2848">Vertical - yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(406,310.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text240"><tspan
+             id="text2854"><tspan
                x="0 9.3859997 16.614 20.943001 23.829 30.329 37.556999 44.785 48.386002 55.613998 58.5 62.101002 66.43 70.030998 76.530998 83.759003"
                y="0"
-               id="tspan238">Horizontal - yes</tspan></text>
+               id="tspan2852">Horizontal - yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(609,310.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text244"><tspan
+             id="text2858"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan242">Enterprise only</tspan></text>
+               id="tspan2856">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(819,295.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text248"><tspan
+             id="text2862"><tspan
                x="0 7.9429998 15.171 19.5 23.101 25.987 32.487 39.715 42.601002 46.202 50.530998 54.132 61.360001"
                y="0"
-               id="tspan246">Vertical - no</tspan></text>
+               id="tspan2860">Vertical - no</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(808,310.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text252"><tspan
+             id="text2866"><tspan
                x="0 9.3859997 16.614 20.943001 23.829 30.329 37.556999 44.785 48.386002 55.613998 58.5 62.101002 66.43 70.030998 76.530998 83.759003"
                y="0"
-               id="tspan250">Horizontal - yes</tspan></text>
+               id="tspan2864">Horizontal - yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,331.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text256"><tspan
+             id="text2870"><tspan
                x="0 8.658 12.259 19.487 23.816 31.044001 38.271999 45.5 49.101002 55.601002 62.101002 69.329002 72.214996 75.100998 82.329002"
                y="0"
-               id="tspan254">Storage scaling</tspan></text>
+               id="tspan2868">Storage scaling</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(229,331.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text260"><tspan
+             id="text2874"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001"
                y="0"
-               id="tspan258">Manual</tspan></text>
+               id="tspan2872">Manual</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,331.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text264"><tspan
+             id="text2878"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan262">No</tspan></text>
+               id="tspan2876">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(609,331.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text268"><tspan
+             id="text2882"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan266">Enterprise only</tspan></text>
+               id="tspan2880">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(810,331.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text272"><tspan
+             id="text2886"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan270">Enterprise only</tspan></text>
+               id="tspan2884">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,373.24512)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text276"><tspan
+             id="text2890"><tspan
                x="0 10.829 18.759001 26.688999 34.618999 42.549 51.935001 61.320999 64.921997 69.250999 77.181 85.111 93.041 96.641998 104.572 112.502 116.103 123.331"
                y="0"
-               id="tspan274">MongoDB topologies</tspan></text>
+               id="tspan2888">MongoDB topologies</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,394.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text280"><tspan
+             id="text2894"><tspan
                x="0 10.829 18.056999 20.943001 24.544001 27.43 31.759001 38.258999 41.145 48.373001 54.873001 58.473999 65.702003 70.030998 73.632004 80.860001 88.087997 95.316002 98.202003 105.43 111.93 122.759 129.987 137.215"
                y="0"
-               id="tspan278">Multi-cluster deployment</tspan></text>
+               id="tspan2892">Multi-cluster deployment</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,394.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text284"><tspan
+             id="text2898"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan282">Yes</tspan></text>
+               id="tspan2896">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,394.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text288"><tspan
+             id="text2902"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan286">No</tspan></text>
+               id="tspan2900">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(644,394.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text292"><tspan
+             id="text2906"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan290">No</tspan></text>
+               id="tspan2904">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(845,394.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text296"><tspan
+             id="text2910"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan294">No</tspan></text>
+               id="tspan2908">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,415.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text300"><tspan
+             id="text2914"><tspan
                x="0 8.658 15.886 23.114 27.443001 34.671001 37.556999 44.785"
                y="0"
-               id="tspan298">Sharding</tspan></text>
+               id="tspan2912">Sharding</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,415.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text304"><tspan
+             id="text2918"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan302">Yes</tspan></text>
+               id="tspan2916">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,415.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text308"><tspan
+             id="text2922"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan306">No</tspan></text>
+               id="tspan2920">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(642,415.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text312"><tspan
+             id="text2926"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan310">Yes</tspan></text>
+               id="tspan2924">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(845,415.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text316"><tspan
+             id="text2930"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan314">No</tspan></text>
+               id="tspan2928">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,436.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text320"><tspan
+             id="text2934"><tspan
                x="0 8.658 12.987 20.215 23.101 26.702 33.93"
                y="0"
-               id="tspan318">Arbiter</tspan></text>
+               id="tspan2932">Arbiter</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,436.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text324"><tspan
+             id="text2938"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan322">Yes</tspan></text>
+               id="tspan2936">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(441,436.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text328"><tspan
+             id="text2942"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan326">Yes</tspan></text>
+               id="tspan2940">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(642,436.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text332"><tspan
+             id="text2946"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan330">Yes</tspan></text>
+               id="tspan2944">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(843,436.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text336"><tspan
+             id="text2950"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan334">Yes</tspan></text>
+               id="tspan2948">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,457.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text340"><tspan
+             id="text2954"><tspan
                x="0 9.3859997 16.614 23.841999 28.171 34.671001 41.898998 45.5 48.386002 55.613998 62.841999 66.443001 73.670998 80.899002 88.126999 95.355003"
                y="0"
-               id="tspan338">Non-voting nodes</tspan></text>
+               id="tspan2952">Non-voting nodes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,457.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text344"><tspan
+             id="text2958"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan342">Yes</tspan></text>
+               id="tspan2956">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,457.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text348"><tspan
+             id="text2962"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan346">No</tspan></text>
+               id="tspan2960">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(644,457.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text352"><tspan
+             id="text2966"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan350">No</tspan></text>
+               id="tspan2964">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(845,457.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text356"><tspan
+             id="text2970"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan354">No</tspan></text>
+               id="tspan2968">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,478.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text360"><tspan
+             id="text2974"><tspan
                x="0 9.3859997 12.272 19.5 26.728001 33.956001 41.183998 44.785 52.013 59.241001 66.469002 73.696999"
                y="0"
-               id="tspan358">Hidden nodes</tspan></text>
+               id="tspan2972">Hidden nodes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(242,478.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text364"><tspan
+             id="text2978"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan362">No</tspan></text>
+               id="tspan2976">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(441,478.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text368"><tspan
+             id="text2982"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan366">Yes</tspan></text>
+               id="tspan2980">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(642,478.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text372"><tspan
+             id="text2986"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan370">Yes</tspan></text>
+               id="tspan2984">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(843,478.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text376"><tspan
+             id="text2990"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan374">Yes</tspan></text>
+               id="tspan2988">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,499.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text380"><tspan
+             id="text2994"><tspan
                x="0 9.3859997 16.614 20.215 29.601 36.828999 41.158001 47.658001 51.258999 58.487 64.987 72.214996 79.443001 85.943001 93.170998 97.5"
                y="0"
-               id="tspan378">Network exposure</tspan></text>
+               id="tspan2992">Network exposure</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,499.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text384"><tspan
+             id="text2998"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan382">Yes</tspan></text>
+               id="tspan2996">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(441,499.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text388"><tspan
+             id="text3002"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan386">Yes</tspan></text>
+               id="tspan3000">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(563,499.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text392"><tspan
+             id="text3006"><tspan
                x="0 9.3859997 16.614 20.215 23.816 31.044001 38.271999 41.158001 47.658001 51.258999 54.860001 62.088001 66.417 73.644997 80.873001 88.100998 95.329002 98.93 109.759 116.987 124.215 131.44299 138.67101 141.55701 145.158 151.658 158.886 166.114 169.715 172.601"
                y="0"
-               id="tspan390">No, only through manual config</tspan></text>
+               id="tspan3004">No, only through manual config</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(810,499.24512)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text396"><tspan
+             id="text3010"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan394">Enterprise only</tspan></text>
+               id="tspan3008">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,541.2451)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text400"><tspan
+             id="text3014"><tspan
                x="0 9.3859997 16.614 23.841999 31.07 39 46.93"
                y="0"
-               id="tspan398">Backups</tspan></text>
+               id="tspan3012">Backups</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,562.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text404"><tspan
+             id="text3018"><tspan
                x="0 8.658 15.158 22.386 29.614 36.841999 44.07 46.956001 54.183998 61.411999 65.013 72.240997 79.469002 85.969002 92.469002 99.696999 106.925"
                y="0"
-               id="tspan402">Scheduled backups</tspan></text>
+               id="tspan3016">Scheduled backups</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,562.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text408"><tspan
+             id="text3022"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan406">Yes</tspan></text>
+               id="tspan3020">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,562.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text412"><tspan
+             id="text3026"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan410">No</tspan></text>
+               id="tspan3024">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(609,562.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text416"><tspan
+             id="text3030"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan414">Enterprise only</tspan></text>
+               id="tspan3028">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(810,562.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text420"><tspan
+             id="text3034"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan418">Enterprise only</tspan></text>
+               id="tspan3032">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,583.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text424"><tspan
+             id="text3038"><tspan
                x="0 3.6010001 10.829 17.329 21.658001 28.886 39.715 46.943001 54.171001 57.771999 65 67.886002 71.487 78.714996 85.943001 92.443001 98.943001 106.171 113.399"
                y="0"
-               id="tspan422">Incremental backups</tspan></text>
+               id="tspan3036">Incremental backups</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(242,583.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text428"><tspan
+             id="text3042"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan426">No</tspan></text>
+               id="tspan3040">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,583.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text432"><tspan
+             id="text3046"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan430">No</tspan></text>
+               id="tspan3044">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(609,583.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text436"><tspan
+             id="text3050"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan434">Enterprise only</tspan></text>
+               id="tspan3048">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(845,583.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text440"><tspan
+             id="text3054"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan438">No</tspan></text>
+               id="tspan3052">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,604.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text444"><tspan
+             id="text3058"><tspan
                x="0 8.658 15.886 18.771999 26 29.601 33.93 36.816002 44.043999 48.373001 51.973999 54.860001 65.689003 72.917 76.517998 80.847 88.074997 94.574997 101.803 108.303 115.531 119.86"
                y="0"
-               id="tspan442">Point-in-time recovery</tspan></text>
+               id="tspan3056">Point-in-time recovery</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,604.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text448"><tspan
+             id="text3062"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan446">Yes</tspan></text>
+               id="tspan3060">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,604.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text452"><tspan
+             id="text3066"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan450">No</tspan></text>
+               id="tspan3064">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(644,604.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text456"><tspan
+             id="text3070"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan454">No</tspan></text>
+               id="tspan3068">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(810,604.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text460"><tspan
+             id="text3074"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan458">Enterprise only</tspan></text>
+               id="tspan3072">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,646.2451)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text464"><tspan
+             id="text3078"><tspan
                x="0 10.829 18.759001 26.688999 30.290001 34.618999 42.549 47.605999 51.207001 59.137001"
                y="0"
-               id="tspan462">Monitoring</tspan></text>
+               id="tspan3076">Monitoring</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,681.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text468"><tspan
+             id="text3082"><tspan
                x="0 9.3859997 16.614 23.114 26.715 33.943001 44.771999 48.373001 55.601002 62.101002 69.329002 76.556999 80.886002 84.487 91.714996 96.043999"
                y="0"
-               id="tspan466">Custom exporters</tspan></text>
+               id="tspan3080">Custom exporters</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(188,681.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text472"><tspan
+             id="text3086"><tspan
                x="0 7.4749999 14.703 21.202999 24.804001 28.405001 32.006001 39.234001 43.563 50.791 58.019001 65.247002 72.474998 76.075996 82.575996 85.461998 92.690002 99.917999 106.418 113.646 117.975"
                y="0"
-               id="tspan470">Yes, through sidecars</tspan></text>
+               id="tspan3084">Yes, through sidecars</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(362,681.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text476"><tspan
+             id="text3090"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001 46.969002 54.196999 58.526001 65.753998 72.253998 79.482002 86.709999 91.039001 94.639999 101.868 106.197 109.798 117.026 123.526 127.127 134.355 137.95599 144.45599 147.342 154.57001 161.798 168.298 175.526"
                y="0"
-               id="tspan474">mongodb-exporter as a sidecar</tspan></text>
+               id="tspan3088">mongodb-exporter as a sidecar</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(563,681.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text480"><tspan
+             id="text3094"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001 46.969002 54.196999 58.526001 65.753998 72.253998 79.482002 86.709999 91.039001 94.639999 101.868 106.197 109.798 117.026 123.526 127.127 134.355 137.95599 144.45599 147.342 154.57001 161.798 168.298 175.526"
                y="0"
-               id="tspan478">mongodb-exporter as a sidecar</tspan></text>
+               id="tspan3092">mongodb-exporter as a sidecar</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(777,666.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text484"><tspan
+             id="text3098"><tspan
                x="0 3.6010001 10.829 14.43 21.658001 28.886 33.215 40.443001 44.043999 51.271999 54.873001 64.259003 67.144997 70.746002 77.973999 81.574997 88.803001 93.132004 100.36 111.189 118.417 122.018 129.246 136.474 143.702 150.202"
                y="0"
-               id="tspan482">Integrate with prometheus </tspan></text>
+               id="tspan3096">Integrate with prometheus </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(829,681.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text488"><tspan
+             id="text3102"><tspan
                x="0 7.2280002 14.456 21.684 26.013 33.241001 36.841999 44.07"
                y="0"
-               id="tspan486">operator</tspan></text>
+               id="tspan3100">operator</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,701.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text492"><tspan
+             id="text3106"><tspan
                x="0 8.658 15.886 20.215 26.715 33.943001 41.171001 48.398998 52 62.828999 70.056999 77.285004 80.170998 83.772003 91 95.329002 98.214996 105.443 112.671 116.272 123.5 130.728 137.95599"
                y="0"
-               id="tspan490">Percona Monitoring and </tspan></text>
+               id="tspan3104">Percona Monitoring and </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,716.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text496"><tspan
+             id="text3110"><tspan
                x="0 10.829 18.056999 25.285 32.513 39.741001 46.969002 57.798 65.026001 72.253998 75.855003 79.456001 83.785004 92.443001 103.272 114.101"
                y="0"
-               id="tspan494">Management (PMM)</tspan></text>
+               id="tspan3108">Management (PMM)</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,716.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text500"><tspan
+             id="text3114"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan498">Yes</tspan></text>
+               id="tspan3112">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(443,716.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text504"><tspan
+             id="text3118"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan502">No</tspan></text>
+               id="tspan3116">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(644,716.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text508"><tspan
+             id="text3122"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan506">No</tspan></text>
+               id="tspan3120">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(845,716.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text512"><tspan
+             id="text3126"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan510">No</tspan></text>
+               id="tspan3124">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,758.2451)"
              style="font-variant:normal;font-weight:bold;font-size:13px;font-family:Arial;-inkscape-font-specification:Arial-BoldMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text516"><tspan
+             id="text3130"><tspan
                x="0 10.829 14.43 21.658001"
                y="0"
-               id="tspan514">Misc</tspan></text>
+               id="tspan3128">Misc</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,778.2964)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text520"><tspan
+             id="text3134"><tspan
                x="0 8.658 15.886 22.386 28.886 32.487 38.987 46.215 52.715 56.316002 63.543999 74.373001 77.973999 88.803001 96.030998 103.259 110.487 117.715 124.943 132.17101"
                y="0"
-               id="tspan518">Pass custom mongodb </tspan></text>
+               id="tspan3132">Pass custom mongodb </tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,793.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text524"><tspan
+             id="text3138"><tspan
                x="0 6.5 13.728 20.955999 24.556999 27.443001"
                y="0"
-               id="tspan522">config</tspan></text>
+               id="tspan3136">config</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,793.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text528"><tspan
+             id="text3142"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan526">Yes</tspan></text>
+               id="tspan3140">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(441,793.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text532"><tspan
+             id="text3146"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan530">Yes</tspan></text>
+               id="tspan3144">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(642,793.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text536"><tspan
+             id="text3150"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan534">Yes</tspan></text>
+               id="tspan3148">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(788,793.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text540"><tspan
+             id="text3154"><tspan
                x="0 9.3859997 16.614 20.215 23.816 31.044001 38.271999 41.158001 47.658001 51.258999 57.758999 64.987 75.816002 83.043999 86.644997 93.873001 101.101 105.43 112.658 123.487"
                y="0"
-               id="tspan538">No, only some params</tspan></text>
+               id="tspan3152">No, only some params</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,814.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text544"><tspan
+             id="text3158"><tspan
                x="0 9.3859997 16.614 19.5"
                y="0"
-               id="tspan542">Helm</tspan></text>
+               id="tspan3156">Helm</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,814.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text548"><tspan
+             id="text3162"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan546">Yes</tspan></text>
+               id="tspan3160">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(441,814.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text552"><tspan
+             id="text3166"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan550">Yes</tspan></text>
+               id="tspan3164">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(591,814.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text556"><tspan
+             id="text3170"><tspan
                x="0 7.4749999 14.703 21.202999 24.804001 28.405001 32.006001 39.234001 43.563 47.164001 54.391998 61.619999 68.848 73.177002 80.404999 84.005997 91.234001 95.563004 99.164001 106.392 113.62 116.506"
                y="0"
-               id="tspan554">Yes, for operator only</tspan></text>
+               id="tspan3168">Yes, for operator only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(792,814.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text560"><tspan
+             id="text3174"><tspan
                x="0 7.4749999 14.703 21.202999 24.804001 28.405001 32.006001 39.234001 43.563 47.164001 54.391998 61.619999 68.848 73.177002 80.404999 84.005997 91.234001 95.563004 99.164001 106.392 113.62 116.506"
                y="0"
-               id="tspan558">Yes, for operator only</tspan></text>
+               id="tspan3172">Yes, for operator only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,835.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text564"><tspan
+             id="text3178"><tspan
                x="0 8.658 17.316 24.544001 28.145 36.075001 43.303001"
                y="0"
-               id="tspan562">SSL/TLS</tspan></text>
+               id="tspan3176">SSL/TLS</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(240,835.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text568"><tspan
+             id="text3182"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan566">Yes</tspan></text>
+               id="tspan3180">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(441,835.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text572"><tspan
+             id="text3186"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan570">Yes</tspan></text>
+               id="tspan3184">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(609,835.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text576"><tspan
+             id="text3190"><tspan
                x="0 8.658 15.886 19.487 26.715 31.044001 38.271999 42.601002 45.487 51.987 59.215 62.816002 70.043999 77.272003 80.157997"
                y="0"
-               id="tspan574">Enterprise only</tspan></text>
+               id="tspan3188">Enterprise only</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(843,835.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text580"><tspan
+             id="text3194"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan578">Yes</tspan></text>
+               id="tspan3192">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(3,856.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text584"><tspan
+             id="text3198"><tspan
                x="0 9.3859997 13.715 20.943001 28.171 31.771999 39 42.601002 49.828999 56.328999 63.556999 67.886002 74.386002 77.987 82.316002 89.543999 92.43 99.657997"
                y="0"
-               id="tspan582">Create users/roles</tspan></text>
+               id="tspan3196">Create users/roles</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(185,856.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text588"><tspan
+             id="text3202"><tspan
                x="0 9.3859997 16.614 20.215 23.816 31.044001 38.271999 41.158001 47.658001 51.258999 57.758999 64.987 75.816002 83.043999 86.644997 93.873001 101.101 105.43 112.658 123.487"
                y="0"
-               id="tspan586">No, only some params</tspan></text>
+               id="tspan3200">No, only some params</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(441,856.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text592"><tspan
+             id="text3206"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan590">Yes</tspan></text>
+               id="tspan3204">Yes</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(644,856.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text596"><tspan
+             id="text3210"><tspan
                x="0 9.3859997"
                y="0"
-               id="tspan594">No</tspan></text>
+               id="tspan3208">No</tspan></text>
           <text
              xml:space="preserve"
              transform="translate(843,856.2451)"
              style="font-variant:normal;font-weight:normal;font-size:13px;font-family:Arial;-inkscape-font-specification:ArialMT;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none"
-             id="text600"><tspan
+             id="text3214"><tspan
                x="0 7.4749999 14.703"
                y="0"
-               id="tspan598">Yes</tspan></text>
+               id="tspan3212">Yes</tspan></text>
         </g>
       </g>
     </g>
