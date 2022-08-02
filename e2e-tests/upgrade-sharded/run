@@ -159,7 +159,7 @@ function check_upgrade_order() {
 }
 
 function main() {
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || true
+	kubectl_bin delete --wait=false -f "${src_dir}/deploy/crd.yaml" || true
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
 	deploy_cert_manager
 	create_namespace "${namespace}"
@@ -262,7 +262,7 @@ function main() {
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
 	desc 'cleanup'
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
+	kubectl_bin delete --wait=false -f "${src_dir}/deploy/crd.yaml" || :
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
 	destroy "${namespace}"
 }
