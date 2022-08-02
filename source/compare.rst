@@ -12,6 +12,9 @@ There are multiple ways to deploy and manage MongoDB in Kubernetes. This article
 
 Generic
 *******
+
+Review generic features, such as supported MongoDB versions, open source models and more.
+
 +-------------------------+-------------------------------+---------------------+-----------------------------------+-------------------------------------+
 | Feature/Product         | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB                | MongoDB Community Edtion Operator   |
 +=========================+===============================+=====================+===================================+=====================================+
@@ -28,6 +31,8 @@ Generic
 
 Maintenance
 ***********
+Upgrade and scaling are the two most common maintenance tasks that are executed by database administrators and developers.
+
 +------------------+-------------------------------+--------------------------+---------------------+-----------------------------+
 | Feature/Product  | Percona Operator for MongoDB  | Bitnami Helm Chart       | KubeDB for MongoDB  | MongoDB Community Operator  |
 +==================+===============================+==========================+=====================+=============================+
@@ -42,6 +47,8 @@ Maintenance
 
 MongoDB topologies
 ******************
+Replica sets, arbiters, sharding and other node types.
+
 +---------------------------+-------------------------------+---------------------+---------------------+-----------------------------+
 | Feature/Product           | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB  | MongoDB Community Operator  |
 +===========================+===============================+=====================+=====================+=============================+
@@ -60,6 +67,8 @@ MongoDB topologies
 
 Backups
 *******
+Review backup and restore capabilities of each solution.
+
 +-------------------------+-------------------------------+---------------------+---------------------+-----------------------------+
 | Feature/Product         | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB  | MongoDB Community Operator  |
 +=========================+===============================+=====================+=====================+=============================+
@@ -72,6 +81,8 @@ Backups
 
 Monitoring
 **********
+Monitoring is crucial for any operations team.
+
 +------------------------------------------+-------------------------------+--------------------------------+--------------------------------+--------------------------------------+
 | Feature/Product                          | Percona Operator for MongoDB  | Bitnami Helm Chart             | KubeDB for MongoDB             | MongoDB Community Operator           |
 +==========================================+===============================+================================+================================+======================================+
@@ -82,6 +93,8 @@ Monitoring
 
 Miscellaneous
 *************
+Various features that are not a good fit for other categories.
+
 +----------------------------------+-------------------------------+---------------------+-------------------------+-----------------------------+
 | Feature/Product                  | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB      | MongoDB Community Operator  |
 +==================================+===============================+=====================+=========================+=============================+
