@@ -11,4 +11,5 @@ There are multiple ways to deploy and manage MongoDB in Kubernetes. This article
 * `Percona Operator for MongoDB <https://github.com/percona/percona-server-mongodb-operator/>`_
 
 
-
+.. image:: ./img/table1.svg
+   :align: center
