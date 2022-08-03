@@ -23,20 +23,62 @@ type VersionVersionMatrix struct {
 	// haproxy
 	Haproxy map[string]VersionVersion `json:"haproxy,omitempty"`
 
+	// log collector
+	LogCollector map[string]VersionVersion `json:"logCollector,omitempty"`
+
 	// mongod
 	Mongod map[string]VersionVersion `json:"mongod,omitempty"`
 
 	// operator
 	Operator map[string]VersionVersion `json:"operator,omitempty"`
 
+	// pg operator
+	PgOperator map[string]VersionVersion `json:"pgOperator,omitempty"`
+
+	// pg operator apiserver
+	PgOperatorApiserver map[string]VersionVersion `json:"pgOperatorApiserver,omitempty"`
+
+	// pg operator deployer
+	PgOperatorDeployer map[string]VersionVersion `json:"pgOperatorDeployer,omitempty"`
+
+	// pg operator event
+	PgOperatorEvent map[string]VersionVersion `json:"pgOperatorEvent,omitempty"`
+
+	// pg operator rmdata
+	PgOperatorRmdata map[string]VersionVersion `json:"pgOperatorRmdata,omitempty"`
+
+	// pg operator scheduler
+	PgOperatorScheduler map[string]VersionVersion `json:"pgOperatorScheduler,omitempty"`
+
+	// pgbackrest
+	Pgbackrest map[string]VersionVersion `json:"pgbackrest,omitempty"`
+
+	// pgbackrest repo
+	PgbackrestRepo map[string]VersionVersion `json:"pgbackrestRepo,omitempty"`
+
+	// pgbadger
+	Pgbadger map[string]VersionVersion `json:"pgbadger,omitempty"`
+
+	// pgbouncer
+	Pgbouncer map[string]VersionVersion `json:"pgbouncer,omitempty"`
+
 	// pmm
 	Pmm map[string]VersionVersion `json:"pmm,omitempty"`
+
+	// postgresql
+	Postgresql map[string]VersionVersion `json:"postgresql,omitempty"`
 
 	// proxysql
 	Proxysql map[string]VersionVersion `json:"proxysql,omitempty"`
 
+	// psmdb operator
+	PsmdbOperator map[string]VersionVersion `json:"psmdbOperator,omitempty"`
+
 	// pxc
 	Pxc map[string]VersionVersion `json:"pxc,omitempty"`
+
+	// pxc operator
+	PxcOperator map[string]VersionVersion `json:"pxcOperator,omitempty"`
 }
 
 // Validate validates this version version matrix
@@ -51,6 +93,10 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateLogCollector(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateMongod(formats); err != nil {
 		res = append(res, err)
 	}
@@ -59,7 +105,51 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validatePgOperator(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgOperatorApiserver(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgOperatorDeployer(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgOperatorEvent(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgOperatorRmdata(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgOperatorScheduler(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgbackrest(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgbackrestRepo(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgbadger(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePgbouncer(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validatePmm(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePostgresql(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -67,7 +157,15 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validatePsmdbOperator(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validatePxc(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePxcOperator(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -111,6 +209,28 @@ func (m *VersionVersionMatrix) validateHaproxy(formats strfmt.Registry) error {
 			return err
 		}
 		if val, ok := m.Haproxy[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validateLogCollector(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.LogCollector) { // not required
+		return nil
+	}
+
+	for k := range m.LogCollector {
+
+		if err := validate.Required("logCollector"+"."+k, "body", m.LogCollector[k]); err != nil {
+			return err
+		}
+		if val, ok := m.LogCollector[k]; ok {
 			if err := val.Validate(formats); err != nil {
 				return err
 			}
@@ -165,6 +285,226 @@ func (m *VersionVersionMatrix) validateOperator(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *VersionVersionMatrix) validatePgOperator(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PgOperator) { // not required
+		return nil
+	}
+
+	for k := range m.PgOperator {
+
+		if err := validate.Required("pgOperator"+"."+k, "body", m.PgOperator[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PgOperator[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgOperatorApiserver(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PgOperatorApiserver) { // not required
+		return nil
+	}
+
+	for k := range m.PgOperatorApiserver {
+
+		if err := validate.Required("pgOperatorApiserver"+"."+k, "body", m.PgOperatorApiserver[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PgOperatorApiserver[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgOperatorDeployer(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PgOperatorDeployer) { // not required
+		return nil
+	}
+
+	for k := range m.PgOperatorDeployer {
+
+		if err := validate.Required("pgOperatorDeployer"+"."+k, "body", m.PgOperatorDeployer[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PgOperatorDeployer[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgOperatorEvent(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PgOperatorEvent) { // not required
+		return nil
+	}
+
+	for k := range m.PgOperatorEvent {
+
+		if err := validate.Required("pgOperatorEvent"+"."+k, "body", m.PgOperatorEvent[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PgOperatorEvent[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgOperatorRmdata(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PgOperatorRmdata) { // not required
+		return nil
+	}
+
+	for k := range m.PgOperatorRmdata {
+
+		if err := validate.Required("pgOperatorRmdata"+"."+k, "body", m.PgOperatorRmdata[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PgOperatorRmdata[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgOperatorScheduler(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PgOperatorScheduler) { // not required
+		return nil
+	}
+
+	for k := range m.PgOperatorScheduler {
+
+		if err := validate.Required("pgOperatorScheduler"+"."+k, "body", m.PgOperatorScheduler[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PgOperatorScheduler[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgbackrest(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.Pgbackrest) { // not required
+		return nil
+	}
+
+	for k := range m.Pgbackrest {
+
+		if err := validate.Required("pgbackrest"+"."+k, "body", m.Pgbackrest[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Pgbackrest[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgbackrestRepo(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PgbackrestRepo) { // not required
+		return nil
+	}
+
+	for k := range m.PgbackrestRepo {
+
+		if err := validate.Required("pgbackrestRepo"+"."+k, "body", m.PgbackrestRepo[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PgbackrestRepo[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgbadger(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.Pgbadger) { // not required
+		return nil
+	}
+
+	for k := range m.Pgbadger {
+
+		if err := validate.Required("pgbadger"+"."+k, "body", m.Pgbadger[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Pgbadger[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePgbouncer(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.Pgbouncer) { // not required
+		return nil
+	}
+
+	for k := range m.Pgbouncer {
+
+		if err := validate.Required("pgbouncer"+"."+k, "body", m.Pgbouncer[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Pgbouncer[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
 func (m *VersionVersionMatrix) validatePmm(formats strfmt.Registry) error {
 
 	if swag.IsZero(m.Pmm) { // not required
@@ -177,6 +517,28 @@ func (m *VersionVersionMatrix) validatePmm(formats strfmt.Registry) error {
 			return err
 		}
 		if val, ok := m.Pmm[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePostgresql(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.Postgresql) { // not required
+		return nil
+	}
+
+	for k := range m.Postgresql {
+
+		if err := validate.Required("postgresql"+"."+k, "body", m.Postgresql[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Postgresql[k]; ok {
 			if err := val.Validate(formats); err != nil {
 				return err
 			}
@@ -209,6 +571,28 @@ func (m *VersionVersionMatrix) validateProxysql(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *VersionVersionMatrix) validatePsmdbOperator(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PsmdbOperator) { // not required
+		return nil
+	}
+
+	for k := range m.PsmdbOperator {
+
+		if err := validate.Required("psmdbOperator"+"."+k, "body", m.PsmdbOperator[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PsmdbOperator[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
 func (m *VersionVersionMatrix) validatePxc(formats strfmt.Registry) error {
 
 	if swag.IsZero(m.Pxc) { // not required
@@ -221,6 +605,28 @@ func (m *VersionVersionMatrix) validatePxc(formats strfmt.Registry) error {
 			return err
 		}
 		if val, ok := m.Pxc[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePxcOperator(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.PxcOperator) { // not required
+		return nil
+	}
+
+	for k := range m.PxcOperator {
+
+		if err := validate.Required("pxcOperator"+"."+k, "body", m.PxcOperator[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PxcOperator[k]; ok {
 			if err := val.Validate(formats); err != nil {
 				return err
 			}
