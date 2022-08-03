@@ -7,6 +7,8 @@ import (
 	"k8s.io/client-go/discovery"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	uzap "go.uber.org/zap"
