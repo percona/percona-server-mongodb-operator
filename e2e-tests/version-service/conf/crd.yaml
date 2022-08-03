@@ -22676,6 +22676,8 @@ spec:
                       type: string
                     users:
                       type: string
+                    vault:
+                      type: string
                   type: object
                 sharding:
                   properties:

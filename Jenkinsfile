@@ -321,6 +321,7 @@ pipeline {
                         runTest('data-sharded', 'basic')
                         runTest('non-voting', 'basic')
                         runTest('demand-backup-eks-credentials', 'basic')
+                        runTest('data-at-rest-encryption', 'basic')
                         ShutdownCluster('basic')
                     }
                 }
