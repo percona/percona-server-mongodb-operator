@@ -363,12 +363,16 @@ pipeline {
         always {
             script {
                 setTestsresults()
+                makeReport()
+                unstash 'IMAGE'
+                def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
+                TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
                 if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
                     try {
-                        slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
+                        slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME} report: ${TestsReport}"
                     }
                     catch (exc) {
-                        slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
+                        slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME} report: ${TestsReport}"
                     }
 
                 }
@@ -380,10 +384,6 @@ pipeline {
                             comment.delete()
                         }
                     }
-                    makeReport()
-                    unstash 'IMAGE'
-                    def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
                     pullRequest.comment(TestsReport)
                 }
             }
