@@ -3,7 +3,7 @@
 Compare various solutions to deploy MongoDB in Kubernetes
 =========================================================
 
-There are multiple ways to deploy and manage MongoDB in Kubernetes. This article focuses on comparing the following open source solutions:
+There are multiple ways to deploy and manage MongoDB in Kubernetes. Here we will focus on comparing the following open source solutions:
 
 * `Bitnami Helm chart <https://github.com/bitnami/charts/tree/master/bitnami/mongodb>`_
 * `KubeDB <https://github.com/kubedb>`_
@@ -13,7 +13,7 @@ There are multiple ways to deploy and manage MongoDB in Kubernetes. This article
 Generic
 *******
 
-Review generic features, such as supported MongoDB versions, open source models and more.
+Here is the review of generic features, such as supported MongoDB versions, open source models and more.
 
 +-------------------------+-------------------------------+---------------------+-----------------------------------+-------------------------------------+
 | Feature/Product         | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB                | MongoDB Community Edtion Operator   |
@@ -31,6 +31,7 @@ Review generic features, such as supported MongoDB versions, open source models 
 
 Maintenance
 ***********
+
 Upgrade and scaling are the two most common maintenance tasks that are executed by database administrators and developers.
 
 +------------------+-------------------------------+--------------------------+---------------------+-----------------------------+
@@ -47,7 +48,8 @@ Upgrade and scaling are the two most common maintenance tasks that are executed 
 
 MongoDB topologies
 ******************
-Replica sets, arbiters, sharding and other node types.
+
+The next comparison is focused on replica sets, arbiters, sharding and other node types.
 
 +---------------------------+-------------------------------+---------------------+---------------------+-----------------------------+
 | Feature/Product           | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB  | MongoDB Community Operator  |
@@ -67,7 +69,8 @@ Replica sets, arbiters, sharding and other node types.
 
 Backups
 *******
-Review backup and restore capabilities of each solution.
+
+Here are the backup and restore capabilities of each solution.
 
 +-------------------------+-------------------------------+---------------------+---------------------+-----------------------------+
 | Feature/Product         | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB  | MongoDB Community Operator  |
@@ -81,6 +84,7 @@ Review backup and restore capabilities of each solution.
 
 Monitoring
 **********
+
 Monitoring is crucial for any operations team.
 
 +------------------------------------------+-------------------------------+--------------------------------+--------------------------------+--------------------------------------+
@@ -93,7 +97,8 @@ Monitoring is crucial for any operations team.
 
 Miscellaneous
 *************
-Various features that are not a good fit for other categories.
+
+Finally, let's compare various features that are not a good fit for other categories.
 
 +----------------------------------+-------------------------------+---------------------+-------------------------+-----------------------------+
 | Feature/Product                  | Percona Operator for MongoDB  | Bitnami Helm Chart  | KubeDB for MongoDB      | MongoDB Community Operator  |
