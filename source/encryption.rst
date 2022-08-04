@@ -1,7 +1,7 @@
 Data at rest encryption
 ************************
 
-`Data at rest encryption in Percona Server for MongoDB <https://www.percona.com/doc/percona-server-for-mongodb/LATEST/data_at_rest_encryption.html>`_ is supported by the Operator since version 1.1.0.
+`Data at rest encryption in Percona Server for MongoDB <https://docs.percona.com/percona-server-for-mongodb/latest/data-at-rest-encryption.html>`_ is supported by the Operator since version 1.1.0.
 
 .. note:: "Data at rest" means inactive data stored as files, database records, etc.
 
