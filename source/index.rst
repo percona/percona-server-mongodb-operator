@@ -13,6 +13,7 @@ Requirements
 
    System Requirements <System-Requirements.rst>
    Design and architecture <architecture.rst>
+   Comparison with other solutions <compare.rst>
 
 Quickstart guides
 =================
