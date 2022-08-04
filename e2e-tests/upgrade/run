@@ -143,7 +143,7 @@ function main() {
 	create_namespace "${namespace}"
 	apply_s3_storage_secrets
 	deploy_operator_gh
-	deploy_minio
+	#deploy_minio
 
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
@@ -168,9 +168,9 @@ function main() {
 	compare_generation "1" "psmdb" "${cluster}"
 
 	# create backup
-	backup_name_minio="backup-minio"
-	run_backup minio
-	wait_backup "$backup_name_minio"
+	#backup_name_minio="backup-minio"
+	#run_backup minio
+	#wait_backup "$backup_name_minio"
 
 	desc 'upgrade operator'
 	kubectl_bin apply --server-side --force-conflicts -f "${src_dir}/deploy/crd.yaml"
@@ -214,19 +214,19 @@ function main() {
 	desc 'drop collection and do restore with new version'
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
 
-	backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
-		| grep ${backup_dest_minio}_rs0.dump.gz
-	run_restore $backup_name_minio 3 0 "-rs0"
-	wait_restore $backup_name_minio 3 0 "-rs0"
-	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
+	#backup_dest_minio=$(get_backup_dest "$backup_name_minio")
+	#kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+	#	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+	#	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
+	#	| grep ${backup_dest_minio}_rs0.dump.gz
+	#run_restore $backup_name_minio 3 0 "-rs0"
+	#wait_restore $backup_name_minio 3 0 "-rs0"
+	#simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
-	desc 'cleanup'
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
-	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
-	destroy "${namespace}"
+	#desc 'cleanup'
+	#kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
+	#kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
+	#destroy "${namespace}"
 }
 
 main
