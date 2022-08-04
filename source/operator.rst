@@ -2647,8 +2647,8 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-verifytls:								|
 |                 |												|
-| **Key**         | `backup.storages.<storage-name>.insecureSkipTLSVerify <operator.html#			|
-|                 | backup-storages-insecureskiptlsverify>`_							|
+| **Key**         | `backup.storages.<storage-name>.s3.insecureSkipTLSVerify <operator.html#			|
+|                 | backup-storages-s3-insecureskiptlsverify>`_							|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | boolean											|
 +-----------------+---------------------------------------------------------------------------------------------+
