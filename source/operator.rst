@@ -1321,19 +1321,6 @@ The replsets section controls the MongoDB Replica Set.
 +-----------------+---------------------------------------------------------------------------------------------+
 |														|
 +-----------------+---------------------------------------------------------------------------------------------+
-|                 | .. _replsets-schedulername:									|
-|                 |												|
-| **Key**         | `replsets.schedulerName <operator.html#replsets-schedulername>`_				|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Value Type**  | string											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Example**     | ``default``											|
-+-----------------+---------------------------------------------------------------------------------------------+
-| **Description** | The `Kubernetes Scheduler									|
-|                 | <https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers>`_	|
-+-----------------+---------------------------------------------------------------------------------------------+
-|														|
-+-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _replsets-resources-limits-cpu:								|
 |                 |												|
 | **Key**         | `replsets.resources.limits.cpu <operator.html#replsets-resources-limits-cpu>`_		|
@@ -2660,7 +2647,8 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-verifytls:								|
 |                 |												|
-| **Key**         | `backup.storages.<storage-name>.verifyTLS <operator.html#backup-storages-verifytls>`_	|
+| **Key**         | `backup.storages.<storage-name>.insecureSkipTLSVerify <operator.html#			|
+|                 | backup-storages-insecureskiptlsverify>`_							|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | boolean											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2701,7 +2689,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-s3-prefix:								|
 |                 |												|
-| **Key**         | `backup.storages.s3.<storage-name>.prefix <operator.html#backup-storages-s3-prefix>`_	|
+| **Key**         | `backup.storages.<storage-name>.s3.prefix <operator.html#backup-storages-s3-prefix>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2714,7 +2702,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-s3-region:								|
 |                 |												|
-| **Key**         | `backup.storages.s3.<storage-name>.region <operator.html#backup-storages-s3-region>`_	|
+| **Key**         | `backup.storages.<storage-name>.s3.region <operator.html#backup-storages-s3-region>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
@@ -2727,7 +2715,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-s3-endpointurl:								|
 |                 |												|
-| **Key**         | `backup.storages.s3.<storage-name>.endpointUrl						|
+| **Key**         | `backup.storages.<storage-name>.s3.endpointUrl						|
 |                 | <operator.html#backup-storages-s3-endpointurl>`_						|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
@@ -2770,7 +2758,7 @@ Percona Server for MongoDB backups.
 +-----------------+---------------------------------------------------------------------------------------------+
 |                 | .. _backup-storages-azure-prefix:								|
 |                 |												|
-| **Key**         | `backup.storages.azure.<storage-name>.prefix <operator.html#backup-storages-azure-prefix>`_	|
+| **Key**         | `backup.storages.<storage-name>.azure.prefix <operator.html#backup-storages-azure-prefix>`_	|
 +-----------------+---------------------------------------------------------------------------------------------+
 | **Value**       | string											|
 +-----------------+---------------------------------------------------------------------------------------------+
