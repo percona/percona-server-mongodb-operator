@@ -6,6 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 // AgentContainer creates the container object for a backup agent
@@ -53,6 +54,13 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       cr.Spec.Backup.Resources,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "ssl",
+				MountPath: psmdb.SSLDir,
+				ReadOnly:  true,
+			},
+		},
 	}
 
 	if cr.Spec.Sharding.Enabled {

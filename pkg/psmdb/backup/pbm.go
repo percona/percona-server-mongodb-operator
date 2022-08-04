@@ -4,18 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
-
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,6 +38,64 @@ type PBM struct {
 	namespace string
 }
 
+func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string) (string, error) {
+	usersSecretName := api.UserSecretName(cr)
+	scr, err := secret(ctx, k8sclient, cr.Namespace, usersSecretName)
+	if err != nil {
+		return "", errors.Wrap(err, "get secrets")
+	}
+
+	murl := fmt.Sprintf("mongodb://%s:%s@%s/",
+		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_USER"])),
+		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_PASSWORD"])),
+		strings.Join(addrs, ","),
+	)
+
+	if cr.Spec.UnsafeConf {
+		return murl, nil
+	}
+
+	// PBM connection is opened from the operator pod. In order to use SSL
+	// certificates of the cluster, we need to copy them to operator pod.
+	// This is especially important if the user passes custom config to set
+	// net.tls.mode to requireTLS.
+	sslSecret, err := secret(ctx, k8sclient, cr.Namespace, cr.Spec.Secrets.SSL)
+	if err != nil {
+		return "", errors.Wrap(err, "get ssl secret")
+	}
+
+	tlsKey := sslSecret.Data["tls.key"]
+	tlsCert := sslSecret.Data["tls.crt"]
+	tlsPemFile := fmt.Sprintf("/tmp/%s-tls.pem", cr.Name)
+	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return "", errors.Wrapf(err, "open %s", tlsPemFile)
+	}
+	defer f.Close()
+	if _, err := f.Write(append(tlsKey, tlsCert...)); err != nil {
+		return "", errors.Wrapf(err, "write TLS key and certificate to %s", tlsPemFile)
+	}
+
+	caCert := sslSecret.Data["ca.crt"]
+	caCertFile := fmt.Sprintf("/tmp/%s-ca.crt", cr.Name)
+	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return "", errors.Wrapf(err, "open %s", caCertFile)
+	}
+	defer f.Close()
+	if _, err := f.Write(caCert); err != nil {
+		return "", errors.Wrapf(err, "write CA certificate to %s", caCertFile)
+	}
+
+	murl += fmt.Sprintf(
+		"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true",
+		tlsPemFile,
+		caCertFile,
+	)
+
+	return murl, nil
+}
+
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
 func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
@@ -49,26 +106,19 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
-	usersSecretName := api.UserSecretName(cluster)
-	scr, err := secret(ctx, c, cluster.Namespace, usersSecretName)
-	if err != nil {
-		return nil, errors.Wrap(err, "get secrets")
-	}
-
 	if len(cluster.Spec.ClusterServiceDNSSuffix) == 0 {
 		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
 	}
 
 	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, rs.Name, false, pods.Items)
 	if err != nil {
-		return nil, errors.Wrap(err, "get mongo addr")
+		return nil, errors.Wrap(err, "get replset addrs")
 	}
 
-	murl := fmt.Sprintf("mongodb://%s:%s@%s/",
-		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_USER"])),
-		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_PASSWORD"])),
-		strings.Join(addrs, ","),
-	)
+	murl, err := getMongoUri(ctx, c, cluster, addrs)
+	if err != nil {
+		return nil, errors.Wrap(err, "get mongo uri")
+	}
 
 	pbmc, err := pbm.New(ctx, murl, "operator-pbm-ctl")
 	if err != nil {

@@ -166,7 +166,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		},
 		{
 			Name:      "ssl",
-			MountPath: sslDir,
+			MountPath: SSLDir,
 			ReadOnly:  true,
 		},
 		{
@@ -273,7 +273,6 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		)
 	} else {
 		args = append(args,
-			"--sslMode=preferSSL",
 			"--clusterAuthMode=x509",
 		)
 	}

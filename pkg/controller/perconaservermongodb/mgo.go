@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/description"
@@ -21,6 +22,7 @@ import (
 )
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
+var sslDeprecatedVersion = v.Must(v.NewVersion("4.2"))
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
 	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error,
@@ -443,10 +445,10 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 	return nil
 }
 
-// handleReplsetInit runs the k8s-mongodb-initiator from within the first running pod's mongod container.
+// handleReplsetInit initializes the replset within the first running pod's mongod container.
 // This must be ran from within the running container to utilize the MongoDB Localhost Exception.
 //
-// See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
+// See: https://www.mongodb.com/docs/manual/core/localhost-exception/
 //
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
@@ -462,11 +464,28 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		}
 		var errb, outb bytes.Buffer
 
-		cmd := []string{"sh", "-c", ""}
+		cmd := []string{"sh", "-c", "mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1\".\"$2}' | cut -c2-"}
+		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec mongod --version: %v / %s / %s", err, outb.String(), errb.String())
+		}
+		mongoVer := v.Must(v.NewVersion(strings.TrimSpace(outb.String())))
 
-		cmd[2] = fmt.Sprintf(
-			`
-				cat <<-EOF | mongo 
+		mongoCmd := "mongo"
+		if !m.Spec.UnsafeConf {
+			// --tls* options is introduced in 4.2, we need to use --ssl* for older versions
+			if mongoVer.Compare(sslDeprecatedVersion) < 0 {
+				mongoCmd += " --ssl --sslPEMKeyFile /tmp/tls.pem --sslAllowInvalidCertificates --sslCAFile /etc/mongodb-ssl/ca.crt"
+			} else {
+				mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+			}
+		}
+
+		cmd = []string{
+			"sh", "-c",
+			fmt.Sprintf(
+				`
+				cat <<-EOF | %s 
 				rs.initiate(
 					{
 						_id: '%s',
@@ -477,7 +496,11 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 					}
 				)
 				EOF
-			`, replset.Name, host)
+			`, mongoCmd, replset.Name, host),
+		}
+
+		errb.Reset()
+		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
@@ -490,7 +513,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
 
-		cmd[2] = fmt.Sprintf(`mongo --eval %s`, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
+		cmd[2] = fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
