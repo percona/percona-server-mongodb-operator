@@ -249,7 +249,7 @@ const (
 	PMMAPIKey      = "PMM_SERVER_API_KEY"
 )
 
-func (spec *PMMSpec) UseAPI(secret *corev1.Secret) bool {
+func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
 	if _, ok := secret.Data[PMMAPIKey]; !ok {
 		_, okl := secret.Data[PMMUserKey]
 		_, okp := secret.Data[PMMPasswordKey]

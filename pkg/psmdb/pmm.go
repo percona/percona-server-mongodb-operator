@@ -118,7 +118,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 
 	if customLogin {
 		pmmPassKey := api.PMMAPIKey
-		if spec.UseAPI(secret) {
+		if spec.ShouldUseAPIKeyAuth(secret) {
 			pmm.Env = append(pmm.Env, corev1.EnvVar{
 				Name:  "PMM_USER",
 				Value: "api_key",
@@ -242,7 +242,7 @@ func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, cus
 
 	if customLogin {
 		pmmPassKey := api.PMMAPIKey
-		if spec.UseAPI(secret) {
+		if spec.ShouldUseAPIKeyAuth(secret) {
 			pmmAgentEnvs = append(pmmAgentEnvs, corev1.EnvVar{
 				Name:  "PMM_AGENT_SERVER_USERNAME",
 				Value: "api_key",
