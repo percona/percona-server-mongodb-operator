@@ -49,7 +49,6 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --shardsvr
             - --enableEncryption
@@ -170,6 +169,10 @@ spec:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
