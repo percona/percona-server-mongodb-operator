@@ -121,8 +121,8 @@ backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --rest
 	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
 	| grep -c ${backup_dest_minio}_)
 if [[ $backup_exists -eq 1 ]]; then
-  echo "Backup was not removed from bucket -- minio"
-  exit 1
+	echo "Backup was not removed from bucket -- minio"
+	exit 1
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
