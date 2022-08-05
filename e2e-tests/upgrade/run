@@ -138,8 +138,6 @@ function prepare_cr_yaml() {
 }
 
 function main() {
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || true
-	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
 	create_namespace "${namespace}"
 	apply_s3_storage_secrets
 	deploy_operator_gh
@@ -224,8 +222,6 @@ function main() {
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
 	desc 'cleanup'
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
-	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
 	destroy "${namespace}"
 }
 
