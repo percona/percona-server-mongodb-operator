@@ -227,6 +227,14 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			passKey: envMongoDBUserAdminPassword,
 		},
 	}
+	if cr.CompareVersion("1.13.0") >= 0 {
+		users = append([]user{
+			{
+				nameKey: envMongoDBDatabaseAdminUser,
+				passKey: envMongoDBDatabaseAdminPassword,
+			},
+		}, users...)
+	}
 	if cr.Spec.PMM.Enabled {
 		// insert in front
 		if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
