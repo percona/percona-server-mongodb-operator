@@ -105,4 +105,41 @@ backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 run_restore_backupsource "${backup_name_minio}-source-1" "$backup_dest_minio"
 wait_restore "$backup_name_minio" 3
 
+desc 'delete backup and check if it is removed from bucket -- minio'
+kubectl_bin delete psmdb-backup --all
+sleep 5
+backup_dest_minio=$(get_backup_dest "$backup_name_minio")
+backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
+	| grep -c ${backup_dest_minio}_)
+if [[ $backup_exists -eq 1 ]]; then
+  echo "Backup was not removed from bucket -- minio"
+  exit 1
+fi
+
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+  desc 'delete backup and check if it is removed from bucket -- aws-s3'
+	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+  backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz")
+  if [[ $backup_status -ne 404 ]]; then
+    echo "Backup was not removed from bucket -- aws-s3"
+    exit 1
+  fi
+  desc 'delete backup and check if it is removed from bucket -- gcp-cs'
+	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
+  backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz")
+  if [[ $backup_status -ne 404 ]]; then
+    echo "Backup was not removed from bucket -- gcp-cs"
+    exit 1
+  fi
+  desc 'delete backup and check if it is removed from bucket -- azure-blob'
+	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
+  backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz")
+  if [[ $backup_status -ne 404 ]]; then
+    echo "Backup was not removed from bucket -- azure-blob"
+    exit 1
+  fi
+fi
+
 destroy $namespace
