@@ -27,16 +27,6 @@ wait_for_running $cluster 3
 
 backup_name="backup-minio"
 
-desc 'Change MONGODB_DATABASE_ADMIN_PASSWORD'
-patch_secret "some-users" "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpassencrypted"
-sleep 25
-wait_cluster_consistency $psmdb
-sleep 15
-user=$(getSecretData "some-users" "MONGODB_DATABASE_ADMIN_USER")
-check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
-check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
-check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
-
 desc 'Change MONGODB_BACKUP_PASSWORD'
 patch_secret "some-users" "MONGODB_BACKUP_PASSWORD" "$newpassencrypted"
 sleep 25
@@ -129,8 +119,6 @@ check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 desc 'Secret without userAdmin'
 kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
 sleep 25
-user=$(getSecretData "some-users" "MONGODB_USER_ADMIN_USER")
-pass=$(getSecretData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
 check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
