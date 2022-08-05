@@ -121,12 +121,12 @@ fi
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
   desc 'delete backup and check if it is removed from bucket -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-  backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz")
-  if [[ $backup_status -ne 404 ]]; then
-    echo "Backup was not removed from bucket -- aws-s3"
-    exit 1
-  fi
-  desc 'delete backup and check if it is removed from bucket -- gcp-cs'
+	backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz")
+	if [[ $backup_status -ne 404 ]]; then
+		echo "Backup was not removed from bucket -- aws-s3"
+		exit 1
+	fi
+	desc 'delete backup and check if it is removed from bucket -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
 	backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz")
 	if [[ $backup_status -ne 404 ]]; then
