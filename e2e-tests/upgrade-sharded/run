@@ -151,8 +151,6 @@ function main() {
 	if [ -n "$OPERATOR_NS" ]; then
 		rbac="cw-rbac"
 	fi
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || true
-	kubectl_bin delete -f "${src_dir}/deploy/${rbac}.yaml" ${OPERATOR_NS:+-n $OPERATOR_NS} || true
 	deploy_cert_manager
 	create_infra_gh "${namespace}" "${GIT_TAG}"
 	apply_s3_storage_secrets
@@ -253,8 +251,6 @@ function main() {
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
 	desc 'cleanup'
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
-	kubectl_bin delete -f "${src_dir}/deploy/${rbac}.yaml" ${OPERATOR_NS:+-n $OPERATOR_NS} || :
 	destroy "${namespace}"
 }
 
