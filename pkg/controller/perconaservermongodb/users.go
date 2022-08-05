@@ -227,7 +227,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			passKey: envMongoDBUserAdminPassword,
 		},
 	}
-	if cr.CompareVersion("1.13.0") >= 0 {
+	if _, ok := currUsersSec.Data[envMongoDBDatabaseAdminUser]; cr.CompareVersion("1.13.0") >= 0 && ok {
 		users = append([]user{
 			{
 				nameKey: envMongoDBDatabaseAdminUser,
