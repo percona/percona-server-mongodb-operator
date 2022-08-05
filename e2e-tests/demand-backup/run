@@ -128,12 +128,12 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
   fi
   desc 'delete backup and check if it is removed from bucket -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-  backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz")
-  if [[ $backup_status -ne 404 ]]; then
-    echo "Backup was not removed from bucket -- gcp-cs"
-    exit 1
-  fi
-  desc 'delete backup and check if it is removed from bucket -- azure-blob'
+	backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz")
+	if [[ $backup_status -ne 404 ]]; then
+		echo "Backup was not removed from bucket -- gcp-cs"
+		exit 1
+	fi
+	desc 'delete backup and check if it is removed from bucket -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
 	backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz")
 	if [[ $backup_status -ne 404 ]]; then
