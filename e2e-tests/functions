@@ -76,6 +76,7 @@ create_namespace() {
 	local skip_clean_namespace="$2"
 
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
+		delete_crd
 		kubectl_bin get ns \
 			| egrep -v "^kube-|^default|Terminating|pxc-operator|openshift|^NAME" \
 			| awk '{print$1}' \
@@ -715,6 +716,19 @@ deploy_cert_manager() {
 	sleep 30
 }
 
+delete_crd() {
+	kubectl_bin delete psmdb-backup --all || :
+	kubectl_bin delete psmdb-restore --all || :
+	kubectl_bin delete psmdb --all || :
+
+	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
+		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml" || true
+
+	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
+		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml"
+	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
+}
+
 destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-false}"
@@ -734,9 +748,7 @@ destroy() {
 	#TODO: maybe will be enabled later
 	#diff $test_dir/compare/operator.log $tmp_dir/operator.log
 
-	kubectl_bin delete psmdb --all
-	kubectl_bin delete psmdb-backup --all || :
-	kubectl_bin delete psmdb-restore --all || :
+	delete_crd
 
 	kubectl_bin delete -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" 2>/dev/null || :
 	if [ -n "$OPENSHIFT" ]; then
@@ -937,7 +949,7 @@ patch_secret() {
 getSecretData() {
 	local secretName=$1
 	local dataKey=$2
-	local data=$(kubectl get secrets/${secretName} --template={{.data.${dataKey}}} | base64 -D)
+	local data=$(kubectl get secrets/${secretName} --template={{.data.${dataKey}}} | base64 -d)
 	echo "$data"
 }
 
