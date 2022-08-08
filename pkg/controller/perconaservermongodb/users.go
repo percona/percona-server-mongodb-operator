@@ -177,7 +177,7 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 		bytes.Equal(su.newData[passKey], su.currData[passKey]) {
 		return false, nil
 	}
-	if nameKey == envPMMServerUser {
+	if nameKey == envPMMServerUser || passKey == envPMMServerAPIKey {
 		return true, nil
 	}
 	su.users = append(su.users, systemUser{
@@ -237,12 +237,21 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 	}
 	if cr.Spec.PMM.Enabled {
 		// insert in front
-		users = append([]user{
-			{
-				nameKey: envPMMServerUser,
-				passKey: envPMMServerPassword,
-			},
-		}, users...)
+		if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+			users = append([]user{
+				{
+					nameKey: envPMMServerAPIKey,
+					passKey: envPMMServerAPIKey,
+				},
+			}, users...)
+		} else {
+			users = append([]user{
+				{
+					nameKey: envPMMServerUser,
+					passKey: envPMMServerPassword,
+				},
+			}, users...)
+		}
 	}
 
 	for _, u := range users {
@@ -255,7 +264,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			switch u.nameKey {
 			case envMongoDBBackupUser:
 				containers = append(containers, "backup-agent")
-			case envPMMServerUser:
+			case envPMMServerUser, envPMMServerAPIKey:
 				containers = append(containers, "pmm-client")
 			}
 		}
