@@ -41,10 +41,9 @@ sleep 30
 encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 | grep -i "Encryption keys DB is initialized successfully")
 
 echo "$encrypted_cluster_log"
-if [ -z "$encrypted_cluster_log" ]
-then
-  echo "Cluster is not encrypted"
-  exit 1
+if [ -z "$encrypted_cluster_log" ]; then
+	echo "Cluster is not encrypted"
+	exit 1
 fi
 
 apply_cluster "$test_dir/conf/$cluster-unencrypted.yml"
