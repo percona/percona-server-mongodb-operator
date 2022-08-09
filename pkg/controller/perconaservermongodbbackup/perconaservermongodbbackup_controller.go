@@ -319,7 +319,17 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 				if len(cr.Status.PBMname) == 0 {
 					continue
 				}
-				if b.pbm == nil {
+				metaNotFound := false
+				if b.pbm != nil {
+					_, err := b.pbm.C.GetBackupMeta(cr.Status.PBMname)
+					if err != nil {
+						if !errors.Is(err, pbm.ErrNotFound) {
+							return errors.Wrap(err, "get backup meta")
+						}
+						metaNotFound = true
+					}
+				}
+				if b.pbm == nil || metaNotFound {
 					dummyPBM := new(pbm.PBM) // We need this only for the DeleteBackupFiles method, which doesn't use method receiver at all
 					stg, err := r.getPBMStorage(ctx, cr)
 					if err != nil {
