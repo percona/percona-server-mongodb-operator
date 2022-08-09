@@ -50,10 +50,9 @@ apply_cluster "$test_dir/conf/$cluster-unencrypted.yml"
 sleep 30
 unencrypted_cluster_log=$(kubectl_bin logs some-name-rs0-2 | grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk")
 
-if [ -z "$unencrypted_cluster_log" ]
-then
-  echo "Cluster is not encrypted"
-  exit 1
+if [ -z "$unencrypted_cluster_log" ]; then
+	echo "Cluster is not encrypted"
+	exit 1
 fi
 destroy_vault
 destroy $namespace
