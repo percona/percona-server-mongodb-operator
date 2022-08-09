@@ -107,8 +107,10 @@ function deploy_operator_gh() {
 	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
 	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/rbac.yaml"
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/operator.yaml" >"${tmp_dir}/operator_${GIT_TAG}.yaml"
-	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/operator_${GIT_TAG}.yaml"
-	kubectl_bin apply -f "${tmp_dir}/operator_${GIT_TAG}.yaml"
+	cat "${tmp_dir}/operator_${GIT_TAG}.yaml" \
+		| $sed -i -e "s^image: .*^image: ${IMAGE}^" \
+		| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' \
+		| kubectl_bin apply -f -
 
 	sleep 2
 	wait_pod "$(get_operator_pod)"
