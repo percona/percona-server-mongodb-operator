@@ -27,8 +27,9 @@ const (
 	envMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
 	envMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
 	envMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	envPMMServerUser                 = "PMM_SERVER_USER"
-	envPMMServerPassword             = "PMM_SERVER_PASSWORD"
+	envPMMServerUser                 = api.PMMUserKey
+	envPMMServerPassword             = api.PMMPasswordKey
+	envPMMServerAPIKey               = api.PMMAPIKey
 )
 
 type UserRole string
@@ -76,6 +77,10 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(ctx context.Context, cr *
 		creds.Password = string(usersSecret.Data[envMongoDBBackupPassword])
 	default:
 		return creds, errors.Errorf("not implemented for role: %s", role)
+	}
+
+	if creds.Username == "" || creds.Password == "" {
+		return creds, errors.Errorf("can't find credentials for role %s", role)
 	}
 
 	return creds, nil

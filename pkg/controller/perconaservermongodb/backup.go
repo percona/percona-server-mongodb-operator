@@ -257,9 +257,14 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if enabled != cr.Spec.Backup.PITR.Enabled {
 		val := strconv.FormatBool(cr.Spec.Backup.PITR.Enabled)
+		log.Info("Setting pitr.enabled in PBM config", "enabled", val)
 		if err := pbm.C.SetConfigVar("pitr.enabled", val); err != nil {
 			return errors.Wrap(err, "update pitr.enabled")
 		}
+	}
+
+	if !cr.Spec.Backup.PITR.Enabled {
+		return nil
 	}
 
 	val, err = pbm.C.GetConfigVar("pitr.oplogSpanMin")

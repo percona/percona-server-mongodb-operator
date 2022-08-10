@@ -690,7 +690,8 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	for _, role := range users {
 		creds, err := r.getInternalCredentials(ctx, cr, role)
 		if err != nil {
-			return errors.Wrapf(err, "failed to get credentials for %s", role)
+			log.Error(err, "failed to get credentials", "role", role)
+			continue
 		}
 		user, err := mongo.GetUserInfo(ctx, cli, creds.Username)
 		if err != nil {
