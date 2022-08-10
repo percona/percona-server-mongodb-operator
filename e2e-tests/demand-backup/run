@@ -118,24 +118,9 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	desc 'delete backup and check if it is removed from bucket -- aws-s3'
-	backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz")
-	if [[ $backup_status -ne 403 ]]; then # s3 returns 403 if the object is not found
-		echo "Backup was not removed from bucket -- aws-s3"
-		exit 1
-	fi
-	desc 'delete backup and check if it is removed from bucket -- gcp-cs'
-	backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz")
-	if [[ $backup_status -ne 403 ]]; then # gcp-cs returns 403 if the object is not found
-		echo "Backup was not removed from bucket -- gcp-cs"
-		exit 1
-	fi
-	desc 'delete backup and check if it is removed from bucket -- azure-blob'
-	backup_status=$(curl -sw '%{http_code}' -o /dev/null "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz")
-	if [[ $backup_status -ne 404 ]]; then
-		echo "Backup was not removed from bucket -- azure-blob"
-		exit 1
-	fi
+	check_backup_deletion "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" "aws-s3"
+	check_backup_deletion "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" "gcp-cs"
+	check_backup_deletion "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz" "azure-blob"
 fi
 
 destroy $namespace
