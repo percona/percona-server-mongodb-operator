@@ -14,6 +14,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -82,6 +83,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	}
 
+	log.Info("Secret data changed. Updating users...")
+
 	containers, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
@@ -132,17 +135,25 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(pods []corev1.Pod, contain
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
-				log.Info("restart container", "pod", pod.Name, "container", c.Name)
+				log.Info("Restarting container", "pod", pod.Name, "container", c.Name)
 
-				stderrBuf := &bytes.Buffer{}
+				err := retry.OnError(retry.DefaultBackoff, func(_ error) bool { return true }, func() error {
+					stderrBuf := &bytes.Buffer{}
 
-				err := r.clientcmd.Exec(&pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
+					err := r.clientcmd.Exec(&pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
+					if err != nil {
+						return errors.Wrap(err, "exec command in pod")
+					}
+
+					if stderrBuf.Len() != 0 {
+						return errors.Errorf("exec command return error: %s", stderrBuf.String())
+					}
+
+					return nil
+				})
+
 				if err != nil {
-					return errors.Wrap(err, "exec command in pod")
-				}
-
-				if stderrBuf.Len() != 0 {
-					return errors.Errorf("exec command return error: %s", stderrBuf.String())
+					return errors.Wrap(err, "failed to restart container")
 				}
 			}
 		}
@@ -227,7 +238,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			passKey: envMongoDBUserAdminPassword,
 		},
 	}
-	if cr.CompareVersion("1.13.0") >= 0 {
+	if _, ok := currUsersSec.Data[envMongoDBDatabaseAdminUser]; cr.CompareVersion("1.13.0") >= 0 && ok {
 		users = append([]user{
 			{
 				nameKey: envMongoDBDatabaseAdminUser,
