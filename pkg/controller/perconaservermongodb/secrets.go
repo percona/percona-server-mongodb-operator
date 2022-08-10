@@ -79,6 +79,10 @@ func (r *ReconcilePerconaServerMongoDB) getCredentials(ctx context.Context, cr *
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}
 
+	if creds.Username == "" || creds.Password == "" {
+		return creds, errors.Errorf("can't find credentials for role %s", role)
+	}
+
 	return creds, nil
 }
 
