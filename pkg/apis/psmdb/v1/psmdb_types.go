@@ -692,6 +692,10 @@ type BackupTaskSpec struct {
 	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 }
 
+func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
+	return cr.Name + "-backup-" + task.Name
+}
+
 type BackupStorageS3Spec struct {
 	Bucket                string `json:"bucket"`
 	Prefix                string `json:"prefix,omitempty"`

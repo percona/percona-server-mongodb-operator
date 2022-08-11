@@ -22676,8 +22676,6 @@ spec:
                       type: string
                     users:
                       type: string
-                    vault:
-                      type: string
                   type: object
                 sharding:
                   properties:
@@ -31618,7 +31616,7 @@ spec:
       subresources:
         status: {}
 ---
-kind: Role
+kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: percona-server-mongodb-operator
@@ -31632,6 +31630,18 @@ rules:
   - perconaservermongodbbackups/status
   - perconaservermongodbrestores
   - perconaservermongodbrestores/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
   verbs:
   - get
   - list
@@ -31750,15 +31760,16 @@ kind: ServiceAccount
 metadata:
   name: percona-server-mongodb-operator
 ---
-kind: RoleBinding
+kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: service-account-percona-server-mongodb-operator
 subjects:
 - kind: ServiceAccount
   name: percona-server-mongodb-operator
+  namespace: "psmdb-operator"
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: percona-server-mongodb-operator
   apiGroup: rbac.authorization.k8s.io
 ---
@@ -31789,9 +31800,7 @@ spec:
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ""
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -31802,5 +31811,16 @@ spec:
               value: 5s
             - name: LOG_VERBOSE
               value: "false"
-            - name: DISABLE_TELEMETRY
-              value: "false"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: percona-server-mongodb-operator
+  labels:
+    name: percona-server-mongodb-operator
+spec:
+  ports:
+    - port: 443
+      targetPort: 9443
+  selector:
+    app.kubernetes.io/name: percona-server-mongodb-operator
