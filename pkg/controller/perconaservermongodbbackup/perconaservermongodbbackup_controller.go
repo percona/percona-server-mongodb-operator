@@ -143,7 +143,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.GetClusterName())
 		}
 		cluster = nil
-		err = nil
 	}
 
 	if cluster != nil {
@@ -269,8 +268,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 
 		s3Conf.Credentials = s3.Credentials{
-			AccessKeyID:     string(s3secret.Data[backup.AwsAccessKeySecretKey]),
-			SecretAccessKey: string(s3secret.Data[backup.AwsSecretAccessKeySecretKey]),
+			AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
+			SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
 		}
 		return s3.New(s3Conf, nil)
 	default:

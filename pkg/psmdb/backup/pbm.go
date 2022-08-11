@@ -27,8 +27,8 @@ import (
 
 const (
 	agentContainerName               = "backup-agent"
-	AwsAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
-	AwsSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
+	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
+	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
 	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 )
@@ -166,8 +166,8 @@ func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api
 			}
 
 			conf.Storage.S3.Credentials = s3.Credentials{
-				AccessKeyID:     string(s3secret.Data[AwsAccessKeySecretKey]),
-				SecretAccessKey: string(s3secret.Data[AwsSecretAccessKeySecretKey]),
+				AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
+				SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
 			}
 		}
 	case api.BackupStorageFilesystem:
