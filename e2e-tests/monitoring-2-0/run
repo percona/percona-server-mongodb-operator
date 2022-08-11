@@ -8,8 +8,7 @@ test_dir=$(realpath $(dirname $0))
 cluster="monitoring"
 
 deploy_cert_manager
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 
 desc 'install PMM Server'
 platform=kubernetes

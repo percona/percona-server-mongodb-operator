@@ -12,8 +12,7 @@ else
 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 fi
 
-create_namespace "$namespace"
-deploy_operator
+create_infra "$namespace"
 
 desc 'create PSMDB cluster'
 cluster="some-name"

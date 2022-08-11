@@ -101,18 +101,6 @@ function check_applied_images() {
 	esac
 }
 
-function deploy_operator_gh() {
-	desc 'start operator'
-	kubectl_bin apply --server-side --force-conflicts -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/crd.yaml"
-	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/rbac.yaml"
-	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/operator.yaml" >"${tmp_dir}/operator_${GIT_TAG}.yaml"
-	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/operator_${GIT_TAG}.yaml"
-	kubectl_bin apply -f "${tmp_dir}/operator_${GIT_TAG}.yaml"
-
-	sleep 2
-	wait_pod "$(get_operator_pod)"
-}
-
 function prepare_cr_yaml() {
 	local cr_yaml="$1"
 
@@ -159,10 +147,13 @@ function check_upgrade_order() {
 }
 
 function main() {
+	rbac="rbac"
+	if [ -n "$OPERATOR_NS" ]; then
+		rbac="cw-rbac"
+	fi
 	deploy_cert_manager
-	create_namespace "${namespace}"
+	create_infra_gh "${namespace}" "${GIT_TAG}"
 	apply_s3_storage_secrets
-	deploy_operator_gh
 	deploy_minio
 
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
@@ -197,13 +188,13 @@ function main() {
 
 	desc 'upgrade operator'
 	kubectl_bin apply --server-side --force-conflicts -f "${src_dir}/deploy/crd.yaml"
-	kubectl_bin apply -f "${src_dir}/deploy/rbac.yaml"
-	kubectl_bin patch deployment "${OPERATOR_NAME}" \
+	kubectl_bin apply -f "${src_dir}/deploy/${rbac}.yaml" ${OPERATOR_NS:+-n $OPERATOR_NS}
+	kubectl_bin patch deployment ${OPERATOR_NS:+-n $OPERATOR_NS} "${OPERATOR_NAME}" \
 		-p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${TARGET_IMAGE}"'"}]}}}}'
-	kubectl_bin rollout status deployment/"${OPERATOR_NAME}"
+	kubectl_bin rollout status deployment/"${OPERATOR_NAME}" ${OPERATOR_NS:+-n $OPERATOR_NS}
 
 	desc 'wait for operator upgrade'
-	until [[ $(kubectl_bin get pods --selector=name="${OPERATOR_NAME}" \
+	until [[ $(kubectl_bin get pods ${OPERATOR_NS:+-n $OPERATOR_NS} --selector=name="${OPERATOR_NAME}" \
 		-o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image' \
 		| grep -vc 'NAME' | awk '{print $1}') -eq 1 ]]; do
 		sleep 5
