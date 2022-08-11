@@ -996,6 +996,6 @@ check_backup_deletion() {
 		fi
 		echo "waiting for backup deletion $storage_name"
 		sleep $((10 * 2 ** retry))
-		retry+=1
+		((retry+=1))
 	done
 }
