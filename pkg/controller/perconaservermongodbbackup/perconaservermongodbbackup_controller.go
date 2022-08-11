@@ -146,19 +146,22 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}
 
 	if cluster != nil {
-		svr, err := version.Server()
+		var svr *version.ServerVersion
+		svr, err = version.Server()
 		if err != nil {
 			return rr, errors.Wrapf(err, "fetch server version")
 		}
 
-		if err := cluster.CheckNSetDefaults(svr.Platform, log); err != nil {
+		err = cluster.CheckNSetDefaults(svr.Platform, log)
+		if err != nil {
 			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 		}
 		// TODO: Remove after 1.15
 		if cluster.CompareVersion("1.12.0") >= 0 && cr.Spec.ClusterName == "" {
 			cr.Spec.ClusterName = cr.Spec.PSMDBCluster
 			cr.Spec.PSMDBCluster = ""
-			if err := r.client.Update(ctx, cr); err != nil {
+			err = r.client.Update(ctx, cr)
+			if err != nil {
 				return rr, errors.Wrap(err, "failed to update clusterName")
 			}
 		}
