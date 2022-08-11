@@ -36,15 +36,6 @@ run_mongos \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster-mongos.$namespace"
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
-sleep 30
-desc 'Check logs that cluster encrypted'
-encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 | grep -i "Encryption keys DB is initialized successfully")
-
-echo "$encrypted_cluster_log"
-if [ -z "$encrypted_cluster_log" ]; then
-	echo "Cluster is not encrypted"
-	exit 1
-fi
 
 desc 'run backups'
 
@@ -78,6 +69,15 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_restore $backup_name_gcp 3 1 "-mongos"
 	wait_restore $backup_name_gcp 3 1 "-mongos"
 
+fi
+
+desc 'Check logs that cluster encrypted'
+encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 | grep -i "Encryption keys DB is initialized successfully")
+
+echo "$encrypted_cluster_log"
+if [ -z "$encrypted_cluster_log" ]; then
+	echo "Cluster is not encrypted"
+	exit 1
 fi
 
 desc "Check logs for unencrypted cluster"
