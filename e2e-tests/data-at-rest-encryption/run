@@ -36,7 +36,7 @@ run_mongos \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster-mongos.$namespace"
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
-
+sleep 30
 desc 'Check logs that cluster encrypted'
 encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 | grep -i "Encryption keys DB is initialized successfully")
 
