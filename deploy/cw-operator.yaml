@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: percona-server-mongodb-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: percona-server-mongodb-operator
+  template:
+    metadata:
+      labels:
+        name: percona-server-mongodb-operator
+    spec:
+      serviceAccountName: percona-server-mongodb-operator
+      containers:
+        - name: percona-server-mongodb-operator
+          image: perconalab/percona-server-mongodb-operator:main
+          ports:
+          - containerPort: 60000
+            protocol: TCP
+            name: metrics
+          command:
+          - percona-server-mongodb-operator
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              value: ""
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: percona-server-mongodb-operator
+            - name: RESYNC_PERIOD
+              value: 5s
+            - name: LOG_VERBOSE
+              value: "false"

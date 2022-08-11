@@ -115,9 +115,8 @@ network_loss() {
 }
 
 main() {
-	create_namespace $namespace
+	create_infra $namespace
 	deploy_chaos_mesh $namespace
-	deploy_operator
 
 	desc 'start cluster'
 	setup_cluster

@@ -20,13 +20,13 @@ setup_cluster() {
 
 fail_pod() {
 	local init_pod=$(get_operator_pod)
-	local restart_count_before=$(kubectl_bin get pod ${init_pod} -ojsonpath='{.status.containerStatuses[0].restartCount}')
+	local restart_count_before=$(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} ${init_pod} -ojsonpath='{.status.containerStatuses[0].restartCount}')
 
 	cat $conf_dir/chaos-pod-failure.yml \
 		| yq w - "metadata.name" "chaos-operator-pod-failure" \
 		| yq d - "spec.selector.pods.test-namespace" \
-		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
-		| kubectl_bin apply -f -
+		| yq w - "spec.selector.pods.$test_namespace[0]" "$init_pod" \
+		| kubectl_bin apply -n $test_namespace -f -
 	sleep 10
 
 	desc 'check if operator works fine: scale down from 5 to 3'
@@ -36,7 +36,7 @@ fail_pod() {
 	sleep 60
 
 	local pod=$(get_operator_pod)
-	local restart_count_after=$(kubectl_bin get pod ${pod} -ojsonpath='{.status.containerStatuses[0].restartCount}')
+	local restart_count_after=$(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} ${pod} -ojsonpath='{.status.containerStatuses[0].restartCount}')
 	if [ "$init_pod" != "$pod" ]; then
 		echo "Operator pod was killed, when it should have just been restarted."
 		echo "Pod name before: $init_pod , pod name after test: $pod"
@@ -48,8 +48,12 @@ fail_pod() {
 	fi
 
 	# check if Pod started
+	if [ -n "$OPERATOR_NS" ]; then
+		kubectl_bin config set-context --current --namespace="$OPERATOR_NS"
+	fi
 	wait_pod $pod
 	sleep 10
+	kubectl_bin config set-context --current --namespace="$namespace"
 
 	# check scale down
 	wait_for_delete pod/$cluster-3
@@ -61,8 +65,8 @@ kill_pod() {
 	cat $conf_dir/chaos-pod-kill.yml \
 		| yq w - "metadata.name" "chaos-operator-pod-kill" \
 		| yq d - "spec.selector.pods.test-namespace" \
-		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
-		| kubectl_bin apply -f -
+		| yq w - "spec.selector.pods.$test_namespace[0]" "$init_pod" \
+		| kubectl_bin apply -n $test_namespace -f -
 	sleep 10
 
 	if [ "$init_pod" == "$(get_operator_pod)" ]; then
@@ -86,8 +90,8 @@ network_loss() {
 	cat $conf_dir/chaos-network-loss.yml \
 		| yq w - "metadata.name" "chaos-operator-network" \
 		| yq d - "spec.selector.pods.test-namespace" \
-		| yq w - "spec.selector.pods.$namespace[0]" "$init_pod" \
-		| kubectl_bin apply -f -
+		| yq w - "spec.selector.pods.$test_namespace[0]" "$init_pod" \
+		| kubectl_bin apply -n $test_namespace -f -
 	sleep 10
 
 	desc 'check if operator works fine: scale up from 3 to 5'
@@ -101,9 +105,13 @@ network_loss() {
 }
 
 main() {
-	create_namespace $namespace
-	deploy_chaos_mesh $namespace
-	deploy_operator
+	create_infra $namespace
+	test_namespace=$namespace
+	if [ -n "$OPERATOR_NS" ]; then
+		kubectl_bin patch clusterrole percona-server-mongodb-operator --type=json -p '[{"op":"remove","path":"/rules/1"}]'
+		test_namespace=$OPERATOR_NS
+	fi
+	deploy_chaos_mesh $test_namespace
 
 	desc 'create PSMDB cluster'
 	setup_cluster
