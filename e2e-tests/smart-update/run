@@ -32,8 +32,7 @@ function check_pod_update() {
 }
 
 cluster="smart-update"
-create_namespace ${namespace}
-deploy_operator
+create_infra ${namespace}
 
 kubectl_bin apply -f ${conf_dir}/secrets.yml -f ${conf_dir}/client.yml
 

@@ -92,8 +92,7 @@ check_recovery() {
 }
 
 main() {
-	create_namespace $namespace
-	deploy_operator
+	create_infra $namespace
 	deploy_minio
 
 	desc 'create PSMDB cluster'

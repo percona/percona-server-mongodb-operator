@@ -76,17 +76,21 @@ netem_pod() {
 	wait $pid || :
 
 	# check if Pod started
+	if [ -n "$OPERATOR_NS" ]; then
+		kubectl_bin config set-context --current --namespace="$OPERATOR_NS"
+	fi
+	# check if Pod started
 	wait_pod $pod
 	sleep 60
+	kubectl_bin config set-context --current --namespace="$namespace"
 
 	# check scale up
 	wait_for_running $cluster 4
 }
 
 main() {
-	create_namespace $namespace
+	create_infra $namespace
 	## TODO: kubectl_bin apply -f $test_dir/conf/quota.yml
-	deploy_operator
 
 	desc 'create PSMDB cluster'
 	setup_cluster
