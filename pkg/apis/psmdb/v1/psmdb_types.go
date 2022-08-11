@@ -243,6 +243,23 @@ type PMMSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
+const (
+	PMMUserKey     = "PMM_SERVER_USER"
+	PMMPasswordKey = "PMM_SERVER_PASSWORD"
+	PMMAPIKey      = "PMM_SERVER_API_KEY"
+)
+
+func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
+	if _, ok := secret.Data[PMMAPIKey]; !ok {
+		_, okl := secret.Data[PMMUserKey]
+		_, okp := secret.Data[PMMPasswordKey]
+		if okl && okp {
+			return false
+		}
+	}
+	return true
+}
+
 type MultiAZ struct {
 	Affinity            *PodAffinity             `json:"affinity,omitempty"`
 	NodeSelector        map[string]string        `json:"nodeSelector,omitempty"`
@@ -651,6 +668,10 @@ type BackupTaskSpec struct {
 	StorageName      string              `json:"storageName,omitempty"`
 	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+}
+
+func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
+	return cr.Name + "-backup-" + task.Name
 }
 
 type BackupStorageS3Spec struct {

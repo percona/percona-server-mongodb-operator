@@ -120,8 +120,7 @@ recreate() {
 }
 
 main() {
-	create_namespace $namespace
-	deploy_operator
+	create_infra $namespace
 
 	desc 'start cluster'
 	setup_cluster
