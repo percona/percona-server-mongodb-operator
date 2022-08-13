@@ -8,16 +8,14 @@ test_dir=$(realpath $(dirname $0))
 
 API='psmdb.percona.com/v9-9-9'
 
-create_namespace $namespace
+create_infra $namespace
 
 desc 'install version service'
-kubectl_bin create configmap versions \
+kubectl_bin create configmap ${OPERATOR_NS:+-n $OPERATOR_NS} versions \
 	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json \
 	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
-kubectl_bin apply -f $test_dir/conf/vs.yml
+kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f $test_dir/conf/vs.yml
 sleep 10
-
-deploy_operator
 
 cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-major" "version-service-unreachable")
 expected_images=("percona/percona-server-mongodb:4.4.6-8" "percona/percona-server-mongodb:4.2.15-16" "percona/percona-server-mongodb:4.4.8-9" "percona/percona-server-mongodb:4.2.15-16" "$IMAGE_MONGOD")
@@ -70,7 +68,7 @@ for i in "${!cases[@]}"; do
 		fi
 	done
 
-	kubectl delete pod/$(kubectl get pods | grep operator | awk '{print $1}')
+	kubectl delete pod ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
 	kubectl_bin delete psmdb --all
 	sleep 10
 done

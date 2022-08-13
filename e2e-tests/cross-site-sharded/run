@@ -11,6 +11,7 @@ if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
 else
 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 fi
+unset OPERATOR_NS
 
 main_cluster="cross-site-sharded-main"
 replica_cluster="cross-site-sharded-replica"

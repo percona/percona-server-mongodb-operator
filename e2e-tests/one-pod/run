@@ -54,8 +54,7 @@ run_recovery_check() {
 }
 
 main() {
-	create_namespace $namespace
-	deploy_operator
+	create_infra $namespace
 
 	cluster="one-pod-rs0"
 

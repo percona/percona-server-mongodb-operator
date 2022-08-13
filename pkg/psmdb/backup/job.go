@@ -3,6 +3,7 @@ package backup
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
@@ -13,16 +14,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupSpec api.BackupSpec, imagePullSecrets []corev1.LocalObjectReference) (batchv1beta1.CronJob, error) {
-	jobName := crName + "-backup-" + backup.Name
-	containerArgs, err := newBackupCronJobContainerArgs(backup, jobName)
+func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batchv1beta1.CronJob, error) {
+	backupSpec := cr.Spec.Backup
+	containerArgs, err := newBackupCronJobContainerArgs(cr, task)
 	if err != nil {
 		return batchv1beta1.CronJob{}, errors.Wrap(err, "cannot generate container arguments")
 	}
 
 	backupPod := corev1.PodSpec{
 		RestartPolicy:      corev1.RestartPolicyNever,
-		ImagePullSecrets:   imagePullSecrets,
+		ImagePullSecrets:   cr.Spec.ImagePullSecrets,
 		ServiceAccountName: backupSpec.ServiceAccountName,
 		Containers: []corev1.Container{
 			{
@@ -30,10 +31,6 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 				Image:   backupSpec.Image,
 				Command: []string{"sh"},
 				Env: []corev1.EnvVar{
-					{
-						Name:  "clusterName",
-						Value: crName,
-					},
 					{
 						Name: "NAMESPACE",
 						ValueFrom: &corev1.EnvVarSource{
@@ -58,23 +55,23 @@ func BackupCronJob(backup *api.BackupTaskSpec, crName, namespace string, backupS
 			Kind:       "CronJob",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        jobName,
-			Namespace:   namespace,
-			Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
+			Name:        task.Name,
+			Namespace:   cr.Namespace,
+			Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
 			Annotations: backupSpec.Annotations,
 		},
 		Spec: batchv1beta1.CronJobSpec{
-			Schedule:          backup.Schedule,
+			Schedule:          task.Schedule,
 			ConcurrencyPolicy: batchv1beta1.ForbidConcurrent,
 			JobTemplate: batchv1beta1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
+					Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
 					Annotations: backupSpec.Annotations,
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels:      NewBackupCronJobLabels(crName, backupSpec.Labels),
+							Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
 							Annotations: backupSpec.Annotations,
 						},
 						Spec: backupPod,
@@ -102,7 +99,11 @@ func NewBackupCronJobLabels(crName string, labels map[string]string) map[string]
 	return base
 }
 
-func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) ([]string, error) {
+func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*api.PerconaServerMongoDBBackup, error) {
+	shortClusterName := cr.Name
+	if len(shortClusterName) > 16 {
+		shortClusterName = shortClusterName[:16]
+	}
 	backupCr := &api.PerconaServerMongoDBBackup{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: api.SchemeGroupVersion.String(),
@@ -110,22 +111,28 @@ func newBackupCronJobContainerArgs(backup *api.BackupTaskSpec, jobName string) (
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Finalizers:   []string{"delete-backup"},
-			GenerateName: "cron-${clusterName:0:16}-$(date -u '+%Y%m%d%H%M%S')-",
+			GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
 			Labels: map[string]string{
-				"ancestor": jobName,
-				"cluster":  "${clusterName}",
+				"ancestor": task.Name,
+				"cluster":  cr.Name,
 				"type":     "cron",
 			},
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
-			ClusterName:      "${clusterName}",
-			StorageName:      backup.StorageName,
-			Compression:      backup.CompressionType,
-			CompressionLevel: backup.CompressionLevel,
+			ClusterName:      cr.Name,
+			StorageName:      task.StorageName,
+			Compression:      task.CompressionType,
+			CompressionLevel: task.CompressionLevel,
 		},
 	}
+	if err := backupCr.CheckFields(); err != nil {
+		return nil, err
+	}
+	return backupCr, nil
+}
 
-	err := backupCr.CheckFields()
+func newBackupCronJobContainerArgs(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) ([]string, error) {
+	backupCr, err := BackupFromTask(cr, task)
 	if err != nil {
 		return nil, err
 	}
