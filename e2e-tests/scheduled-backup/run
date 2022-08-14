@@ -113,11 +113,5 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 unlabel_node
-if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	kubectl patch psmdb-backup -n "$namespace" "$backup_name_aws" --type=merge -p '{"metadata":{"finalizers":[]}}'
-	kubectl patch psmdb-backup -n "$namespace" "$backup_name_gcp" --type=merge -p '{"metadata":{"finalizers":[]}}'
-	kubectl patch psmdb-backup -n "$namespace" "$backup_name_azure" --type=merge -p '{"metadata":{"finalizers":[]}}'
-fi
-kubectl patch psmdb-backup -n "$namespace" "$backup_name_minio" --type=merge -p '{"metadata":{"finalizers":[]}}'
 
 destroy "$namespace"
