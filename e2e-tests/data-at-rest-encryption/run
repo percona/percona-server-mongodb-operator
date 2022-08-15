@@ -72,7 +72,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 desc 'Check logs that cluster encrypted'
-encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 | grep -i "Encryption keys DB is initialized successfully")
+encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 -n $namespace | grep -i "Encryption keys DB is initialized successfully")
 
 echo "$encrypted_cluster_log"
 if [ -z "$encrypted_cluster_log" ]; then
@@ -83,7 +83,7 @@ fi
 desc "Check logs for unencrypted cluster"
 apply_cluster "$test_dir/conf/$cluster-unencrypted.yml"
 sleep 30
-unencrypted_cluster_log=$(kubectl_bin logs some-name-rs0-2 | grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk")
+unencrypted_cluster_log=$(kubectl_bin logs some-name-rs0-2 -n $namespace| grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk")
 
 if [ -z "$unencrypted_cluster_log" ]; then
 	echo "Cluster is not encrypted"
