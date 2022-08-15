@@ -176,3 +176,7 @@ fabric.properties
 
 e2e-tests/init-deploy/smallrun
 deploy/crds/
+
+### VisualStudioCode ###
+.vscode/*
+.history
