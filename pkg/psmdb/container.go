@@ -43,19 +43,31 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			MountPath: mongodConfigDir,
 		})
 	}
+
 	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
 	if err != nil {
 		return corev1.Container{}, err
 	}
 	if encryptionEnabled {
-		volumes = append(volumes,
-			corev1.VolumeMount{
-				Name:      cr.Spec.EncryptionKeySecretName(),
-				MountPath: api.MongodRESTencryptDir,
-				ReadOnly:  true,
-			},
-		)
+		if len(cr.Spec.Secrets.Vault) != 0 {
+			volumes = append(volumes,
+				corev1.VolumeMount{
+					Name:      cr.Spec.Secrets.Vault,
+					MountPath: vaultDir,
+					ReadOnly:  true,
+				},
+			)
+		} else {
+			volumes = append(volumes,
+				corev1.VolumeMount{
+					Name:      cr.Spec.EncryptionKeySecretName(),
+					MountPath: api.MongodRESTencryptDir,
+					ReadOnly:  true,
+				},
+			)
+		}
 	}
+
 	if cr.CompareVersion("1.8.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "users-secret-file",
@@ -186,11 +198,13 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	if err != nil {
 		log.Error(err, "failed to check if mongo encryption enabled")
 	}
-	if m.CompareVersion("1.12.0") >= 0 && encryptionEnabled {
+
+	if m.CompareVersion("1.12.0") >= 0 && encryptionEnabled && !replset.Configuration.VaultEnabled() {
 		args = append(args, "--enableEncryption",
 			"--encryptionKeyFile="+api.MongodRESTencryptDir+"/"+api.EncryptionKeyName,
 		)
 	}
+
 	// storage
 	if replset.Storage != nil {
 		switch replset.Storage.Engine {
