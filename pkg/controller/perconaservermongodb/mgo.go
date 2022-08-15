@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
-		log.Info("Waiting for the pods", "replsetSize", replsetSize, "pods", len(pods.Items))
+		log.Info("Waiting for the pods", "replset", replset.Name, "size", replsetSize, "pods", len(pods.Items))
 		return api.AppStateInit, nil
 	}
 
@@ -180,6 +181,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			}
 		}()
 
+		err = mongo.SetDefaultRWConcern(ctx, mongosSession, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "set default RW concern")
+		}
+
 		in, err := inShard(ctx, mongosSession, replset.Name)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "get shard")
@@ -201,6 +207,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		rs.AddedAsShard = &t
 		cr.Status.Replsets[replset.Name] = rs
 
+	}
+
+	if replset.Arbiter.Enabled && !cr.Spec.Sharding.Enabled {
+		err := mongo.SetDefaultRWConcern(ctx, cli, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "set default RW concern")
+		}
 	}
 
 	cnf, err := mongo.ReadConfig(ctx, cli)
@@ -225,6 +238,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			Host:         host,
 			BuildIndexes: true,
 			Priority:     mongo.DefaultPriority,
+			Votes:        mongo.DefaultVotes,
 		}
 
 		switch pod.Labels["app.kubernetes.io/component"] {
@@ -246,6 +260,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 		members = append(members, member)
 	}
+
+	// sort config members by priority, descending
+	sort.Slice(members, func(i, j int) bool {
+		return members[i].Priority > members[j].Priority
+	})
 
 	memberC := len(members)
 	for i, extNode := range replset.ExternalNodes {
@@ -285,25 +304,36 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if cnf.Members.RemoveOld(members) {
-		cnf.Members.SetVotes()
-
 		cnf.Version++
-
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
-	if cnf.Members.AddNew(members) || cnf.Members.ExternalNodesChanged(members) {
-		cnf.Members.RemoveOld(members)
-		cnf.Members.SetVotes()
-
+	if cnf.Members.AddNew(members) {
 		cnf.Version++
-
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "add new: write mongo config")
+		}
+	}
+
+	if cnf.Members.ExternalNodesChanged(members) {
+		cnf.Version++
+		err = mongo.WriteConfig(ctx, cli, cnf)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "update external nodes: write mongo config")
+		}
+	}
+
+	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
+	cnf.Members.SetVotes()
+	if !reflect.DeepEqual(currMembers, cnf.Members) {
+		cnf.Version++
+		err = mongo.WriteConfig(ctx, cli, cnf)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "set votes: write mongo config")
 		}
 	}
 
