@@ -348,12 +348,14 @@ deploy_operator() {
 		cat ${src_dir}/deploy/cw-operator.yaml \
 			| sed -e "s^image: .*^image: ${IMAGE}^" \
 			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' \
+			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==LOG_LEVEL).value' 'DEBUG' \
 			| kubectl_bin apply -f -
 	else
 		apply_rbac rbac
 		cat ${src_dir}/deploy/operator.yaml \
 			| sed -e "s^image: .*^image: ${IMAGE}^" \
 			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' \
+			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==LOG_LEVEL).value' 'DEBUG' \
 			| kubectl_bin apply -f -
 	fi
 
@@ -410,6 +412,45 @@ deploy_minio() {
 	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+}
+
+deploy_vault() {
+	desc 'install Vault'
+	helm uninstall vault-service || :
+	helm repo remove hashicorp || :
+	helm repo add hashicorp https://helm.releases.hashicorp.com
+
+	destroy_vault
+
+	retry 10 60 helm install vault-service hashicorp/vault
+
+	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
+		sleep 1
+	done
+
+	kubectl_bin exec pod/vault-service-0 -- vault operator init -key-shares=1 -key-threshold=1 -format=json >"${tmp_dir}"/vault-init
+	local unsealKey=$(jq -r ".unseal_keys_b64[]" <"${tmp_dir}"/vault-init)
+	local token=$(jq -r ".root_token" <"${tmp_dir}"/vault-init)
+	kubectl_bin exec pod/vault-service-0 -- vault operator unseal "${unsealKey}"
+	kubectl_bin exec -it pod/vault-service-0 -- sh <<EOF
+vault login "${token}"
+vault secrets enable -path secret kv-v2
+EOF
+	kubectl_bin create secret generic vault-secret --from-literal=token="${token}"
+}
+
+destroy_vault() {
+	local vault_ns=$(helm list --all-namespaces --filter vault-service | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
+
+	desc 'destroy vault'
+	for i in $(kubectl api-resources | grep vault | awk '{print $1}'); do timeout 30 kubectl delete ${i} --all --all-namespaces || :; done
+	if [ -n "${vault_ns}" ]; then
+		helm uninstall vault-service --namespace ${vault_ns} || :
+	fi
+	timeout 30 kubectl delete crd $(kubectl get crd | grep 'vault' | awk '{print $1}') || :
+	timeout 30 kubectl delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'vault' | awk '{print $1}') || :
+	timeout 30 kubectl delete clusterrole $(kubectl get clusterrole | grep 'vault' | awk '{print $1}') || :
+	timeout 30 kubectl delete mutatingwebhookconfiguration $(kubectl get mutatingwebhookconfiguration | grep 'vault' | awk '{print $1}') || :
 }
 
 deploy_chaos_mesh() {
