@@ -6,6 +6,13 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
+echo $AKS
+
+if [ $AKS -ne 0 ]; then
+	echo "Skip the test. We don't run it on AKS"
+	exit 0
+fi
+
 check_cr_config() {
 	local cluster="$1"
 
