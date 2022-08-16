@@ -1,9 +1,7 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBBackup
 metadata:
-  finalizers:
-    - delete-backup
-  name: backup-aws-s3
+  name: backup-gcp-cs
 spec:
   clusterName: some-name
-  storageName: aws-s3
+  storageName: gcp-cs
