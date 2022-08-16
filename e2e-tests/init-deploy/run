@@ -13,7 +13,7 @@ create_infra $namespace
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"
 kubectl_bin apply \
-	-f $conf_dir/secrets.yml \
+	-f $conf_dir/secrets_with_tls.yml \
 	-f $conf_dir/client.yml
 
 if version_gt "1.19" && [ $EKS -ne 1 ]; then
