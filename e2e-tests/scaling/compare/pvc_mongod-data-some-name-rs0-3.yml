@@ -18,6 +18,3 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  template:
-    spec:
-      containers: {}
