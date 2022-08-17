@@ -54,17 +54,27 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       cr.Spec.Backup.Resources,
-		VolumeMounts: []corev1.VolumeMount{
+	}
+
+	if cr.Spec.Sharding.Enabled {
+		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
+	}
+
+	if cr.CompareVersion("1.13.0") >= 0 {
+		c.Command = []string{psmdb.BinMountPath + "/pbm-entry.sh"}
+		c.Args = []string{"pbm-agent"}
+		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
 			{
 				Name:      "ssl",
 				MountPath: psmdb.SSLDir,
 				ReadOnly:  true,
 			},
-		},
-	}
-
-	if cr.Spec.Sharding.Enabled {
-		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
+			{
+				Name:      psmdb.BinVolumeName,
+				MountPath: psmdb.BinMountPath,
+				ReadOnly:  true,
+			},
+		}...)
 	}
 
 	return c

@@ -52,6 +52,12 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				},
 			},
 		},
+		{
+			Name: BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
 	}
 
 	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
