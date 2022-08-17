@@ -809,27 +809,11 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 	}, nil
 }
 
-// setVersion sets the CRVersion field of the PerconaServerMongoDB object.
-// If CRVersion is an empty string, it's set to latest released version.
-func (cr *PerconaServerMongoDB) setVersion() error {
-	if len(cr.Spec.CRVersion) > 0 {
-		return nil
-	}
-
-	cr.Spec.CRVersion = version.Version
-
-	return nil
-}
-
 func (cr *PerconaServerMongoDB) Version() *v.Version {
 	return v.Must(v.NewVersion(cr.Spec.CRVersion))
 }
 
 func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
-	if len(cr.Spec.CRVersion) == 0 {
-		cr.setVersion()
-	}
-
 	// using Must because "version" must be right format
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }
