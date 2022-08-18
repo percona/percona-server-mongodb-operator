@@ -3,7 +3,6 @@
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
 API="psmdb.percona.com/v1"
-OPERATOR_VERSION=$(grep -oP 'Version = "\K([0-9\.]*)' ${test_dir}/../../version/version.go)
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
@@ -23,6 +22,8 @@ replica_namespace="${test_name}-replica-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 logs_dir=$(realpath $test_dir/../logs)
+
+OPERATOR_VERSION=$(grep -oP 'Version = "\K([0-9\.]*)' ${src_dir}/version/version.go)
 
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
 	if [ ! -d "${logs_dir}" ]; then
