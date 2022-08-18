@@ -92,3 +92,14 @@ echo '---' >>"$crd_file"
 yq r "deploy/crds/psmdb.percona.com_perconaservermongodbrestores.yaml" >>"$crd_file"
 
 mv "$crd_file" "e2e-tests/version-service/conf/crd.yaml"
+
+# deploy/cw-bundle.yaml
+cw_bundle_file=$(mktemp)
+
+cat "deploy/crd.yaml" >"$cw_bundle_file"
+echo "---" >>"$cw_bundle_file"
+cat "deploy/cw-rbac.yaml" >>"$cw_bundle_file"
+echo "---" >>"$cw_bundle_file"
+cat "deploy/cw-operator.yaml" >>"$cw_bundle_file"
+
+mv "$cw_bundle_file" "deploy/cw-bundle.yaml"

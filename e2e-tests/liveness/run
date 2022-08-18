@@ -6,8 +6,7 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 
 kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/minio-secret.yml
 cluster="liveness"

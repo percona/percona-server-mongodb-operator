@@ -11,8 +11,7 @@ if [ $EKS -ne 1 ]; then
 	exit 0
 fi
 
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 
 desc 'create first PSMDB cluster'
 cluster="some-name-rs0"

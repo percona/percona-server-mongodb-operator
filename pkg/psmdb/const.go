@@ -22,6 +22,7 @@ const (
 
 	sslDir           = "/etc/mongodb-ssl"
 	sslInternalDir   = "/etc/mongodb-ssl-internal"
+	vaultDir         = "/etc/mongodb-vault"
 	mongodConfigDir  = "/etc/mongodb-config"
 	mongosConfigDir  = "/etc/mongos-config"
 	mongodSecretsDir = "/etc/mongodb-secrets"

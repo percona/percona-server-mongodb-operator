@@ -22680,6 +22680,8 @@ spec:
                       type: string
                     users:
                       type: string
+                    vault:
+                      type: string
                   type: object
                 sharding:
                   properties:
@@ -31480,6 +31482,10 @@ spec:
                   type: string
                 pbmName:
                   type: string
+                replsetNames:
+                  items:
+                    type: string
+                  type: array
                 s3:
                   properties:
                     bucket:
@@ -31587,6 +31593,10 @@ spec:
                       type: string
                     pbmName:
                       type: string
+                    replsetNames:
+                      items:
+                        type: string
+                      type: array
                     s3:
                       properties:
                         bucket:

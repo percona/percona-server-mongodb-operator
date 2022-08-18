@@ -36,8 +36,7 @@ spinup_psmdb() {
 main() {
 	local cluster="nonvoting-rs0"
 	deploy_cert_manager
-	create_namespace $namespace
-	deploy_operator
+	create_infra $namespace
 	kubectl_bin apply \
 		-f $conf_dir/client.yml \
 		-f $conf_dir/secrets.yml

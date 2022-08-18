@@ -6,8 +6,7 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 
 deploy_minio
 
@@ -104,5 +103,23 @@ desc 'restore from backup source, no storageName -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 run_restore_backupsource "${backup_name_minio}-source-1" "$backup_dest_minio"
 wait_restore "$backup_name_minio" 3
+
+sleep 60
+desc 'delete backup and check if it is removed from bucket -- minio'
+kubectl_bin delete psmdb-backup --all
+backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ \
+	| grep -c ${backup_dest_minio}_ | cat)
+if [[ $backup_exists -eq 1 ]]; then
+	echo "Backup was not removed from bucket -- minio"
+	exit 1
+fi
+
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	check_backup_deletion "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}_rs0.dump.gz" "aws-s3"
+	check_backup_deletion "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}_rs0.dump.gz" "gcp-cs"
+	check_backup_deletion "https://k8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}_rs0.dump.gz" "azure-blob"
+fi
 
 destroy $namespace

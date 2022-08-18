@@ -13,7 +13,7 @@ import (
 
 const (
 	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
-	pbmStartingDeadline       = time.Duration(40)
+	pbmStartingDeadline       = time.Duration(120)
 	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
 )
 
@@ -22,11 +22,10 @@ type Backup struct {
 	spec api.BackupSpec
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) newBackup(
-	ctx context.Context,
-	cluster *api.PerconaServerMongoDB,
-	cr *api.PerconaServerMongoDBBackup,
-) (*Backup, error) {
+func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, cluster *api.PerconaServerMongoDB) (*Backup, error) {
+	if cluster == nil {
+		return new(Backup), nil
+	}
 	cn, err := backup.NewPBM(ctx, r.client, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "create pbm object")
@@ -36,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(
 }
 
 // Start requests backup on PBM
-func (b *Backup) Start(ctx context.Context, cr *api.PerconaServerMongoDBBackup, priority map[string]float64) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup, priority map[string]float64) (api.PerconaServerMongoDBBackupStatus, error) {
 	var status api.PerconaServerMongoDBBackupStatus
 
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
@@ -75,17 +74,26 @@ func (b *Backup) Start(ctx context.Context, cr *api.PerconaServerMongoDBBackup, 
 		LastTransition: &metav1.Time{
 			Time: time.Unix(time.Now().Unix(), 0),
 		},
-		S3:    &stg.S3,
-		Azure: &stg.Azure,
 		State: api.BackupStateRequested,
 	}
-
-	if stg.S3.Prefix != "" {
-		status.Destination = stg.S3.Prefix + "/"
+	if cluster.Spec.Sharding.Enabled && cluster.Spec.Sharding.ConfigsvrReplSet != nil {
+		status.ReplsetNames = append(status.ReplsetNames, cluster.Spec.Sharding.ConfigsvrReplSet.Name)
+	}
+	for _, rs := range cluster.Spec.Replsets {
+		status.ReplsetNames = append(status.ReplsetNames, rs.Name)
 	}
 
-	if stg.Azure.Prefix != "" {
-		status.Destination = stg.Azure.Prefix + "/"
+	switch stg.Type {
+	case api.BackupStorageS3:
+		status.S3 = &stg.S3
+		if stg.S3.Prefix != "" {
+			status.Destination = stg.S3.Prefix + "/"
+		}
+	case api.BackupStorageAzure:
+		status.Azure = &stg.Azure
+		if stg.Azure.Prefix != "" {
+			status.Destination = stg.Azure.Prefix + "/"
+		}
 	}
 	status.Destination += status.PBMname
 
@@ -143,5 +151,8 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 
 // Close closes the PBM connection
 func (b *Backup) Close(ctx context.Context) error {
+	if b.pbm == nil {
+		return nil
+	}
 	return b.pbm.Close(ctx)
 }

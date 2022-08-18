@@ -4,15 +4,16 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-	"reflect"
-	"strconv"
-
+	"github.com/robfig/cron/v3"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 
 	"github.com/pkg/errors"
 
@@ -20,68 +21,172 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
+type BackupScheduleJob struct {
+	api.BackupTaskSpec
+	JobID cron.EntryID
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	ctasks := make(map[string]api.BackupTaskSpec)
-	ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
 
 	for _, task := range cr.Spec.Backup.Tasks {
-		cjob, err := backup.BackupCronJob(&task, cr.Name, cr.Namespace, cr.Spec.Backup, cr.Spec.ImagePullSecrets)
-		if err != nil {
-			return errors.Wrap(err, "can't create job")
+		if !task.Enabled {
+			continue
 		}
-		ls = cjob.ObjectMeta.Labels
-		if task.Enabled {
-			ctasks[cjob.Name] = task
+		_, ok := cr.Spec.Backup.Storages[task.StorageName]
+		if !ok {
+			return errors.Errorf("there is no storage %s in cluster %s for %s task", task.StorageName, cr.Name, task.Name)
+		}
+		ctasks[task.Name] = task
 
-			err := setControllerReference(cr, &cjob, r.scheme)
-			if err != nil {
-				return errors.Wrapf(err, "set owner reference for backup task %s", cjob.Name)
-			}
-
-			err = r.createOrUpdate(ctx, &cjob)
-			if err != nil {
-				return errors.Wrap(err, "create or update backup job")
-			}
+		if err := r.createOrUpdateBackupTask(ctx, cr, task); err != nil {
+			return err
 		}
 	}
 
 	// Remove old/unused tasks
-	tasksList := &batchv1beta1.CronJobList{}
-	err := r.client.List(ctx,
-		tasksList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(ls),
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("get backup list: %v", err)
+	if err := r.deleteOldBackupTasks(ctx, cr, ctasks); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) error {
+	if cr.CompareVersion("1.13.0") < 0 {
+		cjob, err := backup.BackupCronJob(cr, &task)
+		if err != nil {
+			return errors.Wrap(err, "can't create job")
+		}
+		err = setControllerReference(cr, &cjob, r.scheme)
+		if err != nil {
+			return errors.Wrapf(err, "set owner reference for backup task %s", cjob.Name)
+		}
+
+		err = r.createOrUpdate(ctx, &cjob)
+		if err != nil {
+			return errors.Wrap(err, "create or update backup job")
+		}
+		return nil
+	}
+	t := BackupScheduleJob{}
+	bj, ok := r.crons.backupJobs.Load(task.JobName(cr))
+	if ok {
+		t = bj.(BackupScheduleJob)
 	}
 
-	for _, t := range tasksList.Items {
-		if spec, ok := ctasks[t.Name]; ok {
+	if !ok || t.Schedule != task.Schedule || t.StorageName != task.StorageName {
+		log.Info("Creating or updating backup job", "name", task.Name, "schedule", task.Schedule)
+		r.deleteBackupTask(cr, t.BackupTaskSpec)
+		jobID, err := r.crons.crons.AddFunc(task.Schedule, r.createBackupTask(ctx, cr, task))
+		if err != nil {
+			return errors.Wrapf(err, "can't parse cronjob schedule for backup %s with schedule %s", task.Name, task.Schedule)
+		}
+
+		r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
+			BackupTaskSpec: task,
+			JobID:          jobID,
+		})
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB, ctasks map[string]api.BackupTaskSpec) error {
+	if cr.CompareVersion("1.13.0") < 0 {
+		ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
+		tasksList := &batchv1beta1.CronJobList{}
+		err := r.client.List(ctx,
+			tasksList,
+			&client.ListOptions{
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(ls),
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("get backup list: %v", err)
+		}
+
+		for _, t := range tasksList.Items {
+			if spec, ok := ctasks[t.Name]; ok {
+				if spec.Keep > 0 {
+					oldjobs, err := r.oldScheduledBackups(ctx, cr, t.Name, spec.Keep)
+					if err != nil {
+						return fmt.Errorf("remove old backups: %v", err)
+					}
+
+					for _, todel := range oldjobs {
+						err = r.client.Delete(ctx, &todel)
+						if err != nil {
+							return fmt.Errorf("failed to delete backup object: %v", err)
+						}
+					}
+				}
+			} else {
+				err := r.client.Delete(ctx, &t)
+				if err != nil && !k8sErrors.IsNotFound(err) {
+					return fmt.Errorf("delete backup task %s: %v", t.Name, err)
+				}
+			}
+		}
+		return nil
+	}
+	r.crons.backupJobs.Range(func(k, v interface{}) bool {
+		item := v.(BackupScheduleJob)
+		if spec, ok := ctasks[item.Name]; ok {
 			if spec.Keep > 0 {
-				oldjobs, err := r.oldScheduledBackups(ctx, cr, t.Name, spec.Keep)
+				oldjobs, err := r.oldScheduledBackups(ctx, cr, item.Name, spec.Keep)
 				if err != nil {
-					return fmt.Errorf("remove old backups: %v", err)
+					log.Error(err, "failed to list old backups", "job name", item.Name)
+					return true
 				}
 
 				for _, todel := range oldjobs {
 					err = r.client.Delete(ctx, &todel)
 					if err != nil {
-						return fmt.Errorf("failed to delete backup object: %v", err)
+						log.Error(err, "failed to delete backup object")
+						return true
 					}
 				}
+
 			}
 		} else {
-			err := r.client.Delete(ctx, &t)
-			if err != nil && !k8sErrors.IsNotFound(err) {
-				return fmt.Errorf("delete backup task %s: %v", t.Name, err)
-			}
+			log.Info("deleting outdated backup job", "name", item.Name)
+			r.deleteBackupTask(cr, item.BackupTaskSpec)
+		}
+
+		return true
+	})
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) createBackupTask(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) func() {
+	return func() {
+		localCr := &api.PerconaServerMongoDB{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
+		if k8sErrors.IsNotFound(err) {
+			log.Info("cluster is not found, deleting the job",
+				"job name", task.Name, "cluster", cr.Name, "namespace", cr.Namespace)
+			r.deleteBackupTask(cr, task)
+			return
+		}
+		bcp, err := backup.BackupFromTask(cr, &task)
+		if err != nil {
+			log.Error(err, "failed to create backup")
+			return
+		}
+		bcp.Namespace = cr.Namespace
+		err = r.client.Create(ctx, bcp)
+		if err != nil {
+			log.Error(err, "failed to create backup")
 		}
 	}
+}
 
-	return nil
+func (r *ReconcilePerconaServerMongoDB) deleteBackupTask(cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) {
+	job, ok := r.crons.backupJobs.LoadAndDelete(task.JobName(cr))
+	if !ok {
+		return
+	}
+	r.crons.crons.Remove(job.(BackupScheduleJob).JobID)
 }
 
 // oldScheduledBackups returns list of the most old psmdb-bakups that execeed `keep` limit
@@ -257,9 +362,14 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if enabled != cr.Spec.Backup.PITR.Enabled {
 		val := strconv.FormatBool(cr.Spec.Backup.PITR.Enabled)
+		log.Info("Setting pitr.enabled in PBM config", "enabled", val)
 		if err := pbm.C.SetConfigVar("pitr.enabled", val); err != nil {
 			return errors.Wrap(err, "update pitr.enabled")
 		}
+	}
+
+	if !cr.Spec.Backup.PITR.Enabled {
+		return nil
 	}
 
 	val, err = pbm.C.GetConfigVar("pitr.oplogSpanMin")
@@ -351,9 +461,4 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 	}
 
 	return nil
-}
-
-// Int64 returns a pointer to the int64 value passed in.
-func Int64(v int64) *int64 {
-	return &v
 }
