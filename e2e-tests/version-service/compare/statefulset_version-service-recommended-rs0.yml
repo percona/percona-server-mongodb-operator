@@ -151,6 +151,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
@@ -164,6 +166,8 @@ spec:
             defaultMode: 288
             optional: false
             secretName: version-service-recommended-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
         - configMap:
             defaultMode: 420
             name: version-service-recommended-rs0-mongod

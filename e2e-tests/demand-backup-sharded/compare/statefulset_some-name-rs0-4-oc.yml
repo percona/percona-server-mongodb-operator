@@ -163,6 +163,8 @@ spec:
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
+            - mountPath: /opt/percona
+              name: bin
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -181,6 +183,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       runtimeClassName: container-rc
       schedulerName: default-scheduler
@@ -194,6 +198,8 @@ spec:
             defaultMode: 288
             optional: false
             secretName: some-name-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
         - configMap:
             defaultMode: 420
             name: some-name-rs0-mongod
