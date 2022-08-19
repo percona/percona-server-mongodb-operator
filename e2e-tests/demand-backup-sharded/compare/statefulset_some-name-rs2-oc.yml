@@ -179,6 +179,7 @@ spec:
               readOnly: true
             - mountPath: /opt/percona
               name: bin
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:

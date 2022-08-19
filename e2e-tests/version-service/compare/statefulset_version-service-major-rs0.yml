@@ -151,7 +151,7 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - emptyDir: {}
+            - mountPath: /opt/percona
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
