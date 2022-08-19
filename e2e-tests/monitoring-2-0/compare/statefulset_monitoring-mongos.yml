@@ -293,8 +293,6 @@ spec:
             defaultMode: 288
             optional: false
             secretName: monitoring-mongodb-keyfile
-        - emptyDir: {}
-          name: bin
         - name: ssl
           secret:
             defaultMode: 288
@@ -311,6 +309,8 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-monitoring-users
+        - emptyDir: {}
+          name: bin
   updateStrategy:
     rollingUpdate:
       partition: 0
