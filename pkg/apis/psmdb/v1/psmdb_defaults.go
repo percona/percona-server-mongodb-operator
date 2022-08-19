@@ -282,6 +282,25 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = 3
 		}
 
+		var fsgroup *int64
+		if platform == version.PlatformKubernetes {
+			var tp int64 = 1001
+			fsgroup = &tp
+		}
+
+		if cr.Spec.Sharding.Mongos.ContainerSecurityContext == nil {
+			tvar := true
+			cr.Spec.Sharding.Mongos.ContainerSecurityContext = &corev1.SecurityContext{
+				RunAsNonRoot: &tvar,
+				RunAsUser:    fsgroup,
+			}
+		}
+		if cr.Spec.Sharding.Mongos.PodSecurityContext == nil {
+			cr.Spec.Sharding.Mongos.PodSecurityContext = &corev1.PodSecurityContext{
+				FSGroup: fsgroup,
+			}
+		}
+
 		cr.Spec.Sharding.Mongos.reconcileOpts()
 
 		if err := cr.Spec.Sharding.Mongos.Configuration.SetDefaults(); err != nil {
