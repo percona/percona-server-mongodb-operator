@@ -157,6 +157,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - emptyDir: {}
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
@@ -170,6 +172,8 @@ spec:
             defaultMode: 288
             optional: false
             secretName: no-requests-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
         - configMap:
             defaultMode: 420
             name: no-requests-rs0-mongod
