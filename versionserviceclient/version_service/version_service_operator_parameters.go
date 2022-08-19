@@ -17,52 +17,50 @@ import (
 	"github.com/go-openapi/swag"
 )
 
-// NewVersionServiceApplyParams creates a new VersionServiceApplyParams object
+// NewVersionServiceOperatorParams creates a new VersionServiceOperatorParams object
 // with the default values initialized.
-func NewVersionServiceApplyParams() *VersionServiceApplyParams {
+func NewVersionServiceOperatorParams() *VersionServiceOperatorParams {
 	var ()
-	return &VersionServiceApplyParams{
+	return &VersionServiceOperatorParams{
 
 		timeout: cr.DefaultTimeout,
 	}
 }
 
-// NewVersionServiceApplyParamsWithTimeout creates a new VersionServiceApplyParams object
+// NewVersionServiceOperatorParamsWithTimeout creates a new VersionServiceOperatorParams object
 // with the default values initialized, and the ability to set a timeout on a request
-func NewVersionServiceApplyParamsWithTimeout(timeout time.Duration) *VersionServiceApplyParams {
+func NewVersionServiceOperatorParamsWithTimeout(timeout time.Duration) *VersionServiceOperatorParams {
 	var ()
-	return &VersionServiceApplyParams{
+	return &VersionServiceOperatorParams{
 
 		timeout: timeout,
 	}
 }
 
-// NewVersionServiceApplyParamsWithContext creates a new VersionServiceApplyParams object
+// NewVersionServiceOperatorParamsWithContext creates a new VersionServiceOperatorParams object
 // with the default values initialized, and the ability to set a context for a request
-func NewVersionServiceApplyParamsWithContext(ctx context.Context) *VersionServiceApplyParams {
+func NewVersionServiceOperatorParamsWithContext(ctx context.Context) *VersionServiceOperatorParams {
 	var ()
-	return &VersionServiceApplyParams{
+	return &VersionServiceOperatorParams{
 
 		Context: ctx,
 	}
 }
 
-// NewVersionServiceApplyParamsWithHTTPClient creates a new VersionServiceApplyParams object
+// NewVersionServiceOperatorParamsWithHTTPClient creates a new VersionServiceOperatorParams object
 // with the default values initialized, and the ability to set a custom HTTPClient for a request
-func NewVersionServiceApplyParamsWithHTTPClient(client *http.Client) *VersionServiceApplyParams {
+func NewVersionServiceOperatorParamsWithHTTPClient(client *http.Client) *VersionServiceOperatorParams {
 	var ()
-	return &VersionServiceApplyParams{
+	return &VersionServiceOperatorParams{
 		HTTPClient: client,
 	}
 }
 
-/*VersionServiceApplyParams contains all the parameters to send to the API endpoint
-for the version service apply operation typically these are written to a http.Request
+/*VersionServiceOperatorParams contains all the parameters to send to the API endpoint
+for the version service operator operation typically these are written to a http.Request
 */
-type VersionServiceApplyParams struct {
+type VersionServiceOperatorParams struct {
 
-	/*Apply*/
-	Apply string
 	/*BackupVersion*/
 	BackupVersion *string
 	/*ClusterWideEnabled*/
@@ -99,227 +97,211 @@ type VersionServiceApplyParams struct {
 	HTTPClient *http.Client
 }
 
-// WithTimeout adds the timeout to the version service apply params
-func (o *VersionServiceApplyParams) WithTimeout(timeout time.Duration) *VersionServiceApplyParams {
+// WithTimeout adds the timeout to the version service operator params
+func (o *VersionServiceOperatorParams) WithTimeout(timeout time.Duration) *VersionServiceOperatorParams {
 	o.SetTimeout(timeout)
 	return o
 }
 
-// SetTimeout adds the timeout to the version service apply params
-func (o *VersionServiceApplyParams) SetTimeout(timeout time.Duration) {
+// SetTimeout adds the timeout to the version service operator params
+func (o *VersionServiceOperatorParams) SetTimeout(timeout time.Duration) {
 	o.timeout = timeout
 }
 
-// WithContext adds the context to the version service apply params
-func (o *VersionServiceApplyParams) WithContext(ctx context.Context) *VersionServiceApplyParams {
+// WithContext adds the context to the version service operator params
+func (o *VersionServiceOperatorParams) WithContext(ctx context.Context) *VersionServiceOperatorParams {
 	o.SetContext(ctx)
 	return o
 }
 
-// SetContext adds the context to the version service apply params
-func (o *VersionServiceApplyParams) SetContext(ctx context.Context) {
+// SetContext adds the context to the version service operator params
+func (o *VersionServiceOperatorParams) SetContext(ctx context.Context) {
 	o.Context = ctx
 }
 
-// WithHTTPClient adds the HTTPClient to the version service apply params
-func (o *VersionServiceApplyParams) WithHTTPClient(client *http.Client) *VersionServiceApplyParams {
+// WithHTTPClient adds the HTTPClient to the version service operator params
+func (o *VersionServiceOperatorParams) WithHTTPClient(client *http.Client) *VersionServiceOperatorParams {
 	o.SetHTTPClient(client)
 	return o
 }
 
-// SetHTTPClient adds the HTTPClient to the version service apply params
-func (o *VersionServiceApplyParams) SetHTTPClient(client *http.Client) {
+// SetHTTPClient adds the HTTPClient to the version service operator params
+func (o *VersionServiceOperatorParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
-// WithApply adds the apply to the version service apply params
-func (o *VersionServiceApplyParams) WithApply(apply string) *VersionServiceApplyParams {
-	o.SetApply(apply)
-	return o
-}
-
-// SetApply adds the apply to the version service apply params
-func (o *VersionServiceApplyParams) SetApply(apply string) {
-	o.Apply = apply
-}
-
-// WithBackupVersion adds the backupVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithBackupVersion(backupVersion *string) *VersionServiceApplyParams {
+// WithBackupVersion adds the backupVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithBackupVersion(backupVersion *string) *VersionServiceOperatorParams {
 	o.SetBackupVersion(backupVersion)
 	return o
 }
 
-// SetBackupVersion adds the backupVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetBackupVersion(backupVersion *string) {
+// SetBackupVersion adds the backupVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetBackupVersion(backupVersion *string) {
 	o.BackupVersion = backupVersion
 }
 
-// WithClusterWideEnabled adds the clusterWideEnabled to the version service apply params
-func (o *VersionServiceApplyParams) WithClusterWideEnabled(clusterWideEnabled *bool) *VersionServiceApplyParams {
+// WithClusterWideEnabled adds the clusterWideEnabled to the version service operator params
+func (o *VersionServiceOperatorParams) WithClusterWideEnabled(clusterWideEnabled *bool) *VersionServiceOperatorParams {
 	o.SetClusterWideEnabled(clusterWideEnabled)
 	return o
 }
 
-// SetClusterWideEnabled adds the clusterWideEnabled to the version service apply params
-func (o *VersionServiceApplyParams) SetClusterWideEnabled(clusterWideEnabled *bool) {
+// SetClusterWideEnabled adds the clusterWideEnabled to the version service operator params
+func (o *VersionServiceOperatorParams) SetClusterWideEnabled(clusterWideEnabled *bool) {
 	o.ClusterWideEnabled = clusterWideEnabled
 }
 
-// WithCustomResourceUID adds the customResourceUID to the version service apply params
-func (o *VersionServiceApplyParams) WithCustomResourceUID(customResourceUID *string) *VersionServiceApplyParams {
+// WithCustomResourceUID adds the customResourceUID to the version service operator params
+func (o *VersionServiceOperatorParams) WithCustomResourceUID(customResourceUID *string) *VersionServiceOperatorParams {
 	o.SetCustomResourceUID(customResourceUID)
 	return o
 }
 
-// SetCustomResourceUID adds the customResourceUid to the version service apply params
-func (o *VersionServiceApplyParams) SetCustomResourceUID(customResourceUID *string) {
+// SetCustomResourceUID adds the customResourceUid to the version service operator params
+func (o *VersionServiceOperatorParams) SetCustomResourceUID(customResourceUID *string) {
 	o.CustomResourceUID = customResourceUID
 }
 
-// WithDatabaseVersion adds the databaseVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithDatabaseVersion(databaseVersion *string) *VersionServiceApplyParams {
+// WithDatabaseVersion adds the databaseVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithDatabaseVersion(databaseVersion *string) *VersionServiceOperatorParams {
 	o.SetDatabaseVersion(databaseVersion)
 	return o
 }
 
-// SetDatabaseVersion adds the databaseVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetDatabaseVersion(databaseVersion *string) {
+// SetDatabaseVersion adds the databaseVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetDatabaseVersion(databaseVersion *string) {
 	o.DatabaseVersion = databaseVersion
 }
 
-// WithHaproxyVersion adds the haproxyVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithHaproxyVersion(haproxyVersion *string) *VersionServiceApplyParams {
+// WithHaproxyVersion adds the haproxyVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithHaproxyVersion(haproxyVersion *string) *VersionServiceOperatorParams {
 	o.SetHaproxyVersion(haproxyVersion)
 	return o
 }
 
-// SetHaproxyVersion adds the haproxyVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetHaproxyVersion(haproxyVersion *string) {
+// SetHaproxyVersion adds the haproxyVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetHaproxyVersion(haproxyVersion *string) {
 	o.HaproxyVersion = haproxyVersion
 }
 
-// WithHashicorpVaultEnabled adds the hashicorpVaultEnabled to the version service apply params
-func (o *VersionServiceApplyParams) WithHashicorpVaultEnabled(hashicorpVaultEnabled *bool) *VersionServiceApplyParams {
+// WithHashicorpVaultEnabled adds the hashicorpVaultEnabled to the version service operator params
+func (o *VersionServiceOperatorParams) WithHashicorpVaultEnabled(hashicorpVaultEnabled *bool) *VersionServiceOperatorParams {
 	o.SetHashicorpVaultEnabled(hashicorpVaultEnabled)
 	return o
 }
 
-// SetHashicorpVaultEnabled adds the hashicorpVaultEnabled to the version service apply params
-func (o *VersionServiceApplyParams) SetHashicorpVaultEnabled(hashicorpVaultEnabled *bool) {
+// SetHashicorpVaultEnabled adds the hashicorpVaultEnabled to the version service operator params
+func (o *VersionServiceOperatorParams) SetHashicorpVaultEnabled(hashicorpVaultEnabled *bool) {
 	o.HashicorpVaultEnabled = hashicorpVaultEnabled
 }
 
-// WithKubeVersion adds the kubeVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithKubeVersion(kubeVersion *string) *VersionServiceApplyParams {
+// WithKubeVersion adds the kubeVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithKubeVersion(kubeVersion *string) *VersionServiceOperatorParams {
 	o.SetKubeVersion(kubeVersion)
 	return o
 }
 
-// SetKubeVersion adds the kubeVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetKubeVersion(kubeVersion *string) {
+// SetKubeVersion adds the kubeVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetKubeVersion(kubeVersion *string) {
 	o.KubeVersion = kubeVersion
 }
 
-// WithLogCollectorVersion adds the logCollectorVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithLogCollectorVersion(logCollectorVersion *string) *VersionServiceApplyParams {
+// WithLogCollectorVersion adds the logCollectorVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithLogCollectorVersion(logCollectorVersion *string) *VersionServiceOperatorParams {
 	o.SetLogCollectorVersion(logCollectorVersion)
 	return o
 }
 
-// SetLogCollectorVersion adds the logCollectorVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetLogCollectorVersion(logCollectorVersion *string) {
+// SetLogCollectorVersion adds the logCollectorVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetLogCollectorVersion(logCollectorVersion *string) {
 	o.LogCollectorVersion = logCollectorVersion
 }
 
-// WithNamespaceUID adds the namespaceUID to the version service apply params
-func (o *VersionServiceApplyParams) WithNamespaceUID(namespaceUID *string) *VersionServiceApplyParams {
+// WithNamespaceUID adds the namespaceUID to the version service operator params
+func (o *VersionServiceOperatorParams) WithNamespaceUID(namespaceUID *string) *VersionServiceOperatorParams {
 	o.SetNamespaceUID(namespaceUID)
 	return o
 }
 
-// SetNamespaceUID adds the namespaceUid to the version service apply params
-func (o *VersionServiceApplyParams) SetNamespaceUID(namespaceUID *string) {
+// SetNamespaceUID adds the namespaceUid to the version service operator params
+func (o *VersionServiceOperatorParams) SetNamespaceUID(namespaceUID *string) {
 	o.NamespaceUID = namespaceUID
 }
 
-// WithOperatorVersion adds the operatorVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithOperatorVersion(operatorVersion string) *VersionServiceApplyParams {
+// WithOperatorVersion adds the operatorVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithOperatorVersion(operatorVersion string) *VersionServiceOperatorParams {
 	o.SetOperatorVersion(operatorVersion)
 	return o
 }
 
-// SetOperatorVersion adds the operatorVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetOperatorVersion(operatorVersion string) {
+// SetOperatorVersion adds the operatorVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetOperatorVersion(operatorVersion string) {
 	o.OperatorVersion = operatorVersion
 }
 
-// WithPlatform adds the platform to the version service apply params
-func (o *VersionServiceApplyParams) WithPlatform(platform *string) *VersionServiceApplyParams {
+// WithPlatform adds the platform to the version service operator params
+func (o *VersionServiceOperatorParams) WithPlatform(platform *string) *VersionServiceOperatorParams {
 	o.SetPlatform(platform)
 	return o
 }
 
-// SetPlatform adds the platform to the version service apply params
-func (o *VersionServiceApplyParams) SetPlatform(platform *string) {
+// SetPlatform adds the platform to the version service operator params
+func (o *VersionServiceOperatorParams) SetPlatform(platform *string) {
 	o.Platform = platform
 }
 
-// WithPmmVersion adds the pmmVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithPmmVersion(pmmVersion *string) *VersionServiceApplyParams {
+// WithPmmVersion adds the pmmVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithPmmVersion(pmmVersion *string) *VersionServiceOperatorParams {
 	o.SetPmmVersion(pmmVersion)
 	return o
 }
 
-// SetPmmVersion adds the pmmVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetPmmVersion(pmmVersion *string) {
+// SetPmmVersion adds the pmmVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetPmmVersion(pmmVersion *string) {
 	o.PmmVersion = pmmVersion
 }
 
-// WithProduct adds the product to the version service apply params
-func (o *VersionServiceApplyParams) WithProduct(product string) *VersionServiceApplyParams {
+// WithProduct adds the product to the version service operator params
+func (o *VersionServiceOperatorParams) WithProduct(product string) *VersionServiceOperatorParams {
 	o.SetProduct(product)
 	return o
 }
 
-// SetProduct adds the product to the version service apply params
-func (o *VersionServiceApplyParams) SetProduct(product string) {
+// SetProduct adds the product to the version service operator params
+func (o *VersionServiceOperatorParams) SetProduct(product string) {
 	o.Product = product
 }
 
-// WithProxysqlVersion adds the proxysqlVersion to the version service apply params
-func (o *VersionServiceApplyParams) WithProxysqlVersion(proxysqlVersion *string) *VersionServiceApplyParams {
+// WithProxysqlVersion adds the proxysqlVersion to the version service operator params
+func (o *VersionServiceOperatorParams) WithProxysqlVersion(proxysqlVersion *string) *VersionServiceOperatorParams {
 	o.SetProxysqlVersion(proxysqlVersion)
 	return o
 }
 
-// SetProxysqlVersion adds the proxysqlVersion to the version service apply params
-func (o *VersionServiceApplyParams) SetProxysqlVersion(proxysqlVersion *string) {
+// SetProxysqlVersion adds the proxysqlVersion to the version service operator params
+func (o *VersionServiceOperatorParams) SetProxysqlVersion(proxysqlVersion *string) {
 	o.ProxysqlVersion = proxysqlVersion
 }
 
-// WithShardingEnabled adds the shardingEnabled to the version service apply params
-func (o *VersionServiceApplyParams) WithShardingEnabled(shardingEnabled *bool) *VersionServiceApplyParams {
+// WithShardingEnabled adds the shardingEnabled to the version service operator params
+func (o *VersionServiceOperatorParams) WithShardingEnabled(shardingEnabled *bool) *VersionServiceOperatorParams {
 	o.SetShardingEnabled(shardingEnabled)
 	return o
 }
 
-// SetShardingEnabled adds the shardingEnabled to the version service apply params
-func (o *VersionServiceApplyParams) SetShardingEnabled(shardingEnabled *bool) {
+// SetShardingEnabled adds the shardingEnabled to the version service operator params
+func (o *VersionServiceOperatorParams) SetShardingEnabled(shardingEnabled *bool) {
 	o.ShardingEnabled = shardingEnabled
 }
 
 // WriteToRequest writes these params to a swagger request
-func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.Registry) error {
+func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.Registry) error {
 
 	if err := r.SetTimeout(o.timeout); err != nil {
 		return err
 	}
 	var res []error
-
-	// path param apply
-	if err := r.SetPathParam("apply", o.Apply); err != nil {
-		return err
-	}
 
 	if o.BackupVersion != nil {
 
