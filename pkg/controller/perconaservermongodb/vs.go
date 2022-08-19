@@ -17,7 +17,7 @@ const productName = "psmdb-operator"
 
 func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm VersionMeta) (DepVersion, error) {
 	if strings.Contains(endpoint, "https://check.percona.com/versions") {
-		endpoint = api.DefaultVersionServiceEndpoint
+		endpoint = api.GetDefaultVersionServiceEndpoint()
 	}
 
 	requestURL, err := url.Parse(endpoint)
@@ -32,16 +32,19 @@ func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, end
 	})
 
 	applyParams := &version_service.VersionServiceApplyParams{
-		Apply:             vm.Apply,
-		BackupVersion:     &vm.BackupVersion,
-		CustomResourceUID: &vm.CRUID,
-		DatabaseVersion:   &vm.MongoVersion,
-		KubeVersion:       &vm.KubeVersion,
-		OperatorVersion:   vm.Version,
-		Platform:          &vm.Platform,
-		PmmVersion:        &vm.PMMVersion,
-		Product:           productName,
-		HTTPClient:        &http.Client{Timeout: 10 * time.Second},
+		HTTPClient:            &http.Client{Timeout: 10 * time.Second},
+		Apply:                 vm.Apply,
+		BackupVersion:         &vm.BackupVersion,
+		ClusterWideEnabled:    &vm.ClusterWideEnabled,
+		CustomResourceUID:     &vm.CRUID,
+		DatabaseVersion:       &vm.MongoVersion,
+		HashicorpVaultEnabled: &vm.HashicorpVaultEnabled,
+		KubeVersion:           &vm.KubeVersion,
+		OperatorVersion:       vm.Version,
+		Platform:              &vm.Platform,
+		PmmVersion:            &vm.PMMVersion,
+		Product:               productName,
+		ShardingEnabled:       &vm.ShardingEnabled,
 	}
 	applyParams = applyParams.WithTimeout(10 * time.Second)
 
@@ -49,6 +52,10 @@ func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, end
 
 	if err != nil {
 		return DepVersion{}, err
+	}
+
+	if !versionUpgradeEnabled(cr) {
+		return DepVersion{}, nil
 	}
 
 	if len(resp.Payload.Versions) == 0 {
@@ -131,12 +138,15 @@ type VersionResponse struct {
 }
 
 type VersionMeta struct {
-	Apply         string
-	MongoVersion  string
-	KubeVersion   string
-	Platform      string
-	PMMVersion    string
-	BackupVersion string
-	CRUID         string
-	Version       string
+	Apply                 string
+	MongoVersion          string
+	KubeVersion           string
+	Platform              string
+	PMMVersion            string
+	BackupVersion         string
+	CRUID                 string
+	Version               string
+	ClusterWideEnabled    bool
+	HashicorpVaultEnabled bool
+	ShardingEnabled       bool
 }

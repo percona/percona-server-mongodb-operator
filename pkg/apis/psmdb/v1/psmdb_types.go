@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -196,6 +197,14 @@ const (
 )
 
 const DefaultVersionServiceEndpoint = "https://check.percona.com"
+
+func GetDefaultVersionServiceEndpoint() string {
+	if endpoint := os.Getenv("PERCONA_VS_FALLBACK_URI"); len(endpoint) > 0 {
+		return endpoint
+	}
+
+	return DefaultVersionServiceEndpoint
+}
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
