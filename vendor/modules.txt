@@ -26,9 +26,6 @@ github.com/Azure/go-autorest/logger
 # github.com/Azure/go-autorest/tracing v0.6.0
 ## explicit; go 1.12
 github.com/Azure/go-autorest/tracing
-# github.com/Percona-Lab/percona-version-service/api v0.0.0-20200714141734-e9fed619b55c
-## explicit; go 1.14
-github.com/Percona-Lab/percona-version-service/api
 # github.com/PuerkitoBio/purell v1.1.1
 ## explicit
 github.com/PuerkitoBio/purell
