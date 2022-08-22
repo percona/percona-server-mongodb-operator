@@ -175,8 +175,9 @@ func (b BackupCmd) String() string {
 }
 
 type RestoreCmd struct {
-	Name       string `bson:"name"`
-	BackupName string `bson:"backupName"`
+	Name       string            `bson:"name"`
+	BackupName string            `bson:"backupName"`
+	RSMap      map[string]string `bson:"rsMap,omitempty"`
 }
 
 func (r RestoreCmd) String() string {
@@ -187,6 +188,7 @@ type ReplayCmd struct {
 	Name  string              `bson:"name"`
 	Start primitive.Timestamp `bson:"start,omitempty"`
 	End   primitive.Timestamp `bson:"end,omitempty"`
+	RSMap map[string]string   `bson:"rsMap,omitempty"`
 }
 
 func (c ReplayCmd) String() string {
@@ -194,10 +196,11 @@ func (c ReplayCmd) String() string {
 }
 
 type PITRestoreCmd struct {
-	Name string `bson:"name"`
-	TS   int64  `bson:"ts"`
-	I    int64  `bson:"i"`
-	Bcp  string `bson:"bcp"`
+	Name  string            `bson:"name"`
+	TS    int64             `bson:"ts"`
+	I     int64             `bson:"i"`
+	Bcp   string            `bson:"bcp"`
+	RSMap map[string]string `bson:"rsMap,omitempty"`
 }
 
 func (p PITRestoreCmd) String() string {
@@ -539,9 +542,26 @@ type BackupMeta struct {
 	Status           Status               `bson:"status" json:"status"`
 	Conditions       []Condition          `bson:"conditions" json:"conditions"`
 	Nomination       []BackupRsNomination `bson:"n" json:"n"`
-	Error            string               `bson:"error,omitempty" json:"error,omitempty"`
+	Err              string               `bson:"error,omitempty" json:"error,omitempty"`
 	PBMVersion       string               `bson:"pbm_version,omitempty" json:"pbm_version,omitempty"`
 	BalancerStatus   BalancerMode         `bson:"balancer" json:"balancer"`
+	runtimeError     error
+}
+
+func (b *BackupMeta) Error() error {
+	switch {
+	case b.runtimeError != nil:
+		return b.runtimeError
+	case b.Err != "":
+		return errors.New(b.Err)
+	default:
+		return nil
+	}
+}
+
+func (b *BackupMeta) SetRuntimeError(err error) {
+	b.runtimeError = err
+	b.Status = StatusError
 }
 
 // BackupRsNomination is used to choose (nominate and elect) nodes for the backup
@@ -763,13 +783,20 @@ func (p *PBM) getBackupMeta(clause bson.D) (*BackupMeta, error) {
 // or nil if there is no such backup yet. If ts isn't nil it will
 // search for the most recent backup that finished before specified timestamp
 func (p *PBM) GetLastBackup(before *primitive.Timestamp) (*BackupMeta, error) {
-	return p.getRecentBackup(before, -1)
+	return p.getRecentBackup(nil, before, -1)
 }
 
-func (p *PBM) getRecentBackup(before *primitive.Timestamp, sort int) (*BackupMeta, error) {
+func (p *PBM) GetFirstBackup(after *primitive.Timestamp) (*BackupMeta, error) {
+	return p.getRecentBackup(after, nil, 1)
+}
+
+func (p *PBM) getRecentBackup(after, before *primitive.Timestamp, sort int) (*BackupMeta, error) {
 	q := bson.D{
 		{"status", StatusDone},
 		{"type", bson.M{"$ne": string(PhysicalBackup)}},
+	}
+	if after != nil {
+		q = append(q, bson.E{"last_write_ts", bson.M{"$gte": after}})
 	}
 	if before != nil {
 		q = append(q, bson.E{"last_write_ts", bson.M{"$lte": before}})

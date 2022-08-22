@@ -1,6 +1,7 @@
 package pbm
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"sort"
@@ -98,6 +99,27 @@ func (p *PBM) pitrChunk(rs string, sort int) (*OplogChunk, error) {
 	chnk := new(OplogChunk)
 	err := res.Decode(chnk)
 	return chnk, errors.Wrap(err, "decode")
+}
+
+func (p *PBM) AllOplogRSNames(ctx context.Context, from, to primitive.Timestamp) ([]string, error) {
+	q := bson.M{
+		"start_ts": bson.M{"$lte": to},
+	}
+	if !from.IsZero() {
+		q["end_ts"] = bson.M{"$gte": from}
+	}
+
+	res, err := p.Conn.Database(DB).Collection(PITRChunksCollection).Distinct(ctx, "rs", q)
+	if err != nil {
+		return nil, errors.Wrapf(err, "query")
+	}
+
+	rv := make([]string, len(res))
+	for i, rs := range res {
+		rv[i] = rs.(string)
+	}
+
+	return rv, nil
 }
 
 // PITRGetChunksSlice returns slice of PITR oplog chunks which Start TS
