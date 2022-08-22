@@ -637,19 +637,19 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 		}{votes: member.Votes, priority: member.Priority}
 	}
 
-	changes := false
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		if ext, ok := cm[member.Host]; ok {
 			if ext.votes != member.Votes || ext.priority != member.Priority {
-				changes = true
+				[]ConfigMember(*m)[i].Votes = ext.votes
+				[]ConfigMember(*m)[i].Priority = ext.priority
+
+				return true
 			}
-			[]ConfigMember(*m)[i].Votes = ext.votes
-			[]ConfigMember(*m)[i].Priority = ext.priority
 		}
 	}
 
-	return changes
+	return false
 }
 
 // AddNew adds a new member from given list to the config.
