@@ -169,8 +169,6 @@ spec:
             defaultMode: 288
             optional: false
             secretName: some-name-mongodb-keyfile
-        - emptyDir: {}
-          name: bin
         - name: ssl
           secret:
             defaultMode: 288
@@ -187,6 +185,8 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - emptyDir: {}
+          name: bin
   updateStrategy:
     rollingUpdate:
       partition: 0

@@ -145,7 +145,11 @@ spec:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
-        - env:
+        - args:
+            - pbm-agent
+          command:
+            - /opt/percona/pbm-entry.sh
+          env:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -171,6 +175,13 @@ spec:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /opt/percona
+              name: bin
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
