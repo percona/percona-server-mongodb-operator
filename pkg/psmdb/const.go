@@ -20,8 +20,12 @@ const (
 	// MongodContainerDataDir is a mondo data path in container
 	MongodContainerDataDir = "/data/db"
 
-	sslDir           = "/etc/mongodb-ssl"
+	BinVolumeName = "bin"
+	BinMountPath  = "/opt/percona"
+
+	SSLDir           = "/etc/mongodb-ssl"
 	sslInternalDir   = "/etc/mongodb-ssl-internal"
+	vaultDir         = "/etc/mongodb-vault"
 	mongodConfigDir  = "/etc/mongodb-config"
 	mongosConfigDir  = "/etc/mongos-config"
 	mongodSecretsDir = "/etc/mongodb-secrets"

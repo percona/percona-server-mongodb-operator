@@ -32,6 +32,7 @@ spec:
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
+#    vault: my-cluster-name-vault
   pmm:
     enabled: false
     image: percona/pmm-client:2.27.0
@@ -51,6 +52,9 @@ spec:
 #    - host: 34.124.76.92
 #    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #    configuration: |
+#      net:
+#        tls:
+#          mode: preferTLS
 #      operationProfiling:
 #        mode: slowOp
 #      systemLog:
@@ -157,6 +161,8 @@ spec:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      serviceLabels:
+#        rack: rack-22
     resources:
       limits:
         cpu: "300m"
@@ -329,6 +335,8 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        serviceLabels:
+#          rack: rack-22
       resources:
         limits:
           cpu: "300m"
@@ -412,6 +420,8 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        serviceLabels:
+#          rack: rack-22
 
 #  mongod:
 #    security:

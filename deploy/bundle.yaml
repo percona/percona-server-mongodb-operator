@@ -18566,6 +18566,10 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          serviceLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
                         required:
                           - enabled
                         type: object
@@ -22676,6 +22680,8 @@ spec:
                       type: string
                     users:
                       type: string
+                    vault:
+                      type: string
                   type: object
                 sharding:
                   properties:
@@ -24963,6 +24969,10 @@ spec:
                                 type: string
                               type: array
                             serviceAnnotations:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            serviceLabels:
                               additionalProperties:
                                 type: string
                               type: object
@@ -29514,6 +29524,10 @@ spec:
                               additionalProperties:
                                 type: string
                               type: object
+                            serviceLabels:
+                              additionalProperties:
+                                type: string
+                              type: object
                             servicePerPod:
                               type: boolean
                           type: object
@@ -31794,6 +31808,10 @@ spec:
           - percona-server-mongodb-operator
           imagePullPolicy: Always
           env:
+            - name: LOG_STRUCTURED
+              value: 'false'
+            - name: LOG_LEVEL
+              value: INFO
             - name: WATCH_NAMESPACE
               valueFrom:
                 fieldRef:

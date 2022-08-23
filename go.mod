@@ -3,7 +3,6 @@ module github.com/percona/percona-server-mongodb-operator
 go 1.18
 
 require (
-	github.com/Percona-Lab/percona-version-service/api v0.0.0-20200714141734-e9fed619b55c
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/go-logr/logr v1.2.2
 	github.com/go-openapi/errors v0.19.6
@@ -13,12 +12,13 @@ require (
 	github.com/go-openapi/validate v0.19.10
 	github.com/hashicorp/go-version v1.2.0
 	github.com/jetstack/cert-manager v1.6.1
-	github.com/percona/percona-backup-mongodb v1.7.0
+	github.com/percona/percona-backup-mongodb v1.8.1
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	go.mongodb.org/mongo-driver v1.7.0
+	go.uber.org/zap v1.20.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	gopkg.in/yaml.v2 v2.4.0
@@ -95,7 +95,6 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
-	go.uber.org/zap v1.20.0 // indirect
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/net v0.0.0-20220114011407-0dd24b26b47d // indirect

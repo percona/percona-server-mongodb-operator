@@ -56,7 +56,6 @@ spec:
             - --configdb
             - cfg/some-name-cfg-0.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-1.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-2.some-name-cfg.NAME_SPACE.svc.cluster.local:27017
             - --relaxPermChecks
-            - --sslMode=preferSSL
             - --clusterAuthMode=x509
           command:
             - /data/db/ps-entry.sh
@@ -154,6 +153,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
@@ -176,6 +177,8 @@ spec:
             secretName: some-name-ssl-internal
         - emptyDir: {}
           name: mongod-data
+        - emptyDir: {}
+          name: bin
   updateStrategy:
     rollingUpdate:
       partition: 0

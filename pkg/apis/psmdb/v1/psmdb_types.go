@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -197,6 +198,14 @@ const (
 )
 
 const DefaultVersionServiceEndpoint = "https://check.percona.com"
+
+func GetDefaultVersionServiceEndpoint() string {
+	if endpoint := os.Getenv("PERCONA_VS_FALLBACK_URI"); len(endpoint) > 0 {
+		return endpoint
+	}
+
+	return DefaultVersionServiceEndpoint
+}
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
@@ -402,29 +411,50 @@ func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
 	return &b, nil
 }
 
+// VaultEnabled returns whether mongo config has vault section under security
+func (conf MongoConfiguration) VaultEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return false
+	}
+	_, ok := m["vault"]
+	return ok
+}
+
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
 func (conf *MongoConfiguration) setEncryptionDefaults() error {
 	m := make(map[string]interface{})
+
 	err := yaml.Unmarshal([]byte(*conf), m)
 	if err != nil {
 		return err
 	}
+
 	val, ok := m["security"]
 	if !ok {
 		return nil
 	}
+
 	security, ok := val.(map[interface{}]interface{})
 	if !ok {
 		return errors.New("security configuration section is invalid")
 	}
+
+	if _, ok := security["vault"]; ok {
+		return nil
+	}
+
 	if _, ok = security["enableEncryption"]; ok {
 		security["encryptionKeyFile"] = MongodRESTencryptDir + "/" + EncryptionKeyName
 	}
+
 	res, err := yaml.Marshal(m)
 	if err != nil {
 		return err
 	}
+
 	*conf = MongoConfiguration(res)
+
 	return nil
 }
 
@@ -508,6 +538,7 @@ type SecretsSpec struct {
 	SSL           string `json:"ssl,omitempty"`
 	SSLInternal   string `json:"sslInternal,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
+	Vault         string `json:"vault,omitempty"`
 }
 
 type MongosSpec struct {
@@ -755,6 +786,7 @@ type MongosExpose struct {
 	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
+	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
 type Expose struct {
@@ -762,6 +794,7 @@ type Expose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
+	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
 // ServerVersion represents info about k8s / openshift server version

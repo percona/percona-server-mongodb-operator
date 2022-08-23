@@ -14,6 +14,7 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 )
 
 // NewVersionServiceApplyParams creates a new VersionServiceApplyParams object
@@ -64,14 +65,20 @@ type VersionServiceApplyParams struct {
 	Apply string
 	/*BackupVersion*/
 	BackupVersion *string
+	/*ClusterWideEnabled*/
+	ClusterWideEnabled *bool
 	/*CustomResourceUID*/
 	CustomResourceUID *string
 	/*DatabaseVersion*/
 	DatabaseVersion *string
 	/*HaproxyVersion*/
 	HaproxyVersion *string
+	/*HashicorpVaultEnabled*/
+	HashicorpVaultEnabled *bool
 	/*KubeVersion*/
 	KubeVersion *string
+	/*LogCollectorVersion*/
+	LogCollectorVersion *string
 	/*NamespaceUID*/
 	NamespaceUID *string
 	/*OperatorVersion*/
@@ -84,6 +91,8 @@ type VersionServiceApplyParams struct {
 	Product string
 	/*ProxysqlVersion*/
 	ProxysqlVersion *string
+	/*ShardingEnabled*/
+	ShardingEnabled *bool
 
 	timeout    time.Duration
 	Context    context.Context
@@ -145,6 +154,17 @@ func (o *VersionServiceApplyParams) SetBackupVersion(backupVersion *string) {
 	o.BackupVersion = backupVersion
 }
 
+// WithClusterWideEnabled adds the clusterWideEnabled to the version service apply params
+func (o *VersionServiceApplyParams) WithClusterWideEnabled(clusterWideEnabled *bool) *VersionServiceApplyParams {
+	o.SetClusterWideEnabled(clusterWideEnabled)
+	return o
+}
+
+// SetClusterWideEnabled adds the clusterWideEnabled to the version service apply params
+func (o *VersionServiceApplyParams) SetClusterWideEnabled(clusterWideEnabled *bool) {
+	o.ClusterWideEnabled = clusterWideEnabled
+}
+
 // WithCustomResourceUID adds the customResourceUID to the version service apply params
 func (o *VersionServiceApplyParams) WithCustomResourceUID(customResourceUID *string) *VersionServiceApplyParams {
 	o.SetCustomResourceUID(customResourceUID)
@@ -178,6 +198,17 @@ func (o *VersionServiceApplyParams) SetHaproxyVersion(haproxyVersion *string) {
 	o.HaproxyVersion = haproxyVersion
 }
 
+// WithHashicorpVaultEnabled adds the hashicorpVaultEnabled to the version service apply params
+func (o *VersionServiceApplyParams) WithHashicorpVaultEnabled(hashicorpVaultEnabled *bool) *VersionServiceApplyParams {
+	o.SetHashicorpVaultEnabled(hashicorpVaultEnabled)
+	return o
+}
+
+// SetHashicorpVaultEnabled adds the hashicorpVaultEnabled to the version service apply params
+func (o *VersionServiceApplyParams) SetHashicorpVaultEnabled(hashicorpVaultEnabled *bool) {
+	o.HashicorpVaultEnabled = hashicorpVaultEnabled
+}
+
 // WithKubeVersion adds the kubeVersion to the version service apply params
 func (o *VersionServiceApplyParams) WithKubeVersion(kubeVersion *string) *VersionServiceApplyParams {
 	o.SetKubeVersion(kubeVersion)
@@ -187,6 +218,17 @@ func (o *VersionServiceApplyParams) WithKubeVersion(kubeVersion *string) *Versio
 // SetKubeVersion adds the kubeVersion to the version service apply params
 func (o *VersionServiceApplyParams) SetKubeVersion(kubeVersion *string) {
 	o.KubeVersion = kubeVersion
+}
+
+// WithLogCollectorVersion adds the logCollectorVersion to the version service apply params
+func (o *VersionServiceApplyParams) WithLogCollectorVersion(logCollectorVersion *string) *VersionServiceApplyParams {
+	o.SetLogCollectorVersion(logCollectorVersion)
+	return o
+}
+
+// SetLogCollectorVersion adds the logCollectorVersion to the version service apply params
+func (o *VersionServiceApplyParams) SetLogCollectorVersion(logCollectorVersion *string) {
+	o.LogCollectorVersion = logCollectorVersion
 }
 
 // WithNamespaceUID adds the namespaceUID to the version service apply params
@@ -255,6 +297,17 @@ func (o *VersionServiceApplyParams) SetProxysqlVersion(proxysqlVersion *string) 
 	o.ProxysqlVersion = proxysqlVersion
 }
 
+// WithShardingEnabled adds the shardingEnabled to the version service apply params
+func (o *VersionServiceApplyParams) WithShardingEnabled(shardingEnabled *bool) *VersionServiceApplyParams {
+	o.SetShardingEnabled(shardingEnabled)
+	return o
+}
+
+// SetShardingEnabled adds the shardingEnabled to the version service apply params
+func (o *VersionServiceApplyParams) SetShardingEnabled(shardingEnabled *bool) {
+	o.ShardingEnabled = shardingEnabled
+}
+
 // WriteToRequest writes these params to a swagger request
 func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.Registry) error {
 
@@ -278,6 +331,22 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		qBackupVersion := qrBackupVersion
 		if qBackupVersion != "" {
 			if err := r.SetQueryParam("backupVersion", qBackupVersion); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	if o.ClusterWideEnabled != nil {
+
+		// query param clusterWideEnabled
+		var qrClusterWideEnabled bool
+		if o.ClusterWideEnabled != nil {
+			qrClusterWideEnabled = *o.ClusterWideEnabled
+		}
+		qClusterWideEnabled := swag.FormatBool(qrClusterWideEnabled)
+		if qClusterWideEnabled != "" {
+			if err := r.SetQueryParam("clusterWideEnabled", qClusterWideEnabled); err != nil {
 				return err
 			}
 		}
@@ -332,6 +401,22 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 
 	}
 
+	if o.HashicorpVaultEnabled != nil {
+
+		// query param hashicorpVaultEnabled
+		var qrHashicorpVaultEnabled bool
+		if o.HashicorpVaultEnabled != nil {
+			qrHashicorpVaultEnabled = *o.HashicorpVaultEnabled
+		}
+		qHashicorpVaultEnabled := swag.FormatBool(qrHashicorpVaultEnabled)
+		if qHashicorpVaultEnabled != "" {
+			if err := r.SetQueryParam("hashicorpVaultEnabled", qHashicorpVaultEnabled); err != nil {
+				return err
+			}
+		}
+
+	}
+
 	if o.KubeVersion != nil {
 
 		// query param kubeVersion
@@ -342,6 +427,22 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		qKubeVersion := qrKubeVersion
 		if qKubeVersion != "" {
 			if err := r.SetQueryParam("kubeVersion", qKubeVersion); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	if o.LogCollectorVersion != nil {
+
+		// query param logCollectorVersion
+		var qrLogCollectorVersion string
+		if o.LogCollectorVersion != nil {
+			qrLogCollectorVersion = *o.LogCollectorVersion
+		}
+		qLogCollectorVersion := qrLogCollectorVersion
+		if qLogCollectorVersion != "" {
+			if err := r.SetQueryParam("logCollectorVersion", qLogCollectorVersion); err != nil {
 				return err
 			}
 		}
@@ -416,6 +517,22 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		qProxysqlVersion := qrProxysqlVersion
 		if qProxysqlVersion != "" {
 			if err := r.SetQueryParam("proxysqlVersion", qProxysqlVersion); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	if o.ShardingEnabled != nil {
+
+		// query param shardingEnabled
+		var qrShardingEnabled bool
+		if o.ShardingEnabled != nil {
+			qrShardingEnabled = *o.ShardingEnabled
+		}
+		qShardingEnabled := swag.FormatBool(qrShardingEnabled)
+		if qShardingEnabled != "" {
+			if err := r.SetQueryParam("shardingEnabled", qShardingEnabled); err != nil {
 				return err
 			}
 		}

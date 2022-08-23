@@ -35,8 +35,9 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + replset.Name,
-			Namespace: m.Namespace,
+			Name:        m.Name + "-" + replset.Name,
+			Namespace:   m.Namespace,
+			Annotations: replset.Expose.ServiceAnnotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -53,7 +54,15 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 	}
 
 	if m.CompareVersion("1.12.0") >= 0 {
-		svc.Labels = ls
+		svc.Labels = make(map[string]string)
+		for k, v := range ls {
+			svc.Labels[k] = v
+		}
+		for k, v := range replset.Expose.ServiceLabels {
+			if _, ok := svc.Labels[k]; !ok {
+				svc.Labels[k] = v
+			}
+		}
 	}
 
 	return svc
@@ -80,6 +89,12 @@ func ExternalService(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podN
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 		"app.kubernetes.io/component":  "external-service",
+	}
+
+	for k, v := range replset.Expose.ServiceLabels {
+		if _, ok := svc.Labels[k]; !ok {
+			svc.Labels[k] = v
+		}
 	}
 
 	svc.Spec = corev1.ServiceSpec{

@@ -54,6 +54,15 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
+	if m.CompareVersion("1.13.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	}
+
 	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
@@ -66,18 +75,33 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	}
 
 	if encryptionEnabled {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: m.Spec.EncryptionKeySecretName(),
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &secretFileMode,
-						SecretName:  m.Spec.EncryptionKeySecretName(),
-						Optional:    &fvar,
+		if len(m.Spec.Secrets.Vault) != 0 {
+			volumes = append(volumes,
+				corev1.Volume{
+					Name: m.Spec.Secrets.Vault,
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							DefaultMode: &secretFileMode,
+							SecretName:  m.Spec.Secrets.Vault,
+							Optional:    &fvar,
+						},
 					},
 				},
-			},
-		)
+			)
+		} else {
+			volumes = append(volumes,
+				corev1.Volume{
+					Name: m.Spec.EncryptionKeySecretName(),
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							DefaultMode: &secretFileMode,
+							SecretName:  m.Spec.EncryptionKeySecretName(),
+							Optional:    &fvar,
+						},
+					},
+				},
+			)
+		}
 	}
 
 	c, err := container(m, replset, containerName, resources, ikeyName, customConf.Type.IsUsable(),

@@ -48,6 +48,10 @@ spec:
           memory: "0.5G"
       expose:
         exposeType: ClusterIP
+        serviceLabels:
+          test: monitoring
+        serviceAnnotations:
+          test: monitoring
 
   pmm:
     enabled: true

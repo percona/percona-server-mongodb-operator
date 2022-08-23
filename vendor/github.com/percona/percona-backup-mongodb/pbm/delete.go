@@ -205,10 +205,10 @@ func (p *PBM) DeletePITR(until *time.Time, l *log.Event) error {
 		return p.deleteChunks(zerots, zerots, stg, l)
 	}
 
-	bcp, err := p.GetLastBackup(&primitive.Timestamp{T: uint32(until.Unix()), I: 0})
+	t := primitive.Timestamp{T: uint32(until.Unix()), I: 0}
+	bcp, err := p.GetLastBackup(&t)
 	if errors.Is(err, ErrNotFound) {
-		l.Debug("nothing to delete")
-		return nil
+		return p.deleteChunks(zerots, t, stg, l)
 	}
 
 	if err != nil {
