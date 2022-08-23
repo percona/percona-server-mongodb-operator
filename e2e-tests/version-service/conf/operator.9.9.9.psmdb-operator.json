@@ -5,22 +5,28 @@
       "product": "psmdb-operator",
       "matrix": {
         "mongod": {
+          "5.0.10-9": {
+            "image_path": "percona/percona-server-mongodb:5.0.10-9",
+            "image_hash": "0fb4bee9b3e1188056e20d404674f8d135f28c3e43adda1a28c7416d35abd7c1",
+            "status": "available",
+            "critical": false
+          },
+          "4.4.10-11": {
+            "image_path": "percona/percona-server-mongodb:4.4.10-11",
+            "image_hash": "ea73a506fa02604660e3ef7d452d142a89587bb5daca15d3cc1b539a9b1000c5",
+            "status": "recommended",
+            "critical": false
+          },
           "4.4.8-9": {
             "image_path": "percona/percona-server-mongodb:4.4.8-9",
             "image_hash": "4d29b3557c949f95009eaccf7a8f56215ac609406d230be87b6eaa072e0c1f69",
             "status": "available",
             "critical": false
           },
-          "4.4.6-8": {
-            "image_path": "percona/percona-server-mongodb:4.4.6-8",
-            "image_hash": "0afd1ae855cd5090d106ba7462b0c1c73e0da7a180b46811b2f3c2149ecb7d4f",
-            "status": "available",
-            "critical": false
-          },
           "4.2.15-16": {
             "image_path": "percona/percona-server-mongodb:4.2.15-16",
             "image_hash": "c78c007a55b74bea9c4eda5d97a814ffa360857e15f7a19dce9d0a313e2e2285",
-            "status": "recommended",
+            "status": "available",
             "critical": false
           },
           "4.2.14-15": {
@@ -28,24 +34,6 @@
             "image_hash": "255df9d2157eac6d9f452780b918b352da90814af0ab3210ffbe23177e6d4cf8",
             "status": "available",
             "critical": false
-          },
-          "4.0.20-13": {
-            "image_path": "percona/percona-server-mongodb:4.0.20-13",
-            "image_hash": "badef1eb2807b0b27a2298f697388f1dffa5398d5caa306a65fc41b98f7a72e3",
-            "status": "recommended",
-            "critical": false
-          },
-          "4.0.19-12": {
-            "image_path": "percona/percona-server-mongodb:4.0.19-12",
-            "image_hash": "24a8214d84c3a9a4147c12c4c159d4a1aa3dae831859f77b3db1a563a268e2bf",
-            "status": "available",
-            "critical": false
-          },
-          "4.0.18-11": {
-            "image_path": "percona/percona-server-mongodb:4.0.18",
-            "image_hash": "bf9e69712868f7e93daef22c14c083bbb2a74d3028d78d8597b2aeacda340c69",
-            "status": "available",
-            "critical": true
           }
         },
         "pmm": {
