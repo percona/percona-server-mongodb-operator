@@ -45,12 +45,6 @@ else
 	EKS=0
 fi
 
-if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ] || [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-gke\-") ]; then
-	AKS=0
-else
-	AKS=1
-fi
-
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 version_gt() {
