@@ -3103,6 +3103,10 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        serviceLabels:
+                          additionalProperties:
+                            type: string
+                          type: object
                       required:
                       - enabled
                       type: object
@@ -9502,6 +9506,10 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          serviceLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
                         required:
                         - enabled
                         type: object
@@ -14045,6 +14053,10 @@ spec:
                               type: string
                             type: array
                           serviceAnnotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          serviceLabels:
                             additionalProperties:
                               type: string
                             type: object

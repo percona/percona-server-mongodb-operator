@@ -13,7 +13,7 @@ spec:
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: http://version-service:11000
-    apply: 4.2-latest
+    apply: 4.4-latest
     schedule: "0 2 * * *"
   replsets:
   - name: rs0

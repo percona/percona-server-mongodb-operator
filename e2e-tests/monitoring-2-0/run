@@ -54,6 +54,7 @@ sleep 90
 desc 'check if pmm-client container enabled'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl service/$cluster-rs0
+compare_kubectl service/$cluster-mongos
 compare_kubectl statefulset/$cluster-cfg
 compare_kubectl statefulset/$cluster-mongos
 

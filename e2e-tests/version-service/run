@@ -16,7 +16,7 @@ kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f $test_dir/conf/vs.yml
 sleep 10
 
 cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-major" "version-service-unreachable")
-expected_images=("percona/percona-server-mongodb:4.4.6-8" "percona/percona-server-mongodb:4.2.15-16" "percona/percona-server-mongodb:4.4.8-9" "percona/percona-server-mongodb:4.2.15-16" "$IMAGE_MONGOD")
+expected_images=("percona/percona-server-mongodb:4.4.8-9" "percona/percona-server-mongodb:4.4.10-11" "percona/percona-server-mongodb:5.0.10-9" "percona/percona-server-mongodb:4.4.10-11" "$IMAGE_MONGOD")
 
 for i in "${!cases[@]}"; do
 	desc "test ${cases[$i]}"
