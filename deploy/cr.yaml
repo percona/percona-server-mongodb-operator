@@ -161,6 +161,8 @@ spec:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      serviceLabels:
+#        rack: rack-22
     resources:
       limits:
         cpu: "300m"
@@ -333,6 +335,8 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        serviceLabels:
+#          rack: rack-22
       resources:
         limits:
           cpu: "300m"
@@ -416,6 +420,8 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        serviceLabels:
+#          rack: rack-22
 
 #  mongod:
 #    security:
