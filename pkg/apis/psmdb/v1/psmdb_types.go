@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -197,6 +198,14 @@ const (
 )
 
 const DefaultVersionServiceEndpoint = "https://check.percona.com"
+
+func GetDefaultVersionServiceEndpoint() string {
+	if endpoint := os.Getenv("PERCONA_VS_FALLBACK_URI"); len(endpoint) > 0 {
+		return endpoint
+	}
+
+	return DefaultVersionServiceEndpoint
+}
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
@@ -777,6 +786,7 @@ type MongosExpose struct {
 	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
+	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
 type Expose struct {
@@ -784,6 +794,7 @@ type Expose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
+	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
 // ServerVersion represents info about k8s / openshift server version

@@ -10,6 +10,7 @@ import (
 	v "github.com/hashicorp/go-version"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
@@ -228,14 +229,22 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return errors.Wrap(err, "failed to check if major update requested")
 	}
 
+	watchNs, err := k8s.GetWatchNamespace()
+	if err != nil {
+		return errors.Wrap(err, "get WATCH_NAMESPACE env variable")
+	}
+
 	vm := VersionMeta{
-		Apply:         string(cr.Spec.UpgradeOptions.Apply),
-		KubeVersion:   r.serverVersion.Info.GitVersion,
-		MongoVersion:  cr.Status.MongoVersion,
-		PMMVersion:    cr.Status.PMMVersion,
-		BackupVersion: cr.Status.BackupVersion,
-		CRUID:         string(cr.GetUID()),
-		Version:       cr.Version().String(),
+		Apply:                 string(cr.Spec.UpgradeOptions.Apply),
+		KubeVersion:           r.serverVersion.Info.GitVersion,
+		MongoVersion:          cr.Status.MongoVersion,
+		PMMVersion:            cr.Status.PMMVersion,
+		BackupVersion:         cr.Status.BackupVersion,
+		CRUID:                 string(cr.GetUID()),
+		Version:               cr.Version().String(),
+		ShardingEnabled:       cr.Spec.Sharding.Enabled,
+		HashicorpVaultEnabled: len(cr.Spec.Secrets.Vault) > 0,
+		ClusterWideEnabled:    len(watchNs) == 0,
 	}
 	if cr.Spec.Platform != nil {
 		vm.Platform = string(*cr.Spec.Platform)
@@ -250,10 +259,10 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		}
 	}
 
-	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != api.DefaultVersionServiceEndpoint) {
-		_, err = vs.GetExactVersion(cr, api.DefaultVersionServiceEndpoint, vm)
+	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != api.GetDefaultVersionServiceEndpoint()) {
+		_, err = vs.GetExactVersion(cr, api.GetDefaultVersionServiceEndpoint(), vm)
 		if err != nil {
-			log.Error(err, "failed to send telemetry to "+api.DefaultVersionServiceEndpoint)
+			log.Error(err, "failed to send telemetry to "+api.GetDefaultVersionServiceEndpoint())
 		}
 	}
 

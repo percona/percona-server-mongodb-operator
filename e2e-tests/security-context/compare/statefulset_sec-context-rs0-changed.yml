@@ -50,7 +50,6 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
@@ -134,7 +133,11 @@ spec:
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
-        - env:
+        - args:
+            - pbm-agent
+          command:
+            - /opt/percona/pbm-entry.sh
+          env:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -160,6 +163,13 @@ spec:
             runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /opt/percona
+              name: bin
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -178,6 +188,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
@@ -194,6 +206,8 @@ spec:
             defaultMode: 288
             optional: false
             secretName: sec-context-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
         - configMap:
             defaultMode: 420
             name: sec-context-rs0-mongod

@@ -26,9 +26,6 @@ github.com/Azure/go-autorest/logger
 # github.com/Azure/go-autorest/tracing v0.6.0
 ## explicit; go 1.12
 github.com/Azure/go-autorest/tracing
-# github.com/Percona-Lab/percona-version-service/api v0.0.0-20200714141734-e9fed619b55c
-## explicit; go 1.14
-github.com/Percona-Lab/percona-version-service/api
 # github.com/PuerkitoBio/purell v1.1.1
 ## explicit
 github.com/PuerkitoBio/purell
@@ -279,7 +276,7 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
-# github.com/percona/percona-backup-mongodb v1.7.0
+# github.com/percona/percona-backup-mongodb v1.8.1
 ## explicit; go 1.15
 github.com/percona/percona-backup-mongodb/pbm
 github.com/percona/percona-backup-mongodb/pbm/log

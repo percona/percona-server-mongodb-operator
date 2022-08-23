@@ -27,7 +27,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		},
 		{
 			Name:      "ssl",
-			MountPath: sslDir,
+			MountPath: SSLDir,
 			ReadOnly:  true,
 		},
 		{
@@ -165,7 +165,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		)
 	} else {
 		args = append(args,
-			"--sslMode=preferSSL",
 			"--clusterAuthMode=x509",
 		)
 	}
