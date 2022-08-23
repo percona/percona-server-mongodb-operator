@@ -417,6 +417,18 @@ if [[ $originalArgOne == mongo* ]]; then
 		fi
 	fi
 
+	# don't add --tlsMode if allowUnsafeConfigurations is true
+	if clusterAuthMode="$(_mongod_hack_get_arg_val --clusterAuthMode "${mongodHackedArgs[@]}")"; then
+		if [[ ${clusterAuthMode} != "keyFile" ]]; then
+			tlsMode="preferSSL"
+			# if --config arg is present, try to get tlsMode from it
+			if _parse_config "${mongodHackedArgs[@]}"; then
+				tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "${jsonConfigFile}")
+			fi
+			_mongod_hack_ensure_arg_val --sslMode "${tlsMode}" "${mongodHackedArgs[@]}"
+		fi
+	fi
+
 	MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 	if [ "$MONGODB_VERSION" != 'v4.0' ]; then

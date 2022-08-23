@@ -56,7 +56,6 @@ spec:
             - --configdb
             - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017
             - --relaxPermChecks
-            - --sslMode=preferSSL
             - --clusterAuthMode=x509
           command:
             - /data/db/ps-entry.sh
@@ -282,6 +281,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
@@ -308,6 +309,8 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-monitoring-users
+        - emptyDir: {}
+          name: bin
   updateStrategy:
     rollingUpdate:
       partition: 0

@@ -148,7 +148,17 @@ func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Con
 			image = initImage
 		}
 	}
-	return []corev1.Container{EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)}
+
+	initContainer := EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)
+
+	if cr.CompareVersion("1.13.0") >= 0 {
+		initContainer.VolumeMounts = append(initContainer.VolumeMounts, corev1.VolumeMount{
+			Name:      BinVolumeName,
+			MountPath: BinMountPath,
+		})
+	}
+
+	return []corev1.Container{initContainer}
 }
 
 func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) (corev1.Container, error) {
@@ -166,7 +176,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		},
 		{
 			Name:      "ssl",
-			MountPath: sslDir,
+			MountPath: SSLDir,
 			ReadOnly:  true,
 		},
 		{
@@ -273,7 +283,6 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		)
 	} else {
 		args = append(args,
-			"--sslMode=preferSSL",
 			"--clusterAuthMode=x509",
 		)
 	}
@@ -387,6 +396,15 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: configSource.VolumeSource(MongosCustomConfigName(cr.Name)),
+		})
+	}
+
+	if cr.CompareVersion("1.13.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
 		})
 	}
 

@@ -54,6 +54,15 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
+	if m.CompareVersion("1.13.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	}
+
 	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",

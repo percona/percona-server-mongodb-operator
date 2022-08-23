@@ -2,6 +2,7 @@ package perconaservermongodbbackup
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -123,7 +124,7 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 	switch meta.Status {
 	case pbm.StatusError:
 		status.State = api.BackupStateError
-		status.Error = meta.Error
+		status.Error = fmt.Sprintf("%v", meta.Error())
 	case pbm.StatusDone:
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
