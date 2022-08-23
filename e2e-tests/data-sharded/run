@@ -17,7 +17,7 @@ create_infra "$namespace"
 desc 'create PSMDB cluster'
 cluster="some-name"
 kubectl_bin apply \
-	-f "$conf_dir/secrets.yml" \
+	-f "$conf_dir/secrets_with_tls.yml" \
 	-f "$conf_dir/client.yml"
 
 apply_cluster "$test_dir/conf/$cluster.yml"

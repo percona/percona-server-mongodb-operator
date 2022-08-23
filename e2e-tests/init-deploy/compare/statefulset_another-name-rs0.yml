@@ -172,6 +172,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       runtimeClassName: container-rc
       schedulerName: default-scheduler
@@ -186,6 +188,8 @@ spec:
             defaultMode: 288
             optional: false
             secretName: another-name-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
         - configMap:
             defaultMode: 420
             name: another-name-rs0-mongod
