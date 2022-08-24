@@ -12,7 +12,7 @@ help: ## Display this help.
 
 generate: controller-gen  ## Generate CRDs and RBAC files
 	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 $(DEPLOYDIR)/crd.yaml: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
