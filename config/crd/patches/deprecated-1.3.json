@@ -1,7 +1,7 @@
 [
   {
     "op": "add",
-    "path": "/spec/versions/8",
+    "path": "/spec/versions/1",
     "value": {
       "additionalPrinterColumns": [
         {
@@ -21,8 +21,8 @@
         }
       ],
       "deprecated": true,
-      "deprecationWarning": "psmdb.percona.com/v1-10-0 PerconaServerMongoDB is deprecated and will be removed in v1.17.0; see v1.13.0 release notes for instructions to migrate to psmdb.percona.com/v1",
-      "name": "v1-10-0",
+      "deprecationWarning": "psmdb.percona.com/v1-3-0 PerconaServerMongoDB is deprecated and will be removed in v1.17.0; see v1.13.0 release notes for instructions to migrate to psmdb.percona.com/v1",
+      "name": "v1-3-0",
       "schema": {
         "openAPIV3Schema": {
           "properties": {
@@ -38,7 +38,7 @@
           "type": "object"
         }
       },
-      "served": true,
+      "served": false,
       "storage": false,
       "subresources": {
         "status": {}
