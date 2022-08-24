@@ -671,7 +671,6 @@ run_script_mongos() {
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	name="$(basename $script)"
-
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
 		bash -c "mongo $driver://$uri$suffix/admin /tmp/${name}"
