@@ -21,5 +21,8 @@ spec:
     configuration: |
       security:
         enableEncryption: true
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:main-backup
   secrets:
     users: some-users
