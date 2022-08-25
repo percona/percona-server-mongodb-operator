@@ -82,8 +82,8 @@ kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespac
 
 desc 'install version service'
 kubectl_bin create configmap ${OPERATOR_NS:+-n $OPERATOR_NS} versions \
-  --from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json \
-  --from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.dep.json \
+	--from-file $test_dir/conf/operator.9.9.9.psmdb-operator.json
 
 kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f $test_dir/conf/vs.yml
 sleep 10
