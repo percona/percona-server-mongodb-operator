@@ -42,10 +42,11 @@ uninstall: manifests ## Uninstall CRDs, rbac
 	kubectl delete -f $(DEPLOYDIR)/crd.yaml
 	kubectl delete -f $(DEPLOYDIR)/rbac.yaml
 
-deploy: manifests ## Deploy operator
-	kubectl apply -f $(DEPLOYDIR)/operator.yaml
+.PHONY: deploy
+deploy: ## Deploy operator
+	yq w $(DEPLOYDIR)/operator.yaml 'spec.template.spec.containers.(name==percona-server-mongodb-operator).image' $(IMAGE) | kubectl apply -f -
 
-undeploy: manifests ## Undeploy operator
+undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
