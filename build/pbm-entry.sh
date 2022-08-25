@@ -9,7 +9,7 @@ MONGO_SSL_DIR=/etc/mongodb-ssl
 if [[ -f "${MONGO_SSL_DIR}/tls.crt" ]] && [[ -f "${MONGO_SSL_DIR}/tls.key" ]]; then
 	cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
 	PBM_MONGO_OPTS="--tls --tlsAllowInvalidHostnames --tlsCertificateKeyFile=/tmp/tls.pem --tlsCAFile=${MONGO_SSL_DIR}/ca.crt"
-	PBM_MONGODB_URI="${PBM_MONGODB_URI}&tls=true&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem&tlsCAFile=${MONGO_SSL_DIR}%2Fca.crt&tlsAllowInvalidCertificates=true"
+	PBM_MONGODB_URI="${PBM_MONGODB_URI}&tls=true&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem&tlsCAFile=${MONGO_SSL_DIR}%2Fca.crt&tlsInsecure=true"
 fi
 
 export PBM_MONGODB_URI
