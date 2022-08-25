@@ -76,9 +76,9 @@ function check_telemetry_transfer() {
 create_infra $namespace
 
 # Enable telemetry on operator level
-kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespace} |
-  yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"false"' \
-    | kubectl_bin apply -f -
+kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespace} \
+	| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"false"' \
+	| kubectl_bin apply -f -
 
 desc 'install version service'
 kubectl_bin create configmap ${OPERATOR_NS:+-n $OPERATOR_NS} versions \
