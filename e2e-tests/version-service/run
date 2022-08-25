@@ -87,9 +87,9 @@ kubectl_bin create configmap ${OPERATOR_NS:+-n $OPERATOR_NS} versions \
 
 kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f $test_dir/conf/vs.yml
 sleep 10
-$sed 's/version-service/version-service-cr/g' "${test_dir}/conf/vs.yml" |
-  yq w - -d0 'spec.template.spec.containers[0].image' $(yq r -d0 "${test_dir}/conf/vs.yml" 'spec.template.spec.containers[0].image') |
-  kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
+$sed 's/version-service/version-service-cr/g' "${test_dir}/conf/vs.yml" \
+	| yq w - -d0 'spec.template.spec.containers[0].image' $(yq r -d0 "${test_dir}/conf/vs.yml" 'spec.template.spec.containers[0].image') \
+	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 check_telemetry_transfer "http://version-service-cr:11000" "disabled" "enabled"
 
