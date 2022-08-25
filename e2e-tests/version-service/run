@@ -94,9 +94,9 @@ $sed 's/version-service/version-service-cr/g' "${test_dir}/conf/vs.yml" \
 check_telemetry_transfer "http://version-service-cr:11000" "disabled" "enabled"
 
 # Disabling telemetry on the operator level
-kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespace} |
-  yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' |
-  kubectl_bin apply -f -
+kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespace} \
+	| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' \
+	| kubectl_bin apply -f -
 
 wait_deployment 'percona-server-mongodb-operator'
 
