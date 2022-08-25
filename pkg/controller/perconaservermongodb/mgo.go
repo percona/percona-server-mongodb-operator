@@ -40,6 +40,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateReady, nil
 	}
 
+	unsafePsaMode := cr.Spec.UnsafeConf && replset.Arbiter.Enabled && replset.Arbiter.Size == 1 && !replset.NonVoting.Enabled && replset.Size == 2
+
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
 		log.Info("Waiting for the pods", "replset", replset.Name, "size", replsetSize, "pods", len(pods.Items))
@@ -286,7 +288,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if cnf.Members.FixTags(members) {
-		cnf.Members.SetVotes()
+		cnf.Members.SetVotes(unsafePsaMode)
 
 		cnf.Version++
 		if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
@@ -328,7 +330,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes()
+	cnf.Members.SetVotes(unsafePsaMode)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
 		err = mongo.WriteConfig(ctx, cli, cnf)
