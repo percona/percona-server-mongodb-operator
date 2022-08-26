@@ -160,11 +160,10 @@ compare_mongos_cmd "find" "myApp:myPass@$main_cluster-mongos.$namespace"
 desc 'Test failover'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 kubectl_bin delete psmdb $main_cluster
-sleep 120
-
+sleep 60
+run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs0_0_endpoint" "mongodb" ":27017"
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs1_0_endpoint" "mongodb" ":27017"
-run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
 
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
 kubectl_bin patch psmdb ${replica_cluster} --type=merge --patch '{"spec":{"unmanaged": false}}'
