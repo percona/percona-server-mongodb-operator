@@ -10,58 +10,58 @@ API='psmdb.percona.com/v9-9-9'
 
 function check_telemetry_transfer() {
 
-  local cr_vs_uri=${1}
-  local cr_vs_channel=${2:-"disabled"}
-  local telemetry_state=${3:-"enabled"}
+	local cr_vs_uri=${1}
+	local cr_vs_channel=${2:-"disabled"}
+	local telemetry_state=${3:-"enabled"}
 
-  desc 'create first PSMDB minimal cluster'
-  cluster="minimal-cluster"
+	desc 'create first PSMDB minimal cluster'
+	cluster="minimal-cluster"
 
-  kubectl_bin apply -f $conf_dir/client.yml
-  yq w $conf_dir/secrets.yml 'metadata.name' "${cluster}" | kubectl_bin apply -f -
+	kubectl_bin apply -f $conf_dir/client.yml
+	yq w $conf_dir/secrets.yml 'metadata.name' "${cluster}" | kubectl_bin apply -f -
 
-  yq r ${src_dir}/deploy/cr-minimal.yaml |
-    yq w - 'spec.upgradeOptions.versionServiceEndpoint' "${cr_vs_uri}" |
-    yq w - 'spec.upgradeOptions.apply' ${cr_vs_channel} |
-    yq d - "spec.crVersion" |
-    $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" |
-    $sed -e "s#image:\$#image: $IMAGE_MONGOD#" |
-    $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" |
-    $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" |
-    $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" |
-    $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" |
-    kubectl_bin apply -f -
+	yq r ${src_dir}/deploy/cr-minimal.yaml \
+		| yq w - 'spec.upgradeOptions.versionServiceEndpoint' "${cr_vs_uri}" \
+		| yq w - 'spec.upgradeOptions.apply' ${cr_vs_channel} \
+		| yq d - "spec.crVersion" \
+		| $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
+		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
+		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
+		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
+		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
+		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
+		| kubectl_bin apply -f -
 
-  desc 'check if Pod is started'
-  wait_for_running "${cluster}-rs0" 1
-  sleep 20
-  compare_kubectl "statefulset/${cluster}-rs0"
+	desc 'check if Pod is started'
+	wait_for_running "${cluster}-rs0" 1
+	sleep 20
+	compare_kubectl "statefulset/${cluster}-rs0"
 
-  desc 'write data'
-  run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
-    "userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+	desc 'write data'
+	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
 
-  run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
+	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
 
-  compare_kubectl "statefulset/${cluster}-rs0"
+	compare_kubectl "statefulset/${cluster}-rs0"
 
-  kubectl_bin logs $(kubectl get pods --selector=run=version-service-cr -o jsonpath='{.items[0].metadata.name}') |
-    grep -E 'server request payload|unary call' |
-    grep -Eo '\{.*\}' |
-    jq 'del(."grpc.request.content".msg.customResourceUid)' |
-    jq 'del(."grpc.start_time")' |
-    jq 'del(."grpc.time_ms")' \
-      >${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json
+	kubectl_bin logs $(kubectl get pods --selector=run=version-service-cr -o jsonpath='{.items[0].metadata.name}') \
+		| grep -E 'server request payload|unary call' \
+		| grep -Eo '\{.*\}' \
+		| jq 'del(."grpc.request.content".msg.customResourceUid)' \
+		| jq 'del(."grpc.start_time")' \
+		| jq 'del(."grpc.time_ms")' \
+			>${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json
 
-  [[ ${telemetry_state} == "disabled" && ${cr_vs_channel} == "recommended" ]] \
-    && diff -u ${tmp_dir}/enabled_telemetry.version-service-cr.log.json ${test_dir}/compare/enabled_telemetry.version-service-cr.log.json \
-    || comm -13 <(sort -u ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json) <(sort -u ${test_dir}/compare/${telemetry_state}_telemetry.version-service-cr.log.json)
+	[[ ${telemetry_state} == "disabled" && ${cr_vs_channel} == "recommended" ]] \
+		&& diff -u ${tmp_dir}/enabled_telemetry.version-service-cr.log.json ${test_dir}/compare/enabled_telemetry.version-service-cr.log.json \
+		|| comm -13 <(sort -u ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json) <(sort -u ${test_dir}/compare/${telemetry_state}_telemetry.version-service-cr.log.json)
 
-  kubectl_bin delete pod ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
-  kubectl_bin patch psmdb minimal-cluster  --type=merge -p '{"metadata":{"finalizers":["delete-psmdb-pvc"]}}'
-  kubectl_bin delete psmdb --all
-  kubectl_bin delete deploy psmdb-client
-  sleep 30
+	kubectl_bin delete pod ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+	kubectl_bin patch psmdb minimal-cluster --type=merge -p '{"metadata":{"finalizers":["delete-psmdb-pvc"]}}'
+	kubectl_bin delete psmdb --all
+	kubectl_bin delete deploy psmdb-client
+	sleep 30
 }
 
 create_infra $namespace
