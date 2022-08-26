@@ -52,16 +52,6 @@ function check_telemetry_transfer() {
     jq 'del(."grpc.time_ms")' \
       >${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json
 
-  kubectl_bin logs $(kubectl get pods --selector=run=version-service -o jsonpath='{.items[0].metadata.name}') |
-    grep -E 'server request payload|unary call' |
-    grep -Eo '\{.*\}' |
-    jq 'del(."grpc.request.content".msg.customResourceUid)' |
-    jq 'del(."grpc.start_time")' |
-    jq 'del(."grpc.time_ms")' \
-      >${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json
-
-  diff -u ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json ${test_dir}/compare/${telemetry_state}_telemetry.version-service.log.json
-
   [[ ${telemetry_state} == "disabled" && ${cr_vs_channel} == "recommended" ]] \
     && diff -u ${tmp_dir}/enabled_telemetry.version-service-cr.log.json ${test_dir}/compare/enabled_telemetry.version-service-cr.log.json \
     || comm -13 <(sort -u ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json) <(sort -u ${test_dir}/compare/${telemetry_state}_telemetry.version-service-cr.log.json)
