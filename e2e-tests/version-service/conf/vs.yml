@@ -26,11 +26,11 @@ spec:
           protocol: TCP
         volumeMounts:
         - name: versions
-          mountPath: /sources/operator.9.9.9.psmdb-operator.dep.json
-          subPath: operator.9.9.9.psmdb-operator.dep.json
+          mountPath: /sources/operator.1.13.0.psmdb-operator.dep.json
+          subPath: operator.1.13.0.psmdb-operator.dep.json
         - name: versions
-          mountPath: /sources/operator.9.9.9.psmdb-operator.json
-          subPath: operator.9.9.9.psmdb-operator.json
+          mountPath: /sources/operator.1.13.0.psmdb-operator.json
+          subPath: operator.1.13.0.psmdb-operator.json
       volumes:
       - name: versions
         configMap:

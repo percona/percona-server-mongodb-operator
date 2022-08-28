@@ -7,7 +7,7 @@
     "msg": {
       "product": "psmdb-operator",
       "operatorVersion": "1.13.0",
-      "apply": "recommended",
+      "apply": "disabled",
       "kubeVersion": "v1.22.12-gke.1200"
     }
   }
@@ -17,5 +17,6 @@
   "span.kind": "server",
   "grpc.service": "version.VersionService",
   "grpc.method": "Apply",
-  "grpc.code": "OK"
+  "error": "rpc error: code = Internal desc = failed to parse version: disabled",
+  "grpc.code": "Internal"
 }
