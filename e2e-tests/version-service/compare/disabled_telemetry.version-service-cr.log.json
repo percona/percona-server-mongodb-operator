@@ -8,7 +8,8 @@
       "product": "psmdb-operator",
       "operatorVersion": "1.13.0",
       "apply": "recommended",
-      "kubeVersion": "v1.22.12-gke.1200"
+      "kubeVersion": "v1.22.12-gke.1200",
+      "shardingEnabled": true
     }
   }
 }

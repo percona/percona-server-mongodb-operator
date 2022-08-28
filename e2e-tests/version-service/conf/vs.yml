@@ -18,7 +18,7 @@ spec:
       - env:
         - name: SERVE_HTTP
           value: "true"
-        image: perconalab/version-service:main-99458d1
+        image: perconalab/version-service:main-6971486
         imagePullPolicy: IfNotPresent
         name: version-service
         ports:

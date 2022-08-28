@@ -60,6 +60,8 @@ function check_telemetry_transfer() {
     jq 'del(."grpc.time_ms")' \
       >${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json
 
+  cat ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json
+  cat ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json
   diff ${test_dir}/compare/${telemetry_state}_telemetry.version-service.log.json  <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json  ${test_dir}/compare/${telemetry_state}_telemetry.version-service.log.json)
 
   [[ ${telemetry_state} == "disabled" && ${cr_vs_channel} == "recommended" ]] \
