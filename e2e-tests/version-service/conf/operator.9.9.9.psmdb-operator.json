@@ -1,7 +1,7 @@
 {
   "versions": [
     {
-      "operator": "1.13.0",
+      "operator": "9.9.9",
       "product": "psmdb-operator",
       "matrix": {
         "mongod": {

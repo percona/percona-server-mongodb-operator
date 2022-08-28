@@ -6,7 +6,7 @@
   "grpc.request.content": {
     "msg": {
       "product": "psmdb-operator",
-      "operatorVersion": "1.13.0",
+      "operatorVersion": "9.9.9",
       "apply": "disabled",
       "kubeVersion": "v1.22.12-gke.1200",
       "shardingEnabled": true
