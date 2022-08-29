@@ -286,8 +286,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if cnf.Members.FixTags(members) {
-		cnf.Members.SetVotes()
-
 		cnf.Version++
 		if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
 			return api.AppStateError, errors.Wrap(err, "fix tags: write mongo config")
