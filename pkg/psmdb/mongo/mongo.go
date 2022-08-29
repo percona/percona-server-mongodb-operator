@@ -241,6 +241,8 @@ func AddShard(ctx context.Context, client *mongo.Client, rsName, host string) er
 func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error {
 	resp := OKResponse{}
 
+	log.V(1).Info("Running replSetReconfig config", "cfg", cfg)
+
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}})
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "replSetReconfig")
