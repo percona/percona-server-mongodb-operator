@@ -289,5 +289,10 @@ func getCertificateSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) 
 		cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 	}
+
+	if cr.CompareVersion("1.13.0") >= 0 {
+		sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)
+	}
+
 	return sans
 }
