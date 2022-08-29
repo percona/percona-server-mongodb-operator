@@ -21,7 +21,7 @@ function check_telemetry_transfer() {
 	yq r ${src_dir}/deploy/cr-minimal.yaml \
 		| yq w - 'spec.upgradeOptions.versionServiceEndpoint' "${cr_vs_uri}" \
 		| yq w - 'spec.upgradeOptions.apply' ${cr_vs_channel} \
-		| yq w - "spec.crVersion" "9.9.9"\
+		| yq w - "spec.crVersion" "9.9.9" \
 		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
 		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
 		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
