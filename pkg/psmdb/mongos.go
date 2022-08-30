@@ -282,9 +282,10 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)
 	} else {
-		args = append(args,
-			"--clusterAuthMode=x509",
-		)
+		if cr.CompareVersion("1.12.0") <= 0 {
+			args = append(args, "--sslMode=preferSSL")
+		}
+		args = append(args, "--clusterAuthMode=x509")
 	}
 
 	if cr.CompareVersion("1.12.0") < 0 && mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
