@@ -56,7 +56,7 @@ Semi-automatic upgrade
          "spec": {
             "crVersion":"{{{release}}}",
             "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}",
-            "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
+            "backup": { "image": "percona/percona-backup-mongodb:{{{pbmrecommended}}}" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
          }}'
 
@@ -105,7 +105,7 @@ Manual upgrade
          "spec": {
             "crVersion":"{{{release}}}",
             "image": "percona/percona-server-mongodb:{{{mongodb44recommended}}}",
-            "backup": { "image": "percona/percona-server-mongodb-operator:{{{release}}}-backup" },
+            "backup": { "image": "percona/percona-backup-mongodb:{{{pbmrecommended}}}" },
             "pmm": { "image": "percona/pmm-client:{{{pmm2recommended}}}" }
          }}'
 
