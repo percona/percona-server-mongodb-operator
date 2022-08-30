@@ -58,8 +58,6 @@ function check_telemetry_transfer() {
 		| jq 'del(."grpc.time_ms")' \
 			>${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json
 
-	cat ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json
-	cat ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json
 	diff ${test_dir}/compare/${telemetry_state}_telemetry.version-service.log.json <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json ${test_dir}/compare/${telemetry_state}_telemetry.version-service.log.json)
 
 	[[ ${telemetry_state} == "disabled" && ${cr_vs_channel} == "recommended" ]] \
@@ -87,7 +85,7 @@ $sed 's/version-service/version-service-cr/g' "${test_dir}/conf/vs.yml" \
 	| yq w - -d0 'spec.template.spec.containers[0].image' $(yq r -d0 "${test_dir}/conf/vs.yml" 'spec.template.spec.containers[0].image') \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
-# Enable telemetry on operator level
+desc "Enable telemetry on operator level"
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespace} \
 	| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'false' \
 	| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==PERCONA_VS_FALLBACK_URI).value' 'http://version-service:11000' \
@@ -97,7 +95,7 @@ wait_deployment 'percona-server-mongodb-operator'
 
 check_telemetry_transfer "http://version-service-cr:11000" "disabled" "enabled"
 
-# Disabling telemetry on the operator level
+desc "Disabling telemetry on the operator level"
 kubectl_bin delete pod -l run=version-service-cr
 kubectl_bin delete pod -l run=version-service
 
