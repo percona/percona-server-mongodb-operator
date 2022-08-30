@@ -5,6 +5,7 @@ metadata:
   finalizers:
     - delete-psmdb-pvc
 spec:
+  crVersion: 9.9.9
   image:
   initImage: #initImage
   imagePullPolicy: Always

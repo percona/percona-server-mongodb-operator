@@ -288,9 +288,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if cnf.Members.FixTags(members) {
-		cnf.Members.SetVotes(unsafePsaMode)
-
 		cnf.Version++
+
+		log.Info("Fixing member tags")
+
 		if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
 			return api.AppStateError, errors.Wrap(err, "fix tags: write mongo config")
 		}
@@ -298,6 +299,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	if cnf.Members.FixHosts(members) {
 		cnf.Version++
+
+		log.Info("Fixing member hosts", "replset", replset.Name)
 
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
@@ -307,6 +310,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	if cnf.Members.RemoveOld(members) {
 		cnf.Version++
+
+		log.Info("Removing old nodes", "replset", replset.Name)
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "delete: write mongo config")
@@ -315,6 +321,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	if cnf.Members.AddNew(members) {
 		cnf.Version++
+
+		log.Info("Adding new nodes", "replset", replset.Name)
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "add new: write mongo config")
@@ -323,6 +332,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	if cnf.Members.ExternalNodesChanged(members) {
 		cnf.Version++
+
+		log.Info("Updating external nodes", "replset", replset.Name)
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "update external nodes: write mongo config")
@@ -333,6 +345,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	cnf.Members.SetVotes(unsafePsaMode)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
+
+		log.Info("Configuring member votes and priorities", "replset", replset.Name)
+
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "set votes: write mongo config")

@@ -6,8 +6,6 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-API='psmdb.percona.com/v9-9-9'
-
 create_infra $namespace
 
 desc 'install version service'
@@ -34,7 +32,6 @@ for i in "${!cases[@]}"; do
 
 	desc 'create first PSMDB cluster'
 	cat "$tmp_file" \
-		| $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
 		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
 		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
 		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
