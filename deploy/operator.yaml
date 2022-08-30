@@ -44,5 +44,3 @@ spec:
               value: "false"
             - name: DISABLE_TELEMETRY
               value: "false"
-            - name: PERCONA_VS_FALLBACK_URI
-              value: "https://check.percona.com"
