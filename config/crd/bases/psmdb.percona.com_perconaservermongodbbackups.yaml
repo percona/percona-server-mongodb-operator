@@ -1,0 +1,138 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.8.0
+  creationTimestamp: null
+  name: perconaservermongodbbackups.psmdb.percona.com
+spec:
+  group: psmdb.percona.com
+  names:
+    kind: PerconaServerMongoDBBackup
+    listKind: PerconaServerMongoDBBackupList
+    plural: perconaservermongodbbackups
+    shortNames:
+    - psmdb-backup
+    singular: perconaservermongodbbackup
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Cluster name
+      jsonPath: .spec.clusterName
+      name: Cluster
+      type: string
+    - description: Storage name
+      jsonPath: .spec.storageName
+      name: Storage
+      type: string
+    - description: Backup destination
+      jsonPath: .status.destination
+      name: Destination
+      type: string
+    - description: Job status
+      jsonPath: .status.state
+      name: Status
+      type: string
+    - description: Completed time
+      jsonPath: .status.completed
+      name: Completed
+      type: date
+    - description: Created time
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              clusterName:
+                type: string
+              compressionLevel:
+                type: integer
+              compressionType:
+                type: string
+              psmdbCluster:
+                type: string
+              storageName:
+                type: string
+            type: object
+          status:
+            properties:
+              azure:
+                properties:
+                  container:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  prefix:
+                    type: string
+                required:
+                - credentialsSecret
+                type: object
+              completed:
+                format: date-time
+                type: string
+              destination:
+                type: string
+              error:
+                type: string
+              lastTransition:
+                format: date-time
+                type: string
+              pbmName:
+                type: string
+              replsetNames:
+                items:
+                  type: string
+                type: array
+              s3:
+                properties:
+                  bucket:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  endpointUrl:
+                    type: string
+                  insecureSkipTLSVerify:
+                    type: boolean
+                  maxUploadParts:
+                    type: integer
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  storageClass:
+                    type: string
+                  uploadPartSize:
+                    type: integer
+                required:
+                - bucket
+                type: object
+              start:
+                format: date-time
+                type: string
+              state:
+                type: string
+              storageName:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

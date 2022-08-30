@@ -257,6 +257,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}()
 
+	if err := r.setCRVersion(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "set CR version")
+	}
+
 	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
 		err = errors.Wrap(err, "wrong psmdb options")
@@ -554,6 +558,23 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if len(cr.Spec.CRVersion) > 0 {
+		return nil
+	}
+
+	orig := cr.DeepCopy()
+	cr.Spec.CRVersion = version.Version
+
+	if err := r.client.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch CR")
+	}
+
+	log.Info("Set CR version", "version", cr.Spec.CRVersion)
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkConfiguration(ctx context.Context, cr *api.PerconaServerMongoDB) error {
