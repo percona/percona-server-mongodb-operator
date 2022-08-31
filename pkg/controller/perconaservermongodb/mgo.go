@@ -40,7 +40,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateReady, nil
 	}
 
-	unsafePsaMode := cr.Spec.UnsafeConf && replset.Arbiter.Enabled && replset.Arbiter.Size == 1 && !replset.NonVoting.Enabled && replset.Size == 2
+	// Primary with a Secondary and an Arbiter (PSA)
+	unsafePsa := cr.Spec.UnsafeConf && replset.Arbiter.Enabled && replset.Arbiter.Size == 1 && !replset.NonVoting.Enabled && replset.Size == 2
 
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
@@ -342,7 +343,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes(unsafePsaMode)
+	cnf.Members.SetVotes(unsafePsa)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
 
@@ -494,7 +495,6 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 // This must be ran from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
-//
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
