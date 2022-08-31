@@ -58,7 +58,7 @@ function main() {
 	else
 		apply_rbac rbac
 		cat "$deploy_dir/operator.yaml" \
-		  | yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
+			| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
 			| kubectl_bin apply -f -
 	fi
 	kubectl_bin apply -f $conf_dir/client.yml
