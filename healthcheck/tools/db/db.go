@@ -36,6 +36,10 @@ func Dial(conf *Config) (*mgo.Client, error) {
 		"ssl_secure": conf.SSL.Insecure,
 	}).Debug("Connecting to mongodb")
 
+	if err := conf.configureTLS(); err != nil {
+		return nil, errors.Wrap(err, "configure TLS")
+	}
+
 	opts := options.Client().
 		SetHosts(conf.Hosts).
 		SetReplicaSet(conf.ReplSetName).
