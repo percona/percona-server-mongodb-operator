@@ -607,6 +607,9 @@ func (m *ConfigMembers) FixTags(compareWith ConfigMembers) (changes bool) {
 	cm := make(map[string]ReplsetTags, len(compareWith))
 
 	for _, member := range compareWith {
+		if member.ArbiterOnly {
+			continue
+		}
 		cm[member.Host] = member.Tags
 	}
 
