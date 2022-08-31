@@ -49,6 +49,7 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
+            - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
