@@ -86,6 +86,7 @@ $sed 's/version-service/version-service-cr/g' "${test_dir}/conf/vs.yml" \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 kubectl_bin -n $namespace set env deploy/percona-server-mongodb-operator PERCONA_VS_FALLBACK_URI=http://version-service:11000
+sleep 30
 
 desc "Enable telemetry on operator level"
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespace} \
