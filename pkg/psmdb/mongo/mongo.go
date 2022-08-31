@@ -680,7 +680,7 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) bool {
 }
 
 // SetVotes sets voting parameters for members list
-func (m *ConfigMembers) SetVotes(unsafePsa bool) {
+func (m *ConfigMembers) SetVotes(unsafePSA bool) {
 	votes := 0
 	lastVoteIdx := -1
 	for i, member := range *m {
@@ -719,7 +719,7 @@ func (m *ConfigMembers) SetVotes(unsafePsa bool) {
 				// We're setting it to 2 as default, to allow
 				// users to configure external nodes with lower
 				// priority than local nodes.
-				if !unsafePsa || member.Votes == 1 {
+				if !unsafePSA || member.Votes == 1 {
 					// In unsafe PSA (Primary with a Secondary and an Arbiter),
 					// we are unable to set the votes and the priority simultaneously.
 					// Therefore, setting only the votes.

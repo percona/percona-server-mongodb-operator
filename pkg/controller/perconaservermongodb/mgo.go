@@ -41,7 +41,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	// Primary with a Secondary and an Arbiter (PSA)
-	unsafePsa := cr.Spec.UnsafeConf && replset.Arbiter.Enabled && replset.Arbiter.Size == 1 && !replset.NonVoting.Enabled && replset.Size == 2
+	unsafePSA := cr.Spec.UnsafeConf && replset.Arbiter.Enabled && replset.Arbiter.Size == 1 && !replset.NonVoting.Enabled && replset.Size == 2
 
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
@@ -343,7 +343,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes(unsafePsa)
+	cnf.Members.SetVotes(unsafePSA)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
 
