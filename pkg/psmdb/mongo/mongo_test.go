@@ -281,7 +281,7 @@ func TestVoting(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c.mset.SetVotes()
+		c.mset.SetVotes(false)
 		if len(*c.mset) != len(*c.desiered) {
 			t.Errorf("%s: missmatched members size", c.name)
 			continue
