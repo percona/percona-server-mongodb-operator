@@ -85,10 +85,11 @@ $sed 's/version-service/version-service-cr/g' "${test_dir}/conf/vs.yml" \
 	| yq w - -d0 'spec.template.spec.containers[0].image' $(yq r -d0 "${test_dir}/conf/vs.yml" 'spec.template.spec.containers[0].image') \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
+kubectl_bin -n $namespace set env deploy/percona-server-mongodb-operator PERCONA_VS_FALLBACK_URI=http://version-service:11000
+
 desc "Enable telemetry on operator level"
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml -n ${namespace} \
 	| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'false' \
-	| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==PERCONA_VS_FALLBACK_URI).value' 'http://version-service:11000' \
 	| kubectl_bin apply -f -
 
 wait_deployment 'percona-server-mongodb-operator'
