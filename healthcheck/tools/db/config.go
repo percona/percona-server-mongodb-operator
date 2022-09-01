@@ -99,9 +99,6 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 	).Envar(pkg.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
 
 	conf.SSL = ssl
-	if err := conf.configureTLS(); err != nil {
-		return nil, errors.Wrap(err, "get TLS config")
-	}
 
 	return conf, nil
 }
