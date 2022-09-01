@@ -197,7 +197,11 @@ func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeReq
 }
 
 func telemetryEnabled() bool {
-	return os.Getenv("DISABLE_TELEMETRY") == "false"
+	value, ok := os.LookupEnv("DISABLE_TELEMETRY")
+	if ok {
+		return value != "true"
+	}
+	return true
 }
 
 func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
