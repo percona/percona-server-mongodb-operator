@@ -667,11 +667,12 @@ run_script_mongos() {
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
 
 	name="$(basename $script)"
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "mongo $driver://$uri$suffix/admin /tmp/${name}"
+		bash -c "mongo $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 get_service_ip() {
