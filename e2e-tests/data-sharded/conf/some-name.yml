@@ -12,6 +12,10 @@ spec:
 
     configsvrReplSet:
       size: 3
+      configuration: |
+        net:
+          tls:
+            mode: requireTLS
       affinity:
         antiAffinityTopologyKey: none
       volumeSpec:
@@ -22,6 +26,10 @@ spec:
 
     mongos:
       size: 3
+      configuration: |
+        net:
+          tls:
+            mode: requireTLS
       affinity:
         antiAffinityTopologyKey: none
       expose:
@@ -46,6 +54,9 @@ spec:
             storage: 1Gi
     size: 3
     configuration: |
+      net:
+        tls:
+          mode: requireTLS
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
@@ -85,6 +96,9 @@ spec:
 
     size: 3
     configuration: |
+      net:
+        tls:
+          mode: requireTLS
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
@@ -122,6 +136,9 @@ spec:
             storage: 1Gi
     size: 3
     configuration: |
+      net:
+        tls:
+          mode: requireTLS
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
