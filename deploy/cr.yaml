@@ -12,7 +12,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.13.0
-  image: percona/percona-server-mongodb:5.0.7-6
+  image: percona/percona-server-mongodb:5.0.10-9
   imagePullPolicy: Always
 #  tls:
 #    # 90 days in hours
@@ -35,7 +35,7 @@ spec:
 #    vault: my-cluster-name-vault
   pmm:
     enabled: false
-    image: percona/pmm-client:2.27.0
+    image: percona/pmm-client:2.30.0
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -429,7 +429,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-backup-mongodb:1.8.1
     serviceAccountName: percona-server-mongodb-operator
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
