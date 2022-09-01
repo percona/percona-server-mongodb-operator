@@ -367,8 +367,7 @@
           "serverStatus",
           "shardingState",
           "top",
-          "useUUID",
-          "applyOps"
+          "useUUID"
         ]
       },
       {
