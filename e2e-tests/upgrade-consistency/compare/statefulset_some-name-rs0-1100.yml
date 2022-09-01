@@ -49,6 +49,7 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
+            - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --slowms=100
             - --profile=1

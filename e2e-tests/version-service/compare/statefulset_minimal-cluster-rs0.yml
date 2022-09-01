@@ -2,43 +2,55 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 3
+  generation: 1
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/instance: minimal-cluster
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: some-name-rs0
+  name: minimal-cluster-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: some-name
+      name: minimal-cluster
 spec:
   podManagementPolicy: OrderedReady
-  replicas: 3
+  replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/instance: minimal-cluster
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: some-name-rs0
+  serviceName: minimal-cluster-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/instance: minimal-cluster
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
         app.kubernetes.io/replset: rs0
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: mongod
+                  app.kubernetes.io/instance: minimal-cluster
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+                  app.kubernetes.io/replset: rs0
+              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
@@ -49,25 +61,24 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --sslMode=preferSSL
-            - --clusterAuthMode=x509
+            - --clusterAuthMode=keyFile
+            - --keyFile=/etc/mongodb-secrets/mongodb-key
+            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-            - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
-            - --config=/etc/mongodb-config/mongod.conf
           command:
             - /data/db/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: some-name
+              value: minimal-cluster
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: internal-some-name-users
+                name: internal-minimal-cluster-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -102,13 +113,7 @@ spec:
             tcpSocket:
               port: 27017
             timeoutSeconds: 2
-          resources:
-            limits:
-              cpu: 500m
-              memory: 500M
-            requests:
-              cpu: 100m
-              memory: 100M
+          resources: {}
           securityContext:
             runAsNonRoot: true
             runAsUser: 1001
@@ -118,7 +123,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: some-name-mongodb-keyfile
+              name: minimal-cluster-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -126,10 +131,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
-            - mountPath: /etc/mongodb-config
-              name: config
             - mountPath: /etc/mongodb-encryption
-              name: some-name-mongodb-encryption-key
+              name: minimal-cluster-mongodb-encryption-key
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
@@ -140,18 +143,14 @@ spec:
             - /init-entrypoint.sh
           imagePullPolicy: Always
           name: mongo-init
-          resources:
-            limits:
-              cpu: 500m
-              memory: 500M
-            requests:
-              cpu: 100m
-              memory: 100M
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
@@ -160,35 +159,32 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
       volumes:
-        - name: some-name-mongodb-keyfile
+        - name: minimal-cluster-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-keyfile
-        - configMap:
-            defaultMode: 420
-            name: some-name-rs0-mongod
-            optional: true
-          name: config
-        - name: some-name-mongodb-encryption-key
+            secretName: minimal-cluster-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
+        - name: minimal-cluster-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-encryption-key
+            secretName: minimal-cluster-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
-            optional: false
-            secretName: some-name-ssl
+            optional: true
+            secretName: minimal-cluster-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: some-name-ssl-internal
+            secretName: minimal-cluster-ssl-internal
         - name: users-secret-file
           secret:
             defaultMode: 420
-            secretName: internal-some-name-users
+            secretName: internal-minimal-cluster-users
   updateStrategy:
     rollingUpdate:
       partition: 0
@@ -201,6 +197,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 3Gi
       status:
         phase: Pending
