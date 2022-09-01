@@ -206,8 +206,8 @@ function main() {
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
 	check_applied_images "operator"
-	compare_generation "2" "statefulset" "${cluster}-rs0"
-	compare_generation "2" "statefulset" "${cluster}-cfg"
+	compare_generation "1" "statefulset" "${cluster}-rs0"
+	compare_generation "1" "statefulset" "${cluster}-cfg"
 	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
@@ -227,8 +227,8 @@ function main() {
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 	check_applied_images "all"
-	compare_generation "3" "statefulset" "${cluster}-rs0"
-	compare_generation "3" "statefulset" "${cluster}-cfg"
+	compare_generation "2" "statefulset" "${cluster}-rs0"
+	compare_generation "2" "statefulset" "${cluster}-cfg"
 	compare_generation "2" "statefulset" "${cluster}-mongos"
 	compare_generation "2" "psmdb" "${cluster}"
 

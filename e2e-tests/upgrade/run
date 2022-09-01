@@ -179,7 +179,7 @@ function main() {
 	desc 'check images and generation after operator upgrade'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}"
 	check_applied_images "operator"
-	compare_generation "2" "statefulset" "${cluster}-rs0"
+	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "psmdb" "${cluster}"
 
 	desc 'patch psmdb images and upgrade'
@@ -197,7 +197,7 @@ function main() {
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 	check_applied_images "all"
-	compare_generation "3" "statefulset" "${cluster}-rs0"
+	compare_generation "2" "statefulset" "${cluster}-rs0"
 	compare_generation "2" "psmdb" "${cluster}"
 
 	desc 'drop collection and do restore with new version'
