@@ -22,8 +22,11 @@ apply_cluster "$test_dir/conf/$cluster.yml"
 kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
 
 desc 'check if all 3 Pods started'
+wait_for_running $cluster-cfg 3
 wait_for_running $cluster-rs0 3
-wait_for_running $cluster-cfg 3 "false"
+wait_for_running $cluster-rs1 3
+wait_for_running $cluster-rs2 3
+wait_for_running $cluster-mongos 3
 
 desc 'create user'
 
