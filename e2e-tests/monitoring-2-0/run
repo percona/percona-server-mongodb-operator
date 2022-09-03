@@ -42,7 +42,7 @@ kubectl_bin apply \
 	-f $conf_dir/client.yml \
 	-f $test_dir/conf/secrets.yml
 
-sleep 60
+sleep 90
 API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
 kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": '$API_KEY'}}'
 apply_cluster $test_dir/conf/$cluster-rs0.yml

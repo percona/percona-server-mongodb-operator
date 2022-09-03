@@ -16,6 +16,9 @@ spec:
             storage: 1Gi
     size: 3
     configuration: |
+      net:
+        tls:
+          mode: requireTLS
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
@@ -27,6 +30,10 @@ spec:
     enabled: true
     configsvrReplSet:
       size: 3
+      configuration: |
+        net:
+          tls:
+            mode: requireTLS
       volumeSpec:
         persistentVolumeClaim:
           resources:
@@ -35,6 +42,10 @@ spec:
 
     mongos:
       size: 3
+      configuration: |
+        net:
+          tls:
+            mode: requireTLS
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
       podDisruptionBudget:

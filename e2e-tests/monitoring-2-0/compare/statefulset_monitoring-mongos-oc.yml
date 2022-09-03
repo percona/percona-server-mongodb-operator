@@ -57,6 +57,7 @@ spec:
             - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017
             - --relaxPermChecks
             - --clusterAuthMode=x509
+            - --config=/etc/mongos-config/mongos.conf
           command:
             - /data/db/ps-entry.sh
           env:
@@ -219,8 +220,9 @@ spec:
               value: monitoring
             - name: PMM_AGENT_PRERUN_SCRIPT
               value: |-
+                cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
                 pmm-admin status --wait=10s;
-                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT);
+                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-1 --authentication-database=admin;
                 pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'
             - name: PMM_AGENT_SIDECAR
               value: "true"
@@ -263,6 +265,10 @@ spec:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -309,6 +315,11 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-monitoring-users
+        - configMap:
+            defaultMode: 420
+            name: monitoring-mongos
+            optional: true
+          name: config
         - emptyDir: {}
           name: bin
   updateStrategy:
