@@ -17,8 +17,7 @@ main_cluster="cross-site-sharded-main"
 replica_cluster="cross-site-sharded-replica"
 
 desc "Create main cluster"
-create_namespace $namespace
-deploy_operator
+create_infra "$namespace"
 kubectl_bin apply \
 	-f "$conf_dir/client.yml" \
 	-f "$test_dir/conf/secrets.yml"
