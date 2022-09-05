@@ -70,6 +70,9 @@ if [[ ${MONGO_VER} == "5.0" ]]; then
 	chunks_param2=$(run_mongos \
 		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
 		"user:pass@$cluster-mongos.$namespace" \
+		'' \
+		'' \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
 		| grep "switched to db app" -A 1 | grep -v "switched to db app")
 fi
 
