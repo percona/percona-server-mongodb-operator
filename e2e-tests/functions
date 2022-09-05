@@ -73,7 +73,6 @@ create_namespace() {
 	local skip_clean_namespace="$2"
 
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
-		delete_crd
 		kubectl_bin get ns \
 			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^NAME" \
 			| awk '{print$1}' \
@@ -263,11 +262,10 @@ wait_deployment() {
 	local name=$1
 
 	sleep 10
-	set +o xtrace
 	retry=0
 	echo -n $name
-	until kubectl_bin get deployment $name >/dev/null \
-		&& [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
+	until kubectl_bin get deployment $name ${OPERATOR_NS:+-n $OPERATOR_NS} >/dev/null \
+        && [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -806,7 +804,12 @@ delete_crd() {
 
 	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
 		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml"
-	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
+
+	local rbac_yaml='rbac.yaml'
+	if [ -n "${OPERATOR_NS}" ]; then
+		rbac_yaml='cw-rbac.yaml'
+	fi
+	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" || true
 }
 
 destroy() {
@@ -1089,15 +1092,8 @@ check_backup_deletion() {
 create_infra() {
 	local ns="$1"
 
+	delete_crd
 	if [ -n "$OPERATOR_NS" ]; then
-		kubectl get psmdb --all-namespaces -o wide \
-			| grep -v 'NAMESPACE' \
-			| xargs -L 1 sh -xc 'kubectl patch psmdb -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
-			|| :
-		kubectl_bin delete psmdb --all --all-namespaces || :
-		kubectl_bin delete psmdb-backup --all --all-namespaces || :
-		kubectl_bin delete psmdb-restore --all --all-namespaces || :
-
 		create_namespace $OPERATOR_NS
 		deploy_operator
 		create_namespace $ns
