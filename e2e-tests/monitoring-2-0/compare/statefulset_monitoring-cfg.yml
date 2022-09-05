@@ -66,6 +66,7 @@ spec:
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
           command:
             - /data/db/ps-entry.sh
           env:
@@ -130,6 +131,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongodb-config
+              name: config
             - mountPath: /etc/mongodb-encryption
               name: monitoring-mongodb-encryption-key
               readOnly: true
@@ -215,8 +218,9 @@ spec:
               value: monitoring
             - name: PMM_AGENT_PRERUN_SCRIPT
               value: |-
+                cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
                 pmm-admin status --wait=10s;
-                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT);
+                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-1 --authentication-database=admin;
                 pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'
             - name: PMM_AGENT_SIDECAR
               value: "true"
@@ -259,6 +263,10 @@ spec:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -288,6 +296,11 @@ spec:
             secretName: monitoring-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - configMap:
+            defaultMode: 420
+            name: monitoring-cfg-mongod
+            optional: true
+          name: config
         - name: monitoring-mongodb-encryption-key
           secret:
             defaultMode: 288
