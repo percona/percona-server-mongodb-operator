@@ -108,7 +108,6 @@ wait_pod() {
 	set +o xtrace
 	retry=0
 	echo -n $pod
-	#until kubectl_bin get pod/$pod -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
 	until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep 'true'; do
 		sleep 1
 		echo -n .
