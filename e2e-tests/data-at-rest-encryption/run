@@ -6,8 +6,7 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 deploy_vault
 deploy_minio
 
@@ -72,7 +71,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 desc 'Check logs that cluster encrypted'
-encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 -c mongod -n $namespace | grep -i "Encryption keys DB is initialized successfully")
+encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-1 -c mongod -n $namespace | grep -i "Encryption keys DB is initialized successfully")
 
 echo "$encrypted_cluster_log"
 if [ -z "$encrypted_cluster_log" ]; then
