@@ -86,20 +86,19 @@ sleep 30
 
 retry=0
 unencrypted_cluster_log=""
-until [ "$retry" -ge 10 ]
-do
-  unencrypted_cluster_log=$(kubectl_bin logs some-name-rs0-2 -c mongod -n $namespace | grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk")
-  if [ -n "$unencrypted_cluster_log" ]; then
-    echo "Cluster is not encrypted already"
-    break
-  elif [ $retry == 15 ]; then
-     echo "Max retry count $retry reached. Cluster is still encrypted"
-     exit 1
-  else
-    retry=$((retry+1))
-    sleep 15
-    continue
-  fi
+until [ "$retry" -ge 10 ]; do
+	unencrypted_cluster_log=$(kubectl_bin logs some-name-rs0-2 -c mongod -n $namespace | grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk")
+	if [ -n "$unencrypted_cluster_log" ]; then
+		echo "Cluster is not encrypted already"
+		break
+	elif [ $retry == 15 ]; then
+		echo "Max retry count $retry reached. Cluster is still encrypted"
+		exit 1
+	else
+		retry=$((retry + 1))
+		sleep 15
+		continue
+	fi
 done
 
 destroy_vault
