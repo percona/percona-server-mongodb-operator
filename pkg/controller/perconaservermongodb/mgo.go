@@ -185,7 +185,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}()
 
 		err = mongo.SetDefaultRWConcern(ctx, mongosSession, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
-		if err != nil {
+		// SetDefaultRWConcern introduced in MongoDB 4.4
+		if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 			return api.AppStateError, errors.Wrap(err, "set default RW concern")
 		}
 
@@ -214,7 +215,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	if replset.Arbiter.Enabled && !cr.Spec.Sharding.Enabled {
 		err := mongo.SetDefaultRWConcern(ctx, cli, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
-		if err != nil {
+		// SetDefaultRWConcern introduced in MongoDB 4.4
+		if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 			return api.AppStateError, errors.Wrap(err, "set default RW concern")
 		}
 	}
