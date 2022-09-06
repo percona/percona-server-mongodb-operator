@@ -137,6 +137,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongos-config
+              name: config
             - mountPath: /etc/users-secret
               name: users-secret-file
               readOnly: true
