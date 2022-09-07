@@ -133,7 +133,11 @@ spec:
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
-        - env:
+        - args:
+            - pbm-agent
+          command:
+            - /opt/percona/pbm-entry.sh
+          env:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
