@@ -7,7 +7,7 @@ spec:
   image: percona/percona-server-mongodb:5.0.7-6
   allowUnsafeConfigurations: true
   upgradeOptions:
-    apply: 5.0-recommended
+    apply: disabled
     schedule: "0 2 * * *"
   secrets:
     users: minimal-cluster
