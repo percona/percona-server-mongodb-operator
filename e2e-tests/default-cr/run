@@ -43,10 +43,7 @@ function start_cluster() {
 }
 
 function main() {
-	if [ -n "$OPERATOR_NS" ]; then
-		create_namespace $OPERATOR_NS
-	fi
-	create_namespace $namespace
+	create_infra "$namespace"
 	cluster="my-cluster-name"
 
 	desc 'startup default PSMDB cluster'

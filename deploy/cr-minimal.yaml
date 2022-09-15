@@ -4,7 +4,7 @@ metadata:
   name: minimal-cluster
 spec:
   crVersion: 1.13.0
-  image: percona/percona-server-mongodb:5.0.7-6
+  image: percona/percona-server-mongodb:5.0.11-10
   allowUnsafeConfigurations: true
   upgradeOptions:
     apply: disabled

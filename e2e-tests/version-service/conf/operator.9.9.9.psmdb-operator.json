@@ -59,10 +59,16 @@
             "status": "available",
             "critical": false
           },
+          "4.2.22-22": {
+            "image_path": "percona/percona-server-mongodb:4.2.22-22",
+            "image_hash": "da4634df780563e10a547662c58c8ce28fbe5c98e1ac8b42b4f6be87f292e92b",
+            "status": "recommended",
+            "critical": false
+          },
           "4.2.19-19": {
             "image_path": "percona/percona-server-mongodb:4.2.19-19",
             "image_hash": "4fb18d9099058d710242a63b6adc21c6e09149eb48ee94717eacf59ddf5dec40",
-            "status": "recommended",
+            "status": "available",
             "critical": false
           },
           "4.2.17-17": {
