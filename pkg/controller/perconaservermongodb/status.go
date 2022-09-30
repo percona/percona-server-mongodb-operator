@@ -188,22 +188,28 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	}
 	cr.Status.Host = host
 
+	state := api.AppStateInit
+
 	switch {
 	case replsetsStopping > 0 || (cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status == api.AppStateStopping) || cr.ObjectMeta.DeletionTimestamp != nil:
-		cr.Status.State = api.AppStateStopping
+		state = api.AppStateStopping
 	case replsetsPaused == len(repls):
-		cr.Status.State = api.AppStatePaused
+		state = api.AppStatePaused
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStatePaused {
-			cr.Status.State = api.AppStateStopping
+			state = api.AppStateStopping
 		}
 	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
-		cr.Status.State = api.AppStateReady
+		state = api.AppStateReady
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
-			cr.Status.State = cr.Status.Mongos.Status
+			state = cr.Status.Mongos.Status
 		}
-	default:
-		cr.Status.State = api.AppStateInit
 	}
+
+	if cr.Status.State != state {
+		log.Info("Cluster state changed", "previous", cr.Status.State, "current", state)
+	}
+
+	cr.Status.State = state
 	clusterCondition.Type = cr.Status.State
 	cr.Status.AddCondition(clusterCondition)
 

@@ -2,7 +2,8 @@
 
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-API="psmdb.percona.com/v1-13-0"
+API="psmdb.percona.com/v1"
+OPERATOR_VERSION="1.14.0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
@@ -72,7 +73,6 @@ create_namespace() {
 	local skip_clean_namespace="$2"
 
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
-		delete_crd
 		kubectl_bin get ns \
 			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^NAME" \
 			| awk '{print$1}' \
@@ -108,7 +108,6 @@ wait_pod() {
 	set +o xtrace
 	retry=0
 	echo -n $pod
-	#until kubectl_bin get pod/$pod -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
 	until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep 'true'; do
 		sleep 1
 		echo -n .
@@ -262,11 +261,10 @@ wait_deployment() {
 	local name=$1
 
 	sleep 10
-	set +o xtrace
 	retry=0
 	echo -n $name
-	until kubectl_bin get deployment $name >/dev/null \
-		&& [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}')" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
+	until kubectl_bin get deployment $name ${OPERATOR_NS:+-n $OPERATOR_NS} >/dev/null \
+        && [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -347,20 +345,18 @@ deploy_operator() {
 		apply_rbac cw-rbac
 		cat ${src_dir}/deploy/cw-operator.yaml \
 			| sed -e "s^image: .*^image: ${IMAGE}^" \
-			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' \
+			| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
 			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==LOG_LEVEL).value' 'DEBUG' \
 			| kubectl_bin apply -f -
 	else
 		apply_rbac rbac
 		cat ${src_dir}/deploy/operator.yaml \
 			| sed -e "s^image: .*^image: ${IMAGE}^" \
-			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' '"true"' \
+			| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
 			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==LOG_LEVEL).value' 'DEBUG' \
 			| kubectl_bin apply -f -
 	fi
-
 	sleep 2
-
 	wait_pod $(get_operator_pod)
 }
 
@@ -377,6 +373,7 @@ function deploy_operator_gh() {
 	fi
 	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${rbac_yaml}.yaml"
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${operator_yaml}.yaml" >"${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+
 	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 	kubectl_bin apply -f "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 
@@ -644,7 +641,6 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
 
@@ -668,12 +664,12 @@ run_script_mongos() {
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
 
 	name="$(basename $script)"
-
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "mongo $driver://$uri$suffix/admin /tmp/${name}"
+		bash -c "mongo $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 get_service_ip() {
@@ -807,7 +803,12 @@ delete_crd() {
 
 	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
 		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml"
-	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || true
+
+	local rbac_yaml='rbac.yaml'
+	if [ -n "${OPERATOR_NS}" ]; then
+		rbac_yaml='cw-rbac.yaml'
+	fi
+	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" || true
 }
 
 destroy() {
@@ -957,7 +958,6 @@ EOF
 
 cat_config() {
 	cat "$1" \
-		| $sed -e "s#apiVersion: psmdb.percona.com/v.*\$#apiVersion: $API#" \
 		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
 		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
 		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
@@ -1090,15 +1090,8 @@ check_backup_deletion() {
 create_infra() {
 	local ns="$1"
 
+	delete_crd
 	if [ -n "$OPERATOR_NS" ]; then
-		kubectl get psmdb --all-namespaces -o wide \
-			| grep -v 'NAMESPACE' \
-			| xargs -L 1 sh -xc 'kubectl patch psmdb -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
-			|| :
-		kubectl_bin delete psmdb --all --all-namespaces || :
-		kubectl_bin delete psmdb-backup --all --all-namespaces || :
-		kubectl_bin delete psmdb-restore --all --all-namespaces || :
-
 		create_namespace $OPERATOR_NS
 		deploy_operator
 		create_namespace $ns

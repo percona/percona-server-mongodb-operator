@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -821,41 +820,11 @@ func (cr *PerconaServerMongoDB) OwnerRef(scheme *runtime.Scheme) (metav1.OwnerRe
 	}, nil
 }
 
-// setVersion sets the API version of a PSMDB resource.
-// The new (semver-matching) version is determined either by the CR's API version or an API version specified via the CR's annotations.
-// If the CR's API version is an empty string, it returns "v1"
-func (cr *PerconaServerMongoDB) setVersion() error {
-	if len(cr.Spec.CRVersion) > 0 {
-		return nil
-	}
-
-	apiVersion := version.Version
-
-	if lastCR, ok := cr.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
-		var newCR PerconaServerMongoDB
-		err := json.Unmarshal([]byte(lastCR), &newCR)
-		if err != nil {
-			return err
-		}
-		if len(newCR.APIVersion) > 0 {
-			apiVersion = strings.Replace(strings.TrimPrefix(newCR.APIVersion, "psmdb.percona.com/v"), "-", ".", -1)
-		}
-	}
-
-	cr.Spec.CRVersion = apiVersion
-
-	return nil
-}
-
 func (cr *PerconaServerMongoDB) Version() *v.Version {
 	return v.Must(v.NewVersion(cr.Spec.CRVersion))
 }
 
 func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
-	if len(cr.Spec.CRVersion) == 0 {
-		cr.setVersion()
-	}
-
 	// using Must because "version" must be right format
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }

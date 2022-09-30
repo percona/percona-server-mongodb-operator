@@ -1,6 +1,9 @@
 package psmdb
 
 import (
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -165,6 +168,16 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec, secret, customLogin, customAdminParams)...)
 	}
 
+	if cr.CompareVersion("1.13.0") >= 0 && !cr.Spec.UnsafeConf {
+		pmm.VolumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "ssl",
+				MountPath: SSLDir,
+				ReadOnly:  true,
+			},
+		}
+	}
+
 	return pmm
 }
 
@@ -277,15 +290,37 @@ func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, cus
 	return pmmAgentEnvs
 }
 
-func PMMAgentScript() []corev1.EnvVar {
-	pmmServerArgs := " $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push "
+func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
+	pmmServerArgs := "$(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push "
 	pmmServerArgs += " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
+
+	if cr.CompareVersion("1.13.0") >= 0 && !cr.Spec.UnsafeConf {
+		tlsParams := []string{
+			"--tls",
+			"--tls-skip-verify",
+			"--tls-certificate-key-file=/tmp/tls.pem",
+			fmt.Sprintf("--tls-ca-file=%s/ca.crt", SSLDir),
+			"--authentication-mechanism=SCRAM-SHA-1",
+			"--authentication-database=admin",
+		}
+		pmmServerArgs += " " + strings.Join(tlsParams, " ")
+	}
+
+	pmmWait := "pmm-admin status --wait=10s;"
+	pmmAddService := fmt.Sprintf("pmm-admin add $(DB_TYPE) %s;", pmmServerArgs)
+	pmmAnnotate := "pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'"
+	prerunScript := pmmWait + "\n" + pmmAddService + "\n" + pmmAnnotate
+
+	if cr.CompareVersion("1.13.0") >= 0 && !cr.Spec.UnsafeConf {
+		prepareTLS := fmt.Sprintf("cat %[1]s/tls.key %[1]s/tls.crt > /tmp/tls.pem;", SSLDir)
+		prerunScript = prepareTLS + "\n" + prerunScript
+	}
 
 	return []corev1.EnvVar{
 		{
 			Name:  "PMM_AGENT_PRERUN_SCRIPT",
-			Value: "pmm-admin status --wait=10s;\npmm-admin add $(DB_TYPE)" + pmmServerArgs + ";\npmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'",
+			Value: prerunScript,
 		},
 	}
 }
@@ -311,7 +346,7 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, custom
 			},
 		}
 		pmmC.Env = append(pmmC.Env, clusterPmmEnvs...)
-		pmmAgentScriptEnv := PMMAgentScript()
+		pmmAgentScriptEnv := PMMAgentScript(cr)
 		pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
 	}
 	if cr.CompareVersion("1.10.0") >= 0 {

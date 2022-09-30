@@ -55,11 +55,6 @@ const (
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
 func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
-	err := cr.setVersion()
-	if err != nil {
-		return errors.Wrap(err, "set version")
-	}
-
 	if cr.Spec.Replsets == nil {
 		return errors.New("at least one replica set should be specified")
 	}

@@ -17,8 +17,7 @@ main_cluster="cross-site-sharded-main"
 replica_cluster="cross-site-sharded-replica"
 
 desc "Create main cluster"
-create_namespace $namespace
-deploy_operator
+create_infra "$namespace"
 kubectl_bin apply \
 	-f "$conf_dir/client.yml" \
 	-f "$test_dir/conf/secrets.yml"
@@ -130,10 +129,10 @@ kubectl_bin config set-context $(kubectl_bin config current-context) --namespace
 
 kubectl_bin patch psmdb ${main_cluster} --type=merge --patch '{
 			"spec": {"replsets":[
-			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"ClusterIp"},"externalNodes":[{"host":"'${replica_rs0_0_endpoint}'"},{"host":"'${replica_rs0_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs0_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs0","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},
-			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"ClusterIp"},"externalNodes":[{"host":"'${replica_rs1_0_endpoint}'"},{"host":"'${replica_rs1_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs1_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs1","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}}
+			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"ClusterIp"},"externalNodes":[{"host":"'${replica_rs0_0_endpoint}'","priority":0,"votes":0},{"host":"'${replica_rs0_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs0_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs0","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},
+			  {"affinity":{"antiAffinityTopologyKey": "none"},"arbiter":{"affinity":{"antiAffinityTopologyKey": "none"},"enabled":false,"size":1},"expose":{"enabled":true,"exposeType":"ClusterIp"},"externalNodes":[{"host":"'${replica_rs1_0_endpoint}'","priority":0,"votes":0},{"host":"'${replica_rs1_1_endpoint}'","port":27017,"priority":1,"votes":1},{"host":"'${replica_rs1_2_endpoint}'", "port":27017,"priority":1,"votes":1}],"name":"rs1","nonvoting":{"affinity":{"antiAffinityTopologyKey":"none"},"enabled":false,"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"1Gi"}}}}},"podDisruptionBudget":{"maxUnavailable":1},"resources":{"limits":{"cpu":"300m","memory":"0.5G"},"requests":{"cpu":"300m","memory":"0.5G"}},"size":3,"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}}
 			  ],
-			  "sharding":{"configsvrReplSet":{ "externalNodes": [{"host":"'${replica_cfg_0_endpoint}'","priority":1,"votes":1 },{"host":"'${replica_cfg_1_endpoint}'", "priority":1,"votes":1},{"host":"'${replica_cfg_2_endpoint}'"}]}}
+			  "sharding":{"configsvrReplSet":{ "externalNodes": [{"host":"'${replica_cfg_0_endpoint}'","priority":1,"votes":1 },{"host":"'${replica_cfg_1_endpoint}'", "priority":1,"votes":1},{"host":"'${replica_cfg_2_endpoint}'","priority":0,"votes":0}]}}
 			  }
 		}'
 
@@ -160,11 +159,10 @@ compare_mongos_cmd "find" "myApp:myPass@$main_cluster-mongos.$namespace"
 desc 'Test failover'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 kubectl_bin delete psmdb $main_cluster
-sleep 120
-
+sleep 60
+run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs0_0_endpoint" "mongodb" ":27017"
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs1_0_endpoint" "mongodb" ":27017"
-run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
 
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
 kubectl_bin patch psmdb ${replica_cluster} --type=merge --patch '{"spec":{"unmanaged": false}}'

@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: psmdb-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: psmdb-client
+  template:
+    metadata:
+      labels:
+        name: psmdb-client
+    spec:
+      containers:
+        - name: psmdb-client
+          image: percona/percona-server-mongodb:4.4
+          imagePullPolicy: Always
+          command: ["/bin/bash","-c","cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem && sleep 100500"]
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+      volumes:
+        - name: ssl
+          secret:
+            defaultMode: 288
+            optional: true
+            secretName: some-name-ssl

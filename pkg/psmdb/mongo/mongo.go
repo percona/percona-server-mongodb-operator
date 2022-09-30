@@ -241,6 +241,8 @@ func AddShard(ctx context.Context, client *mongo.Client, rsName, host string) er
 func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig) error {
 	resp := OKResponse{}
 
+	log.V(1).Info("Running replSetReconfig config", "cfg", cfg)
+
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}})
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "replSetReconfig")
@@ -605,6 +607,9 @@ func (m *ConfigMembers) FixTags(compareWith ConfigMembers) (changes bool) {
 	cm := make(map[string]ReplsetTags, len(compareWith))
 
 	for _, member := range compareWith {
+		if member.ArbiterOnly {
+			continue
+		}
 		cm[member.Host] = member.Tags
 	}
 
@@ -637,19 +642,19 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 		}{votes: member.Votes, priority: member.Priority}
 	}
 
-	changes := false
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		if ext, ok := cm[member.Host]; ok {
 			if ext.votes != member.Votes || ext.priority != member.Priority {
-				changes = true
+				[]ConfigMember(*m)[i].Votes = ext.votes
+				[]ConfigMember(*m)[i].Priority = ext.priority
+
+				return true
 			}
-			[]ConfigMember(*m)[i].Votes = ext.votes
-			[]ConfigMember(*m)[i].Priority = ext.priority
 		}
 	}
 
-	return changes
+	return false
 }
 
 // AddNew adds a new member from given list to the config.
@@ -678,7 +683,7 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) bool {
 }
 
 // SetVotes sets voting parameters for members list
-func (m *ConfigMembers) SetVotes() {
+func (m *ConfigMembers) SetVotes(unsafePSA bool) {
 	votes := 0
 	lastVoteIdx := -1
 	for i, member := range *m {
@@ -717,7 +722,12 @@ func (m *ConfigMembers) SetVotes() {
 				// We're setting it to 2 as default, to allow
 				// users to configure external nodes with lower
 				// priority than local nodes.
-				[]ConfigMember(*m)[i].Priority = DefaultPriority
+				if !unsafePSA || member.Votes == 1 {
+					// In unsafe PSA (Primary with a Secondary and an Arbiter),
+					// we are unable to set the votes and the priority simultaneously.
+					// Therefore, setting only the votes.
+					[]ConfigMember(*m)[i].Priority = DefaultPriority
+				}
 			}
 		} else if member.ArbiterOnly {
 			// Arbiter should always have a vote
