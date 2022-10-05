@@ -88,7 +88,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	}
 
 	murl += fmt.Sprintf(
-		"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true",
+		"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true&tlsInsecure=true",
 		tlsPemFile,
 		caCertFile,
 	)
