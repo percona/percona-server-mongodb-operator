@@ -107,25 +107,26 @@ function prepare_cr_yaml() {
 	# spinup function expects images to have suffix like "-backup"
 	# to replace them with images from environment variables
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" \
-		| yq w - "metadata.name" "${cluster}" \
-		| yq w - "spec.upgradeOptions.apply" "disabled" \
-		| yq w - "spec.replsets[*].size" "${CLUSTER_SIZE}" \
-		| yq w - "spec.replsets[*].arbiter.enabled" "false" \
-		| yq w - "spec.backup.enabled" "true" \
-		| yq w - "spec.backup.tasks" "[]" \
-		| yq w - "spec.backup.pitr.enabled" "false" \
-		| yq w - "spec.backup.storages.minio.type" "s3" \
-		| yq w - "spec.backup.storages.minio.s3.credentialsSecret" "minio-secret" \
-		| yq w - "spec.backup.storages.minio.s3.region" "us-east-1" \
-		| yq w - "spec.backup.storages.minio.s3.bucket" "operator-testing" \
-		| yq w - "spec.backup.storages.minio.s3.endpointUrl" "http://minio-service:9000/" \
-		| yq w - "spec.backup.storages.minio.s3.insecureSkipTLSVerify" "false" \
-		| yq w - "spec.sharding.enabled" "true" \
-		| yq w - "spec.sharding.configsvrReplSet.size" "${CLUSTER_SIZE}" \
-		| yq w - "spec.sharding.mongos.size" "${CLUSTER_SIZE}" \
-		| yq w - "spec.image" "" \
-		| yq w - "spec.backup.image" -- "-backup" \
-		| yq w - "spec.pmm.image" -- "-pmm" >"${cr_yaml}"
+		| yq eval '
+			.metadata.name = "'${cluster}'" |
+			.spec.upgradeOptions.apply = "disabled" |
+			.spec.replsets[].size = '${CLUSTER_SIZE}' |
+			.spec.replsets[].arbiter.enabled = "false" |
+			.spec.backup.enabled = "true" |
+			.spec.backup.tasks = "[]" |
+			.spec.backup.pitr.enabled = "false" |
+			.spec.backup.storages.minio.type = "s3" |
+			.spec.backup.storages.minio.s3.credentialsSecret = "minio-secret" |
+			.spec.backup.storages.minio.s3.region = "us-east-1" |
+			.spec.backup.storages.minio.s3.bucket = "operator-testing" |
+			.spec.backup.storages.minio.s3.endpointUrl = "http://minio-service:9000/" |
+			.spec.backup.storages.minio.s3.insecureSkipTLSVerify = "false" |
+			.spec.sharding.enabled = "true" |
+			.spec.sharding.configsvrReplSet.size = "${CLUSTER_SIZE}" |
+			.spec.sharding.mongos.size = "${CLUSTER_SIZE}" |
+			.spec.image = "" |
+			.spec.backup.image = "-backup" |
+			.spec.pmm.image = "-pmm"' >"${cr_yaml}"
 }
 
 function check_upgrade_order() {

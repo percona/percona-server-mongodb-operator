@@ -94,20 +94,23 @@ kubectl_bin apply \
 desc "Copy secrets from main to replica namespace"
 
 kubectl get secret ${main_cluster}-secrets -o yaml -n ${namespace} \
-	| yq d - metadata \
-	| yq w - metadata.name ${replica_cluster}-secrets \
+	| yq eval '
+		del(.metadata) |
+		(.metadata.name = "'${replica_cluster}'-secrets")' - \
 	| kubectl_bin apply -f -
 
 kubectl_bin get secret ${main_cluster}-ssl-internal -o yaml -n ${namespace} \
-	| yq d - metadata \
-	| yq d - status \
-	| yq w - metadata.name ${replica_cluster}-ssl-internal \
+	| yq eval '
+		del(.metadata) |
+		del(.status) |
+		(.metadata.name = "'${replica_cluster}'-ssl-internal")' - \
 	| kubectl_bin apply -f -
 
 kubectl_bin get secret ${main_cluster}-ssl -o yaml -n ${namespace} \
-	| yq d - metadata \
-	| yq d - status \
-	| yq w - metadata.name ${replica_cluster}-ssl \
+	| yq eval '
+		del(.metadata) |
+		del(.status) |
+		(.metadata.name = "'${replica_cluster}'-ssl")' - \
 	| kubectl_bin apply -f -
 
 sleep 30

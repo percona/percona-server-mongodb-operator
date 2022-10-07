@@ -16,18 +16,16 @@ function check_telemetry_transfer() {
 	cluster="minimal-cluster"
 
 	kubectl_bin apply -f $conf_dir/client.yml
-	yq w $conf_dir/secrets.yml 'metadata.name' "${cluster}" | kubectl_bin apply -f -
+	yq eval 'metadata.name = '"${cluster}'"' $conf_dir/secrets.yml | kubectl_bin apply -f -
 
-	yq r ${src_dir}/deploy/cr-minimal.yaml \
-		| yq w - 'spec.upgradeOptions.versionServiceEndpoint' "${cr_vs_uri}" \
-		| yq w - 'spec.upgradeOptions.apply' ${cr_vs_channel} \
-		| yq w - 'spec.initImage' $IMAGE \
-		| yq w - "spec.crVersion" "9.9.9" \
-		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-		| $sed -e "s#image: .*-mongod[345].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image: .*-mongodb:[345].*#image: $IMAGE_MONGOD#" \
+	yq eval '
+		.spec.upgradeOptions.versionServiceEndpoint = "'${cr_vs_uri}'" |
+		.spec.upgradeOptions.apply = "'${cr_vs_channel}'" \
+		.spec.initImage = "'$IMAGE'" \
+		.spec.crVersion = "9.9.9" \
+		.spec.image = "'$IMAGE_MONGOD'" \
+		.spec.pmm.image = "'$IMAGE_PMM'" \
+		.spec.backup.image = "'$IMAGE_BACKUP'"' ${src_dir}/deploy/cr-minimal.yaml \
 		| kubectl_bin apply -f -
 
 	desc 'check if Pod is started'
@@ -104,8 +102,7 @@ kubectl_bin create configmap ${OPERATOR_NS:+-n $OPERATOR_NS} versions \
 
 kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f $test_dir/conf/vs.yml
 sleep 10
-$sed 's/version-service/version-service-cr/g' "${test_dir}/conf/vs.yml" \
-	| yq w - -d0 'spec.template.spec.containers[0].image' $(yq r -d0 "${test_dir}/conf/vs.yml" 'spec.template.spec.containers[0].image') \
+yq eval '(.. | select(tag == "!!str")) |= sub("version-service$", "version-service-cr")' "${test_dir}/conf/vs.yml" \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} set env deploy/percona-server-mongodb-operator PERCONA_VS_FALLBACK_URI=http://version-service:11000
@@ -113,7 +110,7 @@ sleep 30
 
 desc "Enable telemetry on operator level"
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
-	| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'false' \
+	| yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 wait_deployment 'percona-server-mongodb-operator'
@@ -125,7 +122,7 @@ kubectl_bin delete pod -l run=version-service-cr ${OPERATOR_NS:+-n $OPERATOR_NS}
 kubectl_bin delete pod -l run=version-service ${OPERATOR_NS:+-n $OPERATOR_NS}
 
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
-	| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
+	| yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 IMAGE_PREFIX=$(echo -n "${IMAGE_MONGOD}" | sed -r 's/.*([0-9].[0-9])(.[0-9].*)?$/\1/')
@@ -133,7 +130,7 @@ wait_deployment 'percona-server-mongodb-operator'
 check_telemetry_transfer "http://version-service-cr:11000" "${IMAGE_PREFIX}-recommended" "disabled"
 
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
-	| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
+	| yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 wait_deployment 'percona-server-mongodb-operator'
@@ -157,15 +154,14 @@ for i in "${!cases[@]}"; do
 	sed "s%#initImage%$IMAGE%g" "$test_dir/conf/${cluster}-rs0.yml" >"$tmp_file"
 
 	desc 'create first PSMDB cluster'
-	cat "$tmp_file" \
-		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-		| $sed -e "s#image: .*-mongod[345].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image: .*-mongodb:[345].*#image: $IMAGE_MONGOD#" \
-		| yq w - 'spec.backup.enabled' 'false' \
-		| yq w - 'spec.backup.tasks' '[]' \
+	yq eval '
+		.spec.backup.enabled = "false" |
+		del(.spec.backup.tasks) |
+		.spec.image = "'$IMAGE_MONGOD'" |
+		.spec.pmm.image = "'$IMAGE_PMM'" |
+		.spec.backup.image = "'$IMAGE_BACKUP'"' "$tmp_file" \
 		| kubectl_bin apply -f -
+
 	desc 'check if Pod is started'
 	wait_for_running "${cluster}-rs0" 3
 	sleep 20
