@@ -16,13 +16,12 @@ package healthcheck
 
 import (
 	"context"
+	"strings"
 
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	mgo "go.mongodb.org/mongo-driver/mongo"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 // OkMemberStates is a slice of acceptable replication member states
@@ -38,7 +37,7 @@ var OkMemberStates = []mongo.MemberState{
 var ErrNoReplsetConfigStr string = "(NotYetInitialized) no replset config has been received"
 
 // getSelfMemberState returns the replication state of the local MongoDB member
-func getSelfMemberState(rsStatus *mongo.Status) *mongo.MemberState {
+func getSelfMemberState(rsStatus *mongo.ReplSetStatus) *mongo.MemberState {
 	member := rsStatus.GetSelf()
 	if member == nil || member.Health != mongo.MemberHealthUp {
 		return nil
@@ -57,8 +56,8 @@ func isStateOk(memberState *mongo.MemberState, okMemberStates []mongo.MemberStat
 }
 
 // HealthCheck checks the replication member state of the local MongoDB member
-func HealthCheck(client *mgo.Client, okMemberStates []mongo.MemberState) (State, *mongo.MemberState, error) {
-	rsStatus, err := mongo.RSStatus(context.TODO(), client)
+func HealthCheck(client mongo.Client, okMemberStates []mongo.MemberState) (State, *mongo.MemberState, error) {
+	rsStatus, err := client.RSStatus(context.TODO(), false)
 	if err != nil {
 		return StateFailed, nil, errors.Wrap(err, "get replica set status")
 	}
@@ -74,8 +73,8 @@ func HealthCheck(client *mgo.Client, okMemberStates []mongo.MemberState) (State,
 	return StateFailed, state, errors.Errorf("member has unhealthy replication state: %d", state)
 }
 
-func HealthCheckMongosLiveness(client *mgo.Client) error {
-	isMasterResp, err := mongo.IsMaster(context.TODO(), client)
+func HealthCheckMongosLiveness(client mongo.Client) error {
+	isMasterResp, err := client.IsMaster(context.TODO())
 	if err != nil {
 		return errors.Wrap(err, "get isMaster response")
 	}
@@ -87,54 +86,38 @@ func HealthCheckMongosLiveness(client *mgo.Client) error {
 	return nil
 }
 
-func HealthCheckMongodLiveness(client *mgo.Client, startupDelaySeconds int64) (*mongo.MemberState, error) {
-	isMasterResp, err := mongo.IsMaster(context.TODO(), client)
+func HealthCheckMongodLiveness(client mongo.Client, startupDelaySeconds int64) (*mongo.MemberState, error) {
+	ctx := context.TODO()
+
+	isMasterResp, err := client.IsMaster(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get isMaster response")
 	}
 
-	buildInfo, err := mongo.RSBuildInfo(context.TODO(), client)
+	buildInfo, err := client.RSBuildInfo(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get buildInfo response")
 	}
 
-	replSetStatusCommand := bson.D{{Key: "replSetGetStatus", Value: 1}}
+	var includeInitialSync bool
 	mongoVersion := v.Must(v.NewVersion(buildInfo.Version))
 	if mongoVersion.Compare(v.Must(v.NewVersion("4.2.1"))) < 0 {
-		// https://docs.mongodb.com/manual/reference/command/replSetGetStatus/#syntax
-		replSetStatusCommand = append(replSetStatusCommand, primitive.E{Key: "initialSync", Value: 1})
+		includeInitialSync = true
 	}
 
-	res := client.Database("admin").RunCommand(context.TODO(), replSetStatusCommand)
-	if res.Err() != nil {
-		// if we come this far, it means db connection was successful
-		// standalone mongod nodes in an unmanaged cluster doesn't need
-		// to die before they added to a replset
-		if res.Err().Error() == ErrNoReplsetConfigStr {
+	rsStatus, err := client.RSStatus(ctx, includeInitialSync)
+	if err != nil {
+		if strings.Contains(err.Error(), ErrNoReplsetConfigStr) {
 			return nil, nil
 		}
-		return nil, errors.Wrap(res.Err(), "get replsetGetStatus response")
+		return nil, errors.Wrap(err, "get replSet status")
 	}
 
-	rsStatus := ReplSetStatus{}
-	if err := res.Decode(&rsStatus); err != nil {
-		return nil, errors.Wrap(err, "get replsetGetStatus response")
-	}
-
-	oplogRs := OplogRs{}
+	var oplogRs mongo.CollectionStats
 	if !isMasterResp.IsArbiter {
-		res := client.Database("local").RunCommand(context.TODO(), bson.D{
-			{Key: "collStats", Value: "oplog.rs"},
-			{Key: "scale", Value: 1024 * 1024 * 1024}, // scale size to gigabytes
-		})
-		if res.Err() != nil {
-			return nil, errors.Wrap(res.Err(), "get oplog.rs info")
-		}
-		if err := res.Decode(&oplogRs); err != nil {
-			return nil, errors.Wrap(err, "decode oplog.rs info")
-		}
-		if oplogRs.Ok == 0 {
-			return nil, errors.New(oplogRs.Errmsg)
+		oplogRs, err = client.CollectionStats(ctx, "oplog.rs")
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -155,21 +138,7 @@ type ServerStatus struct {
 	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
 }
 
-type OplogRs struct {
-	StorageSize int64 `bson:"storageSize" json:"storageSize"`
-
-	Ok     int    `bson:"ok" json:"ok"`
-	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
-}
-
-type ReplSetStatus struct {
-	mongo.Status      `bson:",inline"`
-	InitialSyncStatus InitialSyncStatus `bson:"initialSyncStatus" json:"initialSyncStatus"`
-}
-
-type InitialSyncStatus interface{}
-
-func CheckState(rs ReplSetStatus, startupDelaySeconds int64, oplogSize int64) error {
+func CheckState(rs mongo.ReplSetStatus, startupDelaySeconds int64, oplogSize int64) error {
 	uptime := rs.GetSelf().Uptime
 
 	switch rs.MyState {

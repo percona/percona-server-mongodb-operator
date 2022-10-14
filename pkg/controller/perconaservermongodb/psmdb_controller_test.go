@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -9,8 +10,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -34,27 +39,27 @@ var (
 	cfg       *rest.Config
 	k8sClient client.Client
 	testEnv   *envtest.Environment
+	namespace string
 )
 
-func TestAPIs(t *testing.T) {
+func TestReconcile(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"PerconaServerMongoDB Controller Suite",
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecsWithDefaultAndCustomReporters(t, "PerconaServerMongoDB Controller Suite", []Reporter{printer.NewlineReporter{}})
 }
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
-	t := true
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:        []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
-		ErrorIfCRDPathMissing:    true,
-		UseExistingCluster:       &t,
-		AttachControlPlaneOutput: true,
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
+		ErrorIfCRDPathMissing: true,
 	}
+
+	namespace = "psmdb-envtest-" + rand.String(4)
+	err := os.Setenv("WATCH_NAMESPACE", namespace)
+	Expect(err).NotTo(HaveOccurred())
 
 	cfg, err := testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
@@ -73,6 +78,14 @@ var _ = BeforeSuite(func() {
 	err = controller.AddToManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	ns := corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+		},
+	}
+	err = k8sClient.Create(context.TODO(), &ns)
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(context.TODO())
@@ -82,7 +95,16 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	err := testEnv.Stop()
+
+	ns := corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+		},
+	}
+	err := k8sClient.Delete(context.TODO(), &ns)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
 
@@ -95,10 +117,30 @@ var _ = Describe("PerconaServerMongoDB controller", func() {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cr",
-				Namespace: "default",
+				Namespace: namespace,
 			},
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				CRVersion: version.Version,
+				Image:     "percona/percona-server-mongodb:5.0.11-10",
+				Sharding:  psmdbv1.Sharding{Enabled: false},
+				Secrets: &psmdbv1.SecretsSpec{
+					Users: "test-cr-users",
+				},
+				Replsets: []*psmdbv1.ReplsetSpec{
+					{
+						Name: "rs0",
+						Size: 3,
+						VolumeSpec: &psmdbv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										"storage": resource.MustParse("1G"),
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		}
 
@@ -106,10 +148,72 @@ var _ = Describe("PerconaServerMongoDB controller", func() {
 	})
 	It("Should create replset", func() {
 		sts := &appsv1.StatefulSet{}
-		nn := types.NamespacedName{Namespace: "default", Name: "test-cr-rs0"}
+		nn := types.NamespacedName{Namespace: namespace, Name: "test-cr-rs0"}
 
 		Eventually(func() bool {
 			return k8sClient.Get(context.TODO(), nn, sts) == nil
 		}, time.Second*10, time.Millisecond*250).Should(BeTrue())
+	})
+	It("Should create mongod service", func() {
+		svc := &corev1.Service{}
+		nn := types.NamespacedName{Namespace: namespace, Name: "test-cr-rs0"}
+
+		Eventually(func() bool {
+			return k8sClient.Get(context.TODO(), nn, svc) == nil
+		}, time.Second*10, time.Millisecond*250).Should(BeTrue())
+	})
+	It("Should create users secret", func() {
+		secret := &corev1.Secret{}
+		nn := types.NamespacedName{Namespace: namespace, Name: "test-cr-users"}
+
+		Eventually(func() bool {
+			return k8sClient.Get(context.TODO(), nn, secret) == nil
+		}, time.Second*10, time.Millisecond*250).Should(BeTrue())
+	})
+	It("Should create internal users secret", func() {
+		secret := &corev1.Secret{}
+		nn := types.NamespacedName{Namespace: namespace, Name: "internal-test-cr-users"}
+
+		Eventually(func() bool {
+			return k8sClient.Get(context.TODO(), nn, secret) == nil
+		}, time.Second*10, time.Millisecond*250).Should(BeTrue())
+	})
+	It("Should create TLS secret", func() {
+		secret := &corev1.Secret{}
+		nn := types.NamespacedName{Namespace: namespace, Name: "test-cr-ssl"}
+
+		Eventually(func() bool {
+			return k8sClient.Get(context.TODO(), nn, secret) == nil
+		}, time.Second*10, time.Millisecond*250).Should(BeTrue())
+	})
+	It("Should create internal TLS secret", func() {
+		secret := &corev1.Secret{}
+		nn := types.NamespacedName{Namespace: namespace, Name: "test-cr-ssl-internal"}
+
+		Eventually(func() bool {
+			return k8sClient.Get(context.TODO(), nn, secret) == nil
+		}, time.Second*10, time.Millisecond*250).Should(BeTrue())
+	})
+	It("Should reconcile pods", func() {
+		podList := &corev1.PodList{}
+		err := k8sClient.List(context.TODO(), podList, &client.ListOptions{
+			Namespace:     namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/instance": "test-cr"})},
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		Eventually(func() bool { return len(podList.Items) == 3 }, time.Second*120, time.Millisecond*250).Should(BeTrue())
+
+	})
+	It("Should create PVCs", func() {
+		pvcList := &corev1.PersistentVolumeClaimList{}
+
+		err := k8sClient.List(context.TODO(), pvcList, &client.ListOptions{
+			Namespace:     namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/instance": "test-cr"})},
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(len(pvcList.Items)).To(Equal(3))
 	})
 })

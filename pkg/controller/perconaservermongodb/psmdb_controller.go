@@ -40,7 +40,6 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -107,7 +106,13 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 
 	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
-		return "", err
+		// we're running outside of cluster
+		initImage := os.Getenv("INIT_IMAGE")
+		if initImage == "" {
+			return "", errors.New("Set INIT_IMAGE environment variable to run operator outside of cluster")
+		}
+
+		return initImage, nil
 	}
 
 	ns := strings.TrimSpace(string(nsBytes))
@@ -684,7 +689,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		}
 	}()
 
-	list, err := mongo.ListDBs(ctx, client)
+	list, err := client.ListDatabases(ctx)
 	if err != nil {
 		log.Error(err, "failed to list databases", "rs", rsName)
 		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)

@@ -197,7 +197,7 @@ func TestSetSafeDefault(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			for _, platform := range []version.Platform{version.PlatformKubernetes, version.PlatformOpenshift} {
-				err := test.replset.SetDefauts(platform, false, logf.Log.WithName("TestSetSafeDefault"))
+				err := test.replset.SetDefaults(platform, logf.Log.WithName("TestSetSafeDefault"))
 				if err != nil {
 					t.Fatal(err)
 				}

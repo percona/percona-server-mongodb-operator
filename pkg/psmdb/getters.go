@@ -3,7 +3,6 @@ package psmdb
 import (
 	"context"
 
-	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,8 +48,8 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 	return pods, err
 }
 
-func GetPrimaryPod(ctx context.Context, client *mgo.Client) (string, error) {
-	status, err := mongo.RSStatus(ctx, client)
+func GetPrimaryPod(ctx context.Context, client mongo.TopologyManager) (string, error) {
+	status, err := client.RSStatus(ctx, false)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get rs status")
 	}

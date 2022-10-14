@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	mongod "go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -319,13 +318,13 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(ctx context.Context, cr *api
 	return grp.Wait()
 }
 
-func (u *systemUser) updateMongo(ctx context.Context, c *mongod.Client) error {
+func (u *systemUser) updateMongo(ctx context.Context, c mongo.UserManager) error {
 	if bytes.Equal(u.currName, u.name) {
-		err := mongo.UpdateUserPass(ctx, c, string(u.name), string(u.pass))
+		err := c.UpdateUserPass(ctx, string(u.name), string(u.pass))
 		return errors.Wrapf(err, "change password for user %s", u.name)
 	}
 
-	err := mongo.UpdateUser(ctx, c, string(u.currName), string(u.name), string(u.pass))
+	err := c.UpdateUser(ctx, string(u.currName), string(u.name), string(u.pass))
 	return errors.Wrapf(err, "update user %s -> %s", u.currName, u.name)
 }
 

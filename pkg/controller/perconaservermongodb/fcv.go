@@ -5,7 +5,6 @@ import (
 
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
-	mgo "go.mongodb.org/mongo-driver/mongo"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -23,7 +22,7 @@ func (r *ReconcilePerconaServerMongoDB) getFCV(ctx context.Context, cr *api.Perc
 		}
 	}()
 
-	return mongo.GetFCV(ctx, c)
+	return c.GetFCV(ctx)
 }
 
 func (r *ReconcilePerconaServerMongoDB) setFCV(ctx context.Context, cr *api.PerconaServerMongoDB, version string) error {
@@ -36,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(ctx context.Context, cr *api.Perc
 		return errors.Wrap(err, "failed to get go semver")
 	}
 
-	var cli *mgo.Client
+	var cli mongo.Client
 	var connErr error
 
 	if cr.Spec.Sharding.Enabled {
@@ -55,5 +54,5 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(ctx context.Context, cr *api.Perc
 		}
 	}()
 
-	return mongo.SetFCV(ctx, cli, MajorMinor(v))
+	return cli.SetFCV(ctx, MajorMinor(v))
 }

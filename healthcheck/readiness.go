@@ -19,12 +19,13 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 // ReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
-func ReadinessCheck(client *mongo.Client) (State, error) {
+func ReadinessCheck(client mongo.Client) (State, error) {
 	if err := client.Ping(context.TODO(), readpref.Primary()); err != nil {
 		return StateFailed, errors.Wrap(err, "ping")
 	}
@@ -32,23 +33,7 @@ func ReadinessCheck(client *mongo.Client) (State, error) {
 	return StateOk, nil
 }
 
-func MongosReadinessCheck(client *mongo.Client) error {
-	ss := ServerStatus{}
-	cur := client.Database("admin").RunCommand(context.TODO(), bson.D{
-		{Key: "listDatabases", Value: 1},
-		{Key: "filter", Value: bson.D{{Key: "name", Value: "admin"}}},
-		{Key: "nameOnly", Value: true}})
-	if cur.Err() != nil {
-		return errors.Wrap(cur.Err(), "run listDatabases")
-	}
-
-	if err := cur.Decode(&ss); err != nil {
-		return errors.Wrap(err, "decode listDatabases response")
-	}
-
-	if ss.Ok == 0 {
-		return errors.New(ss.Errmsg)
-	}
-
-	return nil
+func MongosReadinessCheck(client mongo.Client) error {
+	_, err := client.ListDatabases(context.TODO(), bson.E{Key: "filter", Value: bson.D{{Key: "name", Value: "admin"}}}, bson.E{Key: "nameOnly", Value: true})
+	return err
 }

@@ -129,14 +129,17 @@ type IsMasterResp struct {
 	OKResponse `bson:",inline"`
 }
 
-type Status struct {
-	Set                     string         `bson:"set" json:"set"`
-	Date                    time.Time      `bson:"date" json:"date"`
-	MyState                 MemberState    `bson:"myState" json:"myState"`
-	Members                 []*Member      `bson:"members" json:"members"`
-	Term                    int64          `bson:"term,omitempty" json:"term,omitempty"`
-	HeartbeatIntervalMillis int64          `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis,omitempty"`
-	Optimes                 *StatusOptimes `bson:"optimes,omitempty" json:"optimes,omitempty"`
+type InitialSyncStatus interface{}
+
+type ReplSetStatus struct {
+	Set                     string            `bson:"set" json:"set"`
+	Date                    time.Time         `bson:"date" json:"date"`
+	MyState                 MemberState       `bson:"myState" json:"myState"`
+	Members                 []*Member         `bson:"members" json:"members"`
+	Term                    int64             `bson:"term,omitempty" json:"term,omitempty"`
+	HeartbeatIntervalMillis int64             `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis,omitempty"`
+	Optimes                 *StatusOptimes    `bson:"optimes,omitempty" json:"optimes,omitempty"`
+	InitialSyncStatus       InitialSyncStatus `bson:"initialSyncStatus" json:"initialSyncStatus"`
 	OKResponse              `bson:",inline"`
 }
 
@@ -162,7 +165,7 @@ type Member struct {
 	SyncingTo         string              `bson:"syncingTo,omitempty" json:"syncingTo,omitempty"`
 }
 
-func (s *Status) GetSelf() *Member {
+func (s *ReplSetStatus) GetSelf() *Member {
 	for _, member := range s.Members {
 		if member.Self {
 			return member
@@ -213,7 +216,7 @@ var MemberStateStrings = map[MemberState]string{
 	MemberStateRemoved:    "REMOVED",
 }
 
-func (s *Status) GetMembersByState(state MemberState, limit int) []*Member {
+func (s *ReplSetStatus) GetMembersByState(state MemberState, limit int) []*Member {
 	members := make([]*Member, 0)
 	for _, member := range s.Members {
 		if member.State == state {
@@ -226,7 +229,7 @@ func (s *Status) GetMembersByState(state MemberState, limit int) []*Member {
 	return members
 }
 
-func (s *Status) Primary() *Member {
+func (s *ReplSetStatus) Primary() *Member {
 	primary := s.GetMembersByState(MemberStatePrimary, 1)
 	if len(primary) == 1 {
 		return primary[0]
@@ -257,4 +260,11 @@ type User struct {
 type UsersInfo struct {
 	Users      []User `bson:"users" json:"users"`
 	OKResponse `bson:",inline"`
+}
+
+type CollectionStats struct {
+	StorageSize int64 `bson:"storageSize" json:"storageSize"`
+
+	Ok     int    `bson:"ok" json:"ok"`
+	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
 }

@@ -18,11 +18,12 @@ import (
 	"context"
 	"os"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/percona/percona-server-mongodb-operator/healthcheck"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/tool"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
