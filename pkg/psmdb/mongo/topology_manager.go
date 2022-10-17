@@ -1,5 +1,7 @@
 package mongo
 
+//go:generate mockgen -destination=mocks/topology_manager.go -source=topology_manager.go
+
 import (
 	"context"
 

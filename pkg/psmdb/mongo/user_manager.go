@@ -1,5 +1,7 @@
 package mongo
 
+//go:generate mockgen -destination=mocks/user_manager.go -source=user_manager.go
+
 import (
 	"context"
 

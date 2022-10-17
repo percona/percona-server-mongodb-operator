@@ -1,5 +1,7 @@
 package mongo
 
+//go:generate mockgen -aux_files github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo=sharder.go,github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo=user_manager.go,github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo=rs_config_manager.go,github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo=topology_manager.go -destination=mocks/client.go -source=client.go
+
 import (
 	"context"
 	"crypto/tls"

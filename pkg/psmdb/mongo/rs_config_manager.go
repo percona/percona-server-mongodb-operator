@@ -1,5 +1,7 @@
 package mongo
 
+//go:generate mockgen -destination=mocks/rs_config_manager.go -source=rs_config_manager.go
+
 import (
 	"context"
 	"fmt"

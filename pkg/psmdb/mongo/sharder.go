@@ -1,5 +1,7 @@
 package mongo
 
+//go:generate mockgen -destination=mocks/sharder.go -source=sharder.go
+
 import (
 	"context"
 
