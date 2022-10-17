@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/mocks"
 	"github.com/percona/percona-server-mongodb-operator/version"
 	//+kubebuilder:scaffold:imports
 )
@@ -108,6 +110,9 @@ var _ = AfterSuite(func() {
 })
 
 var _ = Describe("PerconaServerMongoDB controller", func() {
+	ctrl := gomock.NewController(GinkgoT())
+	mock_client := mock_mongo.NewMockClient(ctrl)
+
 	It("Should create PerconaServerMongoDB", func() {
 		cr := &psmdbv1.PerconaServerMongoDB{
 			TypeMeta: metav1.TypeMeta{
@@ -194,15 +199,15 @@ var _ = Describe("PerconaServerMongoDB controller", func() {
 		}, time.Second*10, time.Millisecond*250).Should(BeTrue())
 	})
 	It("Should reconcile pods", func() {
-		podList := &corev1.PodList{}
-		err := k8sClient.List(context.TODO(), podList, &client.ListOptions{
-			Namespace:     namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/instance": "test-cr"})},
-		)
-		Expect(err).NotTo(HaveOccurred())
-
-		Eventually(func() bool { return len(podList.Items) == 3 }, time.Second*120, time.Millisecond*250).Should(BeTrue())
-
+		Eventually(func() bool {
+			podList := &corev1.PodList{}
+			err := k8sClient.List(context.TODO(), podList, &client.ListOptions{
+				Namespace:     namespace,
+				LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/instance": "test-cr"})},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			return len(podList.Items) == 3
+		}, time.Second*120, time.Millisecond*250).Should(BeTrue())
 	})
 	It("Should create PVCs", func() {
 		pvcList := &corev1.PersistentVolumeClaimList{}
@@ -214,5 +219,19 @@ var _ = Describe("PerconaServerMongoDB controller", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(len(pvcList.Items)).To(Equal(3))
+	})
+	It("Should initialize the replset", func() {
+		Eventually(func() bool {
+			cr := &psmdbv1.PerconaServerMongoDB{}
+
+			nn := types.NamespacedName{Namespace: namespace, Name: "test-cr"}
+			err := k8sClient.Get(context.TODO(), nn, cr)
+			Expect(err).NotTo(HaveOccurred())
+
+			return cr.Status.Replsets["rs0"].Initialized
+		}, time.Second*30, time.Second*1).Should(BeTrue())
+
+		mock_client.EXPECT().GetRole(gomock.Any(), gomock.Any()).MinTimes(1)
+		mock_client.EXPECT().CreateRole(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).MinTimes(1)
 	})
 })
