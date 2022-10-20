@@ -46,7 +46,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
 		log.Info("Waiting for the pods", "replset", replset.Name, "size", replsetSize, "pods", len(pods.Items))
+
 		return api.AppStateInit, nil
+	}
+
+	// all pods need to be ready as well
+	for _, pod := range pods.Items {
+		for _, container := range pod.Status.ContainerStatuses {
+			if !container.Ready {
+				log.Info("Waiting for the pods to be ready", "replset", replset.Name)
+
+				return api.AppStateInit, nil
+			}
+		}
 	}
 
 	if cr.MCSEnabled() {

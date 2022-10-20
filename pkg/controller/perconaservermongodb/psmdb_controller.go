@@ -501,6 +501,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			logger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 
+		if clusterStatus != api.AppStateReady {
+			return rr, errors.Wrap(err, "failed to reconcile cluster")
+		}
+
 		if err := r.fetchVersionFromMongo(ctx, cr, replset); err != nil {
 			return rr, errors.Wrap(err, "update mongo version")
 		}
@@ -557,7 +561,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return rr, err
 	}
 
-	return rr, nil
+	return reconcile.Result{}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *api.PerconaServerMongoDB) error {
