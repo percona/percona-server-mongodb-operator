@@ -427,6 +427,7 @@ spec:
 #    security:
 #      encryptionKeySecret: "my-cluster-name-mongodb-encryption-key"
 
+  # More info can be found at https://docs.percona.com/percona-backup-mongodb/index.html
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
@@ -443,6 +444,7 @@ spec:
 #    storages:
 #      s3-us-west:
 #        type: s3
+#        # Required AWS IAM policy actions: "s3:PutObject", "s3:ListObjects", "s3:ListBucket", "s3:GetObjectAttributes", "s3:GetObject" and "s3:DeleteObject" for backup rotation
 #        s3:
 #          bucket: S3-BACKUP-BUCKET-NAME-HERE
 #          credentialsSecret: my-cluster-name-backup-s3
@@ -450,7 +452,7 @@ spec:
 #          prefix: ""
 #          uploadPartSize: 10485760
 #          maxUploadParts: 10000
-#          storageClass: STANDARD
+#          storageClass: STANDARD # one of: "STANDARD", "REDUCED_REDUNDANCY", "GLACIER", "STANDARD_IA", "ONEZONE_IA", "INTELLIGENT_TIERING", "DEEP_ARCHIVE", "OUTPOSTS", "GLACIER_IR"
 #          insecureSkipTLSVerify: false
 #      minio:
 #        type: s3
