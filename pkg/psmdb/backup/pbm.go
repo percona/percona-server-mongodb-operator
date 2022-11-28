@@ -219,6 +219,22 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 			return priorities, errors.Wrap(err, "get primary pod")
 		}
 		priorities[primary] = 0.5
+
+		// Running a backup from unmanaged cluster should only affect the unmanaged cluster.
+		if cluster.Spec.Unmanaged {
+			podList, err := psmdb.GetRSPods(ctx, k8sclient, cluster, rs.Name)
+			if err != nil {
+				return priorities, errors.Wrapf(err, "get replicaset %s pods", rs.Name)
+			}
+
+			for _, pod := range podList.Items {
+				host, err := psmdb.MongoHost(ctx, k8sclient, cluster, rs.Name, rs.Expose.Enabled, pod)
+				if err != nil {
+					return priorities, errors.Wrapf(err, "get mongo hostname for pod %s", pod.Name)
+				}
+				priorities[host] = 2.0
+			}
+		}
 	}
 
 	return priorities, nil
