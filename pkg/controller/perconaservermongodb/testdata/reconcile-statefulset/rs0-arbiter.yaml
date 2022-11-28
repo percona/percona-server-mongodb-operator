@@ -61,6 +61,7 @@ spec:
         - --relaxPermChecks
         - --sslAllowInvalidCertificates
         - --clusterAuthMode=x509
+        - --tlsMode=preferTLS
         - --shardsvr
         - --enableEncryption
         - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
@@ -128,6 +129,7 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
+        topologySpreadConstraints: null
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data

@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +42,10 @@ func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) Job {
 	}
 
 	return j
+}
+
+func IsPBMNotConfiguredError(err error) bool {
+	return strings.Contains(err.Error(), "mongo: no documents in result")
 }
 
 // HasActiveJobs returns true if there are running backups or restores
@@ -96,6 +101,9 @@ func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client,
 
 	pbm, err := newPBMFunc(ctx, cl, cluster)
 	if err != nil {
+		if IsPBMNotConfiguredError(err) {
+			return false, nil
+		}
 		return false, errors.Wrap(err, "getting PBM object")
 	}
 	defer pbm.Close(ctx)

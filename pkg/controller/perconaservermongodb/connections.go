@@ -15,7 +15,7 @@ import (
 type MongoClientProvider interface {
 	Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error)
 	Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (mongo.Client, error)
-	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string) (mongo.Client, error)
+	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string, tlsEnabled bool) (mongo.Client, error)
 }
 
 func (r *ReconcilePerconaServerMongoDB) MongoClientProvider() MongoClientProvider {
@@ -47,13 +47,13 @@ func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerM
 	return psmdb.MongosClient(ctx, p.k8sclient, cr, c)
 }
 
-func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string) (mongo.Client, error) {
+func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string, tlsEnabled bool) (mongo.Client, error) {
 	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.StandaloneClient(ctx, p.k8sclient, cr, c, host)
+	return psmdb.StandaloneClient(ctx, p.k8sclient, cr, c, host, tlsEnabled)
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
@@ -69,5 +69,5 @@ func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Con
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get mongo host")
 	}
-	return r.MongoClientProvider().Standalone(ctx, cr, role, host)
+	return r.MongoClientProvider().Standalone(ctx, cr, role, host, cr.TLSEnabled())
 }

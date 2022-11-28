@@ -169,19 +169,24 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
 
+	sslVolume := corev1.Volume{
+		Name: "ssl",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  cr.Spec.Secrets.SSL,
+				Optional:    &cr.Spec.UnsafeConf,
+				DefaultMode: &secretFileMode,
+			},
+		},
+	}
+	if cr.CompareVersion("1.16.0") >= 0 {
+		sslVolume.VolumeSource.Secret.Optional = &cr.Spec.Unsafe.TLS
+	}
+
 	// add TLS/SSL Volume
 	t := true
 	volumes = append(volumes,
-		corev1.Volume{
-			Name: "ssl",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSL,
-					Optional:    &cr.Spec.UnsafeConf,
-					DefaultMode: &secretFileMode,
-				},
-			},
-		},
+		sslVolume,
 		corev1.Volume{
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{
@@ -253,7 +258,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			if name, err := replset.CustomReplsetName(); err == nil {
 				rsName = name
 			}
-			containers = append(containers, backupAgentContainer(cr, rsName))
+			containers = append(containers, backupAgentContainer(cr, rsName, cr.TLSEnabled()))
 		}
 
 		pmmC := AddPMMContainer(ctx, cr, usersSecret, cr.Spec.PMM.MongodParams)
@@ -319,7 +324,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 const agentContainerName = "backup-agent"
 
 // backupAgentContainer creates the container object for a backup agent
-func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Container {
+func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsEnabled bool) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
@@ -422,6 +427,13 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string) core
 				ReadOnly:  false,
 			},
 		}...)
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 {
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "PBM_AGENT_TLS_ENABLED",
+			Value: strconv.FormatBool(tlsEnabled),
+		})
 	}
 
 	return c

@@ -68,9 +68,9 @@ _mongod_hack_have_arg() {
 	local arg
 	for arg; do
 		case "$arg" in
-			"$checkArg" | "$checkArg"=*)
-				return 0
-				;;
+		"$checkArg" | "$checkArg"=*)
+			return 0
+			;;
 		esac
 	done
 	return 1
@@ -83,14 +83,14 @@ _mongod_hack_get_arg_val() {
 		local arg="$1"
 		shift
 		case "$arg" in
-			"$checkArg")
-				echo "$1"
-				return 0
-				;;
-			"$checkArg"=*)
-				echo "${arg#"$checkArg"=}"
-				return 0
-				;;
+		"$checkArg")
+			echo "$1"
+			return 0
+			;;
+		"$checkArg"=*)
+			echo "${arg#"$checkArg"=}"
+			return 0
+			;;
 		esac
 	done
 	return 1
@@ -131,14 +131,14 @@ _mongod_hack_ensure_no_arg_val() {
 		local arg="$1"
 		shift
 		case "$arg" in
-			"$ensureNoArg")
-				shift # also skip the value
-				continue
-				;;
-			"$ensureNoArg"=*)
-				# value is already included
-				continue
-				;;
+		"$ensureNoArg")
+			shift # also skip the value
+			continue
+			;;
+		"$ensureNoArg"=*)
+			# value is already included
+			continue
+			;;
 		esac
 		mongodHackedArgs+=("$arg")
 	done
@@ -282,10 +282,10 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		# if we've got any /docker-entrypoint-initdb.d/* files to parse later, we should initdb
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-				*.sh | *.js) # this should match the set of files we check for below
-					shouldPerformInitdb="$f"
-					break
-					;;
+			*.sh | *.js) # this should match the set of files we check for below
+				shouldPerformInitdb="$f"
+				break
+				;;
 			esac
 		done
 	fi
@@ -319,20 +319,6 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		_mongod_hack_ensure_no_arg --auth "${mongodHackedArgs[@]}"
 		if [ "$MONGO_INITDB_ROOT_USERNAME" ] && [ "$MONGO_INITDB_ROOT_PASSWORD" ]; then
 			_mongod_hack_ensure_no_arg_val --replSet "${mongodHackedArgs[@]}"
-		fi
-
-		# "BadValue: need sslPEMKeyFile when SSL is enabled" vs "BadValue: need to enable SSL via the sslMode flag when using SSL configuration parameters"
-		tlsMode='disabled'
-		if _mongod_hack_have_arg '--tlsCertificateKeyFile' "${mongodHackedArgs[@]}"; then
-			tlsMode='preferTLS'
-		elif _mongod_hack_have_arg '--sslPEMKeyFile' "${mongodHackedArgs[@]}"; then
-			tlsMode='preferSSL'
-		fi
-		# 4.2 switched all configuration/flag names from "SSL" to "TLS"
-		if [ "$tlsMode" = 'preferTLS' ] || mongod --help 2>&1 | grep -q -- ' --tlsMode '; then
-			_mongod_hack_ensure_arg_val --tlsMode "$tlsMode" "${mongodHackedArgs[@]}"
-		else
-			_mongod_hack_ensure_arg_val --sslMode "$tlsMode" "${mongodHackedArgs[@]}"
 		fi
 
 		if stat "/proc/$$/fd/1" >/dev/null && [ -w "/proc/$$/fd/1" ]; then
@@ -396,17 +382,17 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		echo
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-				*.sh)
-					echo "$0: running $f"
-					# shellcheck source=/dev/null
-					. "$f"
-					;;
-				*.js)
-					echo "$0: running $f"
-					"${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"
-					echo
-					;;
-				*) echo "$0: ignoring $f" ;;
+			*.sh)
+				echo "$0: running $f"
+				# shellcheck source=/dev/null
+				. "$f"
+				;;
+			*.js)
+				echo "$0: running $f"
+				"${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"
+				echo
+				;;
+			*) echo "$0: ignoring $f" ;;
 			esac
 			echo
 		done
@@ -422,76 +408,61 @@ fi
 
 if [[ $originalArgOne == mongo* ]]; then
 	mongodHackedArgs=("$@")
-	MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
-	CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-	if [ -f /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt ]; then
-		CA=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+
+	# if --tlsMode arg is present, get it
+	tlsMode="$(_mongod_hack_get_arg_val --tlsMode "${mongodHackedArgs[@]}")"
+
+	if [[ -z ${tlsMode} ]]; then
+		# if neither --tlsMode arg or net.tls.mode is present, set it to preferTLS
+		tlsMode="preferTLS"
 	fi
-	if [ -f "${MONGO_SSL_DIR}/ca.crt" ]; then
-		CA="${MONGO_SSL_DIR}/ca.crt"
-	fi
-	LDAP_SSL_DIR=${LDAP_SSL_DIR:-/etc/openldap/certs}
-	if [ -f "${LDAP_SSL_DIR}/ca.crt" ]; then
-		echo "TLS_CACERT ${LDAP_SSL_DIR}/ca.crt" >/etc/openldap/ldap.conf
-	fi
-	if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
-		cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
-		_mongod_hack_ensure_arg_val --sslPEMKeyFile /tmp/tls.pem "${mongodHackedArgs[@]}"
-		if [ -f "${CA}" ]; then
-			_mongod_hack_ensure_arg_val --sslCAFile "${CA}" "${mongodHackedArgs[@]}"
-		fi
-	fi
-	MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
-	if [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.crt" ]; then
-		cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/tmp/tls-internal.pem
-		_mongod_hack_ensure_arg_val --sslClusterFile /tmp/tls-internal.pem "${mongodHackedArgs[@]}"
-		if [ -f "${MONGO_SSL_INTERNAL_DIR}/ca.crt" ]; then
-			_mongod_hack_ensure_arg_val --sslClusterCAFile "${MONGO_SSL_INTERNAL_DIR}/ca.crt" "${mongodHackedArgs[@]}"
+
+	# don't add --tlsMode if TLS is disabled
+	if clusterAuthMode="$(_mongod_hack_get_arg_val --clusterAuthMode "${mongodHackedArgs[@]}")"; then
+		if [[ ${clusterAuthMode} != "keyFile" ]]; then
+			_mongod_hack_ensure_arg_val --tlsMode "${tlsMode}" "${mongodHackedArgs[@]}"
+		else
+			_mongod_hack_ensure_no_arg --sslAllowInvalidCertificates "${mongodHackedArgs[@]}"
 		fi
 	fi
 
-	# don't add --tlsMode if allowUnsafeConfigurations is true
-	if clusterAuthMode="$(_mongod_hack_get_arg_val --clusterAuthMode "${mongodHackedArgs[@]}")"; then
-		if [[ ${clusterAuthMode} != "keyFile" ]]; then
-			tlsMode="preferSSL"
-			# if --config arg is present, try to get tlsMode from it
-			if _parse_config "${mongodHackedArgs[@]}"; then
-				tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "${jsonConfigFile}")
+	if [[ ${tlsMode} != "disabled" ]]; then
+		MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
+		CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+		if [ -f /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt ]; then
+			CA=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+		fi
+		if [ -f "${MONGO_SSL_DIR}/ca.crt" ]; then
+			CA="${MONGO_SSL_DIR}/ca.crt"
+		fi
+		if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
+			cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
+			_mongod_hack_ensure_arg_val --sslPEMKeyFile /tmp/tls.pem "${mongodHackedArgs[@]}"
+			if [ -f "${CA}" ]; then
+				_mongod_hack_ensure_arg_val --sslCAFile "${CA}" "${mongodHackedArgs[@]}"
 			fi
-			_mongod_hack_ensure_arg_val --sslMode "${tlsMode}" "${mongodHackedArgs[@]}"
+		fi
+		MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
+		if [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.crt" ]; then
+			cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/tmp/tls-internal.pem
+			_mongod_hack_ensure_arg_val --sslClusterFile /tmp/tls-internal.pem "${mongodHackedArgs[@]}"
+			if [ -f "${MONGO_SSL_INTERNAL_DIR}/ca.crt" ]; then
+				_mongod_hack_ensure_arg_val --sslClusterCAFile "${MONGO_SSL_INTERNAL_DIR}/ca.crt" "${mongodHackedArgs[@]}"
+			fi
+		fi
+
+		LDAP_SSL_DIR=${LDAP_SSL_DIR:-/etc/openldap/certs}
+		if [ -f "${LDAP_SSL_DIR}/ca.crt" ]; then
+			echo "TLS_CACERT ${LDAP_SSL_DIR}/ca.crt" >/etc/openldap/ldap.conf
 		fi
 	fi
 
 	if [ "$MONGODB_VERSION" != 'v4.0' ]; then
-
-		_mongod_hack_rename_arg_save_val --sslMode --tlsMode "${mongodHackedArgs[@]}"
-
-		if _mongod_hack_have_arg '--tlsMode' "${mongodHackedArgs[@]}"; then
-			tlsMode="none"
-			if _mongod_hack_have_arg 'allowSSL' "${mongodHackedArgs[@]}"; then
-				tlsMode='allowTLS'
-			elif _mongod_hack_have_arg 'preferSSL' "${mongodHackedArgs[@]}"; then
-				tlsMode='preferTLS'
-			elif _mongod_hack_have_arg 'requireSSL' "${mongodHackedArgs[@]}"; then
-				tlsMode='requireTLS'
-			fi
-
-			if [ "$tlsMode" != "none" ]; then
-				_mongod_hack_ensure_no_arg_val --tlsMode "${mongodHackedArgs[@]}"
-				_mongod_hack_ensure_arg_val --tlsMode "$tlsMode" "${mongodHackedArgs[@]}"
-			fi
-		fi
-
-		_mongod_hack_rename_arg_save_val --sslPEMKeyFile --tlsCertificateKeyFile "${mongodHackedArgs[@]}"
-		if ! _mongod_hack_have_arg '--tlsMode' "${mongodHackedArgs[@]}"; then
-			if _mongod_hack_have_arg '--tlsCertificateKeyFile' "${mongodHackedArgs[@]}"; then
-				_mongod_hack_ensure_arg_val --tlsMode "preferTLS" "${mongodHackedArgs[@]}"
-			fi
-		fi
 		_mongod_hack_rename_arg '--sslAllowInvalidCertificates' '--tlsAllowInvalidCertificates' "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg '--sslAllowInvalidHostnames' '--tlsAllowInvalidHostnames' "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg '--sslAllowConnectionsWithoutCertificates' '--tlsAllowConnectionsWithoutCertificates' "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg '--sslFIPSMode' '--tlsFIPSMode' "${mongodHackedArgs[@]}"
+		_mongod_hack_rename_arg '--sslMode' '--tlsMode' "${mongodHackedArgs[@]}"
 
 		_mongod_hack_rename_arg_save_val --sslPEMKeyPassword --tlsCertificateKeyFilePassword "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg_save_val --sslClusterFile --tlsClusterFile "${mongodHackedArgs[@]}"

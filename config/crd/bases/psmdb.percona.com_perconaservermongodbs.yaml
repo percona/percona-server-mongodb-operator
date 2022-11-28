@@ -17255,9 +17255,24 @@ spec:
                     required:
                     - name
                     type: object
+                  mode:
+                    type: string
                 type: object
               unmanaged:
                 type: boolean
+              unsafeFlags:
+                properties:
+                  backupIfUnhealthy:
+                    type: boolean
+                  mongosSize:
+                    type: boolean
+                  replsetSize:
+                    type: boolean
+                  terminationGracePeriod:
+                    type: boolean
+                  tls:
+                    type: boolean
+                type: object
               updateStrategy:
                 type: string
               upgradeOptions:
