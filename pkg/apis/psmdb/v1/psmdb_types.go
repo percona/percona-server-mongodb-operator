@@ -856,10 +856,6 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 }
 
 func (cr *PerconaServerMongoDB) CanBackup() error {
-	if cr.Spec.Unmanaged {
-		return errors.Errorf("backups are not allowed on unmanaged clusters")
-	}
-
 	if cr.Status.State == AppStateReady {
 		return nil
 	}
