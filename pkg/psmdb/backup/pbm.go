@@ -51,10 +51,6 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		strings.Join(addrs, ","),
 	)
 
-	if cr.Spec.UnsafeConf {
-		return murl, nil
-	}
-
 	// PBM connection is opened from the operator pod. In order to use SSL
 	// certificates of the cluster, we need to copy them to operator pod.
 	// This is especially important if the user passes custom config to set

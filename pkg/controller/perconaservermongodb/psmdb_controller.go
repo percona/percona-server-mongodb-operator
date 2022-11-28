@@ -341,12 +341,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	if !cr.Spec.UnsafeConf {
-		err = r.reconsileSSL(ctx, cr)
-		if err != nil {
-			err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
-			return reconcile.Result{}, err
-		}
+	err = r.reconsileSSL(ctx, cr)
+	if err != nil {
+		err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
+		return reconcile.Result{}, err
 	}
 
 	internalKey := psmdb.InternalKey(cr)
@@ -1455,13 +1453,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 
 	// add TLS/SSL Volume
 	t := true
+	f := false
 	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 		corev1.Volume{
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  cr.Spec.Secrets.SSL,
-					Optional:    &cr.Spec.UnsafeConf,
+					Optional:    &f,
 					DefaultMode: &secretFileMode,
 				},
 			},
@@ -1618,9 +1617,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, l
 }
 
 func (r *ReconcilePerconaServerMongoDB) getTLSHash(ctx context.Context, cr *api.PerconaServerMongoDB, secretName string) (string, error) {
-	if cr.Spec.UnsafeConf {
-		return "", nil
-	}
 	secretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{

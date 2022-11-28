@@ -168,7 +168,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec, secret, customLogin, customAdminParams)...)
 	}
 
-	if cr.CompareVersion("1.13.0") >= 0 && !cr.Spec.UnsafeConf {
+	if cr.CompareVersion("1.13.0") >= 0 {
 		pmm.VolumeMounts = []corev1.VolumeMount{
 			{
 				Name:      "ssl",
@@ -295,7 +295,7 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	pmmServerArgs += " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
-	if cr.CompareVersion("1.13.0") >= 0 && !cr.Spec.UnsafeConf {
+	if cr.CompareVersion("1.13.0") >= 0 {
 		tlsParams := []string{
 			"--tls",
 			"--tls-skip-verify",
@@ -312,7 +312,7 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	pmmAnnotate := "pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'"
 	prerunScript := pmmWait + "\n" + pmmAddService + "\n" + pmmAnnotate
 
-	if cr.CompareVersion("1.13.0") >= 0 && !cr.Spec.UnsafeConf {
+	if cr.CompareVersion("1.13.0") >= 0 {
 		prepareTLS := fmt.Sprintf("cat %[1]s/tls.key %[1]s/tls.crt > /tmp/tls.pem;", SSLDir)
 		prerunScript = prepareTLS + "\n" + prerunScript
 	}
