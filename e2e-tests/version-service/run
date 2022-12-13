@@ -20,11 +20,11 @@ function check_telemetry_transfer() {
 
 	yq eval '
 		.spec.upgradeOptions.versionServiceEndpoint = "'${cr_vs_uri}'" |
-		.spec.upgradeOptions.apply = "'${cr_vs_channel}'" \
-		.spec.initImage = "'$IMAGE'" \
-		.spec.crVersion = "9.9.9" \
-		.spec.image = "'$IMAGE_MONGOD'" \
-		.spec.pmm.image = "'$IMAGE_PMM'" \
+		.spec.upgradeOptions.apply = "'${cr_vs_channel}'" |
+		.spec.initImage = "'$IMAGE'" |
+		.spec.crVersion = "9.9.9" |
+		.spec.image = "'$IMAGE_MONGOD'" |
+		.spec.pmm.image = "'$IMAGE_PMM'" |
 		.spec.backup.image = "'$IMAGE_BACKUP'"' ${src_dir}/deploy/cr-minimal.yaml \
 		| kubectl_bin apply -f -
 
