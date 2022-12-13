@@ -264,7 +264,7 @@ wait_deployment() {
 	retry=0
 	echo -n $name
 	until kubectl_bin get deployment $name ${OPERATOR_NS:+-n $OPERATOR_NS} >/dev/null \
-        && [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" ]; do
+		&& [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -592,7 +592,9 @@ compare_kubectl() {
 			del(.. | select(has("namespace")).namespace) |
 			del(.. | select(has("uid")).uid) |
 			del(.metadata.resourceVersion) |
+			del(.spec.template.spec.containers[].env[] | select(.name == "NAMESPACE")) |
 			del(.metadata.selfLink) |
+			del(.metadata.annotations."cloud.google.com/neg") |
 			del(.. | select(has("image")).image) |
 			del(.. | select(has("clusterIP")).clusterIP) |
 			del(.. | select(has("clusterIPs")).clusterIPs) |
@@ -606,6 +608,8 @@ compare_kubectl() {
 			del(.. | select(has("volume.kubernetes.io/storage-provisioner"))."volume.kubernetes.io/storage-provisioner") |
 			del(.spec.volumeMode) |
 			del(.. | select(has("volume.kubernetes.io/selected-node"))."volume.kubernetes.io/selected-node") |
+			del(.. | select(has("percona.com/last-config-hash"))."percona.com/last-config-hash") |
+			del(.. | select(has("percona.com/configuration-hash"))."percona.com/configuration-hash") |
 			del(.. | select(has("percona.com/ssl-hash"))."percona.com/ssl-hash") |
 			del(.. | select(has("percona.com/ssl-internal-hash"))."percona.com/ssl-internal-hash") |
 			del(.spec.volumeClaimTemplates[].spec.volumeMode | select(. == "Filesystem")) |
