@@ -16,7 +16,7 @@ function check_telemetry_transfer() {
 	cluster="minimal-cluster"
 
 	kubectl_bin apply -f $conf_dir/client.yml
-	yq eval 'metadata.name = '"${cluster}'"' $conf_dir/secrets.yml | kubectl_bin apply -f -
+	yq eval '.metadata.name = "'${cluster}'"' $conf_dir/secrets.yml | kubectl_bin apply -f -
 
 	yq eval '
 		.spec.upgradeOptions.versionServiceEndpoint = "'${cr_vs_uri}'" |
@@ -25,6 +25,7 @@ function check_telemetry_transfer() {
 		.spec.crVersion = "9.9.9" |
 		.spec.image = "'$IMAGE_MONGOD'" |
 		.spec.pmm.image = "'$IMAGE_PMM'" |
+		.spec.backup.enabled = false |
 		.spec.backup.image = "'$IMAGE_BACKUP'"' ${src_dir}/deploy/cr-minimal.yaml \
 		| kubectl_bin apply -f -
 
@@ -60,7 +61,7 @@ function check_telemetry_transfer() {
 
 	local telemetry_log_file="${telemetry_state}_telemetry.version-service.log${OPERATOR_NS:+-cw}.json"
 	# telemetry was disabled in CR but in operator not
-	if [ ${cr_vs_channel} == 'disabled' -a "${telemetry_state}" == 'enabled' ]; then
+	if [ "${cr_vs_channel}" == 'disabled' -a "${telemetry_state}" == 'enabled' ]; then
 		# operator fallback VS should have telemetry
 		diff ${test_dir}/compare/${telemetry_log_file} <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json ${test_dir}/compare/${telemetry_log_file})
 		# CR VS should not have telemetry
@@ -70,7 +71,7 @@ function check_telemetry_transfer() {
 	local telemetry_cr_log_file="${telemetry_state}_telemetry.version-service-cr.log${OPERATOR_NS:+-cw}.json"
 	local image_prefix=${cr_vs_channel%'-recommended'}
 	# telemetry was disabled in operator but not in CR
-	if [ ${cr_vs_channel} == "${image_prefix}-recommended" -a "${telemetry_state}" == 'disabled' ]; then
+	if [ "${cr_vs_channel}" == "${image_prefix}-recommended" -a "${telemetry_state}" == 'disabled' ]; then
 		# cr VS should have telemetry
 		diff ${test_dir}/compare/${telemetry_cr_log_file} <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json ${test_dir}/compare/${telemetry_cr_log_file})
 		# operator VS should not have telemetry
@@ -78,7 +79,7 @@ function check_telemetry_transfer() {
 	fi
 
 	# telemetry was disabled in CR as well as in operator
-	if [ ${cr_vs_channel} == 'disabled' -a "${telemetry_state}" == 'disabled' ]; then
+	if [ "${cr_vs_channel}" == 'disabled' -a "${telemetry_state}" == 'disabled' ]; then
 		# CR VS should not have telemetry
 		[[ -s ${tmp_dir}/disabled_telemetry.version-service-cr.log.json ]] && exit 1
 		# operator VS should not have telemetry
@@ -110,7 +111,7 @@ sleep 30
 
 desc "Enable telemetry on operator level"
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
-	| yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' \
+	| yq eval '(.spec.template.spec.containers[0].env[] | select(.name == "DISABLE_TELEMETRY").value) = "false"' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 wait_deployment 'percona-server-mongodb-operator'
@@ -122,7 +123,7 @@ kubectl_bin delete pod -l run=version-service-cr ${OPERATOR_NS:+-n $OPERATOR_NS}
 kubectl_bin delete pod -l run=version-service ${OPERATOR_NS:+-n $OPERATOR_NS}
 
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
-	| yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' \
+	| yq eval '(.spec.template.spec.containers[0].env[] | select(.name == "DISABLE_TELEMETRY").value) = "true"' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 IMAGE_PREFIX=$(echo -n "${IMAGE_MONGOD}" | sed -r 's/.*([0-9].[0-9])(.[0-9].*)?$/\1/')
@@ -130,7 +131,7 @@ wait_deployment 'percona-server-mongodb-operator'
 check_telemetry_transfer "http://version-service-cr:11000" "${IMAGE_PREFIX}-recommended" "disabled"
 
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
-	| yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' \
+	| yq eval '(.spec.template.spec.containers[0].env[] | select(.name == "DISABLE_TELEMETRY").value) = "true"' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 wait_deployment 'percona-server-mongodb-operator'
@@ -155,7 +156,7 @@ for i in "${!cases[@]}"; do
 
 	desc 'create first PSMDB cluster'
 	yq eval '
-		.spec.backup.enabled = "false" |
+		.spec.backup.enabled = false |
 		del(.spec.backup.tasks) |
 		.spec.image = "'$IMAGE_MONGOD'" |
 		.spec.pmm.image = "'$IMAGE_PMM'" |

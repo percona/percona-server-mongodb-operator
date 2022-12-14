@@ -624,6 +624,14 @@ compare_kubectl() {
 			(.. | select(. == "extensions/v1beta1")) = "apps/v1" |
 			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
 
+	if version_gt "1.22"; then
+		yq -i eval 'del(.spec.internalTrafficPolicy)' ${new_result}
+		yq -i eval 'del(.spec.allocateLoadBalancerNodePorts)' ${new_result}
+		if [[ ${expected_result} == */cronjob* ]]; then
+			yq -i eval 'del(.metadata.generation)' ${new_result}
+		fi
+	fi
+
 	diff -u "$expected_result" "$new_result"
 }
 
