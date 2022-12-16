@@ -18,7 +18,7 @@ You need to install a number of software packages on your system to satisfy the 
 ```
 sudo yum -y install epel-release
 sudo yum -y install coreutils sed jq curl docker
-sudo curl -s -L https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64 -o /usr/bin/yq
+sudo curl -s -L https://github.com/mikefarah/yq/releases/download/v4.27.2/yq_linux_amd64 -o /usr/bin/yq
 sudo chmod a+x /usr/bin/yq
 curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
     | tar -C /usr/bin --strip-components 1 --wildcards -zxvpf - '*/oc' '*/kubectl'
@@ -35,7 +35,7 @@ curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyr
 sudo apt-get update
 sudo apt-get install -y google-cloud-sdk docker.io kubectl jq
 sudo snap install helm --classic
-sudo snap install yq --channel=v3/stable
+sudo snap install yq
 curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz | sudo tar -C /usr/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
 ```
 
@@ -44,9 +44,7 @@ curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshi
 Install [Docker](https://docs.docker.com/docker-for-mac/install/), and run the following commands for the other required components:
 
 ```
-brew install coreutils gnu-sed jq kubernetes-cli openshift-cli kubernetes-helm
-wget https://github.com/mikefarah/yq/releases/download/3.4.1/yq_darwin_amd64 -O /usr/local/bin/yq &&    chmod +x /usr/local/bin/yq
-cp /usr/local/bin/yq /opt/homebrew/bin
+brew install coreutils gnu-sed jq yq kubernetes-cli openshift-cli kubernetes-helm
 curl https://sdk.cloud.google.com | bash
 ```
 
