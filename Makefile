@@ -44,7 +44,7 @@ uninstall: manifests ## Uninstall CRDs, rbac
 
 .PHONY: deploy
 deploy: ## Deploy operator
-	yq w $(DEPLOYDIR)/operator.yaml 'spec.template.spec.containers.(name==percona-server-mongodb-operator).image' $(IMAGE) | kubectl apply -f -
+	yq eval '(.spec.template.spec.containers[].image = "'${IMAGE}'")' $(DEPLOYDIR)/operator.yaml | kubectl apply -f -
 
 undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
