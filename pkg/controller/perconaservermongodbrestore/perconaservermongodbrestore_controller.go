@@ -380,7 +380,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        cr.Name,
 				Namespace:   cr.Namespace,
-				ClusterName: cr.ClusterName,
 			},
 			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
