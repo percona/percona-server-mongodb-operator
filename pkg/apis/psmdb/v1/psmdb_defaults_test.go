@@ -3,6 +3,7 @@ package v1_test
 import (
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/stretchr/testify/assert"
@@ -194,10 +195,18 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 	}
 
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Spec: api.PerconaServerMongoDBSpec{
+			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
+			Sharding: api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
+		},
+	}
+
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			for _, platform := range []version.Platform{version.PlatformKubernetes, version.PlatformOpenshift} {
-				err := test.replset.SetDefauts(platform, false, logf.Log.WithName("TestSetSafeDefault"))
+				err := test.replset.SetDefaults(platform, cr, logf.Log.WithName("TestSetSafeDefault"))
 				if err != nil {
 					t.Fatal(err)
 				}
