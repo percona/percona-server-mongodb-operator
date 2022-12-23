@@ -124,7 +124,7 @@ function prepare_cr_yaml() {
 			.spec.sharding.enabled = true |
 			.spec.sharding.configsvrReplSet.size = "${CLUSTER_SIZE}" |
 			.spec.sharding.mongos.size = "${CLUSTER_SIZE}" |
-			.spec.image = "" |
+			.spec.image="" | .spec.image tag="!!null" |
 			.spec.backup.image = "-backup" |
 			.spec.pmm.image = "-pmm"' >"${cr_yaml}"
 }
