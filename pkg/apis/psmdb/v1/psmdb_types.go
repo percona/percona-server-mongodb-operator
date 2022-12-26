@@ -29,13 +29,13 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDB is the Schema for the perconaservermongodbs API
-//+k8s:openapi-gen=true
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="psmdb"
-//+kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
-//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName="psmdb"
+// +kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaServerMongoDB struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -69,6 +69,8 @@ type PerconaServerMongoDBSpec struct {
 	Image                   string                               `json:"image,omitempty"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	IgnoreLabels            []string                             `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations       []string                             `json:"ignoreAnnotations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
 	Replsets                []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                 *SecretsSpec                         `json:"secrets,omitempty"`
@@ -471,7 +473,7 @@ type ReplsetSpec struct {
 	Size                     int32                      `json:"size"`
 	ClusterRole              ClusterRole                `json:"clusterRole,omitempty"`
 	Arbiter                  Arbiter                    `json:"arbiter,omitempty"`
-	Expose                   Expose                     `json:"expose,omitempty"`
+	Expose                   ExposeTogglable            `json:"expose,omitempty"`
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
@@ -781,19 +783,26 @@ type Arbiter struct {
 }
 
 type MongosExpose struct {
+	ServicePerPod bool `json:"servicePerPod,omitempty"`
+
+	Expose `json:",inline"`
+}
+
+type ExposeTogglable struct {
+	Enabled bool `json:"enabled"`
+
+	Expose `json:",inline"`
+}
+
+type Expose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
-type Expose struct {
-	Enabled                  bool               `json:"enabled"`
-	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
-	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
+func (e *Expose) SaveOldMeta() bool {
+	return len(e.ServiceAnnotations) == 0 && len(e.ServiceLabels) == 0
 }
 
 // ServerVersion represents info about k8s / openshift server version

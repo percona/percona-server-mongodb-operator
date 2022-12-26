@@ -26,7 +26,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 			return nil, errors.Wrapf(err, "set owner ref for Service %s", service.Name)
 		}
 
-		err = r.createOrUpdate(ctx, service)
+		err = r.createOrUpdateSvc(ctx, cr, service, replset.Expose.SaveOldMeta())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create external service for replset %s", replset.Name)
 		}
@@ -53,7 +53,7 @@ func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *a
 	if err := setControllerReference(cr, se, r.scheme); err != nil {
 		return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
 	}
-	if err := r.createOrUpdate(ctx, se); err != nil {
+	if err := r.createOrUpdateSvc(ctx, cr, svc, true); err != nil {
 		return errors.Wrapf(err, "create or update ServiceExport %s", se.Name)
 	}
 	return nil
