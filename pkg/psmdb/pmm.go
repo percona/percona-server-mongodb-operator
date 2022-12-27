@@ -326,7 +326,17 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 }
 
 // AddPMMContainer creates the container object for a pmm-client
-func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) (corev1.Container, error) {
+func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) *corev1.Container {
+	if !cr.Spec.PMM.Enabled {
+		return nil
+	}
+
+	if !cr.Spec.PMM.HasSecret(secret) {
+		log.Info(fmt.Sprintf(`Can't enable PMM: "%s" or "%s" keys don't exist in the %s, or %s and %s secrets are out of sync`,
+			api.PMMAPIKey, api.PMMUserKey, cr.Spec.Secrets.Users, cr.Spec.Secrets.Users, api.InternalUserSecretName(cr)))
+		return nil
+	}
+
 	pmmC := PMMContainer(cr, secret, customAdminParams)
 	if cr.CompareVersion("1.2.0") >= 0 {
 		pmmC.Resources = cr.Spec.PMM.Resources
@@ -366,5 +376,5 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, custom
 		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
 	}
 
-	return pmmC, nil
+	return &pmmC
 }

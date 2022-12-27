@@ -246,7 +246,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			},
 		}, users...)
 	}
-	if cr.Spec.PMM.Enabled {
+	if cr.Spec.PMM.IsEnabled(newUsersSec) {
 		// insert in front
 		if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
 			users = append([]user{
