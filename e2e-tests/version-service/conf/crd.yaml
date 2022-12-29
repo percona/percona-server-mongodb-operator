@@ -5577,6 +5577,10 @@ spec:
                           type: array
                         volumeSpec:
                           properties:
+                            annotations:
+                              additionalProperties:
+                                type: string
+                              type: object
                             emptyDir:
                               properties:
                                 medium:
@@ -5596,6 +5600,10 @@ spec:
                                   type: string
                               required:
                               - path
+                              type: object
+                            labels:
+                              additionalProperties:
+                                type: string
                               type: object
                             persistentVolumeClaim:
                               properties:
@@ -7334,6 +7342,10 @@ spec:
                       type: array
                     volumeSpec:
                       properties:
+                        annotations:
+                          additionalProperties:
+                            type: string
+                          type: object
                         emptyDir:
                           properties:
                             medium:
@@ -7353,6 +7365,10 @@ spec:
                               type: string
                           required:
                           - path
+                          type: object
+                        labels:
+                          additionalProperties:
+                            type: string
                           type: object
                         persistentVolumeClaim:
                           properties:
@@ -11980,6 +11996,10 @@ spec:
                             type: array
                           volumeSpec:
                             properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
                               emptyDir:
                                 properties:
                                   medium:
@@ -11999,6 +12019,10 @@ spec:
                                     type: string
                                 required:
                                 - path
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
                                 type: object
                               persistentVolumeClaim:
                                 properties:
@@ -13737,6 +13761,10 @@ spec:
                         type: array
                       volumeSpec:
                         properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
                           emptyDir:
                             properties:
                               medium:
@@ -13756,6 +13784,10 @@ spec:
                                 type: string
                             required:
                             - path
+                            type: object
+                          labels:
+                            additionalProperties:
+                              type: string
                             type: object
                           persistentVolumeClaim:
                             properties:

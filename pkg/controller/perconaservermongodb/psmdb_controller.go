@@ -1501,7 +1501,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	} else {
 		if volumeSpec.PersistentVolumeClaim != nil {
 			sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
-				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, volumeSpec.PersistentVolumeClaim),
+				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
 			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
