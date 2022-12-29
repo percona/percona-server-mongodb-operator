@@ -28,6 +28,7 @@ func TestUpdateStatus(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: "1.12.0",
 			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
 			Sharding: api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
 		},
