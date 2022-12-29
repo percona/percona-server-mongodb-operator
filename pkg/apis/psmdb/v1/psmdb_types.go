@@ -256,8 +256,7 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 		return false
 	}
 	for _, k := range []string{PMMAPIKey, PMMUserKey} {
-		_, ok := secret.Data[k]
-		if ok {
+		if _, ok := secret.Data[k]; ok {
 			return true
 		}
 	}
