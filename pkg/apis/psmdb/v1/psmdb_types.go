@@ -251,10 +251,6 @@ type PMMSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (spec *PMMSpec) IsEnabled(secret *corev1.Secret) bool {
-	return spec.Enabled && spec.HasSecret(secret)
-}
-
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if len(secret.Data) == 0 {
 		return false
