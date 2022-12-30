@@ -9,32 +9,20 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	finalizerDeletePVC              = "delete-psmdb-pvc"
-	finalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
 )
 
 var errWaitingTermination = errors.New("waiting pods to be deleted")
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
 	shouldReconcile = false
-	finalizers := sets.NewString(cr.GetFinalizers()...)
+	finalizers := cr.GetOrderedFinalizers()
 
-	order := []string{finalizerDeletePSMDBPodsInOrder, finalizerDeletePVC}
-
-	for _, f := range order {
-		if !finalizers.Has(f) {
-			continue
-		}
-
+	for _, f := range finalizers {
 		switch f {
-		case finalizerDeletePVC:
+		case api.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
-		case finalizerDeletePSMDBPodsInOrder:
+		case api.FinalizerDeletePSMDBPodsInOrder:
 			err = r.deletePSMDBPods(ctx, cr)
 			if err == nil {
 				shouldReconcile = true
@@ -49,11 +37,10 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			}
 			break
 		}
-
-		finalizers = finalizers.Delete(f)
+		finalizers = finalizers[1:]
 	}
 
-	cr.SetFinalizers(finalizers.List())
+	cr.SetFinalizers(finalizers)
 	err = r.client.Update(ctx, cr)
 
 	return shouldReconcile, err

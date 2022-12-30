@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -29,13 +30,13 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDB is the Schema for the perconaservermongodbs API
-//+k8s:openapi-gen=true
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="psmdb"
-//+kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
-//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName="psmdb"
+// +kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaServerMongoDB struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -907,4 +908,25 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 
 func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
+}
+
+const (
+	FinalizerDeletePVC              = "delete-psmdb-pvc"
+	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
+)
+
+func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
+	order := []string{FinalizerDeletePSMDBPodsInOrder, FinalizerDeletePVC}
+
+	set := sets.NewString(cr.GetFinalizers()...)
+	finalizers := make([]string, 0, len(order))
+
+	for _, f := range order {
+		if !set.Has(f) {
+			continue
+		}
+		finalizers = append(finalizers, f)
+	}
+
+	return finalizers
 }
