@@ -2,6 +2,9 @@ apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
+  finalizers:
+    - delete-psmdb-pods-in-order
+#    - delete-psmdb-pvc
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
@@ -18,10 +21,10 @@ spec:
 #    - name: private-registry-credentials
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
-  ignoreAnnotations:
-    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
-  ignoreLabels:
-    - rack
+#  ignoreAnnotations:
+#    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
+#  ignoreLabels:
+#    - rack
 #  multiCluster:
 #    enabled: true
 #    DNSSuffix: svc.clusterset.local
@@ -336,8 +339,8 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-        serviceLabels:
-          rack: rack-22
+#        serviceLabels:
+#          rack: rack-22
       resources:
         limits:
           cpu: "300m"
@@ -421,8 +424,8 @@ spec:
 #          - 10.0.0.0/8
 #        serviceAnnotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-        serviceLabels:
-          rack: rack-22
+#        serviceLabels:
+#          rack: rack-22
 
 #  mongod:
 #    security:
