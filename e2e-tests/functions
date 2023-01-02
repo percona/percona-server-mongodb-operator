@@ -1093,6 +1093,7 @@ create_infra() {
 	local ns="$1"
 
 	delete_crd
+	check_crd_for_deletion "${GIT_BRANCH}"
 	if [ -n "$OPERATOR_NS" ]; then
 		create_namespace $OPERATOR_NS
 		deploy_operator
@@ -1107,6 +1108,7 @@ function create_infra_gh() {
 	local ns="$1"
 	local git_tag="$2"
 
+	check_crd_for_deletion "${git_tag}"
 	if [ -n "${OPERATOR_NS}" ]; then
 		create_namespace "${OPERATOR_NS}"
 		deploy_operator_gh "${git_tag}"
@@ -1115,4 +1117,20 @@ function create_infra_gh() {
 		create_namespace "${ns}"
 		deploy_operator_gh "${git_tag}"
 	fi
+}
+
+function check_crd_for_deletion() {
+	# 1.24 rejects CR object creation if the corresponding CRD object is to be removed.
+	# We need to make sure that it will happen before the next CR creation request.
+	local git_tag="$1"
+
+	for crd_name in $(curl -s https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml | yq eval '.metadata.name' | $sed 's/---//g' | $sed ':a;N;$!ba;s/\n/ /g');
+	do
+		if [[ $(kubectl_bin get crd/${crd_name} -o jsonpath='{.status.conditions[-1].type}') == "Terminating" ]]; then
+			kubectl get ${crd_name} --all-namespaces -o wide \
+				| grep -v 'NAMESPACE' \
+				| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
+				|| :
+		fi
+	done
 }
