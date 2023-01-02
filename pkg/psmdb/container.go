@@ -44,6 +44,10 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		})
 	}
 
+	if cr.CompareVersion("1.14.0") >= 0 {
+		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
+	}
+
 	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
 	if err != nil {
 		return corev1.Container{}, err
@@ -138,6 +142,10 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			},
 		}
 		container.Command = []string{"/data/db/ps-entry.sh"}
+	}
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		container.Command = []string{BinMountPath + "/ps-entry.sh"}
 	}
 
 	return container, nil
@@ -334,7 +342,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 // explicitly set the WiredTiger cache size to fix this.
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
-//
 func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64, subtract1GB bool) float64 {
 	maxMemory := resourceList[corev1.ResourceMemory]
 	var size float64

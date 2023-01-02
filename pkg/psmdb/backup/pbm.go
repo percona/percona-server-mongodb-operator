@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -41,7 +42,7 @@ type PBM struct {
 
 func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string) (string, error) {
 	usersSecretName := api.UserSecretName(cr)
-	scr, err := secret(ctx, k8sclient, cr.Namespace, usersSecretName)
+	scr, err := getSecret(ctx, k8sclient, cr.Namespace, usersSecretName)
 	if err != nil {
 		return "", errors.Wrap(err, "get secrets")
 	}
@@ -60,7 +61,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	// certificates of the cluster, we need to copy them to operator pod.
 	// This is especially important if the user passes custom config to set
 	// net.tls.mode to requireTLS.
-	sslSecret, err := secret(ctx, k8sclient, cr.Namespace, cr.Spec.Secrets.SSL)
+	sslSecret, err := getSecret(ctx, k8sclient, cr.Namespace, cr.Spec.Secrets.SSL)
 	if err != nil {
 		return "", errors.Wrap(err, "get ssl secret")
 	}
@@ -136,7 +137,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 }
 
 // GetPriorities returns priorities to be used in PBM config.
-func (b *PBM) GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) (map[string]float64, error) {
+func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) (map[string]float64, error) {
 	priorities := make(map[string]float64)
 
 	usersSecret := corev1.Secret{}
@@ -180,14 +181,21 @@ func (b *PBM) GetPriorities(ctx context.Context, k8sclient client.Client, cluste
 	return priorities, nil
 }
 
-// SetConfig sets the pbm config with storage defined in the cluster CR
-// by given storageName
-func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api.PITRSpec, priority map[string]float64) error {
-	conf := pbm.Config{
+func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) (pbm.Config, error) {
+	l := logf.FromContext(ctx)
+
+	conf := pbm.Config{}
+
+	priority, err := GetPriorities(ctx, k8sclient, cluster)
+	if err != nil {
+		return conf, errors.Wrap(err, "get priorities")
+	}
+
+	conf = pbm.Config{
 		PITR: pbm.PITRConf{
-			Enabled:          pitr.Enabled,
-			Compression:      pitr.CompressionType,
-			CompressionLevel: pitr.CompressionLevel,
+			Enabled:          cluster.Spec.Backup.PITR.Enabled,
+			Compression:      cluster.Spec.Backup.PITR.CompressionType,
+			CompressionLevel: cluster.Spec.Backup.PITR.CompressionLevel,
 		},
 		Backup: pbm.BackupConf{
 			Priority: priority,
@@ -211,25 +219,25 @@ func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api
 		}
 
 		if len(stg.S3.CredentialsSecret) != 0 {
-			s3secret, err := secret(ctx, b.k8c, b.namespace, stg.S3.CredentialsSecret)
+			s3secret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.S3.CredentialsSecret)
 			if err != nil {
-				return errors.Wrap(err, "getting s3 credentials secret name")
+				return conf, errors.Wrap(err, "get s3 credentials secret")
 			}
 
 			conf.Storage.S3.Credentials = s3.Credentials{
 				AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
 				SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
 			}
+
+			l.Info("s3 credentials", "creds", conf.Storage.S3.Credentials)
 		}
-	case api.BackupStorageFilesystem:
-		return errors.New("filesystem backup storage not supported yet, skipping storage name")
 	case api.BackupStorageAzure:
 		if stg.Azure.CredentialsSecret == "" {
-			return errors.New("no credentials specified for the secret name")
+			return conf, errors.New("no credentials specified for the secret name")
 		}
-		azureSecret, err := secret(ctx, b.k8c, b.namespace, stg.Azure.CredentialsSecret)
+		azureSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.Azure.CredentialsSecret)
 		if err != nil {
-			return errors.Wrap(err, "getting azure credentials secret name")
+			return conf, errors.Wrap(err, "get azure credentials secret")
 		}
 		conf.Storage = pbm.StorageConf{
 			Type: storage.Azure,
@@ -242,13 +250,27 @@ func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api
 				},
 			},
 		}
+	case api.BackupStorageFilesystem:
+		return conf, errors.New("filesystem backup storage not supported yet, skipping storage name")
 	default:
-		return errors.New("unsupported backup storage type")
+		return conf, errors.New("unsupported backup storage type")
+	}
+
+	return conf, nil
+}
+
+// SetConfig sets the pbm config with storage defined in the cluster CR
+// by given storageName
+func (b *PBM) SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
+	if err != nil {
+		return errors.Wrap(err, "get PBM config")
 	}
 
 	if err := b.C.SetConfig(conf); err != nil {
 		return errors.Wrap(err, "write config")
 	}
+
 	time.Sleep(11 * time.Second) // give time to init new storage
 
 	return nil
@@ -259,7 +281,7 @@ func (b *PBM) Close(ctx context.Context) error {
 	return b.C.Conn.Disconnect(ctx)
 }
 
-func secret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
+func getSecret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,

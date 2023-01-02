@@ -1393,6 +1393,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
+	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
+	if ok {
+		if err := r.smartUpdate(ctx, cr, sfs, replset); err != nil {
+			return nil, errors.Wrap(err, "failed to run smartUpdate")
+		}
+
+		log.Info("Restore in progress, skipping reconcilation of statefulset", "name", sfs.Name)
+		return sfs, nil
+	}
+
 	inits := []corev1.Container{}
 	if cr.CompareVersion("1.5.0") >= 0 {
 		inits = append(inits, psmdb.InitContainers(cr, r.initImage)...)

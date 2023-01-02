@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
@@ -139,28 +138,6 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	}, nil
 }
 
-func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Container {
-	image := cr.Spec.InitImage
-	if len(image) == 0 {
-		if cr.CompareVersion(version.Version) != 0 {
-			image = strings.Split(initImage, ":")[0] + ":" + cr.Spec.CRVersion
-		} else {
-			image = initImage
-		}
-	}
-
-	initContainer := EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)
-
-	if cr.CompareVersion("1.13.0") >= 0 {
-		initContainer.VolumeMounts = append(initContainer.VolumeMounts, corev1.VolumeMount{
-			Name:      BinVolumeName,
-			MountPath: BinMountPath,
-		})
-	}
-
-	return []corev1.Container{initContainer}
-}
-
 func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) (corev1.Container, error) {
 	fvar := false
 
@@ -199,6 +176,10 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			MountPath: "/etc/users-secret",
 			ReadOnly:  true,
 		})
+	}
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
 	}
 
 	container := corev1.Container{
@@ -249,6 +230,10 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		Resources:       cr.Spec.Sharding.Mongos.Resources,
 		VolumeMounts:    volumes,
 		Command:         []string{"/data/db/ps-entry.sh"},
+	}
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		container.Command = []string{BinMountPath + "/ps-entry.sh"}
 	}
 
 	return container, nil

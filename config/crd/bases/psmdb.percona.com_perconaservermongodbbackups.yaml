@@ -30,6 +30,10 @@ spec:
       jsonPath: .status.destination
       name: Destination
       type: string
+    - description: Backup type
+      jsonPath: .spec.backupType
+      name: Type
+      type: string
     - description: Job status
       jsonPath: .status.state
       name: Status
@@ -54,6 +58,8 @@ spec:
             type: object
           spec:
             properties:
+              backupType:
+                type: string
               clusterName:
                 type: string
               compressionLevel:
@@ -123,6 +129,8 @@ spec:
               state:
                 type: string
               storageName:
+                type: string
+              type:
                 type: string
             type: object
         type: object

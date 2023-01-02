@@ -100,7 +100,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return errors.Wrap(err, "failed to check active jobs")
 	}
 
-	if hasActiveJobs {
+	_, ok = sfs.Annotations[api.AnnotationRestoreInProgress]
+	if !ok && hasActiveJobs {
 		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
 	}

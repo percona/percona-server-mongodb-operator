@@ -77,5 +77,30 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 		}...)
 	}
 
+	if cr.CompareVersion("1.14.0") >= 0 {
+		c.Env = append(c.Env, []corev1.EnvVar{
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+			{
+				Name:  "PBM_MONGODB_URI",
+				Value: "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)",
+			},
+		}...)
+
+		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
+			{
+				Name:      "mongod-data",
+				MountPath: psmdb.MongodContainerDataDir,
+				ReadOnly:  false,
+			},
+		}...)
+	}
+
 	return c
 }

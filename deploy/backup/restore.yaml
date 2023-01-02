@@ -3,7 +3,7 @@ kind: PerconaServerMongoDBRestore
 metadata:
   name: restore1
 spec:
-  clusterName: my-cluster-name
+  clusterName: cluster1
   backupName: backup1
 #  pitr:
 #    type: date

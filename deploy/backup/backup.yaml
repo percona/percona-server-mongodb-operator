@@ -1,11 +1,10 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBBackup
 metadata:
-  finalizers:
-  - delete-backup
   name: backup1
 spec:
-  clusterName: my-cluster-name
-  storageName: s3-us-west
+  clusterName: cluster1
+  storageName: minio
+  backupType: physical
 #  compressionType: gzip
 #  compressionLevel: 6

@@ -491,5 +491,16 @@ fi
 
 rm -f "$jsonConfigFile" "$tempConfigFile"
 
+if [[ -f /opt/percona/restore-in-progress ]]; then
+	echo "Physical restore in progress..."
+
+	for (( ; ; )); do
+		if [[ ! -f /opt/percona/restore-in-progress ]]; then
+			exit 0
+		fi
+		sleep 5
+	done
+fi
+
 set -o xtrace
 exec "$@"
