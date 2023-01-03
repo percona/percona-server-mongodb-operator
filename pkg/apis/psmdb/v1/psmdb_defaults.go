@@ -60,7 +60,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	if cr.Spec.Image == "" {
-		return fmt.Errorf("Required value for spec.image")
+		return fmt.Errorf("required value for spec.image")
 	}
 	if cr.Spec.ImagePullPolicy == "" {
 		cr.Spec.ImagePullPolicy = defaultImagePullPolicy

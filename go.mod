@@ -4,13 +4,13 @@ go 1.18
 
 require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
-	github.com/go-logr/logr v1.2.2
+	github.com/go-logr/logr v1.2.3
 	github.com/go-openapi/errors v0.19.6
 	github.com/go-openapi/runtime v0.19.16
 	github.com/go-openapi/strfmt v0.19.5
 	github.com/go-openapi/swag v0.19.14
 	github.com/go-openapi/validate v0.19.10
-	github.com/hashicorp/go-version v1.2.0
+	github.com/hashicorp/go-version v1.6.0
 	github.com/jetstack/cert-manager v1.6.1
 	github.com/percona/percona-backup-mongodb v1.8.1
 	github.com/pkg/errors v0.9.1
