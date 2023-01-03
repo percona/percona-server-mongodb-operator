@@ -1124,8 +1124,7 @@ function check_crd_for_deletion() {
 	# We need to make sure that it will happen before the next CR creation request.
 	local git_tag="$1"
 
-	for crd_name in $(curl -s https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml | yq eval '.metadata.name' | $sed 's/---//g' | $sed ':a;N;$!ba;s/\n/ /g');
-	do
+	for crd_name in $(curl -s https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml | yq eval '.metadata.name' | $sed 's/---//g' | $sed ':a;N;$!ba;s/\n/ /g'); do
 		if [[ $(kubectl_bin get crd/${crd_name} -o jsonpath='{.status.conditions[-1].type}') == "Terminating" ]]; then
 			kubectl get ${crd_name} --all-namespaces -o wide \
 				| grep -v 'NAMESPACE' \
