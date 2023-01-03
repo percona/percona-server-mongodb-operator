@@ -121,7 +121,7 @@ function prepare_cr_yaml() {
 			.spec.backup.storages.minio.s3.bucket = "operator-testing" |
 			.spec.backup.storages.minio.s3.endpointUrl = "http://minio-service:9000/" |
 			.spec.sharding.enabled = false |
-			.spec.image = "" |
+			.spec.image="" | .spec.image tag="!!null" |
 			.spec.backup.image = "-backup" |
 			.spec.pmm.image = "-pmm"' >"${cr_yaml}"
 }
