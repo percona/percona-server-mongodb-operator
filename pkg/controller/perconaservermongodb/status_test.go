@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"testing"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -27,6 +28,7 @@ func TestUpdateStatus(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: "1.12.0",
 			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
 			Sharding: api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
 		},
@@ -37,7 +39,7 @@ func TestUpdateStatus(t *testing.T) {
 
 	r := buildFakeClient([]runtime.Object{cr, rs0, rs1})
 
-	if err := r.updateStatus(cr, nil, api.AppStateInit); err != nil {
+	if err := r.updateStatus(context.TODO(), cr, nil, api.AppStateInit); err != nil {
 		t.Error(err)
 	}
 
