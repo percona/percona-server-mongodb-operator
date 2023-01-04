@@ -1,0 +1,48 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+#  platform: openshift
+  image:
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  updateStrategy: SmartUpdate
+  ignoreAnnotations:
+    - ignoredAnnotation
+  ignoreLabels:
+    - ignoredLabel
+  secrets:
+    users: some-users
+  replsets:
+  - name: rs0
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+    podDisruptionBudget:
+      maxUnavailable: 1
+    expose:
+      enabled: true
+      exposeType: ClusterIP
+      serviceLabels:
+        crLabel: "true"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "0.5G"
+      requests:
+        cpu: "100m"
+        memory: "0.1G"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+  sharding:
+    enabled: false
+  backup:
+    enabled: false
+    image: perconalab/percona-server-mongodb-operator:main-backup
+    serviceAccountName: percona-server-mongodb-operator
+    pitr:
+      enabled: false
