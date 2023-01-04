@@ -37,7 +37,6 @@ sleep 5 # waiting for reconcile
 desc 'check if not ignored annotations/labels are deleted from service'
 compare_kubectl "service/$cluster-rs0-0"
 
-
 desc 'removing ignoreLabels'
 # `ignoredLabel` should be deleted
 kubectl_bin patch psmdb ${cluster} --type=json --patch '[
@@ -48,7 +47,6 @@ kubectl_bin patch psmdb ${cluster} --type=json --patch '[
 
 sleep 5 # waiting for reconcile
 compare_kubectl "service/$cluster-rs0-0" "-no-ignored-labels"
-
 
 desc 'removing serviceLabels and ignoreAnnotations'
 # When `serviceLabels` and `serviceAnnotations` are not set, old metadata should stay
@@ -64,7 +62,6 @@ kubectl_bin patch psmdb ${cluster} --type=json --patch '[
 
 sleep 5 # waiting for reconcile
 compare_kubectl "service/$cluster-rs0-0" "-no-ignored-labels"
-
 
 desc 'adding serviceAnnotation'
 # Old metadata should be deleted
