@@ -81,7 +81,7 @@ type PerconaServerMongoDBSpec struct {
 	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 	ClusterServiceDNSMode   DnsMode                              `json:"clusterServiceDNSMode,omitempty"`
 	Sharding                Sharding                             `json:"sharding,omitempty"`
-	InitImage               string                               `json:"initImage"`
+	InitImage               string                               `json:"initImage,omitempty"`
 	MultiCluster            MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                     *TLSSpec                             `json:"tls,omitempty"`
 }

@@ -16031,7 +16031,6 @@ spec:
                 type: object
             required:
             - image
-            - initImage
             type: object
           status:
             properties:
