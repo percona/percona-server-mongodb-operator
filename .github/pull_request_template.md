@@ -14,7 +14,7 @@
 **Jira**
 - [ ] Is the Jira ticket created and referenced properly?
 - [ ] Does the Jira ticket have the proper statuses for documentation (`Needs Doc`) and QA (`Needs QA`)?
-- [ ] Does Jira ticket link to proper `Fix Version` milestone?
+- [ ] Does the Jira ticket link to the proper Fix Version milestone?
 
 **E2E tests**
 - [ ] Are E2E tests passing?
