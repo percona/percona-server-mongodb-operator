@@ -25,7 +25,7 @@
 - [ ] Are OpenShift compare files changed for E2E tests (`compare/*-oc.yml`)?
 
 **Config/Logging/Testability**
-- [ ] Are all needed new/changed options added to default yaml files?
+- [ ] Are all needed new/changed options added to default YAML files?
 - [ ] Are the manifests (crd/bundle) regenerated if needed?
 - [ ] Did we add proper logging messages for operator actions?
 - [ ] Did we NOT break compatibility with the previous version or cluster upgrade process?
