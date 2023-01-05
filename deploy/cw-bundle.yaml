@@ -883,6 +883,7 @@ spec:
                     type: array
                 required:
                 - enabled
+                - image
                 type: object
               clusterServiceDNSMode:
                 type: string
@@ -1050,6 +1051,8 @@ spec:
                     type: object
                   serverHost:
                     type: string
+                required:
+                - image
                 type: object
               replsets:
                 items:
@@ -16026,6 +16029,9 @@ spec:
                   versionServiceEndpoint:
                     type: string
                 type: object
+            required:
+            - image
+            - initImage
             type: object
           status:
             properties:
