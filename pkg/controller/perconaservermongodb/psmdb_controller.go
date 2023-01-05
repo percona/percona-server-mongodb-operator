@@ -1706,17 +1706,9 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 		return r.client.Create(ctx, obj)
 	}
 
-	updateObject := false
 	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!compareMaps(oldObject.GetLabels(), obj.GetLabels()) {
-		updateObject = true
-	} else if _, ok := obj.(*corev1.Service); !ok {
-		// ignore annotations changes for Service object
-		// in case NodePort, to avoid port changing
-		updateObject = !compareMaps(oldObject.GetAnnotations(), obj.GetAnnotations())
-	}
-
-	if updateObject {
+		!compareMaps(oldObject.GetLabels(), obj.GetLabels()) ||
+		!compareMaps(oldObject.GetAnnotations(), obj.GetAnnotations()) {
 		obj.SetResourceVersion(oldObject.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
