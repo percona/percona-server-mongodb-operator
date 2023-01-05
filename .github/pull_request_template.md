@@ -16,7 +16,7 @@
 - [ ] Does the Jira ticket have the proper statuses for documentation (`Needs Doc`) and QA (`Needs QA`)?
 - [ ] Does the Jira ticket link to the proper Fix Version milestone?
 
-**E2E tests**
+**Tests**
 - [ ] Are E2E tests passing?
 - [ ] Are unit tests passing?
 - [ ] Are linting tests passing?
