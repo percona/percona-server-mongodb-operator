@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -703,13 +703,13 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupTaskSpec struct {
-	Name             string              `json:"name"`
-	Enabled          bool                `json:"enabled"`
-	Keep             int                 `json:"keep,omitempty"`
-	Schedule         string              `json:"schedule,omitempty"`
-	StorageName      string              `json:"storageName,omitempty"`
-	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+	Name             string                   `json:"name"`
+	Enabled          bool                     `json:"enabled"`
+	Keep             int                      `json:"keep,omitempty"`
+	Schedule         string                   `json:"schedule,omitempty"`
+	StorageName      string                   `json:"storageName,omitempty"`
+	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
@@ -749,10 +749,10 @@ type BackupStorageSpec struct {
 }
 
 type PITRSpec struct {
-	Enabled          bool                `json:"enabled,omitempty"`
-	OplogSpanMin     numstr.NumberString `json:"oplogSpanMin,omitempty"`
-	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+	Enabled          bool                     `json:"enabled,omitempty"`
+	OplogSpanMin     numstr.NumberString      `json:"oplogSpanMin,omitempty"`
+	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {

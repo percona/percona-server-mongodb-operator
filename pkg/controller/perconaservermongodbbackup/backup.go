@@ -59,7 +59,7 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 
 	err = b.pbm.C.SendCmd(pbm.Cmd{
 		Cmd: pbm.CmdBackup,
-		Backup: pbm.BackupCmd{
+		Backup: &pbm.BackupCmd{
 			Name:             name,
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
