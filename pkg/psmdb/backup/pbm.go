@@ -251,6 +251,12 @@ func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api
 	}
 	time.Sleep(11 * time.Second) // give time to init new storage
 
+	e := b.C.Logger().NewEvent(string(pbm.CmdResync), "", "", primitive.Timestamp{})
+	err := b.C.ResyncStorage(e)
+	if err != nil {
+		return errors.Wrap(err, "set resync backup list from the store")
+	}
+
 	return nil
 }
 

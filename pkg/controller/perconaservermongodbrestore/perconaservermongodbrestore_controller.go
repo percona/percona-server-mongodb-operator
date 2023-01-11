@@ -8,7 +8,6 @@ import (
 
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -290,11 +289,11 @@ func reEnablePITR(pbm *backup.PBM, backup psmdbv1.BackupSpec) (err error) {
 }
 
 func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
-	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResync), "", "", primitive.Timestamp{})
-	err := pbmc.C.ResyncStorage(e)
-	if err != nil {
-		return "", errors.Wrap(err, "set resync backup list from the store")
-	}
+	//	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResync), "", "", primitive.Timestamp{})
+	//	err := pbmc.C.ResyncStorage(e)
+	//	if err != nil {
+	//		return "", errors.Wrap(err, "set resync backup list from the store")
+	//	}
 
 	var (
 		cmd   pbm.Cmd
@@ -339,7 +338,7 @@ func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmd
 		}
 	}
 
-	if err = pbmc.C.SendCmd(cmd); err != nil {
+	if err := pbmc.C.SendCmd(cmd); err != nil {
 		return "", errors.Wrap(err, "send restore cmd")
 	}
 
