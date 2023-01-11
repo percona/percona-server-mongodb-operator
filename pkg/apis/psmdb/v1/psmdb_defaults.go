@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +60,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	if cr.Spec.Image == "" {
-		return fmt.Errorf("Required value for spec.image")
+		return errors.New("Required value for spec.image")
 	}
 	if cr.Spec.ImagePullPolicy == "" {
 		cr.Spec.ImagePullPolicy = defaultImagePullPolicy
@@ -463,7 +463,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Backup.Enabled {
 		for _, bkpTask := range cr.Spec.Backup.Tasks {
 			if string(bkpTask.CompressionType) == "" {
-				bkpTask.CompressionType = pbm.CompressionTypeGZIP
+				bkpTask.CompressionType = compress.CompressionTypeGZIP
 			}
 		}
 		if len(cr.Spec.Backup.ServiceAccountName) == 0 {
