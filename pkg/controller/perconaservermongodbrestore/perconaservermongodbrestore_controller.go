@@ -305,7 +305,7 @@ func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmd
 	case pitr == nil:
 		cmd = pbm.Cmd{
 			Cmd: pbm.CmdRestore,
-			Restore: pbm.RestoreCmd{
+			Restore: &pbm.RestoreCmd{
 				Name:       rName,
 				BackupName: backup,
 			},
@@ -319,7 +319,7 @@ func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmd
 
 		cmd = pbm.Cmd{
 			Cmd: pbm.CmdPITRestore,
-			PITRestore: pbm.PITRestoreCmd{
+			PITRestore: &pbm.PITRestoreCmd{
 				Name: rName,
 				TS:   ts,
 			},
@@ -332,7 +332,7 @@ func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmd
 
 		cmd = pbm.Cmd{
 			Cmd: pbm.CmdPITRestore,
-			PITRestore: pbm.PITRestoreCmd{
+			PITRestore: &pbm.PITRestoreCmd{
 				Name: rName,
 				TS:   int64(tl.End),
 			},
