@@ -50,10 +50,10 @@ run_mongos \
 	"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 sleep 2
 run_mongos \
-	'use myApp\n db.test.insert({ x: 100500 })' \
+	'sh.enableSharding("myApp","rs0")' \
 	"myApp:myPass@$cluster-mongos.$namespace"
 run_mongos \
-	'db.adminCommand( { movePrimary : "myApp", to : "rs0" } )' \
+	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster-mongos.$namespace"
 sleep 10 # for minikube
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
