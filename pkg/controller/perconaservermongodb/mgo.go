@@ -511,7 +511,13 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		}
 		var errb, outb bytes.Buffer
 
+
 		mongoCmd := "mongosh"
+		if !strings.Contains(m.Spec.Image, "6.0") {
+			mongoCmd = "mongo"
+		}
+		log.Info("AAAA - mongocmd", "mongoCmd", mongoCmd)
+
 		if !m.Spec.UnsafeConf {
 			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
 		}
@@ -533,6 +539,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 				EOF
 			`, mongoCmd, replset.Name, host),
 		}
+		log.Info("AAAA - command", "cmd", cmd)
 
 		errb.Reset()
 		outb.Reset()
@@ -549,6 +556,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		}
 
 		cmd[2] = fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
+
+		log.Info("AAAA - command after eval", "cmd", cmd)
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
