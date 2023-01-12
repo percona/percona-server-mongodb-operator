@@ -66,7 +66,7 @@ wait_backup_agent $cluster-2
 desc 'add backups schedule, wait for the first backup'
 apply_cluster "$test_dir/conf/$cluster-2.yml"
 
-sleep 40
+sleep 55
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
