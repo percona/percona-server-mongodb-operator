@@ -518,13 +518,14 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		}
 		log.Info("AAAA - mongocmd", "mongoCmd", mongoCmd)
 
-		dbAdmin, err := r.getInternalCredentials(ctx, m, roleDatabaseAdmin)
-		if err != nil {
-			return err
-		}
+		// dbAdmin, err := r.getInternalCredentials(ctx, m, roleDatabaseAdmin)
+		// if err != nil {
+		// 	return err
+		// }
 
 		if !m.Spec.UnsafeConf {
-			mongoCmd += fmt.Sprintf(" --username %s --password %s --authenticationDatabase admin --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt", dbAdmin.Username, dbAdmin.Password)
+			//mongoCmd += fmt.Sprintf(" --username %s --password %s --authenticationDatabase admin --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt", dbAdmin.Username, dbAdmin.Password)
+			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
 		}
 
 		cmd := []string{
