@@ -513,18 +513,11 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 
 
 		mongoCmd := "mongosh"
-		if !strings.Contains(m.Spec.Image, "6.0") {
+		if !strings.Contains(m.Spec.Image, "6.0") { // TODO: check the version properly
 			mongoCmd = "mongo"
 		}
-		log.Info("AAAA - mongocmd", "mongoCmd", mongoCmd)
-
-		// dbAdmin, err := r.getInternalCredentials(ctx, m, roleDatabaseAdmin)
-		// if err != nil {
-		// 	return err
-		// }
 
 		if !m.Spec.UnsafeConf {
-			//mongoCmd += fmt.Sprintf(" --username %s --password %s --authenticationDatabase admin --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt", dbAdmin.Username, dbAdmin.Password)
 			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
 		}
 
@@ -545,7 +538,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 				EOF
 			`, mongoCmd, replset.Name, host),
 		}
-		log.Info("AAAA - command", "cmd", cmd)
 
 		errb.Reset()
 		outb.Reset()
@@ -563,7 +555,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 
 		cmd[2] = fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 
-		log.Info("AAAA - command after eval", "cmd", cmd)
 		errb.Reset()
 		outb.Reset()
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
