@@ -20,7 +20,7 @@ spec:
           credentialsSecret: aws-s3-secret
           region: us-east-1
           bucket: operator-testing
-          prefix: psmdb
+          prefix: psmdb-scheduled-backup
           insecureSkipTLSVerify: false
       minio:
         type: s3
@@ -37,13 +37,13 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: https://storage.googleapis.com
-          prefix: psmdb
+          prefix: psmdb-scheduled-backup
           insecureSkipTLSVerify: false
       azure-blob:
         type: azure
         azure:
           container: operator-testing
-          prefix: psmdb
+          prefix: psmdb-scheduled-backup
           credentialsSecret: azure-secret
     tasks:
     - name: every-min-minio

@@ -108,7 +108,7 @@ testsReportMap  = [:]
 testsResultsMap = [:]
 
 void makeReport() {
-    def wholeTestAmount=sh(script: 'cat e2e-tests/run | grep "|| fail"| grep -v "default-cr"| wc -l', , returnStdout: true).trim()
+    def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
     def startedTestAmount = testsReportMap.size()
     for ( test in testsReportMap ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
@@ -404,7 +404,7 @@ pipeline {
         always {
             script {
                 setTestsresults()
-                if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.result != 'NOT_BUILT') {
+                if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.nextBuild == null) {
                     try {
                         slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                     }
@@ -413,7 +413,7 @@ pipeline {
                     }
 
                 }
-                if (env.CHANGE_URL) {
+                if (env.CHANGE_URL && currentBuild.nextBuild == null) {
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
                         if (comment.user.equals('JNKPercona')) {
@@ -421,13 +421,11 @@ pipeline {
                             comment.delete()
                         }
                     }
-                    if (currentBuild.result != 'NOT_BUILT') {
-                        makeReport()
-                        unstash 'IMAGE'
-                        def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
-                        pullRequest.comment(TestsReport)
-                    }
+                    makeReport()
+                    unstash 'IMAGE'
+                    def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
+                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                    pullRequest.comment(TestsReport)
                 }
             }
             DeleteOldClusters("$CLUSTER_NAME")
