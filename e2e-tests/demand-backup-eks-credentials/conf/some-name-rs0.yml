@@ -15,7 +15,7 @@ spec:
         s3:
           region: us-east-1
           bucket: operator-testing
-          prefix: psmdb
+          prefix: psmdb-demand-backup-eks-credentials
     tasks:
     - name: weekly
       enabled: true
