@@ -26,6 +26,9 @@ check_service() {
             "value": ["ignoredLabel"]
         }
     ]'
+
+    sleep 10
+
 	replset_name=$1
 
 	local expose_path
