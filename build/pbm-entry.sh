@@ -24,13 +24,13 @@ if [ "${1:0:9}" = "pbm-agent" ]; then
 
 			# check in case if shard has role 'shardsrv'
 			set +o xtrace
-			mongo ${PBM_MONGO_OPTS} "${PBM_MONGODB_URI}" --eval="db.isMaster().\$configServerState.opTime.ts" --quiet | tee "$OUT"
+			mongosh ${PBM_MONGO_OPTS} "${PBM_MONGODB_URI}" --eval="db.isMaster().\$configServerState.opTime.ts" --quiet | tee "$OUT"
 			set -o xtrace
 			exit_status=$?
 
 			# check in case if shard has role 'configsrv'
 			set +o xtrace
-			mongo ${PBM_MONGO_OPTS} "${PBM_MONGODB_URI}" --eval="db.isMaster().configsvr" --quiet | tail -n 1 | tee "$OUT_CFG"
+			mongosh ${PBM_MONGO_OPTS} "${PBM_MONGODB_URI}" --eval="db.isMaster().configsvr" --quiet | tail -n 1 | tee "$OUT_CFG"
 			set -o xtrace
 			exit_status_cfg=$?
 
@@ -44,7 +44,7 @@ if [ "${1:0:9}" = "pbm-agent" ]; then
 			fi
 		else
 			set +o xtrace
-			mongo ${PBM_MONGO_OPTS} "${PBM_MONGODB_URI}" --eval="(db.isMaster().hosts).length" --quiet | tee "$OUT"
+			mongosh ${PBM_MONGO_OPTS} "${PBM_MONGODB_URI}" --eval="(db.isMaster().hosts).length" --quiet | tee "$OUT"
 			set -o xtrace
 			exit_status=$?
 			rs_size=$(grep -E '^([0-9]+)$' "$OUT")
