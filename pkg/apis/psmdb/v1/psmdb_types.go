@@ -66,7 +66,7 @@ type PerconaServerMongoDBSpec struct {
 	Unmanaged               bool                                 `json:"unmanaged,omitempty"`
 	CRVersion               string                               `json:"crVersion,omitempty"`
 	Platform                *version.Platform                    `json:"platform,omitempty"`
-	Image                   string                               `json:"image,omitempty"`
+	Image                   string                               `json:"image"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
@@ -244,7 +244,7 @@ type ClusterCondition struct {
 type PMMSpec struct {
 	Enabled      bool   `json:"enabled,omitempty"`
 	ServerHost   string `json:"serverHost,omitempty"`
-	Image        string `json:"image,omitempty"`
+	Image        string `json:"image"`
 	MongodParams string `json:"mongodParams,omitempty"`
 	MongosParams string `json:"mongosParams,omitempty"`
 
@@ -753,7 +753,7 @@ type BackupSpec struct {
 	Annotations              map[string]string            `json:"annotations,omitempty"`
 	Labels                   map[string]string            `json:"labels,omitempty"`
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
-	Image                    string                       `json:"image,omitempty"`
+	Image                    string                       `json:"image"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`
 	ServiceAccountName       string                       `json:"serviceAccountName,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
