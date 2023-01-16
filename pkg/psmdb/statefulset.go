@@ -176,13 +176,13 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
-			Labels:      spec.Labels,
-			Annotations: spec.Annotations,
+			Labels:      spec.PersistentVolumeClaim.Labels,
+			Annotations: spec.PersistentVolumeClaim.Annotations,
 		},
 	}
 
-	if spec.PersistentVolumeClaim != nil {
-		pvc.Spec = *spec.PersistentVolumeClaim
+	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
 	return pvc
 }
