@@ -14,7 +14,7 @@ desc 'check if all 3 Pods started'
 wait_for_running "$cluster-rs0" 3
 
 check_service() {
-    kubectl_bin patch psmdb "$cluster" --type=json --patch '[
+	kubectl_bin patch psmdb "$cluster" --type=json --patch '[
         {
             "op": "replace",
             "path": "/spec/ignoreAnnotations",
@@ -27,7 +27,7 @@ check_service() {
         }
     ]'
 
-    sleep 10
+	sleep 10
 
 	replset_name=$1
 
