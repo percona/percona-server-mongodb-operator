@@ -8,10 +8,6 @@ spec:
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
-  ignoreAnnotations:
-    - ignoredAnnotation
-  ignoreLabels:
-    - ignoredLabel
   secrets:
     users: some-users
   replsets:
@@ -39,7 +35,51 @@ spec:
           requests:
             storage: 1Gi
   sharding:
-    enabled: false
+    enabled: true
+
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      expose:
+        enabled: true
+        exposeType: ClusterIP
+        serviceLabels:
+          crLabel: "true"
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      expose:
+        exposeType: ClusterIP
+        servicePerPod: true
+        serviceLabels:
+          crLabel: "true"
+
   backup:
     enabled: false
     image: perconalab/percona-server-mongodb-operator:main-backup
