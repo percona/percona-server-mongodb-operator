@@ -14,7 +14,7 @@ import (
 
 const (
 	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
-	pbmStartingDeadline       = time.Duration(120)
+	pbmStartingDeadline       = time.Duration(120) * time.Second
 	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
 )
 
