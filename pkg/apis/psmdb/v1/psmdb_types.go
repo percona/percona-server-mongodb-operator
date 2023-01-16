@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -255,10 +256,9 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if len(secret.Data) == 0 {
 		return false
 	}
-	for _, k := range []string{PMMAPIKey, PMMUserKey} {
-		if _, ok := secret.Data[k]; ok {
-			return true
-		}
+	s := sets.StringKeySet(secret.Data)
+	if s.HasAll(PMMUserKey, PMMPasswordKey) || s.Has(PMMAPIKey) {
+		return true
 	}
 	return false
 }
