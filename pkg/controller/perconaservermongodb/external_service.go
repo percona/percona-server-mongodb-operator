@@ -126,8 +126,10 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Conte
 	service := psmdb.ExternalService(cr, replset, cr.Name+"-"+replset.Name)
 
 	svcNames := make(map[string]struct{}, replset.Size)
-	for i := 0; i < int(replset.Size); i++ {
-		svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
+	if replset.Expose.Enabled {
+		for i := 0; i < int(replset.Size); i++ {
+			svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
+		}
 	}
 
 	if replset.NonVoting.Enabled {
