@@ -308,7 +308,7 @@ wait_restore_object() {
 		sleep 1
 		echo -n .
 		let retry+=1
-		if [ $retry -ge 360 ]; then
+		if [ $retry -ge 720 ]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
