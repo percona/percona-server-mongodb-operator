@@ -18,7 +18,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	shouldReconcile = false
 	finalizers := cr.GetOrderedFinalizers()
 
-	for _, f := range finalizers {
+	for i, f := range finalizers {
 		switch f {
 		case api.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
@@ -27,6 +27,8 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			if err == nil {
 				shouldReconcile = true
 			}
+		default:
+			continue
 		}
 		if err != nil {
 			switch err {
@@ -37,7 +39,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			}
 			break
 		}
-		finalizers = finalizers[1:]
+		finalizers = append(finalizers[:i], finalizers[i+1:]...)
 	}
 
 	cr.SetFinalizers(finalizers)

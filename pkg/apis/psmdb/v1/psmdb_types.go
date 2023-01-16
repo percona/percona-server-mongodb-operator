@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -917,16 +916,22 @@ const (
 
 func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	order := []string{FinalizerDeletePSMDBPodsInOrder, FinalizerDeletePVC}
+	finalizers := make([]string, len(cr.GetFinalizers()))
+	copy(finalizers, cr.GetFinalizers())
+	orderedFinalizers := make([]string, 0, len(finalizers))
 
-	set := sets.NewString(cr.GetFinalizers()...)
-	finalizers := make([]string, 0, len(order))
-
-	for _, f := range order {
-		if !set.Has(f) {
-			continue
+	i := 0
+	for _, v := range order {
+		for i < len(finalizers) {
+			if v == finalizers[i] {
+				orderedFinalizers = append(orderedFinalizers, v)
+				finalizers = append(finalizers[:i], finalizers[i+1:]...)
+				break
+			}
+			i++
 		}
-		finalizers = append(finalizers, f)
 	}
 
-	return finalizers
+	orderedFinalizers = append(orderedFinalizers, finalizers...)
+	return orderedFinalizers
 }
