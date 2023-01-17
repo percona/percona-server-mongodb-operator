@@ -960,12 +960,10 @@ EOF
 
 cat_config() {
 	cat "$1" \
-		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#apply:.*#apply: Never#"
+		| yq eval ".spec.image=\"$IMAGE_MONGOD\"" \
+		| yq eval ".spec.pmm.image=\"$IMAGE_PMM\"" \
+		| yq eval ".spec.backup.image=\"$IMAGE_BACKUP\"" \
+		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
 
 apply_cluster() {
