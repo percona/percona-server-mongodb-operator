@@ -308,7 +308,7 @@ wait_restore_object() {
 		sleep 1
 		echo -n .
 		let retry+=1
-		if [ $retry -ge 360 ]; then
+		if [ $retry -ge 720 ]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
@@ -683,7 +683,8 @@ get_service_ip() {
 	while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
 		sleep 1
 	done
-	if [ "$(kubectl_bin get service/$service -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
+	service_type=$(kubectl_bin get service/"$service" -o 'jsonpath={.spec.type}')
+	if [ "$service_type" = "ClusterIP" ] || [ "$service_type" = "NodePort" ]; then
 		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi

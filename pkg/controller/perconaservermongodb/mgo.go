@@ -774,6 +774,7 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 		[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
 	}
 
+	cnf.Version++
 	log.Info("Writing replicaset config", "config", cnf)
 
 	if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
