@@ -132,7 +132,7 @@ spec:
               readOnly: true
           workingDir: /data/db
         - args:
-            - pbm-agent
+            - pbm-agent-entrypoint
           command:
             - /opt/percona/pbm-entry.sh
           env:
@@ -152,6 +152,8 @@ spec:
               value: rs1
             - name: PBM_MONGODB_PORT
               value: "27017"
+            - name: PBM_AGENT_SIDECAR
+              value: "true"
             - name: SHARDED
               value: "TRUE"
           imagePullPolicy: Always
