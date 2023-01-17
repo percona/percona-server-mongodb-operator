@@ -1577,7 +1577,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
 
-	if err := r.reconcilePVCs(sfs, matchLabels); err != nil {
+	if err := r.reconcilePVCs(ctx, sfs, matchLabels, volumeSpec.PersistentVolumeClaim); err != nil {
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
@@ -1588,10 +1588,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	return sfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, ls map[string]string) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	err := r.client.List(context.TODO(), pvcList, &client.ListOptions{
-		Namespace:     sfs.Namespace,
+	err := r.client.List(ctx, pvcList, &client.ListOptions{
+		Namespace:     sts.Namespace,
 		LabelSelector: labels.SelectorFromSet(ls),
 	})
 	if err != nil {
@@ -1599,17 +1599,24 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, l
 	}
 
 	for _, pvc := range pvcList.Items {
-		if compareMaps(sfs.Labels, pvc.Labels) {
-			continue
+		orig := pvc.DeepCopy()
+
+		for k, v := range pvcSpec.Labels {
+			pvc.Labels[k] = v
+		}
+		for k, v := range sts.Labels {
+			pvc.Labels[k] = v
+		}
+		for k, v := range pvcSpec.Annotations {
+			pvc.Annotations[k] = v
 		}
 
-		orig := pvc.DeepCopy()
-		for k, v := range sfs.Labels {
-			pvc.Labels[k] = v
+		if compareMaps(orig.Labels, pvc.Labels) && compareMaps(orig.Annotations, pvc.Annotations) {
+			continue
 		}
 		patch := client.MergeFrom(orig)
 
-		if err := r.client.Patch(context.TODO(), &pvc, patch); err != nil {
+		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
 			log.Error(err, "patch PVC", "PVC", pvc.Name)
 		}
 	}
