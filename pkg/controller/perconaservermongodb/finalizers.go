@@ -16,9 +16,10 @@ var errWaitingTermination = errors.New("waiting pods to be deleted")
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
 	shouldReconcile = false
-	finalizers := cr.GetOrderedFinalizers()
+	orderedFinalizers := cr.GetOrderedFinalizers()
+	var finalizers []string
 
-	for i, f := range finalizers {
+	for _, f := range orderedFinalizers {
 		switch f {
 		case api.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
@@ -28,6 +29,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 				shouldReconcile = true
 			}
 		default:
+			finalizers = append(finalizers, f)
 			continue
 		}
 		if err != nil {
@@ -37,9 +39,9 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			default:
 				log.Error(err, "failed to run finalizer", "finalizer", f)
 			}
+			finalizers = append(finalizers, f)
 			break
 		}
-		finalizers = append(finalizers[:i], finalizers[i+1:]...)
 	}
 
 	cr.SetFinalizers(finalizers)
