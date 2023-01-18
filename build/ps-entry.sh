@@ -430,6 +430,10 @@ if [[ $originalArgOne == mongo* ]]; then
 			tlsMode="preferSSL"
 			# if --config arg is present, try to get tlsMode from it
 			if _parse_config "${mongodHackedArgs[@]}"; then
+				echo "aaaaaa before prefereSSL args - ${mongodHackedArgs[@]}"
+				if [ -s $jsonConfigFile ]; then
+					cat $jsonConfigFile
+				fi
 				tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "${jsonConfigFile}")
 				echo "AAAA prefereSSL - tlsMode: $tlsMode"
 			fi
