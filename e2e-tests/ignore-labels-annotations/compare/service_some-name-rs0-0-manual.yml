@@ -2,7 +2,8 @@ apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    crAnnotation: "true"
+    ignoredAnnotation: "true"
+    notIgnoredAnnotation: "true"
   labels:
     app.kubernetes.io/component: external-service
     app.kubernetes.io/instance: some-name
@@ -10,6 +11,8 @@ metadata:
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
+    ignoredLabel: "true"
+    notIgnoredLabel: "true"
   name: some-name-rs0-0
   ownerReferences:
     - controller: true

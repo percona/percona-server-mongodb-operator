@@ -20,8 +20,6 @@ spec:
     expose:
       enabled: true
       exposeType: ClusterIP
-      serviceLabels:
-        crLabel: "true"
     resources:
       limits:
         cpu: "500m"
@@ -46,8 +44,6 @@ spec:
       expose:
         enabled: true
         exposeType: ClusterIP
-        serviceLabels:
-          crLabel: "true"
       resources:
         limits:
           cpu: "300m"
@@ -77,8 +73,6 @@ spec:
       expose:
         exposeType: ClusterIP
         servicePerPod: true
-        serviceLabels:
-          crLabel: "true"
 
   backup:
     enabled: false

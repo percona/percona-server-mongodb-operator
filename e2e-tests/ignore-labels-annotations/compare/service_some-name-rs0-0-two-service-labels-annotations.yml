@@ -3,16 +3,19 @@ kind: Service
 metadata:
   annotations:
     ignoredAnnotation: "true"
+    otherCrAnnotation: "true"
+    secondCrAnnotation: "true"
   labels:
     app.kubernetes.io/component: external-service
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: cfg
-    crLabel: "true"
+    app.kubernetes.io/replset: rs0
     ignoredLabel: "true"
-  name: some-name-cfg-0
+    otherCrLabel: "true"
+    secondCrLabel: "true"
+  name: some-name-rs0-0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -24,6 +27,6 @@ spec:
       protocol: TCP
       targetPort: 27017
   selector:
-    statefulset.kubernetes.io/pod-name: some-name-cfg-0
+    statefulset.kubernetes.io/pod-name: some-name-rs0-0
   sessionAffinity: None
   type: ClusterIP
