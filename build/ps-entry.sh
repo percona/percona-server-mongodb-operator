@@ -1,9 +1,6 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-set -o errexit
-set -o xtrace
-
 if [ "${1:0:1}" = '-' ]; then
 	set -- mongod "$@"
 fi
@@ -201,6 +198,7 @@ jsonConfigFile="${TMPDIR:-/tmp}/docker-entrypoint-config.json"
 tempConfigFile="${TMPDIR:-/tmp}/docker-entrypoint-temp-config.json"
 _parse_config() {
 	if [ -s "$tempConfigFile" ]; then
+		echo "parseConfig - if -s tempConfigFile"
 		return 0
 	fi
 
@@ -210,6 +208,12 @@ _parse_config() {
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
 		mongosh --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
 		jq 'del(.systemLog, .processManagement, .net, .security)' "$jsonConfigFile" >"$tempConfigFile"
+
+		echo "========================= _parse_config"
+		cat $jsonConfigFile
+		echo "-------------------------"
+		cat $tempConfigFile
+		echo "========================= _parse_config"
 		return 0
 	fi
 
@@ -427,6 +431,7 @@ if [[ $originalArgOne == mongo* ]]; then
 			# if --config arg is present, try to get tlsMode from it
 			if _parse_config "${mongodHackedArgs[@]}"; then
 				tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "${jsonConfigFile}")
+				echo "AAAA prefereSSL - tlsMode: $tlsMode"
 			fi
 			_mongod_hack_ensure_arg_val --sslMode "${tlsMode}" "${mongodHackedArgs[@]}"
 		fi
@@ -435,6 +440,8 @@ if [[ $originalArgOne == mongo* ]]; then
 	MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 	if [ "$MONGODB_VERSION" != 'v4.0' ]; then
+
+		echo "AAAA Mongoversion tlsMode: $tlsMode"
 		_mongod_hack_rename_arg_save_val --sslMode --tlsMode "${mongodHackedArgs[@]}"
 
 		if _mongod_hack_have_arg '--tlsMode' "${mongodHackedArgs[@]}"; then
