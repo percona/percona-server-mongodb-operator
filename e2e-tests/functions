@@ -960,7 +960,7 @@ EOF
 
 cat_config() {
 	cat "$1" \
-		| yq eval ".spec.image=\"$IMAGE_MONGOD\"" \
+		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
 		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_BACKUP"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
