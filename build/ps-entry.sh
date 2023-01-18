@@ -435,6 +435,11 @@ if [[ $originalArgOne == mongo* ]]; then
 					cat $jsonConfigFile
 				fi
 				tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "${jsonConfigFile}")
+
+				if [ -z "$tlsMode" ]; then
+					tlsMode='preferTLS'
+				fi
+
 				echo "AAAA prefereSSL - tlsMode: $tlsMode"
 			fi
 			_mongod_hack_ensure_arg_val --sslMode "${tlsMode}" "${mongodHackedArgs[@]}"
