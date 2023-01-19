@@ -36,7 +36,7 @@ if [ -f "$conf_dir/cloud-secret.yml" ]; then
 	SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
 fi
 
-if oc get projects; then
+if oc get projects 2>/dev/null; then
 	OPENSHIFT=4
 fi
 
@@ -48,6 +48,13 @@ fi
 
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
+set_debug() {
+	if [ -n "${DEBUG_TESTS}" ]; then
+		set -o xtrace
+	else
+		set +o xtrace
+	fi
+}
 version_gt() {
 	# return true if kubernetes version equal or greater than desired
 	if [ $(echo "${KUBE_VERSION} >= $1" | bc -l) -eq 1 ]; then
@@ -125,7 +132,7 @@ wait_pod() {
 			exit 1
 		fi
 	done
-	set -o xtrace
+	set_debug
 }
 
 wait_cron() {
@@ -149,7 +156,7 @@ wait_cron() {
 			exit 1
 		fi
 	done
-	set -o xtrace
+	set_debug
 }
 
 wait_backup_agent() {
@@ -170,7 +177,7 @@ wait_backup_agent() {
 		fi
 	done
 	echo
-	set -o xtrace
+	set_debug
 }
 
 wait_backup() {
@@ -195,7 +202,7 @@ wait_backup() {
 		fi
 	done
 	echo
-	set -o xtrace
+	set_debug
 }
 
 run_restore() {
@@ -251,7 +258,7 @@ wait_restore() {
 
 	wait_restore_object "${1}"
 	echo
-	set -o xtrace
+	set_debug
 
 	sleep 20
 	simple_data_check "${cluster}" "${2}" "$isSharded" "$cluster_pfx"
@@ -499,6 +506,7 @@ wait_for_running() {
 	let last_pod="$(($2 - 1))" || :
 	local check_cluster_readyness="${3:-true}"
 
+    set_debug
 	local rs_name=${name/*-/}
 	local cluster_name=${name/-$rs_name/}
 	for i in $(seq 0 $last_pod); do
@@ -530,7 +538,7 @@ wait_for_running() {
 			fi
 		done
 		echo
-		set -x
+		set_debug
 	fi
 }
 
@@ -555,7 +563,7 @@ wait_for_delete() {
 			exit 1
 		fi
 	done
-	set -o xtrace
+	set_debug
 }
 
 function compare_generation() {
@@ -734,6 +742,7 @@ get_mongo_primary() {
 	local uri="$1"
 	local cluster="$2"
 
+	set_debug
 	endpoint=$(get_mongo_primary_endpoint $uri)
 	if [[ $endpoint =~ ".$cluster" ]]; then
 		echo $endpoint \
@@ -796,28 +805,30 @@ deploy_cert_manager() {
 }
 
 delete_crd() {
-	kubectl_bin delete psmdb-backup --all || :
-	kubectl_bin delete psmdb-restore --all || :
-	kubectl_bin delete psmdb --all || :
-
-	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
+	desc 'get and delete old CRDs and RBAC'
+	kubectl_bin get psmdb-backup 2>/dev/null && kubectl_bin delete psmdb-backup --all || :
+	kubectl_bin get psmdb-restore 2>/dev/null && kubectl_bin delete psmdb-restore --all || :
+	kubectl_bin get psmdb 2>/dev/null && kubectl_bin delete psmdb --all || :
+	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com 2>/dev/null \
 		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml" || true
 
-	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
+	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com 2>/dev/null \
 		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml"
 
 	local rbac_yaml='rbac.yaml'
 	if [ -n "${OPERATOR_NS}" ]; then
 		rbac_yaml='cw-rbac.yaml'
 	fi
-	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" || true
+
+	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" 2>/dev/null || true
+
 }
 
 destroy() {
 	local namespace="$1"
-	local ignore_logs="${2:-false}"
+	local ignore_logs="${2:-true}"
 
-	if [[ ${ignore_logs} == "false" ]]; then
+	if [ ${ignore_logs} == "false" -o -n "${DEBUG_TESTS}" ]; then
 		kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 			| grep -v 'level=info' \
 			| grep -v 'level=debug' \
@@ -855,7 +866,7 @@ desc() {
 	printf "\n\n-----------------------------------------------------------------------------------\n"
 	printf "$msg"
 	printf "\n-----------------------------------------------------------------------------------\n\n"
-	set -o xtrace
+	set_debug
 }
 
 get_backup_dest() {
@@ -1009,12 +1020,14 @@ kubectl_bin() {
 	local LAST_ERR="$(mktemp)"
 	local exit_status=0
 	local timeout=4
+
 	for i in $(seq 0 2); do
 		set +e
+		echo "kubectl $@" >&2
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
-		if [[ ${exit_status} != 0 ]]; then
+		if [ ${exit_status} != 0 -a -n "${DEBUG_TESTS}" ]; then
 			cat "$LAST_OUT"
 			cat "$LAST_ERR" >&2
 			sleep "$((timeout * i))"
@@ -1022,6 +1035,7 @@ kubectl_bin() {
 			break
 		fi
 	done
+
 	cat "$LAST_OUT"
 	cat "$LAST_ERR" >&2
 	rm "$LAST_OUT" "$LAST_ERR"

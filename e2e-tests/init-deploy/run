@@ -1,28 +1,32 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 max_conn=10
 
+desc 'start PSMDB operator'
 create_infra $namespace
 
-desc 'create first PSMDB cluster'
-cluster="some-name-rs0"
+desc 'create secrets and start client'
 kubectl_bin apply \
 	-f $conf_dir/secrets_with_tls.yml \
 	-f $conf_dir/client.yml
 
+desc 'create custom RuntimeClass'
 if version_gt "1.19" && [ $EKS -ne 1 ]; then
 	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
 else
 	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
+cluster="some-name-rs0"
+desc "create first PSMDB cluster $cluster"
 apply_cluster $conf_dir/$cluster.yml
+
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
@@ -90,5 +94,8 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
 
+desc 'destroy cluster/operator and all other resources'
 kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 destroy $namespace
+
+desc 'test passed'
