@@ -15,8 +15,8 @@ fi
 export PBM_MONGODB_URI
 
 mongo_shell=mongosh
-if ! command -v mongosh &> /dev/null; then
-    echo "mongosh not found, using mongo"
+if ! command -v mongosh &>/dev/null; then
+	echo "mongosh not found, using mongo"
 	mongo_shell=mongo
 fi
 
