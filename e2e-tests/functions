@@ -643,7 +643,7 @@ run_mongo() {
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongosh $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
 
 }
 
@@ -656,7 +656,7 @@ run_mongos() {
 	local mongo_flag="$5"
 
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongosh $driver://$uri$suffix/admin $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
 }
 
 run_script_mongos() {
@@ -670,7 +670,7 @@ run_script_mongos() {
 	name="$(basename $script)"
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "mongosh $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
+		bash -c "mongo $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 get_service_ip() {
