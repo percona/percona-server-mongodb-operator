@@ -31,6 +31,13 @@ if [[ $originalArgOne == mongo* ]]; then
 	fi
 fi
 
+MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+
+mongo_shell=mongosh
+if [ "$MONGODB_VERSION" != 'v6.0' ]; then
+    mongo_shell=mongo
+fi
+
 # usage: file_env VAR [DEFAULT]
 #    ie: file_env 'XYZ_DB_PASSWORD' 'example'
 # (will allow for "$XYZ_DB_PASSWORD_FILE" to fill in the value of
@@ -205,7 +212,7 @@ _parse_config() {
 	if configPath="$(_mongod_hack_get_arg_val --config "$@")"; then
 		# if --config is specified, parse it into a JSON file so we can remove a few problematic keys (especially SSL-related keys)
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
-		mongosh --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
+		$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
 		jq 'del(.systemLog, .processManagement, .net, .security)' "$jsonConfigFile" >"$tempConfigFile"
 		return 0
 	fi
@@ -324,7 +331,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 
 		"${mongodHackedArgs[@]}" --fork
 
-		mongo=(mongosh --host 127.0.0.1 --port 27017 --quiet)
+		mongo=($mongo_shell --host 127.0.0.1 --port 27017 --quiet)
 
 		# check to see that our "mongod" actually did start up (catches "--help", "--version", MongoDB 3.2 being silly, slow prealloc, etc)
 		# https://jira.mongodb.org/browse/SERVER-16292
@@ -433,7 +440,7 @@ if [[ $originalArgOne == mongo* ]]; then
 		fi
 	fi
 
-	MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+	# MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 	if [ "$MONGODB_VERSION" != 'v4.0' ]; then
 
