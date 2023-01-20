@@ -37,6 +37,32 @@ check_cr_config() {
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
 
+	if [[ $cluster == "node-port-rs0" ]]; then
+		old_node_port=$(kubectl_bin get svc node-port-rs0-0 -o 'jsonpath={.spec.ports[0].nodePort}')
+		kubectl_bin patch psmdb node-port --type=json --patch '[
+		{
+			"op": "add", 
+			"path": "/spec/replsets/0/expose/serviceAnnotations", 
+			"value": {
+				"test": "service-per-pod",
+			}
+		},
+		{
+			"op": "add", 
+			"path": "/spec/replsets/0/expose/serviceLabels", 
+			"value": {
+				"test": "service-per-pod",
+			}
+		}]'
+		sleep 5 # waiting for reconcile
+		compare_kubectl service/node-port-rs0-0 "-updated"
+		current_node_port=$(kubectl_bin get svc node-port-rs0-0 -o 'jsonpath={.spec.ports[0].nodePort}')
+		if [[ $current_node_port != "$old_node_port" ]]; then
+			echo "Node port changed from ${old_node_port} to ${current_node_port}"
+			exit 1
+		fi
+	fi
+
 	# delete cluster
 	kubectl_bin delete \
 		-f $test_dir/conf/$cluster.yml
@@ -54,6 +80,9 @@ main() {
 
 	desc 'check LoadBalancer'
 	check_cr_config "local-balancer-rs0"
+
+	desc 'check NodePort'
+	check_cr_config "node-port-rs0"
 
 	destroy $namespace
 }

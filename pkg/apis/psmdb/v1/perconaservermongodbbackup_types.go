@@ -3,17 +3,17 @@ package v1
 import (
 	"fmt"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupSpec struct {
-	PSMDBCluster     string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
-	ClusterName      string              `json:"clusterName,omitempty"`
-	StorageName      string              `json:"storageName,omitempty"`
-	Compression      pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+	PSMDBCluster     string                   `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
+	ClusterName      string                   `json:"clusterName,omitempty"`
+	StorageName      string                   `json:"storageName,omitempty"`
+	Compression      compress.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
 type BackupState string
@@ -81,7 +81,7 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 		return fmt.Errorf("spec clusterName and deprecated psmdbCluster fields are empty")
 	}
 	if string(p.Spec.Compression) == "" {
-		p.Spec.Compression = pbm.CompressionTypeGZIP
+		p.Spec.Compression = compress.CompressionTypeGZIP
 	}
 	return nil
 }

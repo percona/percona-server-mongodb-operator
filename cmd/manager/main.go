@@ -82,6 +82,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	operatorNamespace, err := k8s.GetOperatorNamespace()
+	if err != nil {
+		setupLog.Error(err, "failed to get operators' namespace")
+		os.Exit(1)
+	}
+
 	config, err := ctrl.GetConfig()
 	if err != nil {
 		setupLog.Error(err, "failed to get config")
@@ -99,9 +105,9 @@ func main() {
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE
-	if strings.Contains(namespace, ",") {
+	if len(namespace) > 0 {
 		options.Namespace = ""
-		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(namespace, ","))
+		options.NewCache = cache.MultiNamespacedCacheBuilder(append(strings.Split(namespace, ","), operatorNamespace))
 	}
 
 	mgr, err := ctrl.NewManager(config, options)
