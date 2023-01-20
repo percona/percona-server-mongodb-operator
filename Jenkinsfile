@@ -105,9 +105,9 @@ void pushMonitoringFile() {
     echo "Push logfile $MONITORING_FILE_NAME file to gcp bucket!"
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            S3_PATH=s3://test-duration-monitoring/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            gsutil ls \$S3_PATH/${MONITORING_FILE_NAME} || :
-            gsutil cp --content-type text/plain --quiet ${MONITORING_FILE_PATH} \$S3_PATH/${MONITORING_FILE_NAME} || :
+            GS_PATH=gs://test-duration-monitoring/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            gsutil ls \$GS_PATH/${MONITORING_FILE_NAME} || :
+            gsutil cp --content-type text/plain --quiet ${MONITORING_FILE_PATH} \$GS_PATH/${MONITORING_FILE_NAME} || :
         """
     }
 }
@@ -248,6 +248,8 @@ pipeline {
                     gcloud components install alpha
                     gcloud components install kubectl
                     gcloud components install gsutil
+                    gsutil --version
+                    gsutil ls
 
                     curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
                     curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
