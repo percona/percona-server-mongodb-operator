@@ -94,12 +94,14 @@ void pushLogFile(String FILE_NAME) {
 
 void createMonitoringFile() {
     echo "Create file to store test duration"
-    mkdir "e2e-tests/test-duration-monitoring"
-    touch "e2e-tests/test-duration-monitoring/monitoring-$GIT_SHORT_COMMIT.json"
+    sh """
+        mkdir "e2e-tests/test-duration-monitoring"
+        touch "e2e-tests/test-duration-monitoring/monitoring-${env.GIT_SHORT_COMMIT}.json"
+    """
 }
 void pushMonitoringFile() {
-    MONITORING_FILE_PATH="e2e-tests/test-duration-monitoring/monitoring-$GIT_SHORT_COMMIT.json"
-    MONITORING_FILE_NAME="monitoring-$GIT_SHORT_COMMIT.json"
+    MONITORING_FILE_PATH="e2e-tests/test-duration-monitoring/monitoring-${env.GIT_SHORT_COMMIT}.json"
+    MONITORING_FILE_NAME="monitoring-${env.GIT_SHORT_COMMIT}.json"
     echo "Push logfile $FILE_NAME file to gcp bucket!"
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
@@ -206,7 +208,7 @@ pipeline {
         CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
         AUTHOR_NAME  = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
         ENABLE_LOGGING="true"
-        MONITORING_FILE_PATH="e2e-tests/test-duration-monitoring/monitoring-$GIT_SHORT_COMMIT.json"
+        MONITORING_FILE_PATH="e2e-tests/test-duration-monitoring/monitoring-${env.GIT_SHORT_COMMIT}.json"
     }
     agent {
         label 'docker'
