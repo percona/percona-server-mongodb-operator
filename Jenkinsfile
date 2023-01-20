@@ -146,7 +146,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
     waitUntil {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
         try {
-            initial_timestamp=$(date +%s)
+            initial_timestamp=sh(script: 'date +%s', , returnStdout: true).trim()
             echo "The $TEST_NAME test was started!"
             testsReportMap[TEST_NAME] = "[failed]($testUrl)"
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
@@ -164,7 +164,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             }
             testsReportMap[TEST_NAME] = "[passed]($testUrl)"
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
-            final_timestamp=$(date +%s)
+            final_timestamp=sh(script: 'date +%s', , returnStdout: true).trim()
             test_duration=$final_timestamp - $initial_timestamp
             echo "{'test': $TEST_NAME, 'test_duration': $test_duration, 'timestamp': $final_timestamp}" >> $MONITORING_FILE_PATH
             return true
