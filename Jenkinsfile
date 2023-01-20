@@ -102,7 +102,7 @@ void createMonitoringFile() {
 void pushMonitoringFile() {
     MONITORING_FILE_PATH="e2e-tests/test-duration-monitoring/monitoring-${env.GIT_SHORT_COMMIT}.json"
     MONITORING_FILE_NAME="monitoring-${env.GIT_SHORT_COMMIT}.json"
-    echo "Push logfile $FILE_NAME file to gcp bucket!"
+    echo "Push logfile $MONITORING_FILE_NAME file to gcp bucket!"
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             S3_PATH=s3://test-duration-monitoring/\$JOB_NAME/\$(git rev-parse --short HEAD)
