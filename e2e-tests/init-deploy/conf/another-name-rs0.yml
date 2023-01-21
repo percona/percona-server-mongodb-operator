@@ -9,6 +9,7 @@ spec:
   allowUnsafeConfigurations: true
   backup:
     enabled: false
+    image:
 #    storages:
 #    tasks:
   replsets:
