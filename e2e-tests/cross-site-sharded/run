@@ -57,7 +57,7 @@ desc 'Check chunks'
 chunks_param1="ns"
 chunks_param2='"app.city"'
 
-if [[ ${MONGO_VER} == "5.0" ]]; then
+if [[ ${MONGO_VER} == "6.0" ]]; then
 	chunks_param1="uuid"
 	chunks_param2=$(run_mongos \
 		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
