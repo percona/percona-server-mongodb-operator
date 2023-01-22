@@ -8,7 +8,6 @@ spec:
   imagePullPolicy: Always
   backup:
     enabled: false
-    image:
 #    storages:
 #    tasks:
   replsets:
