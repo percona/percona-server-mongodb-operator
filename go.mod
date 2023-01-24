@@ -5,9 +5,9 @@ go 1.18
 require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/go-logr/logr v1.2.3
-	github.com/go-openapi/errors v0.19.6
+	github.com/go-openapi/errors v0.20.2
 	github.com/go-openapi/runtime v0.19.16
-	github.com/go-openapi/strfmt v0.19.5
+	github.com/go-openapi/strfmt v0.21.3
 	github.com/go-openapi/swag v0.19.14
 	github.com/go-openapi/validate v0.19.10
 	github.com/hashicorp/go-version v1.6.0
@@ -43,7 +43,7 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
-	github.com/asaskevich/govalidator v0.0.0-20200428143746-21a406dcc535 // indirect
+	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
 	github.com/aws/aws-sdk-go v1.44.71 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -84,6 +84,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mongodb/mongo-tools v0.0.0-20220803145531-1d46e6e7021f // indirect
 	github.com/montanaflynn/stats v0.6.6 // indirect
+	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.0 // indirect
