@@ -19,10 +19,10 @@ $(DEPLOYDIR)/crd.yaml: kustomize generate
 	cp $(DEPLOYDIR)/crd.yaml ./e2e-tests/version-service/conf/crd.yaml
 
 $(DEPLOYDIR)/bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml  ## Generate deploy/bundle.yaml
-	cat $(DEPLOYDIR)/crd.yaml <(echo ---) $(DEPLOYDIR)/rbac.yaml <(echo ---) $(DEPLOYDIR)/operator.yaml > $(DEPLOYDIR)/bundle.yaml
+	cat $(DEPLOYDIR)/crd.yaml > $(DEPLOYDIR)/bundle.yaml; echo "---" >> $(DEPLOYDIR)/bundle.yaml; cat $(DEPLOYDIR)/rbac.yaml >> $(DEPLOYDIR)/bundle.yaml; echo "---" >> $(DEPLOYDIR)/bundle.yaml; cat $(DEPLOYDIR)/operator.yaml >> $(DEPLOYDIR)/bundle.yaml
 
 $(DEPLOYDIR)/cw-bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(DEPLOYDIR)/cw-operator.yaml  ## Generate deploy/cw-bundle.yaml
-	cat $(DEPLOYDIR)/crd.yaml <(echo ---) $(DEPLOYDIR)/cw-rbac.yaml <(echo ---) $(DEPLOYDIR)/cw-operator.yaml > $(DEPLOYDIR)/cw-bundle.yaml
+	cat $(DEPLOYDIR)/crd.yaml > $(DEPLOYDIR)/cw-bundle.yaml; echo "---" >> $(DEPLOYDIR)/cw-bundle.yaml; cat $(DEPLOYDIR)/cw-rbac.yaml >> $(DEPLOYDIR)/cw-bundle.yaml; echo "---" >> $(DEPLOYDIR)/cw-bundle.yaml; cat $(DEPLOYDIR)/cw-operator.yaml >> $(DEPLOYDIR)/cw-bundle.yaml
 
 manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle.yaml ## Put generated manifests to deploy directory
 
@@ -44,7 +44,7 @@ uninstall: manifests ## Uninstall CRDs, rbac
 
 .PHONY: deploy
 deploy: ## Deploy operator
-	yq w $(DEPLOYDIR)/operator.yaml 'spec.template.spec.containers.(name==percona-server-mongodb-operator).image' $(IMAGE) | kubectl apply -f -
+	yq eval '(.spec.template.spec.containers[].image = "'${IMAGE}'")' $(DEPLOYDIR)/operator.yaml | kubectl apply -f -
 
 undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml

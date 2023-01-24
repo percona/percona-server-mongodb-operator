@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
@@ -196,7 +197,7 @@ func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api
 	switch stg.Type {
 	case api.BackupStorageS3:
 		conf.Storage = pbm.StorageConf{
-			Type: pbm.StorageS3,
+			Type: storage.S3,
 			S3: s3.Conf{
 				Region:                stg.S3.Region,
 				EndpointURL:           stg.S3.EndpointURL,
@@ -231,7 +232,7 @@ func (b *PBM) SetConfig(ctx context.Context, stg api.BackupStorageSpec, pitr api
 			return errors.Wrap(err, "getting azure credentials secret name")
 		}
 		conf.Storage = pbm.StorageConf{
-			Type: pbm.StorageAzure,
+			Type: storage.Azure,
 			Azure: azure.Conf{
 				Account:   string(azureSecret.Data[AzureStorageAccountNameSecretKey]),
 				Container: stg.Azure.Container,

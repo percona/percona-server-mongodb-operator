@@ -11,9 +11,12 @@ fail() {
 	exit 1
 }
 
-"$dir/default-cr/run" || fail "default-cr"
 "$dir/arbiter/run" || fail "arbiter"
+"$dir/cross-site-sharded/run" || fail "cross-site-sharded"
+"$dir/data-at-rest-encryption/run" || fail "data-at-rest-encryption"
 "$dir/data-sharded/run" || fail "data-sharded"
+"$dir/default-cr/run" || fail "default-cr"
+"$dir/demand-backup-eks-credentials/run" || fail "demand-backup-eks-credentials"
 "$dir/demand-backup-sharded/run" || fail "demand-backup-sharded"
 "$dir/demand-backup/run" || fail "demand-backup"
 "$dir/init-deploy/run" || fail "init-deploy"
@@ -23,7 +26,6 @@ fail() {
 "$dir/non-voting/run" || fail "non-voting"
 "$dir/one-pod/run" || fail "one-pod"
 "$dir/operator-self-healing-chaos/run" || fail "operator-self-healing-chaos"
-"$dir/operator-self-healing/run" || fail "operator-self-healing"
 "$dir/pitr-sharded/run" || fail "pitr-sharded"
 "$dir/pitr/run" || fail "pitr"
 "$dir/rs-shard-migration/run" || fail "rs-shard-migration"
@@ -31,7 +33,6 @@ fail() {
 "$dir/scheduled-backup/run" || fail "scheduled-backup"
 "$dir/security-context/run" || fail "security-context"
 "$dir/self-healing-chaos/run" || fail "self-healing-chaos"
-"$dir/self-healing/run" || fail "self-healing"
 "$dir/service-per-pod/run" || fail "service-per-pod"
 "$dir/smart-update/run" || fail "smart-update"
 "$dir/storage/run" || fail "storage"
@@ -40,5 +41,3 @@ fail() {
 "$dir/upgrade/run" || fail "upgrade"
 "$dir/users/run" || fail "users"
 "$dir/version-service/run" || fail "version-service"
-"$dir/cross-site-sharded/run" || fail "cross-site-sharded"
-"$dir/demand-backup-eks-credentials/run" || fail "demand-backup-eks-credentials"

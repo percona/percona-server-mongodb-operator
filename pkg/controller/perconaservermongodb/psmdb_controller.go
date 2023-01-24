@@ -1174,20 +1174,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		}
 	}
 
-	if cr.Spec.PMM.Enabled {
-		pmmsec := corev1.Secret{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
-		if err != nil {
-			return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
-		}
-
-		pmmC, err := psmdb.AddPMMContainer(cr, &pmmsec, cr.Spec.PMM.MongosParams)
-		if err != nil {
-			return errors.Wrap(err, "failed to create a pmm-client container")
-		}
+	secret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, secret)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
+	}
+	pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongosParams)
+	if pmmC != nil {
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
-			pmmC,
+			*pmmC,
 		)
 	}
 
@@ -1488,6 +1484,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 				},
 			})
 	}
+	secret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, secret)
+	if client.IgnoreNotFound(err) != nil {
+		return nil, errors.Wrap(err, "check pmm secrets")
+	}
 
 	if matchLabels["app.kubernetes.io/component"] == "arbiter" {
 		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
@@ -1520,17 +1521,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
 
-		if cr.Spec.PMM.Enabled {
-			pmmsec := corev1.Secret{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
-			if err != nil {
-				return nil, errors.Wrap(err, "check pmm secrets")
-			}
-			pmmC, err := psmdb.AddPMMContainer(cr, &pmmsec, cr.Spec.PMM.MongodParams)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to create a pmm-client container")
-			}
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, pmmC)
+		pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongodParams)
+		if pmmC != nil {
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, *pmmC)
 		}
 	}
 
@@ -1706,17 +1699,9 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 		return r.client.Create(ctx, obj)
 	}
 
-	updateObject := false
 	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!compareMaps(oldObject.GetLabels(), obj.GetLabels()) {
-		updateObject = true
-	} else if _, ok := obj.(*corev1.Service); !ok {
-		// ignore annotations changes for Service object
-		// in case NodePort, to avoid port changing
-		updateObject = !compareMaps(oldObject.GetAnnotations(), obj.GetAnnotations())
-	}
-
-	if updateObject {
+		!compareMaps(oldObject.GetLabels(), obj.GetLabels()) ||
+		!compareMaps(oldObject.GetAnnotations(), obj.GetAnnotations()) {
 		obj.SetResourceVersion(oldObject.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:

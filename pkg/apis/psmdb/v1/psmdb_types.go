@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -29,13 +30,13 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDB is the Schema for the perconaservermongodbs API
-//+k8s:openapi-gen=true
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="psmdb"
-//+kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
-//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName="psmdb"
+// +kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaServerMongoDB struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -66,7 +67,7 @@ type PerconaServerMongoDBSpec struct {
 	Unmanaged               bool                                 `json:"unmanaged,omitempty"`
 	CRVersion               string                               `json:"crVersion,omitempty"`
 	Platform                *version.Platform                    `json:"platform,omitempty"`
-	Image                   string                               `json:"image,omitempty"`
+	Image                   string                               `json:"image"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
@@ -244,11 +245,22 @@ type ClusterCondition struct {
 type PMMSpec struct {
 	Enabled      bool   `json:"enabled,omitempty"`
 	ServerHost   string `json:"serverHost,omitempty"`
-	Image        string `json:"image,omitempty"`
+	Image        string `json:"image"`
 	MongodParams string `json:"mongodParams,omitempty"`
 	MongosParams string `json:"mongosParams,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
+	if len(secret.Data) == 0 {
+		return false
+	}
+	s := sets.StringKeySet(secret.Data)
+	if s.HasAll(PMMUserKey, PMMPasswordKey) || s.Has(PMMAPIKey) {
+		return true
+	}
+	return false
 }
 
 const (
@@ -691,17 +703,17 @@ type MongodSpecOperationProfiling struct {
 }
 
 type BackupTaskSpec struct {
-	Name             string              `json:"name"`
-	Enabled          bool                `json:"enabled"`
-	Keep             int                 `json:"keep,omitempty"`
-	Schedule         string              `json:"schedule,omitempty"`
-	StorageName      string              `json:"storageName,omitempty"`
-	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+	Name             string                   `json:"name"`
+	Enabled          bool                     `json:"enabled"`
+	Keep             int                      `json:"keep,omitempty"`
+	Schedule         string                   `json:"schedule,omitempty"`
+	StorageName      string                   `json:"storageName,omitempty"`
+	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
-	return cr.Name + "-backup-" + task.Name
+	return fmt.Sprintf("%s-backup-%s-%s", cr.Name, task.Name, cr.Namespace)
 }
 
 type BackupStorageS3Spec struct {
@@ -737,10 +749,10 @@ type BackupStorageSpec struct {
 }
 
 type PITRSpec struct {
-	Enabled          bool                `json:"enabled,omitempty"`
-	OplogSpanMin     numstr.NumberString `json:"oplogSpanMin,omitempty"`
-	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+	Enabled          bool                     `json:"enabled,omitempty"`
+	OplogSpanMin     numstr.NumberString      `json:"oplogSpanMin,omitempty"`
+	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {
@@ -753,7 +765,7 @@ type BackupSpec struct {
 	Annotations              map[string]string            `json:"annotations,omitempty"`
 	Labels                   map[string]string            `json:"labels,omitempty"`
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
-	Image                    string                       `json:"image,omitempty"`
+	Image                    string                       `json:"image"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`
 	ServiceAccountName       string                       `json:"serviceAccountName,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
