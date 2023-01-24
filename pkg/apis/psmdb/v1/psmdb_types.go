@@ -708,7 +708,7 @@ type BackupTaskSpec struct {
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
-	return cr.Name + "-backup-" + task.Name
+	return fmt.Sprintf("%s-backup-%s-%s", cr.Name, task.Name, cr.Namespace)
 }
 
 type BackupStorageS3Spec struct {

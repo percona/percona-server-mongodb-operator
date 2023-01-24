@@ -30,7 +30,7 @@ RUN find $GOPATH/pkg/mod -regextype posix-extended -iregex '.*(license|notice)(\
             sh -c 'mkdir -pv /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi") \
                    && cp -v "$0" /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi")' {} \;
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal AS ubi8
+FROM registry.access.redhat.com/ubi9/ubi-minimal AS ubi9
 RUN microdnf update -y && microdnf clean all
 
 LABEL name="Percona Server for MongoDB Operator" \
