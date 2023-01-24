@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -251,6 +252,17 @@ type PMMSpec struct {
 	MongosParams string `json:"mongosParams,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
+	if len(secret.Data) == 0 {
+		return false
+	}
+	s := sets.StringKeySet(secret.Data)
+	if s.HasAll(PMMUserKey, PMMPasswordKey) || s.Has(PMMAPIKey) {
+		return true
+	}
+	return false
 }
 
 const (
