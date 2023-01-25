@@ -1,0 +1,8 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBBackup
+metadata:
+  name:
+spec:
+  clusterName: some-name
+  storageName:
+  backupType: physical
