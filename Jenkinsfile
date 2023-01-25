@@ -349,10 +349,11 @@ pipeline {
                         ShutdownCluster('cluster1')
                    }
                 }
-                stage('2 OneP Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
+                stage('2 OneP IgnoreLA Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
                     steps {
                         CreateCluster('cluster2')
                         runTest('one-pod', 'cluster2')
+                        runTest('ignore-labels-annotations', 'cluster2')
                         runTest('monitoring-2-0', 'cluster2')
                         runTest('arbiter', 'cluster2')
                         runTest('service-per-pod', 'cluster2')
