@@ -59,7 +59,7 @@ spec:
             - --clusterAuthMode=x509
             - --config=/etc/mongos-config/mongos.conf
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: MONGODB_PORT
               value: "27017"
@@ -74,7 +74,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --component
@@ -100,7 +100,7 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - readiness
                 - --component
@@ -142,6 +142,8 @@ spec:
             - mountPath: /etc/users-secret
               name: users-secret-file
               readOnly: true
+            - mountPath: /opt/percona
+              name: bin
           workingDir: /data/db
         - env:
             - name: PMM_SERVER

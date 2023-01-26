@@ -67,7 +67,7 @@ spec:
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: no-limits
@@ -83,7 +83,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --ssl
