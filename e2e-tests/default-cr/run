@@ -48,15 +48,6 @@ function main() {
 
 	desc 'startup default PSMDB cluster'
 	kubectl_bin apply -f $deploy_dir/secrets.yaml
-	kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} --server-side --force-conflicts -f $deploy_dir/crd.yaml
-	if [ -n "$OPERATOR_NS" ]; then
-		apply_rbac cw-rbac
-		kubectl_bin apply -n ${OPERATOR_NS} -f $deploy_dir/cw-operator.yaml
-	else
-		apply_rbac rbac
-		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" \
-			| kubectl_bin apply -f -
-	fi
 	kubectl_bin apply -f $conf_dir/client.yml
 
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com" |
