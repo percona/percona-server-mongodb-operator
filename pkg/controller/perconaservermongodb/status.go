@@ -373,6 +373,10 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		}
 		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
 		if err != nil {
+			switch errors.Cause(err) {
+			case psmdb.ErrNoIngressPoints, psmdb.ErrServiceNotExists:
+				return "", nil
+			}
 			return "", errors.Wrap(err, "get replset addresses")
 		}
 		return strings.Join(addrs, ","), nil

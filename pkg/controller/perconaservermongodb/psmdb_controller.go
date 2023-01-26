@@ -476,19 +476,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 		// Create exposed services
 		if replset.Expose.Enabled {
-			srvs, err := r.ensureExternalServices(ctx, cr, replset, &pods)
+			_, err := r.ensureExternalServices(ctx, cr, replset, &pods)
 			if err != nil {
 				err = errors.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
-			}
-			if replset.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-				lbsvc := srvs[:0]
-				for _, svc := range srvs {
-					if len(svc.Status.LoadBalancer.Ingress) > 0 {
-						lbsvc = append(lbsvc, svc)
-					}
-				}
-				srvs = lbsvc
 			}
 		}
 
