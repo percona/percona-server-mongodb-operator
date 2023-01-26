@@ -107,6 +107,21 @@ func (spec *PerconaServerMongoDBSpec) EncryptionKeySecretName() string {
 	return ""
 }
 
+func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
+	switch name {
+	case "":
+		return nil
+	case ConfigReplSetName:
+		return spec.Sharding.ConfigsvrReplSet
+	}
+	for _, rs := range spec.Replsets {
+		if rs != nil && rs.Name == name {
+			return rs
+		}
+	}
+	return nil
+}
+
 const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 )

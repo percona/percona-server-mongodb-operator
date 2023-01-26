@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
@@ -25,7 +26,7 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
+	mongosPods []corev1.Pod) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
 	replsetSize := replset.Size
@@ -42,8 +43,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateReady, nil
 	}
 
-	// Primary with a Secondary and an Arbiter (PSA)
-	unsafePSA := cr.Spec.UnsafeConf && replset.Arbiter.Enabled && replset.Arbiter.Size == 1 && !replset.NonVoting.Enabled && replset.Size == 2
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name, false)
+	if err != nil {
+		return api.AppStateInit, errors.Wrap(err, "failed to get replset pods")
+	}
 
 	// all pods needs to be scheduled to reconcile
 	if int(replsetSize) > len(pods.Items) {
@@ -223,21 +226,37 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
+	membersLive, err := r.updateConfigMembers(ctx, cli, cr, pods.Items, replset)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "failed to update config members")
+	}
+
+	if membersLive == len(pods.Items) {
+		return api.AppStateReady, nil
+	}
+
+	return api.AppStateInit, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli *mgo.Client, cr *api.PerconaServerMongoDB, pods []corev1.Pod, rs *api.ReplsetSpec) (int, error) {
+	// Primary with a Secondary and an Arbiter (PSA)
+	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
+
 	cnf, err := mongo.ReadConfig(ctx, cli)
 	if err != nil {
-		return api.AppStateError, errors.Wrap(err, "get mongo config")
+		return 0, errors.Wrap(err, "get mongo config")
 	}
 
 	members := mongo.ConfigMembers{}
-	for key, pod := range pods.Items {
+	for key, pod := range pods {
 		if key >= mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", replset.Name)
+			log.Error(errReplsetLimit, "rs", rs.Name)
 			break
 		}
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, pod)
 		if err != nil {
-			return api.AppStateError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
+			return 0, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
 
 		member := mongo.ConfigMember{
@@ -274,9 +293,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	})
 
 	memberC := len(members)
-	for i, extNode := range replset.ExternalNodes {
+	for i, extNode := range rs.ExternalNodes {
 		if i+memberC >= mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", replset.Name)
+			log.Error(errReplsetLimit, "rs", rs.Name)
 			break
 		}
 
@@ -295,54 +314,54 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	if cnf.Members.FixTags(members) {
 		cnf.Version++
 
-		log.Info("Fixing member tags", "replset", replset.Name)
+		log.Info("Fixing member tags", "replset", rs.Name)
 
 		if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
-			return api.AppStateError, errors.Wrap(err, "fix tags: write mongo config")
+			return 0, errors.Wrap(err, "fix tags: write mongo config")
 		}
 	}
 
 	if cnf.Members.FixHosts(members) {
 		cnf.Version++
 
-		log.Info("Fixing member hosts", "replset", replset.Name)
+		log.Info("Fixing member hosts", "replset", rs.Name)
 
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
-			return api.AppStateError, errors.Wrap(err, "fix hosts: write mongo config")
+			return 0, errors.Wrap(err, "fix hosts: write mongo config")
 		}
 	}
 
 	if cnf.Members.RemoveOld(members) {
 		cnf.Version++
 
-		log.Info("Removing old nodes", "replset", replset.Name)
+		log.Info("Removing old nodes", "replset", rs.Name)
 
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
-			return api.AppStateError, errors.Wrap(err, "delete: write mongo config")
+			return 0, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
 	if cnf.Members.AddNew(members) {
 		cnf.Version++
 
-		log.Info("Adding new nodes", "replset", replset.Name)
+		log.Info("Adding new nodes", "replset", rs.Name)
 
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
-			return api.AppStateError, errors.Wrap(err, "add new: write mongo config")
+			return 0, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
 
 	if cnf.Members.ExternalNodesChanged(members) {
 		cnf.Version++
 
-		log.Info("Updating external nodes", "replset", replset.Name)
+		log.Info("Updating external nodes", "replset", rs.Name)
 
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
-			return api.AppStateError, errors.Wrap(err, "update external nodes: write mongo config")
+			return 0, errors.Wrap(err, "update external nodes: write mongo config")
 		}
 	}
 
@@ -351,17 +370,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
 
-		log.Info("Configuring member votes and priorities", "replset", replset.Name)
+		log.Info("Configuring member votes and priorities", "replset", rs.Name)
 
 		err = mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
-			return api.AppStateError, errors.Wrap(err, "set votes: write mongo config")
+			return 0, errors.Wrap(err, "set votes: write mongo config")
 		}
 	}
 
 	rsStatus, err := mongo.RSStatus(ctx, cli)
 	if err != nil {
-		return api.AppStateError, errors.Wrap(err, "unable to get replset members")
+		return 0, errors.Wrap(err, "unable to get replset members")
 	}
 
 	membersLive := 0
@@ -387,17 +406,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			mongo.MemberStateDown,
 			mongo.MemberStateUnknown:
 
-			return api.AppStateInit, nil
+			return 0, nil
 		default:
-			return api.AppStateError, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
+			return 0, errors.Errorf("undefined state of the replset member %s: %v", member.Name, member.State)
 		}
 	}
-
-	if membersLive == len(pods.Items) {
-		return api.AppStateReady, nil
-	}
-
-	return api.AppStateInit, nil
+	return membersLive, nil
 }
 
 func inShard(ctx context.Context, client *mgo.Client, rsName string) (bool, error) {

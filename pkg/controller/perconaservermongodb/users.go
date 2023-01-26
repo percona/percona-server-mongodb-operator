@@ -107,7 +107,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 
 			pods = append(pods, mongosList.Items...)
 
-			cfgPodlist, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
+			cfgPodlist, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName, false)
 			if err != nil {
 				return errors.Wrap(err, "failed to get mongos pods")
 			}
