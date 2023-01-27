@@ -2,9 +2,7 @@ package psmdb
 
 import (
 	"context"
-	"fmt"
 	"sort"
-	"strings"
 
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
