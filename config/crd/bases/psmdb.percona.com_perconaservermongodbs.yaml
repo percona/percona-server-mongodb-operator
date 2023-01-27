@@ -289,6 +289,14 @@ spec:
                 type: string
               crVersion:
                 type: string
+              ignoreAnnotations:
+                items:
+                  type: string
+                type: array
+              ignoreLabels:
+                items:
+                  type: string
+                type: array
               image:
                 type: string
               imagePullPolicy:
