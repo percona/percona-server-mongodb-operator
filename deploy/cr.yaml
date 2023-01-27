@@ -21,6 +21,10 @@ spec:
 #    - name: private-registry-credentials
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+#  ignoreAnnotations:
+#    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
+#  ignoreLabels:
+#    - rack
 #  multiCluster:
 #    enabled: true
 #    DNSSuffix: svc.clusterset.local

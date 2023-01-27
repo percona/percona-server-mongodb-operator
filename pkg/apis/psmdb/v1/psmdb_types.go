@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -69,6 +70,8 @@ type PerconaServerMongoDBSpec struct {
 	Image                   string                               `json:"image"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	IgnoreLabels            []string                             `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations       []string                             `json:"ignoreAnnotations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
 	Replsets                []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                 *SecretsSpec                         `json:"secrets,omitempty"`
@@ -249,6 +252,17 @@ type PMMSpec struct {
 	MongosParams string `json:"mongosParams,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
+	if len(secret.Data) == 0 {
+		return false
+	}
+	s := sets.StringKeySet(secret.Data)
+	if s.HasAll(PMMUserKey, PMMPasswordKey) || s.Has(PMMAPIKey) {
+		return true
+	}
+	return false
 }
 
 const (
@@ -471,7 +485,7 @@ type ReplsetSpec struct {
 	Size                     int32                      `json:"size"`
 	ClusterRole              ClusterRole                `json:"clusterRole,omitempty"`
 	Arbiter                  Arbiter                    `json:"arbiter,omitempty"`
-	Expose                   Expose                     `json:"expose,omitempty"`
+	Expose                   ExposeTogglable            `json:"expose,omitempty"`
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
@@ -788,19 +802,26 @@ type Arbiter struct {
 }
 
 type MongosExpose struct {
+	ServicePerPod bool `json:"servicePerPod,omitempty"`
+
+	Expose `json:",inline"`
+}
+
+type ExposeTogglable struct {
+	Enabled bool `json:"enabled"`
+
+	Expose `json:",inline"`
+}
+
+type Expose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
-type Expose struct {
-	Enabled                  bool               `json:"enabled"`
-	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
-	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
+func (e *Expose) SaveOldMeta() bool {
+	return len(e.ServiceAnnotations) == 0 && len(e.ServiceLabels) == 0
 }
 
 // ServerVersion represents info about k8s / openshift server version
