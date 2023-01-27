@@ -164,6 +164,8 @@ spec:
               value: "27017"
             - name: PBM_AGENT_SIDECAR
               value: "true"
+            - name: PBM_AGENT_SIDECAR_SLEEP
+              value: "5"
           imagePullPolicy: Always
           name: backup-agent
           resources: {}
