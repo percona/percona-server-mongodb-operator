@@ -2,7 +2,9 @@ package psmdb
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
@@ -62,11 +64,39 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 	if rs == nil {
 		return pods, errors.Errorf("replset %s is not found", rsName)
 	}
-	if len(pods.Items) >= int(rs.Size) {
-		pods.Items = pods.Items[:rs.Size]
+
+	mongodPods := filterPodsByComponent(pods, "mongod")
+	arbiterPods := filterPodsByComponent(pods, "arbiter")
+	nvPods := filterPodsByComponent(pods, "nonVoting")
+
+	if len(mongodPods) >= int(rs.Size) {
+		mongodPods = mongodPods[:rs.Size]
 	}
+	if len(arbiterPods) >= int(rs.Arbiter.Size) {
+		arbiterPods = arbiterPods[:rs.Arbiter.Size]
+	}
+	if len(nvPods) >= int(rs.NonVoting.Size) {
+		nvPods = nvPods[:rs.NonVoting.Size]
+	}
+	pods.Items = mongodPods
+	pods.Items = append(pods.Items, arbiterPods...)
+	pods.Items = append(pods.Items, nvPods...)
 
 	return pods, nil
+}
+
+func filterPodsByComponent(list corev1.PodList, component string) []corev1.Pod {
+	var pods []corev1.Pod
+	for _, pod := range list.Items {
+		v, ok := pod.Labels["app.kubernetes.io/component"]
+		if !ok {
+			continue
+		}
+		if v == component {
+			pods = append(pods, pod)
+		}
+	}
+	return pods
 }
 
 func GetPrimaryPod(ctx context.Context, client *mgo.Client) (string, error) {

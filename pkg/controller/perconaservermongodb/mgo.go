@@ -226,7 +226,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	membersLive, err := r.updateConfigMembers(ctx, cli, cr, pods.Items, replset)
+	membersLive, err := r.updateConfigMembers(ctx, cli, cr, replset)
 	if err != nil {
 		return api.AppStateError, errors.Wrap(err, "failed to update config members")
 	}
@@ -238,9 +238,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	return api.AppStateInit, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli *mgo.Client, cr *api.PerconaServerMongoDB, pods []corev1.Pod, rs *api.ReplsetSpec) (int, error) {
+func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli *mgo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (int, error) {
 	// Primary with a Secondary and an Arbiter (PSA)
 	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
+
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name, false)
+	if err != nil {
+		return 0, errors.Wrap(err, "get rs pods")
+	}
 
 	cnf, err := mongo.ReadConfig(ctx, cli)
 	if err != nil {
@@ -248,7 +253,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	}
 
 	members := mongo.ConfigMembers{}
-	for key, pod := range pods {
+	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
 			log.Error(errReplsetLimit, "rs", rs.Name)
 			break
