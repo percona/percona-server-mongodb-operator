@@ -40,14 +40,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(apis.AddToScheme(scheme))
-}
-
-func printVersion() {
-	setupLog.Info(fmt.Sprintf("Git commit: %s Git branch: %s", GitCommit, GitBranch))
-	setupLog.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
-	setupLog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 }
 
 func main() {
@@ -74,7 +67,8 @@ func main() {
 	// uniform and structured logs.
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	printVersion()
+	setupLog.Info("Manager starting up", "gitCommit", GitCommit, "gitBranch", GitBranch,
+		"goVersion", runtime.Version(), "os", runtime.GOOS, "arch", runtime.GOARCH)
 
 	namespace, err := k8s.GetWatchNamespace()
 	if err != nil {
@@ -173,7 +167,7 @@ func getLogEncoder(log logr.Logger) zapcore.Encoder {
 
 	useJson, err := strconv.ParseBool(s)
 	if err != nil {
-		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using console logger", s))
+		log.Info("Cant't parse LOG_STRUCTURED env var, using console logger", "envVar", s)
 		return consoleEnc
 	}
 	if !useJson {
@@ -197,7 +191,7 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	case "ERROR":
 		return zapcore.ErrorLevel
 	default:
-		log.Info(fmt.Sprintf("unsupported log level: %s, using INFO level", l))
+		log.Info("Unsupported log level", "level", l)
 		return zapcore.InfoLevel
 	}
 }
