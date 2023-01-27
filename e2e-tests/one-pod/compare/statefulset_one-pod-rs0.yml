@@ -237,10 +237,6 @@ spec:
     type: RollingUpdate
   volumeClaimTemplates:
     - metadata:
-        annotations:
-          test: one-pod
-        labels:
-          test: one-pod
         name: mongod-data
       spec:
         accessModes:
