@@ -106,14 +106,17 @@ void popArtifactFile(String FILE_NAME) {
 TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
 testsReportMap  = [:]
 testsResultsMap = [:]
+TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
 void makeReport() {
     def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
     def startedTestAmount = testsReportMap.size()
     for ( test in testsReportMap ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value}/><$duration/></testcase>\n"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
 void setTestsresults() {
@@ -142,6 +145,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                     fi
                 """
             }
+
             testsReportMap[TEST_NAME] = "[passed]($testUrl)"
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
@@ -423,6 +427,12 @@ pipeline {
                         }
                     }
                     makeReport()
+                    sh """
+                        echo "${TestsReportXML}" > TestsReport.xml
+                    """
+                    step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                    archiveArtifacts '*.xml'
+
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                     TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"

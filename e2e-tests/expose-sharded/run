@@ -1,0 +1,306 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+
+
+function stop_cluster() {
+	local cluster_name=$1
+	local max_wait_time=${2:-120}
+
+	local passed_time=0
+	local sleep_time=1
+	kubectl_bin patch psmdb ${cluster_name} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
+	set +x
+	echo -n 'Waiting for cluster stop'
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.mongos.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get deployment ${cluster_name}-mongos -o jsonpath='{.status.replicas}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.replsets.cfg.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.replsets.rs0.ready}') -le 0 ]]; do
+		echo -n .
+		let passed_time="${passed_time}+${sleep_time}"
+		sleep ${passed_time}
+		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
+			echo "We've been waiting for cluster stop for too long. Exiting..."
+			exit 1
+		fi
+	done
+	echo
+	set -x
+}
+
+function start_cluster() {
+	local cluster_name=$1
+
+	kubectl_bin patch psmdb ${cluster_name} --type json -p='[{"op":"add","path":"/spec/pause","value":false}]'
+	wait_cluster_consistency ${cluster_name}
+}
+
+function compare_mongo_config() {
+  cluster=$1
+  namespace=$2
+  enable_expose=${3:-"true"}
+
+  desc "Compare mongo config"
+  if [[ ${enable_expose} == "true" ]]; then
+    cfg_0_endpoint=$(get_service_ip $cluster-cfg-0 'cfg')
+    rs0_0_endpoint=$(get_service_ip $cluster-rs0-0)
+  else
+    cfg_0_endpoint="$cluster-cfg-0.$cluster-cfg.$namespace.svc.cluster.local"
+    rs0_0_endpoint="$cluster-rs0-0.$cluster-rs0.$namespace.svc.cluster.local"
+  fi
+
+  rs0_0_endpoint_actual=$(run_mongo "rs.conf().members[0].host" "clusterAdmin:clusterAdmin123456@$${cluster}-rs0.${namespace}")
+	cfg_0_endpoint_actual=$(run_mongo "rs.conf().members[0].host" "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}")
+
+	if [[ $rs0_0_endpoint_actual != "$rs0_0_endpoint:27017" || $cfg_0_endpoint_actual != "$cfg_0_endpoint:27017" ]]; then
+	  echo "Actual values rs $rs0_0_endpoint_actual and cfg $cfg_0_endpoint_actual do not match expected rs $rs0_0_endpoint:27017 and cfg $cfg_0_endpoint:27017"
+	  exit 1
+	fi
+
+}
+
+function main() {
+
+  create_infra "$namespace"
+  desc 'create first PSMDB cluster'
+  cluster="some-name"
+
+  kubectl_bin apply \
+    -f "$conf_dir/secrets.yml" \
+    -f "$conf_dir/client.yml"
+
+  apply_s3_storage_secrets
+  if version_gt "1.19" && [ $EKS -ne 1 ]; then
+    cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+  else
+    kubectl_bin apply -f "$conf_dir/container-rc.yaml"
+  fi
+
+  apply_cluster "$test_dir/conf/$cluster-rs0.yml"
+  desc 'check if all 3 Pods started'
+  wait_for_running $cluster-rs0 3
+  wait_for_running $cluster-cfg 3 "false"
+  wait_for_running $cluster-mongos 3
+
+  sleep 10
+
+  desc 'check if service and statefulset created with expected config'
+#  compare_kubectl statefulset/$cluster-rs0
+#  compare_kubectl statefulset/$cluster-rs1
+#  compare_kubectl statefulset/$cluster-rs2
+#  compare_kubectl statefulset/$cluster-cfg
+#  compare_kubectl statefulset/$cluster-mongos ""
+
+  kubectl_bin apply -f "$test_dir/conf/mongos-secret.yml"
+  sleep 10
+  wait_for_running $cluster-mongos 3
+
+  compare_kubectl statefulset/$cluster-mongos "-secret"
+
+  desc 'write data, read from all'
+  run_mongos \
+    'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+    "userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+  run_mongos \
+    'sh.enableSharding("myApp","rs0")' \
+    "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
+  run_mongos \
+    'use myApp\n db.test.insert({ x: 100500 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
+  sleep 10 # for minikube
+  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
+
+  desc 'Unexposed -> Exposed, ClusterIP'
+
+  kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+          {
+              "op": "replace",
+              "path": "/spec/replsets/0/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "ClusterIP"
+        }
+          },
+        {
+              "op": "replace",
+              "path": "/spec/sharding/mongos/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "ClusterIP"
+        }
+          },
+          {
+              "op": "replace",
+              "path": "/spec/sharding/configsvrReplSet/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "ClusterIP"
+        }
+          }]'
+
+  wait_for_running $cluster-rs0 3
+  wait_for_running $cluster-cfg 3 "false"
+  wait_for_running $cluster-mongos 3
+  run_mongos \
+    'use myApp\n db.test.insert({ x: 100501 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
+
+  sleep 10 # for minikube
+
+  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-2nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-2nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-2nd"
+  compare_mongo_config ${cluster} $namespace
+
+  desc 'Exposed, ClusterIP -> LoadBalancer'
+  kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+          {
+              "op": "replace",
+              "path": "/spec/replsets/0/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "LoadBalancer"
+        }
+          },
+        {
+              "op": "replace",
+              "path": "/spec/sharding/mongos/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "LoadBalancer"
+        }
+          },
+          {
+              "op": "replace",
+              "path": "/spec/sharding/configsvrReplSet/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "LoadBalancer"
+        }
+          }]'
+
+  wait_for_running $cluster-rs0 3
+  wait_for_running $cluster-cfg 3 "false"
+  wait_for_running $cluster-mongos 3
+  run_mongos \
+    'use myApp\n db.test.insert({ x: 100502 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
+  sleep 10 # for minikube
+
+  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-3nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-3nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-3nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-3nd"
+
+  compare_mongo_config ${cluster} $namespace
+
+  desc "Exposed,  LoadBalancer -> ClusterIP"
+  kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+          {
+              "op": "replace",
+              "path": "/spec/replsets/0/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "ClusterIP"
+        }
+          },
+        {
+              "op": "replace",
+              "path": "/spec/sharding/mongos/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "ClusterIP"
+        }
+          },
+          {
+              "op": "replace",
+              "path": "/spec/sharding/configsvrReplSet/expose",
+        "value": {
+          "enabled": true,
+          "exposeType" : "ClusterIP"
+        }
+          }]'
+
+  wait_for_running $cluster-rs0 3
+  wait_for_running $cluster-cfg 3 "false"
+  wait_for_running $cluster-mongos 3
+  run_mongos \
+    'use myApp\n db.test.insert({ x: 100503 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
+  sleep 10 # for minikube
+
+  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-4nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-4nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-4nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-4nd"
+
+  compare_mongo_config ${cluster} $namespace
+
+  desc "Pause Exposed cluster (ClusterIP)"
+  stop_cluster ${cluster}
+	start_cluster ${cluster}
+	run_mongos \
+    'use myApp\n db.test.insert({ x: 100504 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
+  sleep 10 # for minikube
+
+  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
+
+  compare_mongo_config ${cluster}
+
+  desc "Exposed -> Unexposed"
+
+  kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+          {
+              "op": "replace",
+              "path": "/spec/replsets/0/expose",
+        "value": {
+          "enabled": false,
+          "exposeType" : "ClusterIP"
+        }
+          },
+        {
+              "op": "replace",
+              "path": "/spec/sharding/mongos/expose",
+        "value": {
+          "enabled": false,
+          "exposeType" : "ClusterIP"
+        }
+          },
+          {
+              "op": "replace",
+              "path": "/spec/sharding/configsvrReplSet/expose",
+        "value": {
+          "enabled": false,
+          "exposeType" : "ClusterIP"
+        }
+          }]'
+
+  wait_for_running $cluster-rs0 3
+  wait_for_running $cluster-cfg 3 "false"
+  wait_for_running $cluster-mongos 3
+  run_mongos \
+    'use myApp\n db.test.insert({ x: 100505 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
+  sleep 10 # for minikube
+
+  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-6nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-6nd"
+
+  compare_mongo_config ${cluster} $namespace "false"
+
+  kubectl_bin delete -f "$conf_dir/container-rc.yaml"
+  destroy "$namespace"
+}
+
+main
