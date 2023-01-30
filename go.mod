@@ -8,7 +8,7 @@ require (
 	github.com/go-openapi/errors v0.20.3
 	github.com/go-openapi/runtime v0.19.16
 	github.com/go-openapi/strfmt v0.21.3
-	github.com/go-openapi/swag v0.19.14
+	github.com/go-openapi/swag v0.22.3
 	github.com/go-openapi/validate v0.19.10
 	github.com/hashicorp/go-version v1.6.0
 	github.com/jetstack/cert-manager v1.6.1
@@ -73,7 +73,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
-	github.com/mailru/easyjson v0.7.6 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-ieproxy v0.0.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/minio/minio-go v6.0.14+incompatible // indirect
