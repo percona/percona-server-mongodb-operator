@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -11,25 +12,38 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
-	shouldReconcile = true
-	finalizers := []string{}
+var errWaitingTermination = errors.New("waiting pods to be deleted")
 
-	for _, f := range cr.GetFinalizers() {
+func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
+	shouldReconcile = false
+	orderedFinalizers := cr.GetOrderedFinalizers()
+	var finalizers []string
+
+	for _, f := range orderedFinalizers {
 		switch f {
-		case "delete-psmdb-pvc":
+		case api.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
-		case "delete-psmdb-pods-in-order":
+		case api.FinalizerDeletePSMDBPodsInOrder:
 			err = r.deletePSMDBPods(ctx, cr)
-			if err != nil {
-				shouldReconcile = false
+			if err == nil {
+				shouldReconcile = true
 			}
+		default:
+			finalizers = append(finalizers, f)
+			continue
 		}
 		if err != nil {
-			log.Error(err, "failed to run finalizer", "finalizer", f)
+			switch err {
+			case errWaitingTermination:
+				log.Info(err.Error(), "finalizer", f)
+			default:
+				log.Error(err, "failed to run finalizer", "finalizer", f)
+			}
 			finalizers = append(finalizers, f)
+			break
 		}
 	}
+
 	cr.SetFinalizers(finalizers)
 	err = r.client.Update(ctx, cr)
 
@@ -62,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 			return errors.Wrap(err, "get rs statefulset")
 		}
 		if len(pods.Items) > int(*sts.Spec.Replicas) {
-			return errors.New("waiting pods to be deleted")
+			return errWaitingTermination
 		}
 		if *sts.Spec.Replicas != 1 {
 			rs.Size = 1
@@ -70,7 +84,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 		}
 	}
 	if !done {
-		return errors.New("waiting statefulsets to be resized")
+		return errWaitingTermination
 	}
 	return nil
 }
