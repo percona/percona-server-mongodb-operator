@@ -372,12 +372,13 @@ pipeline {
                         ShutdownCluster('cluster2')
                     }
                 }
-                stage('3 SelfHealing Storage') {
+                stage('3 SelfHealing Storage Expose') {
                     steps {
                         CreateCluster('cluster3')
                         runTest('storage', 'cluster3')
                         runTest('self-healing-chaos', 'cluster3')
                         runTest('operator-self-healing-chaos', 'cluster3')
+                        runTest('expose-sharded', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }
