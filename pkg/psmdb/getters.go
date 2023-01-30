@@ -63,12 +63,18 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 		return pods, errors.Errorf("replset %s is not found", rsName)
 	}
 
-	mongodPods := filterPodsByComponent(pods, "mongod")
+	var rsPods []corev1.Pod
+	if rs.ClusterRole == api.ClusterRoleConfigSvr {
+		rsPods = filterPodsByComponent(pods, api.ConfigReplSetName)
+	} else {
+		rsPods = filterPodsByComponent(pods, "mongod")
+	}
+
 	arbiterPods := filterPodsByComponent(pods, "arbiter")
 	nvPods := filterPodsByComponent(pods, "nonVoting")
 
-	if len(mongodPods) >= int(rs.Size) {
-		mongodPods = mongodPods[:rs.Size]
+	if len(rsPods) >= int(rs.Size) {
+		rsPods = rsPods[:rs.Size]
 	}
 	if len(arbiterPods) >= int(rs.Arbiter.Size) {
 		arbiterPods = arbiterPods[:rs.Arbiter.Size]
@@ -76,7 +82,7 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 	if len(nvPods) >= int(rs.NonVoting.Size) {
 		nvPods = nvPods[:rs.NonVoting.Size]
 	}
-	pods.Items = mongodPods
+	pods.Items = rsPods
 	pods.Items = append(pods.Items, arbiterPods...)
 	pods.Items = append(pods.Items, nvPods...)
 
