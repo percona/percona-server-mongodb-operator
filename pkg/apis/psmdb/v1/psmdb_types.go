@@ -543,7 +543,14 @@ type VolumeSpec struct {
 	// PersistentVolumeClaim represents a reference to a PersistentVolumeClaim.
 	// It has the highest level of precedence, followed by HostPath and
 	// EmptyDir. And represents the PVC specification.
-	PersistentVolumeClaim *corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
+	PersistentVolumeClaim PVCSpec `json:"persistentVolumeClaim,omitempty"`
+}
+
+type PVCSpec struct {
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+
+	*corev1.PersistentVolumeClaimSpec `json:",inline"`
 }
 
 type SecretsSpec struct {

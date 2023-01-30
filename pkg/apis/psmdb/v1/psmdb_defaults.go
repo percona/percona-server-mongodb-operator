@@ -786,11 +786,11 @@ func (m *MultiAZ) reconcileAffinityOpts() {
 }
 
 func (v *VolumeSpec) reconcileOpts() error {
-	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
-		v.PersistentVolumeClaim = &corev1.PersistentVolumeClaimSpec{}
+	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+		v.PersistentVolumeClaim.PersistentVolumeClaimSpec = &corev1.PersistentVolumeClaimSpec{}
 	}
 
-	if v.PersistentVolumeClaim != nil {
+	if v.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 		_, ok := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 		if !ok {
 			return fmt.Errorf("volume.resources.storage can't be empty")
