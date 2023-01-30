@@ -70,6 +70,8 @@ type PerconaServerMongoDBSpec struct {
 	Image                   string                               `json:"image"`
 	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	IgnoreLabels            []string                             `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations       []string                             `json:"ignoreAnnotations,omitempty"`
 	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
 	Replsets                []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                 *SecretsSpec                         `json:"secrets,omitempty"`
@@ -483,7 +485,7 @@ type ReplsetSpec struct {
 	Size                     int32                      `json:"size"`
 	ClusterRole              ClusterRole                `json:"clusterRole,omitempty"`
 	Arbiter                  Arbiter                    `json:"arbiter,omitempty"`
-	Expose                   Expose                     `json:"expose,omitempty"`
+	Expose                   ExposeTogglable            `json:"expose,omitempty"`
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
@@ -541,7 +543,14 @@ type VolumeSpec struct {
 	// PersistentVolumeClaim represents a reference to a PersistentVolumeClaim.
 	// It has the highest level of precedence, followed by HostPath and
 	// EmptyDir. And represents the PVC specification.
-	PersistentVolumeClaim *corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
+	PersistentVolumeClaim PVCSpec `json:"persistentVolumeClaim,omitempty"`
+}
+
+type PVCSpec struct {
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+
+	*corev1.PersistentVolumeClaimSpec `json:",inline"`
 }
 
 type SecretsSpec struct {
@@ -793,19 +802,26 @@ type Arbiter struct {
 }
 
 type MongosExpose struct {
+	ServicePerPod bool `json:"servicePerPod,omitempty"`
+
+	Expose `json:",inline"`
+}
+
+type ExposeTogglable struct {
+	Enabled bool `json:"enabled"`
+
+	Expose `json:",inline"`
+}
+
+type Expose struct {
 	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	ServicePerPod            bool               `json:"servicePerPod,omitempty"`
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
 }
 
-type Expose struct {
-	Enabled                  bool               `json:"enabled"`
-	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
-	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
+func (e *Expose) SaveOldMeta() bool {
+	return len(e.ServiceAnnotations) == 0 && len(e.ServiceLabels) == 0
 }
 
 // ServerVersion represents info about k8s / openshift server version
@@ -919,4 +935,31 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 
 func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
+}
+
+const (
+	FinalizerDeletePVC              = "delete-psmdb-pvc"
+	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
+)
+
+func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
+	order := []string{FinalizerDeletePSMDBPodsInOrder, FinalizerDeletePVC}
+	finalizers := make([]string, len(cr.GetFinalizers()))
+	copy(finalizers, cr.GetFinalizers())
+	orderedFinalizers := make([]string, 0, len(finalizers))
+
+	i := 0
+	for _, v := range order {
+		for i < len(finalizers) {
+			if v == finalizers[i] {
+				orderedFinalizers = append(orderedFinalizers, v)
+				finalizers = append(finalizers[:i], finalizers[i+1:]...)
+				break
+			}
+			i++
+		}
+	}
+
+	orderedFinalizers = append(orderedFinalizers, finalizers...)
+	return orderedFinalizers
 }
