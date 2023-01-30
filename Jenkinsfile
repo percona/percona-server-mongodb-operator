@@ -383,6 +383,7 @@ pipeline {
                         runTest('self-healing-chaos', 'cluster3')
                         runTest('operator-self-healing-chaos', 'cluster3')
                         runTest('expose-sharded', 'cluster3')
+                        runTest('recovery-no-primary', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }
