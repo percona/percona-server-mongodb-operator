@@ -929,3 +929,30 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }
+
+const (
+	FinalizerDeletePVC              = "delete-psmdb-pvc"
+	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
+)
+
+func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
+	order := []string{FinalizerDeletePSMDBPodsInOrder, FinalizerDeletePVC}
+	finalizers := make([]string, len(cr.GetFinalizers()))
+	copy(finalizers, cr.GetFinalizers())
+	orderedFinalizers := make([]string, 0, len(finalizers))
+
+	i := 0
+	for _, v := range order {
+		for i < len(finalizers) {
+			if v == finalizers[i] {
+				orderedFinalizers = append(orderedFinalizers, v)
+				finalizers = append(finalizers[:i], finalizers[i+1:]...)
+				break
+			}
+			i++
+		}
+	}
+
+	orderedFinalizers = append(orderedFinalizers, finalizers...)
+	return orderedFinalizers
+}
