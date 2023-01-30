@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/go-logr/logr v1.2.3
-	github.com/go-openapi/errors v0.20.2
+	github.com/go-openapi/errors v0.20.3
 	github.com/go-openapi/runtime v0.19.16
 	github.com/go-openapi/strfmt v0.21.3
 	github.com/go-openapi/swag v0.19.14
