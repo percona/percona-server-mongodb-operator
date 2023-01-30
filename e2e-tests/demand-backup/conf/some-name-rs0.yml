@@ -16,7 +16,7 @@ spec:
           credentialsSecret: aws-s3-secret
           region: us-east-1
           bucket: operator-testing
-          prefix: psmdb
+          prefix: psmdb-demand-backup
           insecureSkipTLSVerify: false
       minio:
         type: s3
@@ -32,14 +32,14 @@ spec:
           credentialsSecret: gcp-cs-secret
           region: us-east-1
           bucket: operator-testing
-          prefix: psmdb
+          prefix: psmdb-demand-backup
           endpointUrl: https://storage.googleapis.com
           insecureSkipTLSVerify: false
       azure-blob:
         type: azure
         azure:
           container: operator-testing
-          prefix: psmdb
+          prefix: psmdb-demand-backup
           credentialsSecret: azure-secret
 
     tasks:
@@ -64,6 +64,9 @@ spec:
         resources:
           requests:
             storage: 1Gi
+    expose:
+      enabled: true
+      exposeType: ClusterIP
     size: 3
     configuration: |
       operationProfiling:

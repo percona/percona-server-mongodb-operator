@@ -281,6 +281,7 @@ spec:
                     type: array
                 required:
                 - enabled
+                - image
                 type: object
               clusterServiceDNSMode:
                 type: string
@@ -288,6 +289,14 @@ spec:
                 type: string
               crVersion:
                 type: string
+              ignoreAnnotations:
+                items:
+                  type: string
+                type: array
+              ignoreLabels:
+                items:
+                  type: string
+                type: array
               image:
                 type: string
               imagePullPolicy:
@@ -448,6 +457,8 @@ spec:
                     type: object
                   serverHost:
                     type: string
+                required:
+                - image
                 type: object
               replsets:
                 items:
@@ -15424,6 +15435,8 @@ spec:
                   versionServiceEndpoint:
                     type: string
                 type: object
+            required:
+            - image
             type: object
           status:
             properties:

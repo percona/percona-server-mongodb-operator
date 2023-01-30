@@ -42,6 +42,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -468,26 +469,17 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, errors.Wrapf(err, "set owner ref for service %s", service.Name)
 		}
 
-		err = r.createOrUpdate(ctx, service)
+		err = r.createOrUpdateSvc(ctx, cr, service, true)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "create or update service for replset %s", replset.Name)
 		}
 
 		// Create exposed services
 		if replset.Expose.Enabled {
-			srvs, err := r.ensureExternalServices(ctx, cr, replset, &pods)
+			_, err := r.ensureExternalServices(ctx, cr, replset, &pods)
 			if err != nil {
 				err = errors.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
-			}
-			if replset.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-				lbsvc := srvs[:0]
-				for _, svc := range srvs {
-					if len(svc.Status.LoadBalancer.Ingress) > 0 {
-						lbsvc = append(lbsvc, svc)
-					}
-				}
-				srvs = lbsvc
 			}
 		}
 
@@ -1045,7 +1037,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Cont
 		return r.client.Create(ctx, configMap)
 	}
 
-	if !mapsEqual(currMap.Data, configMap.Data) {
+	if !util.MapEqual(currMap.Data, configMap.Data) {
 		return r.client.Update(ctx, configMap)
 	}
 
@@ -1174,20 +1166,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		}
 	}
 
-	if cr.Spec.PMM.Enabled {
-		pmmsec := corev1.Secret{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
-		if err != nil {
-			return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
-		}
-
-		pmmC, err := psmdb.AddPMMContainer(cr, &pmmsec, cr.Spec.PMM.MongosParams)
-		if err != nil {
-			return errors.Wrap(err, "failed to create a pmm-client container")
-		}
+	secret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, secret)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
+	}
+	pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongosParams)
+	if pmmC != nil {
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
-			pmmC,
+			*pmmC,
 		)
 	}
 
@@ -1276,7 +1264,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateMongosSvc(ctx context.Cont
 
 	svc.Spec = psmdb.MongosServiceSpec(cr, name)
 
-	err = r.createOrUpdate(ctx, &svc)
+	err = r.createOrUpdateSvc(ctx, cr, &svc, cr.Spec.Sharding.Mongos.Expose.SaveOldMeta())
 	if err != nil {
 		return errors.Wrap(err, "create or update mongos service")
 	}
@@ -1311,20 +1299,6 @@ func ensurePVCs(
 	}
 
 	return nil
-}
-
-func mapsEqual(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for ka, va := range a {
-		if vb, ok := b[ka]; !ok || vb != va {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
@@ -1488,6 +1462,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 				},
 			})
 	}
+	secret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, secret)
+	if client.IgnoreNotFound(err) != nil {
+		return nil, errors.Wrap(err, "check pmm secrets")
+	}
 
 	if matchLabels["app.kubernetes.io/component"] == "arbiter" {
 		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
@@ -1520,17 +1499,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
 
-		if cr.Spec.PMM.Enabled {
-			pmmsec := corev1.Secret{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, &pmmsec)
-			if err != nil {
-				return nil, errors.Wrap(err, "check pmm secrets")
-			}
-			pmmC, err := psmdb.AddPMMContainer(cr, &pmmsec, cr.Spec.PMM.MongodParams)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to create a pmm-client container")
-			}
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, pmmC)
+		pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongodParams)
+		if pmmC != nil {
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, *pmmC)
 		}
 	}
 
@@ -1599,7 +1570,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, l
 	}
 
 	for _, pvc := range pvcList.Items {
-		if compareMaps(sfs.Labels, pvc.Labels) {
+		if util.MapEqual(sfs.Labels, pvc.Labels) {
 			continue
 		}
 
@@ -1706,17 +1677,9 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 		return r.client.Create(ctx, obj)
 	}
 
-	updateObject := false
 	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!compareMaps(oldObject.GetLabels(), obj.GetLabels()) {
-		updateObject = true
-	} else if _, ok := obj.(*corev1.Service); !ok {
-		// ignore annotations changes for Service object
-		// in case NodePort, to avoid port changing
-		updateObject = !compareMaps(oldObject.GetAnnotations(), obj.GetAnnotations())
-	}
-
-	if updateObject {
+		!util.MapEqual(oldObject.GetLabels(), obj.GetLabels()) ||
+		!util.MapEqual(oldObject.GetAnnotations(), obj.GetAnnotations()) {
 		obj.SetResourceVersion(oldObject.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
@@ -1727,6 +1690,55 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj 
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateSvc(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service, saveOldMeta bool) error {
+	if !saveOldMeta && len(cr.Spec.IgnoreAnnotations) == 0 && len(cr.Spec.IgnoreLabels) == 0 {
+		return r.createOrUpdate(ctx, svc)
+	}
+	oldSvc := new(corev1.Service)
+	err := r.client.Get(ctx, types.NamespacedName{
+		Name:      svc.GetName(),
+		Namespace: svc.GetNamespace(),
+	}, oldSvc)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return r.createOrUpdate(ctx, svc)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	if saveOldMeta {
+		svc.SetAnnotations(util.MapMerge(oldSvc.GetAnnotations(), svc.GetAnnotations()))
+		svc.SetLabels(util.MapMerge(oldSvc.GetLabels(), svc.GetLabels()))
+	}
+	setIgnoredAnnotations(cr, svc, oldSvc)
+	setIgnoredLabels(cr, svc, oldSvc)
+	return r.createOrUpdate(ctx, svc)
+}
+
+func setIgnoredAnnotations(cr *api.PerconaServerMongoDB, obj, oldObject client.Object) {
+	oldAnnotations := oldObject.GetAnnotations()
+	if len(oldAnnotations) == 0 {
+		return
+	}
+
+	ignoredAnnotations := util.MapFilterByKeys(oldAnnotations, cr.Spec.IgnoreAnnotations)
+
+	annotations := util.MapMerge(obj.GetAnnotations(), ignoredAnnotations)
+	obj.SetAnnotations(annotations)
+}
+
+func setIgnoredLabels(cr *api.PerconaServerMongoDB, obj, oldObject client.Object) {
+	oldLabels := oldObject.GetLabels()
+	if len(oldLabels) == 0 {
+		return
+	}
+
+	ignoredLabels := util.MapFilterByKeys(oldLabels, cr.Spec.IgnoreLabels)
+
+	labels := util.MapMerge(obj.GetLabels(), ignoredLabels)
+	obj.SetLabels(labels)
 }
 
 func getObjectHash(obj client.Object) (string, error) {
@@ -1780,22 +1792,6 @@ func OwnerRef(ro client.Object, scheme *runtime.Scheme) (metav1.OwnerReference, 
 		UID:        ca.GetUID(),
 		Controller: &trueVar,
 	}, nil
-}
-
-// compareMaps returns true if two maps are equal
-func compareMaps(x, y map[string]string) bool {
-	if len(x) != len(y) {
-		return false
-	}
-
-	for k, v := range x {
-		yVal, ok := y[k]
-		if !ok || yVal != v {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, namespace, name string) (psmdb.CustomConfig, error) {
