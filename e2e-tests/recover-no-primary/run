@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+create_infra ${namespace}
+
+desc 'create PSMDB cluster'
+cluster="some-name"
+kubectl_bin apply \
+	-f ${conf_dir}/secrets_with_tls.yml \
+	-f ${conf_dir}/client.yml
+
+apply_cluster ${test_dir}/conf/${cluster}.yml
+desc 'check if all 3 Pods started'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+desc 'delete statefulset and wait for recovery'
+kubectl delete sts "${cluster}-rs0"
+sleep 30
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+destroy ${namespace}

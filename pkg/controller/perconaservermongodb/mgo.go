@@ -321,7 +321,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Fixing member tags", "replset", rs.Name)
 
-		if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
+		if err := mongo.WriteConfig(ctx, cli, cnf, false); err != nil {
 			return 0, errors.Wrap(err, "fix tags: write mongo config")
 		}
 	}
@@ -331,7 +331,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Fixing member hosts", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = mongo.WriteConfig(ctx, cli, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "fix hosts: write mongo config")
 		}
@@ -342,7 +342,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Removing old nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = mongo.WriteConfig(ctx, cli, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "delete: write mongo config")
 		}
@@ -353,7 +353,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Adding new nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = mongo.WriteConfig(ctx, cli, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "add new: write mongo config")
 		}
@@ -364,7 +364,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Updating external nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = mongo.WriteConfig(ctx, cli, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "update external nodes: write mongo config")
 		}
@@ -377,7 +377,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Configuring member votes and priorities", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = mongo.WriteConfig(ctx, cli, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "set votes: write mongo config")
 		}
@@ -785,20 +785,11 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 		return errors.Wrap(err, "get mongo config")
 	}
 
-	for i := 0; i < len(cnf.Members); i++ {
-		tags := []mongo.ConfigMember(cnf.Members)[i].Tags
-		podName, ok := tags["podName"]
-		if !ok {
-			continue
-		}
-
-		[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
-	}
-
+	cnf.Members[0].Priority = cnf.Members[0].Priority + 1
 	cnf.Version++
 	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
 
-	if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
+	if err := mongo.WriteConfig(ctx, cli, cnf, true); err != nil {
 		return errors.Wrap(err, "write mongo config")
 	}
 
