@@ -137,7 +137,7 @@ spec:
               name: users-secret-file
           workingDir: /data/db
         - args:
-            - pbm-agent
+            - pbm-agent-entrypoint
           command:
             - /opt/percona/pbm-entry.sh
           env:
@@ -157,6 +157,10 @@ spec:
               value: rs0
             - name: PBM_MONGODB_PORT
               value: "27017"
+            - name: PBM_AGENT_SIDECAR
+              value: "true"
+            - name: PBM_AGENT_SIDECAR_SLEEP
+              value: "5"
             - name: SHARDED
               value: "TRUE"
             - name: POD_NAME

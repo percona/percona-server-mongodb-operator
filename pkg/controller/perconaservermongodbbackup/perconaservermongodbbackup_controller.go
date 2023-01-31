@@ -372,5 +372,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, 
 		return r.client.Status().Update(ctx, c)
 	})
 
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+
 	return errors.Wrap(err, "write status")
 }
