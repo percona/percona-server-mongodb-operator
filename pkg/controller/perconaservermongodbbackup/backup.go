@@ -148,6 +148,7 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 	status.LastTransition = &metav1.Time{
 		Time: time.Unix(meta.LastTransitionTS, 0),
 	}
+	status.Type = cr.Spec.Type
 
 	return status, nil
 }

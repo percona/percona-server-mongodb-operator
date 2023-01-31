@@ -151,7 +151,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	switch bcp.Status.Type {
-	case pbm.LogicalBackup:
+	case "", pbm.LogicalBackup:
 		status, err = r.reconcileLogicalRestore(ctx, cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile logical restore")

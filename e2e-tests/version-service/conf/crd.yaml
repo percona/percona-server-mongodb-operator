@@ -30,7 +30,7 @@ spec:
       name: Destination
       type: string
     - description: Backup type
-      jsonPath: .spec.backupType
+      jsonPath: .status.type
       name: Type
       type: string
     - description: Job status

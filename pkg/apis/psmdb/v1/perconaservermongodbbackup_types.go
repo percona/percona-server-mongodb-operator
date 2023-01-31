@@ -56,7 +56,7 @@ type PerconaServerMongoDBBackupStatus struct {
 // +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=".spec.clusterName",description="Cluster name"
 // +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName",description="Storage name"
 // +kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination",description="Backup destination"
-// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".spec.backupType",description="Backup type"
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".status.type",description="Backup type"
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=".status.state",description="Job status"
 // +kubebuilder:printcolumn:name="Completed",type=date,JSONPath=".status.completed",description="Completed time"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp",description="Created time"
