@@ -260,6 +260,8 @@ spec:
                   tasks:
                     items:
                       properties:
+                        backupType:
+                          type: string
                         compressionLevel:
                           type: integer
                         compressionType:
