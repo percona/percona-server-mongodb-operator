@@ -64,6 +64,10 @@ spec:
         memory: "0.5G"
     volumeSpec:
       persistentVolumeClaim:
+        annotations:
+          test: one-pod
+        labels:
+          test: one-pod
         resources:
           requests:
             storage: 3Gi

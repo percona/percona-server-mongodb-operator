@@ -54,18 +54,17 @@ function main() {
 		kubectl_bin apply -n ${OPERATOR_NS} -f $deploy_dir/cw-operator.yaml
 	else
 		apply_rbac rbac
-		cat "$deploy_dir/operator.yaml" \
-			| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
+		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" \
 			| kubectl_bin apply -f -
 	fi
 	kubectl_bin apply -f $conf_dir/client.yml
 
-	yq w $deploy_dir/cr.yaml 'spec.upgradeOptions.versionServiceEndpoint' 'https://check-dev.percona.com' \
-		| yq w - 'spec.replsets.*.affinity.antiAffinityTopologyKey' 'none' \
-		| yq w - 'spec.replsets.*.nonvoting.affinity.antiAffinityTopologyKey' 'none' \
-		| yq w - 'spec.replsets.*.arbiter.affinity.antiAffinityTopologyKey' 'none' \
-		| yq w - 'spec.sharding.configsvrReplSet.affinity.antiAffinityTopologyKey' 'none' \
-		| yq w - 'spec.sharding.mongos.affinity.antiAffinityTopologyKey' 'none' \
+	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com" |
+		.spec.replsets[].affinity.antiAffinityTopologyKey = "none" |
+		.spec.replsets[].nonvoting.affinity.antiAffinityTopologyKey = "none" |
+		.spec.replsets[].arbiter.affinity.antiAffinityTopologyKey = "none" |
+		.spec.sharding.configsvrReplSet.affinity.antiAffinityTopologyKey = "none" |
+		.spec.sharding.mongos.affinity.antiAffinityTopologyKey = "none"' $deploy_dir/cr.yaml \
 		| kubectl_bin apply -f -
 	desc 'check if all 3 Pods started'
 	wait_cluster_consistency $cluster
@@ -127,9 +126,9 @@ function main() {
 	kubectl_bin delete -f $deploy_dir/cr.yaml
 
 	cluster="minimal-cluster"
-	yq w $deploy_dir/secrets.yaml 'metadata.name' "${cluster}" | kubectl_bin apply -f -
+	yq eval '.metadata.name = "'${cluster}'"' $deploy_dir/secrets.yaml | kubectl_bin apply -f -
 
-	yq w $deploy_dir/cr-minimal.yaml 'spec.upgradeOptions.versionServiceEndpoint' 'https://check-dev.percona.com' | kubectl_bin apply -f -
+	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml | kubectl_bin apply -f -
 	desc 'check if all 3 Pods started'
 	wait_cluster_consistency "${cluster}"
 

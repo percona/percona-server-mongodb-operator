@@ -264,7 +264,7 @@ wait_deployment() {
 	retry=0
 	echo -n $name
 	until kubectl_bin get deployment $name ${OPERATOR_NS:+-n $OPERATOR_NS} >/dev/null \
-        && [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" ]; do
+		&& [ "$(kubectl_bin get deployment $name -o jsonpath='{.status.replicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" == "$(kubectl_bin get deployment $name -o jsonpath='{.status.readyReplicas}' ${OPERATOR_NS:+-n $OPERATOR_NS})" ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -308,7 +308,7 @@ wait_restore_object() {
 		sleep 1
 		echo -n .
 		let retry+=1
-		if [ $retry -ge 360 ]; then
+		if [ $retry -ge 720 ]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
@@ -343,17 +343,17 @@ deploy_operator() {
 	kubectl_bin apply --server-side --force-conflicts -f "${cr_file}"
 	if [ -n "$OPERATOR_NS" ]; then
 		apply_rbac cw-rbac
-		cat ${src_dir}/deploy/cw-operator.yaml \
-			| sed -e "s^image: .*^image: ${IMAGE}^" \
-			| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
-			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==LOG_LEVEL).value' 'DEBUG' \
+		yq eval '
+			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
+			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
 			| kubectl_bin apply -f -
 	else
 		apply_rbac rbac
-		cat ${src_dir}/deploy/operator.yaml \
-			| sed -e "s^image: .*^image: ${IMAGE}^" \
-			| yq --style double w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==DISABLE_TELEMETRY).value' 'true' \
-			| yq w - 'spec.template.spec.containers.(name==percona-server-mongodb-operator).env.(name==LOG_LEVEL).value' 'DEBUG' \
+		yq eval '
+			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
+			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml \
 			| kubectl_bin apply -f -
 	fi
 	sleep 2
@@ -585,52 +585,53 @@ compare_kubectl() {
 	fi
 
 	kubectl_bin get -o yaml ${resource} \
-		| yq d - 'metadata.ownerReferences.*.apiVersion' \
-		| yq d - 'metadata.managedFields' \
-		| yq d - '**.creationTimestamp' \
-		| yq d - '**.namespace' \
-		| yq d - '**.uid' \
-		| yq d - 'metadata.resourceVersion' \
-		| yq d - 'metadata.selfLink' \
-		| yq d - '**.creationTimestamp' \
-		| yq d - '**."percona.com/*"' \
-		| yq d - '**.image' \
-		| yq d - '**.clusterIP' \
-		| yq d - 'spec.clusterIPs' \
-		| yq d - '**.dataSource' \
-		| yq d - '**.procMount' \
-		| yq d - '**.storageClassName' \
-		| yq d - '**.finalizers' \
-		| yq d - '**."kubernetes.io/pvc-protection"' \
-		| yq d - '**."cloud.google.com/neg"' \
-		| yq d - '**.volumeName' \
-		| yq d - '**."volume.beta.kubernetes.io/storage-provisioner"' \
-		| yq d - '**."volume.kubernetes.io/storage-provisioner"' \
-		| yq d - 'spec.volumeMode' \
-		| yq d - '**."volume.kubernetes.io/selected-node"' \
-		| yq d - '**."percona.com/ssl*"' \
-		| yq d - '**.(volumeMode==Filesystem).volumeMode' \
-		| yq d - '**.healthCheckNodePort' \
-		| yq d - '**.nodePort' \
-		| yq d - 'status' \
-		| yq d - '**.(name==NAMESPACE)' \
-		| yq d - '**.(name==PBM_AGENT_SERVER_ADDRESS)' \
-		| yq d - 'spec.volumeClaimTemplates.*.apiVersion' \
-		| yq d - 'spec.volumeClaimTemplates.*.kind' \
-		| yq d - 'spec.ipFamilies' \
-		| yq d - 'spec.ipFamilyPolicy' \
-		| $sed "s/${namespace}/NAME_SPACE/g" \
-		| $sed "s#^apiVersion: extensions/v1beta1#apiVersion: apps/v1#" \
-		| $sed "s#^apiVersion: batch/v1beta1#apiVersion: batch/v1#" \
-			>${new_result}
+		| yq eval '
+			del(.metadata.ownerReferences[].apiVersion) |
+			del(.metadata.managedFields) |
+			del(.. | select(has("creationTimestamp")).creationTimestamp) |
+			del(.. | select(has("namespace")).namespace) |
+			del(.. | select(has("uid")).uid) |
+			del(.metadata.resourceVersion) |
+			del(.spec.template.spec.containers[].env[] | select(.name == "NAMESPACE")) |
+			del(.metadata.selfLink) |
+			del(.metadata.annotations."cloud.google.com/neg") |
+			del(.. | select(has("image")).image) |
+			del(.. | select(has("clusterIP")).clusterIP) |
+			del(.. | select(has("clusterIPs")).clusterIPs) |
+			del(.. | select(has("dataSource")).dataSource) |
+			del(.. | select(has("procMount")).procMount) |
+			del(.. | select(has("storageClassName")).storageClassName) |
+			del(.. | select(has("finalizers")).finalizers) |
+			del(.. | select(has("kubernetes.io/pvc-protection"))."kubernetes.io/pvc-protection") |
+			del(.. | select(has("volumeName")).volumeName) |
+			del(.. | select(has("volume.beta.kubernetes.io/storage-provisioner"))."volume.beta.kubernetes.io/storage-provisioner") |
+			del(.. | select(has("volume.kubernetes.io/storage-provisioner"))."volume.kubernetes.io/storage-provisioner") |
+			del(.spec.volumeMode) |
+			del(.. | select(has("volume.kubernetes.io/selected-node"))."volume.kubernetes.io/selected-node") |
+			del(.. | select(has("percona.com/last-config-hash"))."percona.com/last-config-hash") |
+			del(.. | select(has("percona.com/configuration-hash"))."percona.com/configuration-hash") |
+			del(.. | select(has("percona.com/ssl-hash"))."percona.com/ssl-hash") |
+			del(.. | select(has("percona.com/ssl-internal-hash"))."percona.com/ssl-internal-hash") |
+			del(.spec.volumeClaimTemplates[].spec.volumeMode | select(. == "Filesystem")) |
+			del(.. | select(has("healthCheckNodePort")).healthCheckNodePort) |
+			del(.. | select(has("nodePort")).nodePort) |
+			del(.status) |
+			(.. | select(tag == "!!str")) |= sub("'$namespace'", "NAME_SPACE") |
+			del(.spec.volumeClaimTemplates[].apiVersion) |
+			del(.spec.volumeClaimTemplates[].kind) |
+			del(.spec.ipFamilies) |
+			del(.spec.ipFamilyPolicy) |
+			(.. | select(. == "extensions/v1beta1")) = "apps/v1" |
+			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
 
 	if version_gt "1.22"; then
-		yq d -i ${new_result} 'spec.internalTrafficPolicy'
-		yq d -i ${new_result} 'spec.allocateLoadBalancerNodePorts'
-		if [[ $expected_result == */cronjob* ]]; then
-			yq d -i ${new_result} 'metadata.generation'
+		yq -i eval 'del(.spec.internalTrafficPolicy)' ${new_result}
+		yq -i eval 'del(.spec.allocateLoadBalancerNodePorts)' ${new_result}
+		if [[ ${expected_result} == */cronjob* ]]; then
+			yq -i eval 'del(.metadata.generation)' ${new_result}
 		fi
 	fi
+
 	diff -u "$expected_result" "$new_result"
 }
 
@@ -682,7 +683,8 @@ get_service_ip() {
 	while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
 		sleep 1
 	done
-	if [ "$(kubectl_bin get service/$service -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
+	service_type=$(kubectl_bin get service/"$service" -o 'jsonpath={.spec.type}')
+	if [ "$service_type" = "ClusterIP" ] || [ "$service_type" = "NodePort" ]; then
 		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi
@@ -958,12 +960,10 @@ EOF
 
 cat_config() {
 	cat "$1" \
-		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#apply:.*#apply: Never#"
+		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
+		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM"'"' \
+		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
+		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
 
 apply_cluster() {
@@ -972,9 +972,10 @@ apply_cluster() {
 			| kubectl_bin apply -f -
 	else
 		cat_config "$1" \
-			| yq d - 'spec.backup.tasks.[1]' \
-			| yq d - 'spec.backup.tasks.[1]' \
-			| yq d - 'spec.backup.tasks.[1]' \
+			| yq eval '
+				del(.spec.backup.tasks.[1]) |
+				del(.spec.backup.tasks.[1]) |
+				del(.spec.backup.tasks.[1])' - \
 			| kubectl_bin apply -f -
 	fi
 }
@@ -1091,6 +1092,7 @@ create_infra() {
 	local ns="$1"
 
 	delete_crd
+	check_crd_for_deletion "${GIT_BRANCH}"
 	if [ -n "$OPERATOR_NS" ]; then
 		create_namespace $OPERATOR_NS
 		deploy_operator
@@ -1105,6 +1107,7 @@ function create_infra_gh() {
 	local ns="$1"
 	local git_tag="$2"
 
+	check_crd_for_deletion "${git_tag}"
 	if [ -n "${OPERATOR_NS}" ]; then
 		create_namespace "${OPERATOR_NS}"
 		deploy_operator_gh "${git_tag}"
@@ -1113,4 +1116,19 @@ function create_infra_gh() {
 		create_namespace "${ns}"
 		deploy_operator_gh "${git_tag}"
 	fi
+}
+
+function check_crd_for_deletion() {
+	# 1.24 rejects CR object creation if the corresponding CRD object is to be removed.
+	# We need to make sure that it will happen before the next CR creation request.
+	local git_tag="$1"
+
+	for crd_name in $(curl -s https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml | yq eval '.metadata.name' | $sed 's/---//g' | $sed ':a;N;$!ba;s/\n/ /g'); do
+		if [[ $(kubectl_bin get crd/${crd_name} -o jsonpath='{.status.conditions[-1].type}') == "Terminating" ]]; then
+			kubectl get ${crd_name} --all-namespaces -o wide \
+				| grep -v 'NAMESPACE' \
+				| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
+				|| :
+		fi
+	done
 }

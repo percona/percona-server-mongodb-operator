@@ -167,8 +167,8 @@ func MongosCustomConfigName(clusterName string) string {
 }
 
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
-func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
-	return corev1.PersistentVolumeClaim{
+func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {
+	pvc := corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
@@ -177,8 +177,12 @@ func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolume
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: *spec,
 	}
+
+	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
+	}
+	return pvc
 }
 
 // PodAffinity returns podAffinity options for the pod

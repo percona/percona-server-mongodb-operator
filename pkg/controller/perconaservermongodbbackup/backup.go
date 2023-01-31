@@ -14,7 +14,7 @@ import (
 
 const (
 	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
-	pbmStartingDeadline       = time.Duration(120)
+	pbmStartingDeadline       = time.Duration(120) * time.Second
 	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
 )
 
@@ -59,7 +59,7 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 
 	err = b.pbm.C.SendCmd(pbm.Cmd{
 		Cmd: pbm.CmdBackup,
-		Backup: pbm.BackupCmd{
+		Backup: &pbm.BackupCmd{
 			Name:             name,
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
