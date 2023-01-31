@@ -332,7 +332,8 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, custom
 	}
 
 	if !cr.Spec.PMM.HasSecret(secret) {
-		log.Info("Can't enable PMM, credentials are not setup correctly or secrets and internal secrets are our of sync")
+		log.Info(fmt.Sprintf(`Can't enable PMM: "%s" or "%s" with "%s" keys don't exist in the secrets, or secrets and internal secrets are out of sync`,
+			api.PMMAPIKey, api.PMMUserKey, api.PMMPasswordKey), "secrets", cr.Spec.Secrets.Users, "internalSecrets", api.InternalUserSecretName(cr))
 		return nil
 	}
 
