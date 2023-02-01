@@ -222,6 +222,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		RequeueAfter: r.reconcileIn,
 	}
 
+	logger.Error(errors.New("New ERROR"), "AAAAAAAAAA EEERRROOOORRR")
+
 	// As operator can handle a few clusters
 	// lock should be created per cluster to not lock cron jobs of other clusters
 	l := r.lockers.LoadOrCreate(request.NamespacedName.String())
