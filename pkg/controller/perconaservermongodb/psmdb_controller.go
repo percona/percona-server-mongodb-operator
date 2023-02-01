@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	logi "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -222,7 +223,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		RequeueAfter: r.reconcileIn,
 	}
 
-	logger.Error(errors.New("New ERROR"), "AAAAAAAAAA EEERRROOOORRR")
+
+	loooog := logi.FromContext(ctx).WithName("Finalizer")
+
+	loooog.Info("AAAAAAAAAAAAA INFOOOOOOOOOOOOOOOOOOOOOOO")
+
+	loooog.Error(errors.New("New ERROR"), "AAAAAAAAAA EEERRROOOORRR")
 
 	// As operator can handle a few clusters
 	// lock should be created per cluster to not lock cron jobs of other clusters
