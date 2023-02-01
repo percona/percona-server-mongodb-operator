@@ -129,6 +129,9 @@ run_restore "$backup_name_minio" 3
 wait_cluster_consistency "some-name"
 wait_restore "$backup_name_minio" 3
 
+# Resync PBM config to fix stucking delete-backup finalizer
+kubectl_bin exec ${cluster}-0 -c backup-agent -- pbm config --force-resync
+
 unlabel_node
 
 destroy "$namespace"
