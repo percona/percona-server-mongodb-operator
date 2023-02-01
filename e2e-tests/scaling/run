@@ -54,14 +54,23 @@ wait_for_delete pod/$cluster-3
 wait_for_delete pod/$cluster-4
 kubectl wait --for=jsonpath='{.status.state}'=ready --timeout=300s psmdb/${cluster%%-rs0}
 
+desc 'scale up from 3 to 1'
 kubectl_bin patch psmdb ${cluster%%-rs0} \
 	--type='json' \
 	-p='[
 		{"op": "replace", "path": "/spec/replsets/0/size", "value": 1},
 		{"op": "replace", "path": "/spec/allowUnsafeConfigurations", "value": true}
 		]'
+desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-1
 wait_for_delete pod/$cluster-2
 kubectl wait --for=jsonpath='{.status.state}'=ready --timeout=300s psmdb/${cluster%%-rs0}
+
+desc 'scale up from 1 to 3'
+kubectl_bin patch psmdb ${cluster%%-rs0} \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
+desc 'check if all 3 Pods started'
+wait_for_running $cluster 3
 
 destroy $namespace
