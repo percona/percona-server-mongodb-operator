@@ -448,8 +448,6 @@ if [[ $originalArgOne == mongo* ]]; then
 		fi
 	fi
 
-	# MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
-
 	if [ "$MONGODB_VERSION" != 'v4.0' ]; then
 
 		_mongod_hack_rename_arg_save_val --sslMode --tlsMode "${mongodHackedArgs[@]}"
