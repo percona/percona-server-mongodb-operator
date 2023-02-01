@@ -69,7 +69,7 @@ apply_cluster "$test_dir/conf/$cluster-2.yml"
 sleep 55
 
 apply_cluster "$test_dir/conf/$cluster.yml"
-if [ -z "$skip_backups_to_aws_gcp_azure" ]; then
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
 	backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
 	backup_name_azure=$(kubectl_bin get psmdb-backup | grep azure-blob | awk '{print$1}' | head -1)
