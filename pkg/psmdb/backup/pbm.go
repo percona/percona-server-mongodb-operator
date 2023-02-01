@@ -20,7 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -182,8 +181,6 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 }
 
 func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) (pbm.Config, error) {
-	l := logf.FromContext(ctx)
-
 	conf := pbm.Config{}
 
 	priority, err := GetPriorities(ctx, k8sclient, cluster)
@@ -228,8 +225,6 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 				AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
 				SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
 			}
-
-			l.Info("s3 credentials", "creds", conf.Storage.S3.Credentials)
 		}
 	case api.BackupStorageAzure:
 		if stg.Azure.CredentialsSecret == "" {
