@@ -342,7 +342,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	err = r.reconsileSSL(ctx, cr)
+	err = r.reconcileSSL(ctx, cr)
 	if err != nil {
 		err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
 		return reconcile.Result{}, err
@@ -1302,6 +1302,10 @@ func ensurePVCs(
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
 
+	if !*cr.Spec.TLS.Enabled {
+		return annotation, nil
+	}
+
 	is110 := cr.CompareVersion("1.1.0") >= 0
 	if is110 {
 		sslHash, err := r.getTLSHash(ctx, cr, cr.Spec.Secrets.SSL)
@@ -1428,17 +1432,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	// add TLS/SSL Volume
 	t := true
 	f := false
-	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
-		corev1.Volume{
-			Name: "ssl",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSL,
-					Optional:    &f,
-					DefaultMode: &secretFileMode,
-				},
+
+	sslVolume := corev1.Volume{
+		Name: "ssl",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  cr.Spec.Secrets.SSL,
+				DefaultMode: &secretFileMode,
+				Optional:    &t,
 			},
 		},
+	}
+	if *cr.Spec.TLS.Enabled {
+		sslVolume.Secret.Optional = &f
+	}
+
+	sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
+		sslVolume,
 		corev1.Volume{
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{

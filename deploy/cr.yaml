@@ -14,12 +14,11 @@ spec:
   crVersion: 1.14.0
   image: percona/percona-server-mongodb:5.0.11-10
   imagePullPolicy: Always
-#  tls:
-#    # 90 days in hours
-#    certValidityDuration: 2160h
+  tls:
+    enabled: false
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-  allowUnsafeConfigurations: false
+  allowUnsafeConfigurations: true
   updateStrategy: SmartUpdate
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
@@ -47,6 +46,7 @@ spec:
 
   - name: rs0
     size: 3
+    clusterAuthMode: keyFile
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -287,6 +287,7 @@ spec:
 
     configsvrReplSet:
       size: 3
+      clusterAuthMode: keyFile
 #      externalNodes:
 #      - host: 34.124.76.93
 #      - host: 34.124.76.94

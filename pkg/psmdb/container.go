@@ -156,7 +156,11 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
 		"--sslAllowInvalidCertificates",
-		"--clusterAuthMode=x509",
+		"--clusterAuthMode=" + string(replset.ClusterAuthMode),
+	}
+
+	if replset.ClusterAuthMode == api.ClusterAuthKeyFile {
+		args = append(args, "--keyFile="+mongodSecretsDir+"/mongodb-key")
 	}
 
 	if m.CompareVersion("1.12.0") <= 0 {
@@ -327,7 +331,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 // explicitly set the WiredTiger cache size to fix this.
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
-//
 func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64, subtract1GB bool) float64 {
 	maxMemory := resourceList[corev1.ResourceMemory]
 	var size float64

@@ -90,6 +90,7 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type TLSSpec struct {
+	Enabled              *bool           `json:"enabled,omitempty"`
 	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
 }
 
@@ -478,6 +479,13 @@ func (conf *MongoConfiguration) SetDefaults() error {
 	return nil
 }
 
+type ClusterAuthMode string
+
+const (
+	ClusterAuthX509    ClusterAuthMode = "x509"
+	ClusterAuthKeyFile ClusterAuthMode = "keyFile"
+)
+
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
@@ -495,6 +503,9 @@ type ReplsetSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
+
+	// +kubebuilder:validation:Enum={x509,keyFile}
+	ClusterAuthMode ClusterAuthMode `json:"clusterAuthMode,omitempty"`
 }
 
 func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {

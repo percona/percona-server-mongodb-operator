@@ -116,10 +116,18 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
+	t := true
 	if cr.Spec.TLS == nil {
 		cr.Spec.TLS = &TLSSpec{
+			Enabled:              &t,
 			CertValidityDuration: metav1.Duration{Duration: time.Hour * 24 * 90},
 		}
+	}
+	if cr.Spec.TLS.Enabled == nil {
+		cr.Spec.TLS.Enabled = &t
+	}
+	if !cr.Spec.UnsafeConf && !*cr.Spec.TLS.Enabled {
+		cr.Spec.TLS.Enabled = &t
 	}
 
 	if len(cr.Spec.Replsets) == 0 {
@@ -545,6 +553,13 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 	err := rs.VolumeSpec.reconcileOpts()
 	if err != nil {
 		return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
+	}
+
+	if len(rs.ClusterAuthMode) == 0 {
+		rs.ClusterAuthMode = ClusterAuthX509
+	}
+	if !cr.Spec.UnsafeConf && rs.ClusterAuthMode == ClusterAuthKeyFile {
+		rs.ClusterAuthMode = ClusterAuthX509
 	}
 
 	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {

@@ -511,7 +511,10 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		}
 		var errb, outb bytes.Buffer
 
-		mongoCmd := "mongo --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+		mongoCmd := "mongo"
+		if *m.Spec.TLS.Enabled {
+			mongoCmd = "mongo --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+		}
 
 		cmd := []string{
 			"sh", "-c",

@@ -269,8 +269,13 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		"--sslAllowInvalidCertificates",
 		"--configdb",
 		configDB,
-		"--clusterAuthMode=x509",
+		"--clusterAuthMode=" + string(cfgRs.ClusterAuthMode),
 	}
+
+	if cfgRs.ClusterAuthMode == api.ClusterAuthKeyFile {
+		args = append(args, "--keyFile="+mongodSecretsDir+"/mongodb-key")
+	}
+
 	if cr.CompareVersion("1.7.0") >= 0 {
 		args = append(args,
 			"--relaxPermChecks",

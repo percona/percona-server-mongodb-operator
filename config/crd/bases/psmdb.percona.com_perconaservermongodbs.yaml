@@ -2718,6 +2718,11 @@ spec:
                       - enabled
                       - size
                       type: object
+                    clusterAuthMode:
+                      enum:
+                      - x509
+                      - keyFile
+                      type: string
                     clusterRole:
                       type: string
                     configuration:
@@ -9257,6 +9262,11 @@ spec:
                         - enabled
                         - size
                         type: object
+                      clusterAuthMode:
+                        enum:
+                        - x509
+                        - keyFile
+                        type: string
                       clusterRole:
                         type: string
                       configuration:
@@ -15730,6 +15740,8 @@ spec:
                 properties:
                   certValidityDuration:
                     type: string
+                  enabled:
+                    type: boolean
                 type: object
               unmanaged:
                 type: boolean
