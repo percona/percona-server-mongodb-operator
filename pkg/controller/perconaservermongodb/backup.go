@@ -4,6 +4,9 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"reflect"
+	"strconv"
+
 	"github.com/robfig/cron/v3"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
@@ -11,9 +14,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
 
 	"github.com/pkg/errors"
 
@@ -149,7 +150,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 			}
 		} else {
-			log.Info("deleting outdated backup job", "name", item.Name)
+			log.Info("deleting outdated backup job", "name", item.Name, "namespace", cr.Namespace)
 			r.deleteBackupTask(cr, item.BackupTaskSpec)
 		}
 
