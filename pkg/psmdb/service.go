@@ -255,11 +255,11 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 
 // MongoHost returns the mongo host for given pod
 func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
-	if rsExposed {
-		if m.Spec.ClusterServiceDNSMode == api.DnsModeServiceMesh {
-			return GetServiceMeshAddr(m, pod.Name, m.Namespace), nil
-		}
+	if m.Spec.ClusterServiceDNSMode == api.DnsModeServiceMesh {
+		return GetServiceMeshAddr(m, pod.Name, m.Namespace), nil
+	}
 
+	if rsExposed {
 		if m.MCSEnabled() {
 			imported, err := IsServiceImported(ctx, cl, m, pod.Name)
 			if err != nil {
