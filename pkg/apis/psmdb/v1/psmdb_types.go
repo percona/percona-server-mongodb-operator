@@ -406,6 +406,13 @@ type NonVotingSpec struct {
 	MultiAZ `json:",inline"`
 }
 
+func (nv *NonVotingSpec) GetSize() int32 {
+	if !nv.Enabled {
+		return 0
+	}
+	return nv.Size
+}
+
 type MongoConfiguration string
 
 func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interface{}, error) {
@@ -814,6 +821,13 @@ type Arbiter struct {
 
 	Enabled bool  `json:"enabled"`
 	Size    int32 `json:"size"`
+}
+
+func (a *Arbiter) GetSize() int32 {
+	if !a.Enabled {
+		return 0
+	}
+	return a.Size
 }
 
 type MongosExpose struct {

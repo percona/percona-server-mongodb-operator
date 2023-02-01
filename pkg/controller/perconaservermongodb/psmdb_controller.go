@@ -1543,7 +1543,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrap(err, "get rs pods")
 	}
 
-	if len(pods.Items) > int(replset.Size+replset.Arbiter.Size+replset.NonVoting.Size) {
+	if len(pods.Items) > int(replset.Size+replset.Arbiter.GetSize()+replset.NonVoting.GetSize()) {
 		cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 		if err != nil {
 			return nil, errors.Wrap(err, "mongo client")
