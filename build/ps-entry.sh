@@ -213,7 +213,14 @@ _parse_config() {
 	if configPath="$(_mongod_hack_get_arg_val --config "$@")"; then
 		# if --config is specified, parse it into a JSON file so we can remove a few problematic keys (especially SSL-related keys)
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
-		$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
+		if [ $mongo_shell == 'mongosh' ]; then
+			echo "parsing with mongosh"
+			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js','/fs.js'); JSON.stringify((jsyaml.load(fs.readFileSync($(_js_escape "$configPath"),'utf8'))),null,2)" >"$jsonConfigFile"
+		else
+			echo "parsing with mongo"
+			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
+		fi
+	
 		jq 'del(.systemLog, .processManagement, .net, .security)' "$jsonConfigFile" >"$tempConfigFile"
 		return 0
 	fi
