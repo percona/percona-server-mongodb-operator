@@ -76,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 	}
 
 	if !ok || t.Schedule != task.Schedule || t.StorageName != task.StorageName {
-		log.Info("Creating or updating backup job", "name", task.Name, "namespace", cr.Namespace, "schedule", task.Schedule)
+		log.Info("Creating or updating backup job", "cluster", cr.Name, "name", task.Name, "namespace", cr.Namespace, "schedule", task.Schedule)
 		r.deleteBackupTask(cr, t.BackupTaskSpec)
 		jobID, err := r.crons.crons.AddFunc(task.Schedule, r.createBackupTask(ctx, cr, task))
 		if err != nil {
@@ -150,7 +150,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 			}
 		} else {
-			log.Info("deleting outdated backup job", "name", item.Name, "namespace", cr.Namespace)
+			log.Info("deleting outdated backup job", "cluster", cr.Name, "name", item.Name, "namespace", cr.Namespace)
 			r.deleteBackupTask(cr, item.BackupTaskSpec)
 		}
 
