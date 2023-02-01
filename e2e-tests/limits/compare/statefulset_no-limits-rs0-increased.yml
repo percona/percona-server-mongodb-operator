@@ -133,10 +133,10 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
-            - mountPath: /opt/percona
-              name: bin
             - mountPath: /etc/mongodb-config
               name: config
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: no-limits-mongodb-encryption-key
               readOnly: true

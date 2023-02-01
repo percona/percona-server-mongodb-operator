@@ -134,6 +134,8 @@ spec:
               readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: no-limits-mongodb-encryption-key
               readOnly: true
