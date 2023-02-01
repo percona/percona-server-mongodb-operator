@@ -476,19 +476,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 		// Create exposed services
 		if replset.Expose.Enabled {
-			srvs, err := r.ensureExternalServices(ctx, cr, replset, &pods)
+			_, err := r.ensureExternalServices(ctx, cr, replset, &pods)
 			if err != nil {
 				err = errors.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
 				return reconcile.Result{}, err
-			}
-			if replset.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-				lbsvc := srvs[:0]
-				for _, svc := range srvs {
-					if len(svc.Status.LoadBalancer.Ingress) > 0 {
-						lbsvc = append(lbsvc, svc)
-					}
-				}
-				srvs = lbsvc
 			}
 		}
 
@@ -1487,9 +1478,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			},
 		)
 	} else {
-		if volumeSpec.PersistentVolumeClaim != nil {
+		if volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 			sfsSpec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
-				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, volumeSpec.PersistentVolumeClaim),
+				psmdb.PersistentVolumeClaim(psmdb.MongodDataVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
 			sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
@@ -1557,7 +1548,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
 
-	if err := r.reconcilePVCs(sfs, matchLabels); err != nil {
+	if err := r.reconcilePVCs(ctx, sfs, matchLabels, volumeSpec.PersistentVolumeClaim); err != nil {
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
@@ -1568,10 +1559,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	return sfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, ls map[string]string) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	err := r.client.List(context.TODO(), pvcList, &client.ListOptions{
-		Namespace:     sfs.Namespace,
+	err := r.client.List(ctx, pvcList, &client.ListOptions{
+		Namespace:     sts.Namespace,
 		LabelSelector: labels.SelectorFromSet(ls),
 	})
 	if err != nil {
@@ -1579,17 +1570,24 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(sfs *appsv1.StatefulSet, l
 	}
 
 	for _, pvc := range pvcList.Items {
-		if util.MapEqual(sfs.Labels, pvc.Labels) {
-			continue
+		orig := pvc.DeepCopy()
+
+		for k, v := range pvcSpec.Labels {
+			pvc.Labels[k] = v
+		}
+		for k, v := range sts.Labels {
+			pvc.Labels[k] = v
+		}
+		for k, v := range pvcSpec.Annotations {
+			pvc.Annotations[k] = v
 		}
 
-		orig := pvc.DeepCopy()
-		for k, v := range sfs.Labels {
-			pvc.Labels[k] = v
+		if util.MapEqual(orig.Labels, pvc.Labels) && util.MapEqual(orig.Annotations, pvc.Annotations) {
+			continue
 		}
 		patch := client.MergeFrom(orig)
 
-		if err := r.client.Patch(context.TODO(), &pvc, patch); err != nil {
+		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
 			log.Error(err, "patch PVC", "PVC", pvc.Name)
 		}
 	}

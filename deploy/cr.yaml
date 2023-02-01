@@ -180,6 +180,10 @@ spec:
 #        path: /data
 #        type: Directory
       persistentVolumeClaim:
+#        annotations:
+#          volume.beta.kubernetes.io/storage-class: example-hostpath
+#        labels:
+#          rack: rack-22
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
@@ -232,11 +236,19 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       volumeSpec:
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      labels:
+#        rack: rack-22
 #        emptyDir: {}
 #        hostPath:
 #          path: /data
 #          type: Directory
         persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
 #          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
@@ -349,11 +361,19 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       volumeSpec:
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      labels:
+#        rack: rack-22
 #       emptyDir: {}
 #       hostPath:
 #         path: /data
 #         type: Directory
         persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
 #          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
           resources:

@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -242,6 +243,10 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api
 		return r.client.Status().Update(ctx, c)
 	})
 
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+
 	return errors.Wrap(err, "write status")
 }
 
@@ -373,6 +378,10 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		}
 		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
 		if err != nil {
+			switch errors.Cause(err) {
+			case psmdb.ErrNoIngressPoints, psmdb.ErrServiceNotExists:
+				return "", nil
+			}
 			return "", errors.Wrap(err, "get replset addresses")
 		}
 		return strings.Join(addrs, ","), nil

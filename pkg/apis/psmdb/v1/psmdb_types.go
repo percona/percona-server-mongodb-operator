@@ -315,7 +315,7 @@ func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Contai
 	return
 }
 
-func (m *MultiAZ) WithSidecarVolumes(logger logr.Logger, volumes []corev1.Volume) []corev1.Volume {
+func (m *MultiAZ) WithSidecarVolumes(log logr.Logger, volumes []corev1.Volume) []corev1.Volume {
 	names := make(map[string]struct{}, len(volumes))
 	for i := range volumes {
 		names[volumes[i].Name] = struct{}{}
@@ -326,7 +326,7 @@ func (m *MultiAZ) WithSidecarVolumes(logger logr.Logger, volumes []corev1.Volume
 
 	for _, v := range m.SidecarVolumes {
 		if _, ok := names[v.Name]; ok {
-			logger.Info(fmt.Sprintf("Sidecar volume name cannot be %s. It's skipped", v.Name))
+			log.Info("Wrong sidecar volume name, it is skipped", "volumeName", v.Name)
 			continue
 		}
 
@@ -336,7 +336,7 @@ func (m *MultiAZ) WithSidecarVolumes(logger logr.Logger, volumes []corev1.Volume
 	return rv
 }
 
-func (m *MultiAZ) WithSidecarPVCs(logger logr.Logger, pvcs []corev1.PersistentVolumeClaim) []corev1.PersistentVolumeClaim {
+func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolumeClaim) []corev1.PersistentVolumeClaim {
 	names := make(map[string]struct{}, len(pvcs))
 	for i := range pvcs {
 		names[pvcs[i].Name] = struct{}{}
@@ -347,7 +347,7 @@ func (m *MultiAZ) WithSidecarPVCs(logger logr.Logger, pvcs []corev1.PersistentVo
 
 	for _, p := range m.SidecarPVCs {
 		if _, ok := names[p.Name]; ok {
-			logger.Info(fmt.Sprintf("Sidecar PVC name cannot be %s. It's skipped", p.Name))
+			log.Info("Wrong sidecar PVC name, it is skipped", "PVCName", p.Name)
 			continue
 		}
 
@@ -543,7 +543,14 @@ type VolumeSpec struct {
 	// PersistentVolumeClaim represents a reference to a PersistentVolumeClaim.
 	// It has the highest level of precedence, followed by HostPath and
 	// EmptyDir. And represents the PVC specification.
-	PersistentVolumeClaim *corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
+	PersistentVolumeClaim PVCSpec `json:"persistentVolumeClaim,omitempty"`
+}
+
+type PVCSpec struct {
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+
+	*corev1.PersistentVolumeClaimSpec `json:",inline"`
 }
 
 type SecretsSpec struct {
@@ -928,4 +935,31 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 
 func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
+}
+
+const (
+	FinalizerDeletePVC              = "delete-psmdb-pvc"
+	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
+)
+
+func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
+	order := []string{FinalizerDeletePSMDBPodsInOrder, FinalizerDeletePVC}
+	finalizers := make([]string, len(cr.GetFinalizers()))
+	copy(finalizers, cr.GetFinalizers())
+	orderedFinalizers := make([]string, 0, len(finalizers))
+
+	i := 0
+	for _, v := range order {
+		for i < len(finalizers) {
+			if v == finalizers[i] {
+				orderedFinalizers = append(orderedFinalizers, v)
+				finalizers = append(finalizers[:i], finalizers[i+1:]...)
+				break
+			}
+			i++
+		}
+	}
+
+	orderedFinalizers = append(orderedFinalizers, finalizers...)
+	return orderedFinalizers
 }
