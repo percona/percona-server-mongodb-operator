@@ -116,7 +116,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 
 	containers, ok := multiAZ.WithSidecars(c)
 	if !ok {
-		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
+		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
 	annotations := multiAZ.Annotations
