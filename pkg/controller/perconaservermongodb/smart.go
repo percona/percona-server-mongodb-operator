@@ -128,8 +128,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if err != nil {
 		return fmt.Errorf("get primary pod: %v", err)
 	}
-
-	log.Info(fmt.Sprintf("primary pod is %s", primary))
+	log.Info("Got primary pod", "name", primary)
 
 	waitLimit := int(replset.LivenessProbe.InitialDelaySeconds)
 
@@ -286,7 +285,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr
 
 func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
 	if pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision {
-		log.Info(fmt.Sprintf("pod %s is already updated", pod.Name))
+		log.Info("Pod already updated", "pod", pod.Name)
 	} else {
 		if err := r.client.Delete(ctx, pod); err != nil {
 			return errors.Wrap(err, "delete pod")
@@ -323,7 +322,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		}
 
 		if pod.Status.Phase == corev1.PodRunning && pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision && ready {
-			log.Info(fmt.Sprintf("pod %s started", pod.Name))
+			log.Info("Pod started", "pod", pod.Name)
 			return nil
 		}
 	}
