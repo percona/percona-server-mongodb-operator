@@ -1,0 +1,92 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+cluster='upgrade'
+CLUSTER_SIZE=3
+
+
+function prepare_cr_yaml() {
+	local cr_yaml="$1"
+
+	# spinup function expects images to have suffix like "-backup"
+	# to replace them with images from environment variables
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/cr.yaml" \
+		| yq eval '
+			.metadata.name = "'${cluster}'" |
+			.spec.upgradeOptions.apply = "disabled" |
+			.spec.replsets[].size = '${CLUSTER_SIZE}' |
+			.spec.replsets[].arbiter.enabled = false |
+			.spec.backup.enabled = true |
+			.spec.backup.pitr.enabled = false |
+			.spec.backup.storages.minio.type = "s3" |
+			.spec.backup.storages.minio.s3.credentialsSecret = "minio-secret" |
+			.spec.backup.storages.minio.s3.region = "us-east-1" |
+			.spec.backup.storages.minio.s3.bucket = "operator-testing" |
+			.spec.backup.storages.minio.s3.endpointUrl = "http://minio-service:9000/" |
+			.spec.sharding.enabled = false |
+			.spec.image="" | .spec.image tag="!!null" |
+			.spec.backup.image = "-backup" |
+			.spec.pmm.image = "-pmm"' >"${cr_yaml}"
+}
+
+function get_mongo_ver_from_image() {
+	local image=$1
+
+	local version_info=$(kubectl_bin run -i ${RANDOM} --rm --image=${image} --restart=Never \
+		-- bash -c "mongod --version | grep 'db version'")
+	echo ${version_info} | $sed -r 's/^.*(([0-9]+\.){2}[0-9]+)-.*$/\1/g'
+}
+
+function main() {
+	rbac="rbac"
+	if [ -n "$OPERATOR_NS" ]; then
+		rbac="cw-rbac"
+	fi
+
+	IFS=$'\n' database_version_images=($IMAGE_MONGOD_CHAIN)
+	database_version_images+=(${IMAGE_MONGOD})
+	buffer="{}"
+	for image in ${database_version_images[*]}; do
+		buffer=$(echo ${buffer} | jq '. += {"'$(get_mongo_ver_from_image ${image})'": {"image":"'${image}'"}}')
+	done
+	incoming_versions_chain=$(echo ${buffer} | jq 'to_entries | sort_by(.key | split(".") | map(tonumber)) | map({(.key): .value})')
+	
+	current_version=$(get_mongo_ver_from_image ${IMAGE_MONGOD})
+	current_version_index=$(echo ${incoming_versions_chain} | jq 'map(keys[] == "'${current_version}'") | index(true)' )
+
+	chain_to_verify=$(echo ${incoming_versions_chain} | jq '.['${current_version_index}':]')
+
+	echo ${chain_to_verify} | jq
+	# create_infra_gh "${namespace}" "${GIT_TAG}"
+	# apply_s3_storage_secrets
+	# deploy_minio
+
+	# curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
+	# kubectl_bin apply -f "${conf_dir}/client.yml" \
+	# 	-f "${tmp_dir}/secrets.yaml"
+
+	# local cr_yaml="${tmp_dir}/cr_${GIT_TAG}.yaml"
+	# prepare_cr_yaml "${cr_yaml}"
+
+	# desc 'create first PSMDB cluster'
+	# apply_cluster "${cr_yaml}"
+
+	# desc 'check if Pod is started'
+	# wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}"
+	# sleep 20
+
+	# desc 'write data'
+	# run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+	# 	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+	# run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	# compare_generation "1" "statefulset" "${cluster}-rs0"
+	# compare_generation "1" "psmdb" "${cluster}"
+}
+
+main
