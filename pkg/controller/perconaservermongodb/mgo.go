@@ -512,7 +512,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 		var errb, outb bytes.Buffer
 
 		mongoCmd := "mongosh"
-		if !strings.Contains(m.Spec.Image, "6.0") { // TODO: check the version properly
+		if !strings.Contains(m.Spec.Image, "6.0") {
 			mongoCmd = "mongo"
 		}
 
