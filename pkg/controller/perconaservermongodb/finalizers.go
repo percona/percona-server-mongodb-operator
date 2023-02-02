@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -17,7 +17,7 @@ import (
 var errWaitingTermination = errors.New("waiting pods to be deleted")
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	shouldReconcile = false
 	orderedFinalizers := cr.GetOrderedFinalizers()
@@ -119,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteAllStatefulsets(ctx context.Contex
 	}
 
 	for _, sts := range stsList.Items {
-		log.FromContext(ctx).Info("deleting StatefulSet", "name", sts.Name)
+		logf.FromContext(ctx).Info("deleting StatefulSet", "name", sts.Name)
 		err := r.client.Delete(ctx, &sts)
 		if err != nil {
 			return errors.Wrapf(err, "failed to delete StatefulSet %s", sts.Name)
@@ -136,7 +136,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteAllPVC(ctx context.Context, cr *ap
 	}
 
 	for _, pvc := range pvcList.Items {
-		log.FromContext(ctx).Info("deleting PVC", "name", pvc.Name)
+		logf.FromContext(ctx).Info("deleting PVC", "name", pvc.Name)
 		err := r.client.Delete(ctx, &pvc)
 		if err != nil {
 			return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
@@ -169,7 +169,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteSecrets(ctx context.Context, cr *a
 			continue
 		}
 
-		log.FromContext(ctx).Info("deleting secret", "name", secret.Name)
+		logf.FromContext(ctx).Info("deleting secret", "name", secret.Name)
 		err = r.client.Delete(ctx, secret)
 		if err != nil {
 			return errors.Wrapf(err, "delete secret %s", secretName)

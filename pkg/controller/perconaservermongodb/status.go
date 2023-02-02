@@ -15,14 +15,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	clusterCondition := api.ClusterCondition{
 		Status:             api.ConditionTrue,

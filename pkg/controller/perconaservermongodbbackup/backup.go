@@ -10,7 +10,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -112,7 +112,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 	}
 
 	if meta == nil || meta.Name == "" || errors.Is(err, pbm.ErrNotFound) {
-		log.FromContext(ctx).Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
+		logf.FromContext(ctx).Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
 

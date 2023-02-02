@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -82,7 +82,7 @@ type ReconcilePerconaServerMongoDBRestore struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	log := log.FromContext(ctx).WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := logf.FromContext(ctx).WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
@@ -138,7 +138,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) reconcileRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	status := cr.Status
 

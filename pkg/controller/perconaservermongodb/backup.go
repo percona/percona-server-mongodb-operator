@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -76,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 	}
 
 	if !ok || t.Schedule != task.Schedule || t.StorageName != task.StorageName {
-		log.FromContext(ctx).Info("Creating or updating backup job", "name", task.Name, "namespace", cr.Namespace, "schedule", task.Schedule)
+		logf.FromContext(ctx).Info("Creating or updating backup job", "name", task.Name, "namespace", cr.Namespace, "schedule", task.Schedule)
 		r.deleteBackupTask(cr, t.BackupTaskSpec)
 		jobID, err := r.crons.crons.AddFunc(task.Schedule, r.createBackupTask(ctx, cr, task))
 		if err != nil {
@@ -92,7 +92,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB, ctasks map[string]api.BackupTaskSpec) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	if cr.CompareVersion("1.13.0") < 0 {
 		ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
@@ -162,7 +162,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) createBackupTask(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) func() {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	return func() {
 		localCr := &api.PerconaServerMongoDB{}
@@ -319,7 +319,7 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	if !cr.Spec.Backup.Enabled {
 		return nil

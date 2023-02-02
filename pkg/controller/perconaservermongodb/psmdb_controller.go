@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -212,7 +212,7 @@ const (
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	log := log.FromContext(ctx).WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := logf.FromContext(ctx).WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	rr := reconcile.Result{
 		RequeueAfter: r.reconcileIn,
@@ -560,7 +560,7 @@ func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *ap
 		return errors.Wrap(err, "patch CR")
 	}
 
-	log.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
+	logf.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
 
 	return nil
 }
@@ -654,7 +654,7 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	systemDBs := map[string]struct{}{
 		"local":  {},
@@ -750,7 +750,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 					podName := strings.TrimPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-")
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
-						log.FromContext(ctx).Info("remove orphan pvc", "pvc", pvc.Name)
+						logf.FromContext(ctx).Info("remove orphan pvc", "pvc", pvc.Name)
 						err := r.client.Delete(ctx, &pvc)
 						if err != nil {
 							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
@@ -1043,7 +1043,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Cont
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	if !cr.Spec.Sharding.Enabled {
 		return nil
@@ -1404,7 +1404,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	}
 
 	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, customLabels,
-		multiAZ, size, internalKeyName, inits, log.FromContext(ctx), customConfig, resources,
+		multiAZ, size, internalKeyName, inits, logf.FromContext(ctx), customConfig, resources,
 		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
 		configName)
 	if err != nil {
@@ -1505,8 +1505,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		}
 	}
 
-	sfsSpec.Template.Spec.Volumes = multiAZ.WithSidecarVolumes(log.FromContext(ctx), sfsSpec.Template.Spec.Volumes)
-	sfsSpec.VolumeClaimTemplates = multiAZ.WithSidecarPVCs(log.FromContext(ctx), sfsSpec.VolumeClaimTemplates)
+	sfsSpec.Template.Spec.Volumes = multiAZ.WithSidecarVolumes(logf.FromContext(ctx), sfsSpec.Template.Spec.Volumes)
+	sfsSpec.VolumeClaimTemplates = multiAZ.WithSidecarPVCs(logf.FromContext(ctx), sfsSpec.VolumeClaimTemplates)
 
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
@@ -1588,7 +1588,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, sts *
 		patch := client.MergeFrom(orig)
 
 		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			log.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
+			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
 		}
 	}
 

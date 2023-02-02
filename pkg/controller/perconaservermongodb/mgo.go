@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -25,9 +25,8 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error,
-) {
-	log := log.FromContext(ctx)
+	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
+	log := logf.FromContext(ctx)
 
 	replsetSize := replset.Size
 
@@ -428,7 +427,7 @@ func mongoInitAdminUser(user, pwd string) string {
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	if !cr.Spec.Sharding.Enabled {
 		return nil
@@ -486,7 +485,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 	defer func() {
 		err := cli.Disconnect(ctx)
 		if err != nil {
-			log.FromContext(ctx).Error(err, "failed to close mongos connection")
+			logf.FromContext(ctx).Error(err, "failed to close mongos connection")
 		}
 	}()
 
@@ -503,7 +502,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
@@ -675,7 +674,7 @@ func compareRoles(x []map[string]interface{}, y []map[string]interface{}) bool {
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleUserAdmin)
 	if err != nil {
@@ -778,7 +777,7 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 	}
 
 	cnf.Version++
-	log.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
+	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
 
 	if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
 		return errors.Wrap(err, "write mongo config")

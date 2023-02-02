@@ -10,13 +10,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Unmanaged {
 		return nil
@@ -105,7 +105,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 }
 
 func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Unmanaged {
 		return nil
