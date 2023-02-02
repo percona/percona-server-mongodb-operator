@@ -341,9 +341,25 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 		return nil
 	}
 
+	ver, err := r.retrieveMongoVersion(ctx, cr, replset)
+	if err != nil{
+		return errors.Wrap(err, "retrieve mongo version")
+	}
+
+	log.Info(fmt.Sprintf("update Mongo version to %v (fetched from db)", ver))
+	cr.Status.MongoVersion = ver
+	cr.Status.MongoImage = cr.Spec.Image
+
+	// updating status resets our defaults, so we're passing a copy
+	err = r.client.Status().Update(ctx, cr.DeepCopy())
+	return errors.Wrapf(err, "failed to update CR")
+}
+
+// retrieveMongoVersion retrieves the version from running Mongo database
+func (r *ReconcilePerconaServerMongoDB) retrieveMongoVersion(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (string, error) {
 	session, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 	if err != nil {
-		return errors.Wrap(err, "dial")
+		return "", errors.Wrap(err, "dial")
 	}
 
 	defer func() {
@@ -355,14 +371,8 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 
 	info, err := mongo.RSBuildInfo(ctx, session)
 	if err != nil {
-		return errors.Wrap(err, "get build info")
+		return "", errors.Wrap(err, "get build info")
 	}
 
-	log.Info(fmt.Sprintf("update Mongo version to %v (fetched from db)", info.Version))
-	cr.Status.MongoVersion = info.Version
-	cr.Status.MongoImage = cr.Spec.Image
-
-	// updating status resets our defaults, so we're passing a copy
-	err = r.client.Status().Update(ctx, cr.DeepCopy())
-	return errors.Wrapf(err, "failed to update CR")
+	return info.Version, nil
 }
