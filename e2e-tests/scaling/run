@@ -52,7 +52,7 @@ kubectl_bin patch psmdb ${cluster%%-rs0} \
 desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-3
 wait_for_delete pod/$cluster-4
-kubectl wait --for=jsonpath='{.status.state}'=ready --timeout=300s psmdb/${cluster%%-rs0}
+wait_for_running $cluster 3
 
 desc 'scale up from 3 to 1'
 kubectl_bin patch psmdb ${cluster%%-rs0} \
@@ -64,7 +64,7 @@ kubectl_bin patch psmdb ${cluster%%-rs0} \
 desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-1
 wait_for_delete pod/$cluster-2
-kubectl wait --for=jsonpath='{.status.state}'=ready --timeout=300s psmdb/${cluster%%-rs0}
+wait_for_running $cluster 1
 
 desc 'scale up from 1 to 3'
 kubectl_bin patch psmdb ${cluster%%-rs0} \
