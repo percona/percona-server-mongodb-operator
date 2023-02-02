@@ -506,18 +506,37 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+		log.Info("AAAAAAAAAA HOST", "host", host)
+		
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
 		var errb, outb bytes.Buffer
 
-		ver, err := r.retrieveMongoVersion(ctx, cr, replset)
+		cli, err := r.standaloneClientWithRole(ctx, cr, roleClusterAdmin, host)
 		if err != nil {
-			return errors.Wrap(err, "retrieve mongo version")
+			return errors.Wrap(err, "get standalone client")
 		}
 
+		defer func() {
+			err := cli.Disconnect(ctx)
+			if err != nil {
+				log.Error(err, "failed to close connection")
+			}
+		}()
+	
+		info, err := mongo.RSBuildInfo(ctx, cli)
+		if err != nil {
+			return errors.Wrap(err, "get build info")
+		}
+
+		// ver, err := r.retrieveMongoVersion(ctx, cr, replset)
+		// if err != nil {
+		// 	return errors.Wrap(err, "retrieve mongo version")
+		// }
+
 		mongoCmd := "mongosh"
-		if !strings.Contains(ver, "6.0") {
+		if !strings.Contains(info.Version, "6.0") {
 			mongoCmd = "mongo"
 		}
 
