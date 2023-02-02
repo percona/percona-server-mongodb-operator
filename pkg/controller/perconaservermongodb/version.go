@@ -8,15 +8,17 @@ import (
 	"sync/atomic"
 
 	v "github.com/hashicorp/go-version"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
@@ -25,6 +27,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServe
 }
 
 func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+	log := log.FromContext(ctx)
 	schedule, ok := r.crons.jobs[jobName(cr)]
 	if cr.Spec.UpgradeOptions.Schedule == "" || !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		if ok {
@@ -210,6 +213,8 @@ func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+	log := log.FromContext(ctx)
+
 	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		return nil
 	}
@@ -335,6 +340,8 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	log := log.FromContext(ctx)
+
 	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
 		cr.Status.State != api.AppStateReady ||
 		cr.Status.MongoImage == cr.Spec.Image {

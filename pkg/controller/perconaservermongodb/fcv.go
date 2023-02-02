@@ -6,6 +6,7 @@ import (
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -19,7 +20,7 @@ func (r *ReconcilePerconaServerMongoDB) getFCV(ctx context.Context, cr *api.Perc
 
 	defer func() {
 		if err := c.Disconnect(ctx); err != nil {
-			log.Error(err, "close client connection")
+			log.FromContext(ctx).Error(err, "close client connection")
 		}
 	}()
 
@@ -51,7 +52,7 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(ctx context.Context, cr *api.Perc
 
 	defer func() {
 		if err := cli.Disconnect(ctx); err != nil {
-			log.Error(err, "close client connection")
+			log.FromContext(ctx).Error(err, "close client connection")
 		}
 	}()
 
