@@ -342,7 +342,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 	}
 
 	ver, err := r.retrieveMongoVersion(ctx, cr, replset)
-	if err != nil{
+	if err != nil {
 		return errors.Wrap(err, "retrieve mongo version")
 	}
 

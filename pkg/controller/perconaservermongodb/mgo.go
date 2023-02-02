@@ -512,7 +512,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		var errb, outb bytes.Buffer
 
 		ver, err := r.retrieveMongoVersion(ctx, cr, replset)
-		if err != nil{
+		if err != nil {
 			return errors.Wrap(err, "retrieve mongo version")
 		}
 
