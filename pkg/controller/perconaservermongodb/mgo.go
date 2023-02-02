@@ -506,7 +506,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
-		
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
