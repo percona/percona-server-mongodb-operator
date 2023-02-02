@@ -512,7 +512,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		}
 		var errb, outb bytes.Buffer
 
-		err = r.clientcmd.Exec(&pod, "mongod", []string{"--version"}, nil, &outb, &errb, false)
+		err = r.clientcmd.Exec(&pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
 		}
