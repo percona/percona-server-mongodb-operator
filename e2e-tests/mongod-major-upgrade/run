@@ -98,9 +98,9 @@ function main() {
 		run_mongo \
 			'use myApp\n db.test.insert({ x: 10050'$((index + 1))' })' \
 			"myApp:myPass@$cluster.$namespace"
-		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-$((index+1))"
-		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-$((index+1))"
-		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-$((index+1))"
+		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-$((index + 1))"
+		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-$((index + 1))"
+		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-$((index + 1))"
 	done
 }
 
