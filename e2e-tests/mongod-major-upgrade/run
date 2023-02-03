@@ -104,6 +104,8 @@ function main() {
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-$((index + 1))"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-$((index + 1))"
 	done
+
+	destroy $namespace
 }
 
 main
