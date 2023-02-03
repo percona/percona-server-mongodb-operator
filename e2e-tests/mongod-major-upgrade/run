@@ -96,7 +96,7 @@ function main() {
 			-p '[{"op":"replace", "path":"/spec/image","value":'${target_mongod_image}'}]'
 		wait_for_running "${cluster}" 3
 		run_mongo \
-			'use myApp\n db.test.insert({ x: 10050'$((index+1))' })' \
+			'use myApp\n db.test.insert({ x: 10050'$((index + 1))' })' \
 			"myApp:myPass@$cluster.$namespace"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-$((index+1))"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-$((index+1))"
