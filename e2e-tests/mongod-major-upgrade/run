@@ -41,7 +41,7 @@ function main() {
 	fi
 
 	# Don't really want to start the upgrade chain from IMAGE_MONGOD. Rather with next one
-	chain_to_verify=$(echo ${incoming_versions_chain} | jq '.['$((current_version_index+1))':]')
+	chain_to_verify=$(echo ${incoming_versions_chain} | jq '.['$((current_version_index + 1))':]')
 	chain_length=$(echo ${chain_to_verify} | jq 'length')
 
 	if [[ ${chain_length} -le 1 ]]; then
