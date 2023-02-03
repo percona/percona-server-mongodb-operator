@@ -83,7 +83,7 @@ function main() {
 
 		# Checking whether https://www.mongodb.com/docs/manual/release-notes/6.0-upgrade-replica-set/#feature-compatibility-version is enabled
 		if [[ $(echo ${chain_to_verify} | jq -r '.['${index}'] | keys |.[]') =~ 6\..* ]] \
-			&& [[ $(echo ${chain_to_verify} | jq -r '.['$((index-1))'] | keys |.[]') =~ 5\..* ]]; then
+			&& [[ $(echo ${chain_to_verify} | jq -r '.['$((index - 1))'] | keys |.[]') =~ 5\..* ]]; then
 
 			kubectl_bin patch "psmdb/${cluster//-rs0/}" \
 				--type=json \
