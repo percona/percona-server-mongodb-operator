@@ -34,8 +34,8 @@ function main() {
 	incoming_versions_chain=$(echo ${buffer} | jq 'to_entries | sort_by(.key | split(".") | map(tonumber)) | map({(.key): .value})')
 
 	current_version=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
-	current_version_index=$(echo ${incoming_versions_chain} | jq 'map(keys[] == "'${current_version}'") | index(true)' )
-	if [[ "${current_version_index}" == 'null' ]]; then
+	current_version_index=$(echo ${incoming_versions_chain} | jq 'map(keys[] == "'${current_version}'") | index(true)')
+	if [[ ${current_version_index} == 'null' ]]; then
 		: "IMAGE_MONGOD ${IMAGE_MONGOD} has mongod version ${current_version} . Please check whether it correlates with IMAGE_MONGOD_CHAIN contents"
 		exit 1
 	fi
