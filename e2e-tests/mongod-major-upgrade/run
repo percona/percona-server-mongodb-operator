@@ -77,7 +77,7 @@ function main() {
 
 	desc 'Starting to follow IMAGE_MONGOD_CHAIN'
 
-	for index in $(seq 0 $((chain_length-1))); do
+	for index in $(seq 0 $((chain_length - 1))); do
 		target_mongod_image=$(echo ${chain_to_verify} | jq '.['${index}'] | .[].image')
 		desc 'Trying '${target_mongod_image}' to upgrade to'
 
