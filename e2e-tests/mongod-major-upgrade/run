@@ -48,7 +48,9 @@ function main() {
 		echo "IMAGE_MONGOD ${IMAGE_MONGOD} is the last in version chain. Exiting."
 		return 0
 	fi
-	echo ${chain_to_verify} | jq > versions.json
+
+	desc 'The version chain to follow:'
+	echo ${chain_to_verify} | jq
 
 	apply_s3_storage_secrets
 	deploy_minio
