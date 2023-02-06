@@ -101,6 +101,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	initContainers := InitContainers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
+		initContainers[i].SecurityContext = c.SecurityContext
 	}
 
 	containers, ok := cr.Spec.Sharding.Mongos.MultiAZ.WithSidecars(c)
