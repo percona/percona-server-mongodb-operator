@@ -232,6 +232,11 @@ run_restore() {
 			compare_mongo_cmd "find" "myApp:myPass@$cluster$cluster_pfx-${i}.$cluster$cluster_pfx.$namespace" "-2nd"
 		done
 	fi
+	apply_restore $backup_name
+}
+
+apply_restore() {
+	local backup_name=$1
 	cat $test_dir/conf/restore.yml \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
@@ -1085,8 +1090,12 @@ wait_cluster_consistency() {
 
 run_backup() {
 	local storage=$1
+	local backup_name=${2:-"backup-${storage}"}
 
-	kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
+	yq eval '.metadata.name = "'${backup_name}'"
+			| .spec.storageName = "'${storage}'"' \
+		$test_dir/conf/backup-$storage.yml \
+		| kubectl_bin apply -f -
 }
 
 check_backup_deletion() {

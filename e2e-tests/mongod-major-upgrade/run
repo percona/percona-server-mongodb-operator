@@ -44,7 +44,7 @@ function main() {
 	chain_to_verify=$(echo ${incoming_versions_chain} | jq '.['$((current_version_index + 1))':]')
 	chain_length=$(echo ${chain_to_verify} | jq 'length')
 
-	if [[ ${chain_length} -le 1 ]]; then
+	if [[ ${chain_length} -lt 1 ]]; then
 		echo "IMAGE_MONGOD ${IMAGE_MONGOD} is the last in version chain. Exiting."
 		return 0
 	fi
@@ -60,7 +60,7 @@ function main() {
 
 	cluster="some-name-rs0"
 	desc 'Starting the cluster with IMAGE_MONGOD '${IMAGE_MONGOD}''
-	apply_cluster "${conf_dir}/${cluster}.yml"
+	apply_cluster "${test_dir}/conf/${cluster}.yml"
 
 	desc 'check if all 3 Pods started'
 	wait_for_running "${cluster}" 3
@@ -80,6 +80,11 @@ function main() {
 	desc 'Starting to follow IMAGE_MONGOD_CHAIN'
 
 	for index in $(seq 0 $((chain_length - 1))); do
+		: Making a backup from an old version with a minimal static dataset all the time
+		backup_name_minio="backup-minio-${index}"
+		run_backup minio ${backup_name_minio}
+		wait_backup ${backup_name_minio}
+
 		target_mongod_image=$(echo ${chain_to_verify} | jq '.['${index}'] | .[].image')
 		desc 'Trying '${target_mongod_image}' to upgrade to'
 
@@ -103,9 +108,22 @@ function main() {
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-$((index + 1))"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-$((index + 1))"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-$((index + 1))"
+
+		: Making a restore on newer version
+		backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
+		kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+			/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio}/rs0/ \
+			| grep myApp.test.gz
+		apply_restore ${backup_name_minio} 3
+		wait_restore ${backup_name_minio} 3
+		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
+
 	done
 
-	destroy $namespace
+	destroy ${namespace}
 }
 
 main
