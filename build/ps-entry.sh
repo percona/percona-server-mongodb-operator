@@ -440,9 +440,9 @@ if [[ $originalArgOne == mongo* ]]; then
 			if _parse_config "${mongodHackedArgs[@]}"; then
 				tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "${jsonConfigFile}")
 
-				if [ -z "$tlsMode" ]; then
-					tlsMode='preferTLS'
-				fi
+				# if [ -z "$tlsMode" ]; then
+				# 	tlsMode='preferTLS'
+				# fi
 			fi
 			_mongod_hack_ensure_arg_val --sslMode "${tlsMode}" "${mongodHackedArgs[@]}"
 		fi
