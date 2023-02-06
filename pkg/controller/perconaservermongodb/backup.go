@@ -4,6 +4,9 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"reflect"
+	"strconv"
+
 	"github.com/robfig/cron/v3"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
@@ -11,10 +14,10 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"strconv"
+
 
 	"github.com/pkg/errors"
 
@@ -77,6 +80,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 
 	if !ok || t.Schedule != task.Schedule || t.StorageName != task.StorageName {
 		logf.FromContext(ctx).Info("Creating or updating backup job", "name", task.Name, "namespace", cr.Namespace, "schedule", task.Schedule)
+
 		r.deleteBackupTask(cr, t.BackupTaskSpec)
 		jobID, err := r.crons.crons.AddFunc(task.Schedule, r.createBackupTask(ctx, cr, task))
 		if err != nil {
@@ -152,7 +156,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 			}
 		} else {
-			log.Info("deleting outdated backup job", "name", item.Name)
+			log.Info("deleting outdated backup job", "cluster", cr.Name, "name", item.Name, "namespace", cr.Namespace)
 			r.deleteBackupTask(cr, item.BackupTaskSpec)
 		}
 
