@@ -18,7 +18,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"strconv"
 
-
 	"github.com/pkg/errors"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
