@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
+	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
@@ -14,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -76,10 +79,48 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	stderrBuf := &bytes.Buffer{}
 
 	if cr.Status.State == psmdbv1.RestoreStateWaiting {
-		command := []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
-		log.Info("Starting restore", "command", command)
+		command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
+		log.Info("Set PBM configuration", "command", command)
 		if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-			return status, errors.Wrapf(err, "start restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+		}
+
+		stdoutBuf.Reset()
+		stderrBuf.Reset()
+		command = []string{"/opt/percona/pbm", "config", "--force-resync"}
+		log.Info("Resync PBM storage", "command", command)
+		if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+		}
+
+		err := retry.OnError(
+			wait.Backoff{
+				Steps:    4,
+				Duration: 5 * time.Second,
+				Factor:   5.0,
+				Jitter:   0.1,
+			},
+			func(err error) bool {
+				return strings.Contains(err.Error(), "another operation in progress") || strings.Contains(err.Error(), "not found")
+			},
+			func() error {
+				command := []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+
+				log.Info("Starting restore", "command", command)
+
+				stdoutBuf.Reset()
+				stderrBuf.Reset()
+
+				err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
+				if err != nil {
+					return errors.Wrapf(err, "stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+				}
+
+				return nil
+			},
+		)
+		if err != nil {
+			return status, errors.Wrapf(err, "start restore")
 		}
 
 		var out struct {
@@ -103,6 +144,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		"--config", "/etc/pbm/pbm_config.yaml",
 		"--out", "json",
 	}
+	log.Info("Check restore status", "command", command)
 	if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
 		return status, errors.Wrap(err, "describe restore")
 	}
@@ -149,6 +191,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			if err := r.client.Delete(ctx, &sts); err != nil {
 				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
 			}
+		}
+
+		pbmConf := corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pbm-config",
+				Namespace: cluster.Namespace,
+			},
+		}
+		if err := r.client.Delete(ctx, &pbmConf); err != nil {
+			return status, errors.Wrapf(err, "delete secret pbm-config")
 		}
 
 	}

@@ -189,6 +189,6 @@ wait_restore ${backup_name_minio} "_restore_sharded"
 compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
 
 # Resync PBM config to fix stucking delete-backup finalizer
-kubectl_bin exec ${cluster}-0 -c backup-agent -- pbm config --force-resync
+kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm config --force-resync
 
 destroy "$namespace"
