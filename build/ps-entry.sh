@@ -214,10 +214,10 @@ _parse_config() {
 		# if --config is specified, parse it into a JSON file so we can remove a few problematic keys (especially SSL-related keys)
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
 		if [ $mongo_shell == 'mongosh' ]; then
-			echo "parsing with mongosh"
+			echo "parsing config with mongosh"
 			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js','/fs.js'); JSON.stringify((jsyaml.load(fs.readFileSync($(_js_escape "$configPath"),'utf8'))),null,2)" >"$jsonConfigFile"
 		else
-			echo "parsing with mongo"
+			echo "parsing config with mongo"
 			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
 		fi
 	
@@ -339,7 +339,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 
 		"${mongodHackedArgs[@]}" --fork
 
-		mongo=($mongo_shell --host 127.0.0.1 --port 27017 --quiet)
+		mongo=("$mongo_shell" --host 127.0.0.1 --port 27017 --quiet)
 
 		# check to see that our "mongod" actually did start up (catches "--help", "--version", MongoDB 3.2 being silly, slow prealloc, etc)
 		# https://jira.mongodb.org/browse/SERVER-16292
@@ -439,10 +439,6 @@ if [[ $originalArgOne == mongo* ]]; then
 			# if --config arg is present, try to get tlsMode from it
 			if _parse_config "${mongodHackedArgs[@]}"; then
 				tlsMode=$(jq -r '.net.tls.mode // "preferSSL"' "${jsonConfigFile}")
-
-				# if [ -z "$tlsMode" ]; then
-				# 	tlsMode='preferTLS'
-				# fi
 			fi
 			_mongod_hack_ensure_arg_val --sslMode "${tlsMode}" "${mongodHackedArgs[@]}"
 		fi
