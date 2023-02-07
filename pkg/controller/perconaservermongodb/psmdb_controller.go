@@ -1331,6 +1331,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	matchLabels map[string]string,
 	internalKeyName string,
 ) (*appsv1.StatefulSet, error) {
+	log := logf.FromContext(ctx)
+
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
