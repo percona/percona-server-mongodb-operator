@@ -87,6 +87,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateInit, errors.Wrap(statusErr, "rsStatusCode")
 		}
 
+		// 93 - is an InvalidReplicaSetConfig error code
+		// https://github.com/mongodb/mongo/blob/master/src/mongo/base/error_codes.yml
 		if cr.Status.Replsets[replset.Name].Initialized || statusCode == 93 {
 			// If an exposed replset is initialized but connection fails with ReplicaSetNoPrimary,
 			// we'll change the member hosts to local FQDNs and reconfig to recover.
