@@ -15,7 +15,6 @@
 package db
 
 import (
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -65,7 +64,7 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 
 	pwdFile := "/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD"
 	if _, err := os.Stat(pwdFile); err == nil {
-		pass, err := ioutil.ReadFile(pwdFile)
+		pass, err := os.ReadFile(pwdFile)
 		if err != nil {
 			return nil, errors.Wrapf(err, "read %s", pwdFile)
 		}
