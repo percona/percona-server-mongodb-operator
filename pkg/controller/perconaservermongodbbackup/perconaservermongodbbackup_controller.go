@@ -31,8 +31,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
-var log = logf.Log.WithName("controller_perconaservermongodbbackup")
-
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
@@ -92,6 +90,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	log := logf.FromContext(ctx)
+
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
 	}
@@ -197,6 +197,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	cr *psmdbv1.PerconaServerMongoDBBackup,
 	bcp *Backup,
 ) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
+	log := logf.FromContext(ctx)
 	status := cr.Status
 	if cluster == nil {
 		return status, errors.New("cluster not found")
@@ -229,7 +230,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	time.Sleep(5 * time.Second)
-	return bcp.Status(cr)
+	return bcp.Status(ctx, cr)
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
@@ -307,6 +308,8 @@ func getPBMBackupMeta(cr *psmdbv1.PerconaServerMongoDBBackup) *pbm.BackupMeta {
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, b *Backup) error {
+	log := logf.FromContext(ctx)
+
 	var err error
 	if cr.ObjectMeta.DeletionTimestamp == nil {
 		return nil
