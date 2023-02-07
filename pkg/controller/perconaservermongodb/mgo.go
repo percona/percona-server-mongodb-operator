@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
@@ -239,6 +238,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli *mgo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (int, error) {
+	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
 	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
 
