@@ -74,8 +74,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		}
 	}
 
-	pbmc, errPBM := backup.NewPBM(ctx, r.client, cluster)
-	if errPBM != nil {
+	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
+	if err != nil {
 		log.Info("Waiting for pbm-agent.")
 		status.State = psmdbv1.RestoreStateWaiting
 		return status, nil
@@ -121,8 +121,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		log.Info("Waiting for restore metadata", "PBM name", cr.Status.PBMname, "restore", cr.Name, "backup", cr.Spec.BackupName)
 		return status, nil
 	}
-
-	log.Info("Did we reach here??", "meta", meta)
 
 	switch meta.Status {
 	case pbm.StatusError:

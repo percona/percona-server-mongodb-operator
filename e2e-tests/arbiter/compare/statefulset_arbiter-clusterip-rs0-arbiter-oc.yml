@@ -95,7 +95,7 @@ spec:
             - "7200"
           failureThreshold: 4
           initialDelaySeconds: 60
-          periodSeconds: 30 w
+          periodSeconds: 30
           successThreshold: 1
           timeoutSeconds: 10
         name: mongod-arbiter
