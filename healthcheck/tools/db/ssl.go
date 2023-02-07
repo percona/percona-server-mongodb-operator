@@ -17,7 +17,6 @@ package db
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
 	"os"
 
 	"github.com/pkg/errors"
@@ -34,7 +33,7 @@ type SSLConfig struct {
 }
 
 func (sc *SSLConfig) loadCaCertificate() (*x509.CertPool, error) {
-	caCert, err := ioutil.ReadFile(sc.CAFile)
+	caCert, err := os.ReadFile(sc.CAFile)
 	if err != nil {
 		return nil, err
 	}
