@@ -7,6 +7,10 @@ OPERATOR_VERSION="1.14.0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
+IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
+perconalab/percona-server-mongodb-operator:main-mongod4.4
+perconalab/percona-server-mongodb-operator:main-mongod5.0
+perconalab/percona-server-mongodb-operator:main-mongod6.0'}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
@@ -89,8 +93,8 @@ create_namespace() {
 		oc project "$namespace"
 		oc adm policy add-scc-to-user hostaccess -z default || :
 	else
-		kubectl_bin delete namespace "$namespace" || :
-		wait_for_delete "namespace/$namespace"
+		kubectl_bin delete namespace "$namespace" --ignore-not-found || :
+		kubectl_bin wait --for=delete namespace "$namespace" || :
 		kubectl_bin create namespace "$namespace"
 		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 	fi
@@ -217,6 +221,11 @@ run_restore() {
 			compare_mongo_cmd "find" "myApp:myPass@$cluster$cluster_pfx-${i}.$cluster$cluster_pfx.$namespace" "-2nd"
 		done
 	fi
+	apply_restore $backup_name
+}
+
+apply_restore() {
+	local backup_name=$1
 	cat $test_dir/conf/restore.yml \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
@@ -796,21 +805,20 @@ deploy_cert_manager() {
 }
 
 delete_crd() {
-	kubectl_bin delete psmdb-backup --all || :
-	kubectl_bin delete psmdb-restore --all || :
-	kubectl_bin delete psmdb --all || :
-
-	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
-		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml" || true
-
-	kubectl_bin get crd/perconaservermongodbs.psmdb.percona.com \
-		&& timeout 120 kubectl delete -f "${src_dir}/deploy/crd.yaml"
+	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" --ignore-not-found --wait=false || :
+	for crd_name in $(yq eval '.metadata.name' "${src_dir}/deploy/crd.yaml" | grep -v '\-\-\-'); do
+		kubectl get ${crd_name} --all-namespaces -o wide \
+			| grep -v 'NAMESPACE' \
+			| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
+			|| :
+		kubectl_bin wait --for=delete crd ${crd_name} || :
+	done
 
 	local rbac_yaml='rbac.yaml'
 	if [ -n "${OPERATOR_NS}" ]; then
 		rbac_yaml='cw-rbac.yaml'
 	fi
-	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" || true
+	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
 }
 
 destroy() {
@@ -1068,8 +1076,12 @@ wait_cluster_consistency() {
 
 run_backup() {
 	local storage=$1
+	local backup_name=${2:-"backup-${storage}"}
 
-	kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
+	yq eval '.metadata.name = "'${backup_name}'"
+			| .spec.storageName = "'${storage}'"' \
+		$test_dir/conf/backup-$storage.yml \
+		| kubectl_bin apply -f -
 }
 
 check_backup_deletion() {
@@ -1092,7 +1104,7 @@ create_infra() {
 	local ns="$1"
 
 	delete_crd
-	check_crd_for_deletion "${GIT_BRANCH}"
+	# check_crd_for_deletion "${GIT_BRANCH}"
 	if [ -n "$OPERATOR_NS" ]; then
 		create_namespace $OPERATOR_NS
 		deploy_operator

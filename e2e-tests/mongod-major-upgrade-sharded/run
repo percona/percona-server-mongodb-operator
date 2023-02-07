@@ -1,0 +1,136 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+function get_mongod_ver_from_image() {
+	local image=${1}
+
+	local version_info=$(kubectl_bin run -i ${RANDOM} --rm --image=${image} --restart=Never \
+		-- bash -c "mongod --version | grep 'db version'")
+	echo ${version_info} | $sed -r 's/^.*(([0-9]+\.){2}[0-9]+)-.*$/\1/g'
+}
+
+function main() {
+	rbac="rbac"
+	if [ -n "$OPERATOR_NS" ]; then
+		rbac="cw-rbac"
+	fi
+	create_infra "${namespace}"
+
+	desc 'Preparing MongoDB version tree'
+	IFS=$'\n' database_images=(${IMAGE_MONGOD_CHAIN})
+	database_images+=(${IMAGE_MONGOD})
+	buffer="{}"
+	for image in ${database_images[*]}; do
+		mongod_version=$(get_mongod_ver_from_image ${image})
+		if [[ ${#mongod_version} -ge 3 ]]; then
+			buffer=$(echo ${buffer} | jq '. += {"'${mongod_version}'": {"image":"'${image}'"}}')
+		fi
+	done
+	incoming_versions_chain=$(echo ${buffer} | jq 'to_entries | sort_by(.key | split(".") | map(tonumber)) | map({(.key): .value})')
+
+	current_version=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
+	current_version_index=$(echo ${incoming_versions_chain} | jq 'map(keys[] == "'${current_version}'") | index(true)')
+	if [[ ${current_version_index} == 'null' ]]; then
+		: "IMAGE_MONGOD ${IMAGE_MONGOD} has mongod version ${current_version} . Please check whether it correlates with IMAGE_MONGOD_CHAIN contents"
+		exit 1
+	fi
+
+	# Don't really want to start the upgrade chain from IMAGE_MONGOD. Rather with next one
+	chain_to_verify=$(echo ${incoming_versions_chain} | jq '.['$((current_version_index + 1))':]')
+	chain_length=$(echo ${chain_to_verify} | jq 'length')
+
+	if [[ ${chain_length} -lt 1 ]]; then
+		echo "IMAGE_MONGOD ${IMAGE_MONGOD} is the last in version chain. Exiting."
+		return 0
+	fi
+
+	desc 'The version chain to follow:'
+	echo ${chain_to_verify} | jq
+
+	apply_s3_storage_secrets
+	deploy_minio
+
+	kubectl_bin apply -f "${conf_dir}/client.yml" \
+		-f "${conf_dir}/secrets.yml"
+
+	cluster="some-name"
+	desc 'Starting the cluster with IMAGE_MONGOD '${IMAGE_MONGOD}''
+	apply_cluster "${test_dir}/conf/${cluster}.yml"
+
+	desc 'check if all 3 Pods started'
+	wait_for_running "${cluster}-cfg" 3
+	wait_for_running "${cluster}-rs0" 3
+	wait_for_running "${cluster}-mongos" 3
+
+
+	desc 'write data, read from all'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+	run_mongos \
+		'sh.enableSharding("myApp","rs0")' \
+		"clusterAdmin:clusterAdmin123456@${cluster}-mongos.${namespace}"
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@${cluster}-mongos.${namespace}"
+	sleep 10 # for minikube
+	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	desc 'Starting to follow IMAGE_MONGOD_CHAIN'
+
+	for index in $(seq 0 $((chain_length - 1))); do
+		: Making a backup from an old version with a minimal static dataset all the time
+		backup_name_minio="backup-minio-${index}"
+		run_backup minio ${backup_name_minio}
+		wait_backup ${backup_name_minio}
+
+		target_mongod_image=$(echo ${chain_to_verify} | jq '.['${index}'] | .[].image')
+		desc 'Trying '${target_mongod_image}' to upgrade to'
+
+		# Checking whether https://www.mongodb.com/docs/manual/release-notes/6.0-upgrade-replica-set/#feature-compatibility-version is enabled
+		if [[ $(echo ${chain_to_verify} | jq -r '.['${index}'] | keys |.[]') =~ 6\..* ]] \
+			&& [[ $(echo ${chain_to_verify} | jq -r '.['$((index - 1))'] | keys |.[]') =~ 5\..* ]]; then
+
+			kubectl_bin patch "psmdb/${cluster}" \
+				--type=json \
+				-p '[{"op":"replace", "path":"/spec/upgradeOptions/setFCV","value":true}]'
+			sleep 30
+		fi
+
+		kubectl_bin patch "psmdb/${cluster}" \
+			--type=json \
+			-p '[{"op":"replace", "path":"/spec/image","value":'${target_mongod_image}'}]'
+
+		wait_for_running $cluster-cfg 3
+		wait_for_running $cluster-rs0 3
+		wait_for_running $cluster-mongos 3
+
+		run_mongos \
+			'use myApp\n db.test.insert({ x: 10050'$((index + 1))' })' \
+			"myApp:myPass@${cluster}-mongos.${namespace}"
+		sleep 10 # for minikube
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-$((index + 1))"
+
+
+		: Making a restore on newer version
+		backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
+		kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+			/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio}/rs0/ \
+			| grep myApp.test.gz
+		apply_restore ${backup_name_minio} 3
+		wait_restore ${backup_name_minio} 3 1 '-mongos'
+
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	done
+
+	destroy ${namespace}
+}
+
+main
