@@ -52,10 +52,6 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		strings.Join(addrs, ","),
 	)
 
-	if cr.Spec.UnsafeConf {
-		return murl, nil
-	}
-
 	// PBM connection is opened from the operator pod. In order to use SSL
 	// certificates of the cluster, we need to copy them to operator pod.
 	// This is especially important if the user passes custom config to set
@@ -175,6 +171,22 @@ func (b *PBM) GetPriorities(ctx context.Context, k8sclient client.Client, cluste
 			return priorities, errors.Wrap(err, "get primary pod")
 		}
 		priorities[primary] = 0.5
+
+		// Running a backup from unmanaged cluster should only affect the unmanaged cluster.
+		if cluster.Spec.Unmanaged {
+			podList, err := psmdb.GetRSPods(ctx, k8sclient, cluster, rs.Name)
+			if err != nil {
+				return priorities, errors.Wrapf(err, "get replicaset %s pods", rs.Name)
+			}
+
+			for _, pod := range podList.Items {
+				host, err := psmdb.MongoHost(ctx, k8sclient, cluster, rs.Name, rs.Expose.Enabled, pod)
+				if err != nil {
+					return priorities, errors.Wrapf(err, "get mongo hostname for pod %s", pod.Name)
+				}
+				priorities[host] = 2.0
+			}
+		}
 	}
 
 	return priorities, nil

@@ -35,14 +35,12 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		Password:    c.Password,
 	}
 
-	if !cr.Spec.UnsafeConf {
-		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get TLS config")
-		}
-
-		conf.TLSConf = &tlsCfg
+	tlsCfg, err := tls.Config(ctx, k8sclient, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get TLS config")
 	}
+
+	conf.TLSConf = &tlsCfg
 
 	return mongo.Dial(conf)
 }
@@ -58,14 +56,12 @@ func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaS
 		Password: c.Password,
 	}
 
-	if !cr.Spec.UnsafeConf {
-		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get TLS config")
-		}
-
-		conf.TLSConf = &tlsCfg
+	tlsCfg, err := tls.Config(ctx, k8sclient, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get TLS config")
 	}
+
+	conf.TLSConf = &tlsCfg
 
 	return mongo.Dial(&conf)
 }
@@ -78,14 +74,12 @@ func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.Perc
 		Direct:   true,
 	}
 
-	if !cr.Spec.UnsafeConf {
-		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get TLS config")
-		}
-
-		conf.TLSConf = &tlsCfg
+	tlsCfg, err := tls.Config(ctx, k8sclient, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get TLS config")
 	}
+
+	conf.TLSConf = &tlsCfg
 
 	return mongo.Dial(&conf)
 }

@@ -269,6 +269,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		"--sslAllowInvalidCertificates",
 		"--configdb",
 		configDB,
+		"--clusterAuthMode=x509",
 	}
 	if cr.CompareVersion("1.7.0") >= 0 {
 		args = append(args,
@@ -276,16 +277,8 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		)
 	}
 
-	if cr.Spec.UnsafeConf {
-		args = append(args,
-			"--clusterAuthMode=keyFile",
-			"--keyFile="+mongodSecretsDir+"/mongodb-key",
-		)
-	} else {
-		if cr.CompareVersion("1.12.0") <= 0 {
-			args = append(args, "--sslMode=preferSSL")
-		}
-		args = append(args, "--clusterAuthMode=x509")
+	if cr.CompareVersion("1.12.0") <= 0 {
+		args = append(args, "--sslMode=preferSSL")
 	}
 
 	if cr.CompareVersion("1.12.0") < 0 && mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
@@ -344,7 +337,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  cr.Spec.Secrets.SSL,
-					Optional:    &cr.Spec.UnsafeConf,
+					Optional:    &fvar,
 					DefaultMode: &secretFileMode,
 				},
 			},
