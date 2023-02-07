@@ -83,12 +83,41 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
+	recreated, err := r.checkIfClusterRecreated(ctx, cr, replset)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "check if cluster is recreated")
+	}
+
+	if recreated && !cr.Status.Replsets[replset.Name].Initialized {
+		log.Info("Cluster is recreated, assuming replset is initialized already")
+		rs := cr.Status.Replsets[replset.Name]
+		rs.Initialized = true
+		cr.Status.Replsets[replset.Name] = rs
+	}
+
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 	if err != nil {
+		log.Error(err, "failed to open connection to mongo")
+
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
 		}
+
 		if cr.Status.Replsets[replset.Name].Initialized {
+			serverSelectionError, ok := errors.Cause(err).(topology.ServerSelectionError)
+			if ok {
+				if serverSelectionError.Desc.Kind != description.ReplicaSetNoPrimary {
+					return api.AppStateError, errors.Wrap(err, "dial")
+				}
+
+				log.Error(err, "Cluster crashed, trying to recover", "cluster", cr.Name)
+				if err := r.recoverReplsetNoPrimary(ctx, cr, replset, pods.Items[0]); err != nil {
+					return api.AppStateError, errors.Wrap(err, "force reconfig to recover")
+				}
+
+				return api.AppStateInit, nil
+			}
+
 			return api.AppStateError, errors.Wrap(err, "dial")
 		}
 
@@ -768,7 +797,22 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 		return errors.Wrap(err, "get mongo config")
 	}
 
-	cnf.Members[0].Priority = cnf.Members[0].Priority + 1
+	// If connection to an exposed replset fails with ReplicaSetNoPrimary,
+	// we'll change the member hosts to local FQDNs and reconfig to recover.
+	if replset.Expose.Enabled {
+		for i := 0; i < len(cnf.Members); i++ {
+			tags := []mongo.ConfigMember(cnf.Members)[i].Tags
+			podName, ok := tags["podName"]
+			if !ok {
+				continue
+			}
+
+			[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
+		}
+	} else {
+		cnf.Members[0].Priority = cnf.Members[0].Priority + 1
+	}
+
 	cnf.Version++
 	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
 
@@ -788,6 +832,17 @@ func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, c
 	}
 	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]
 	return ok, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) checkIfClusterRecreated(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+	pvc := &corev1.PersistentVolumeClaim{}
+	pvcName := psmdb.MongodDataVolClaimName + "-" + cr.Name + "-" + replset.Name + "-0"
+	err := r.client.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: cr.Namespace}, pvc)
+	if err != nil {
+		return false, errors.Wrapf(err, "get pvc/%s", pvcName)
+	}
+
+	return pvc.CreationTimestamp.Before(&cr.CreationTimestamp), nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod

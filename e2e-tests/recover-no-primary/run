@@ -8,20 +8,55 @@ test_dir=$(realpath $(dirname $0))
 
 create_infra ${namespace}
 
-desc 'create PSMDB cluster'
 cluster="some-name"
 kubectl_bin apply \
 	-f ${conf_dir}/secrets_with_tls.yml \
 	-f ${conf_dir}/client.yml
 
 apply_cluster ${test_dir}/conf/${cluster}.yml
-desc 'check if all 3 Pods started'
 wait_for_running "${cluster}-rs0" 3
 wait_cluster_consistency ${cluster}
 
+## Case 1: Kill pods abruptly and wait for recovery
+
+desc 'kill pods abruptly and wait for recovery'
+for i in $(seq 0 2); do
+	kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
+done
+sleep 10
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+## Case 2: Delete statefulset and wait for recovery
+
 desc 'delete statefulset and wait for recovery'
 kubectl delete sts "${cluster}-rs0"
-sleep 30
+
+set +e
+echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
+until ! kubectl get sts "${cluster}-rs0"; do
+	echo -n "."
+	sleep 1
+done
+set -e
+
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+## Case 3: Delete cluster and recreate
+
+desc 'delete cluster and recreate'
+kubectl delete psmdb "${cluster}"
+
+set +e
+echo -n "waiting for psmdb/${cluster} to be deleted"
+until ! kubectl get psmdb "${cluster}"; do
+	echo -n "."
+	sleep 1
+done
+set -e
+
+apply_cluster ${test_dir}/conf/${cluster}.yml
 wait_for_running "${cluster}-rs0" 3
 wait_cluster_consistency ${cluster}
 
