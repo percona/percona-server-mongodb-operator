@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,7 +82,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
 		}
-		if cr.Status.Replsets[replset.Name].Initialized {
+		statusCode, statusErr := r.rsStatusCode(ctx, cr, pods.Items[0])
+		if statusErr != nil {
+			return api.AppStateInit, errors.Wrap(statusErr, "rsStatusCode")
+		}
+
+		if cr.Status.Replsets[replset.Name].Initialized || statusCode == 93 {
 			// If an exposed replset is initialized but connection fails with ReplicaSetNoPrimary,
 			// we'll change the member hosts to local FQDNs and reconfig to recover.
 			serverSelectionError, ok := errors.Cause(err).(topology.ServerSelectionError)
@@ -101,7 +107,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateError, errors.Wrap(err, "dial")
 		}
 
-		err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
+		err = r.handleReplsetInit(ctx, cr, replset, pods.Items)
 		if err != nil {
 			return api.AppStateInit, errors.Wrap(err, "handleReplsetInit")
 		}
@@ -225,7 +231,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	membersLive, err := r.updateConfigMembers(ctx, cli, cr, replset)
+	membersLive, err := r.updateConfigMembers(ctx, cli, cr, replset, false)
 	if err != nil {
 		return api.AppStateError, errors.Wrap(err, "failed to update config members")
 	}
@@ -237,7 +243,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	return api.AppStateInit, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli *mgo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (int, error) {
+func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli *mgo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, force bool) (int, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
 	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
@@ -321,7 +327,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Fixing member tags", "replset", rs.Name)
 
-		if err := mongo.WriteConfig(ctx, cli, cnf, false); err != nil {
+		if err := mongo.WriteConfig(ctx, cli, cnf, force); err != nil {
 			return 0, errors.Wrap(err, "fix tags: write mongo config")
 		}
 	}
@@ -331,7 +337,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Fixing member hosts", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf, false)
+		err = mongo.WriteConfig(ctx, cli, cnf, force)
 		if err != nil {
 			return 0, errors.Wrap(err, "fix hosts: write mongo config")
 		}
@@ -342,7 +348,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Removing old nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf, false)
+		err = mongo.WriteConfig(ctx, cli, cnf, force)
 		if err != nil {
 			return 0, errors.Wrap(err, "delete: write mongo config")
 		}
@@ -353,7 +359,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Adding new nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf, false)
+		err = mongo.WriteConfig(ctx, cli, cnf, force)
 		if err != nil {
 			return 0, errors.Wrap(err, "add new: write mongo config")
 		}
@@ -364,7 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Updating external nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf, false)
+		err = mongo.WriteConfig(ctx, cli, cnf, force)
 		if err != nil {
 			return 0, errors.Wrap(err, "update external nodes: write mongo config")
 		}
@@ -377,7 +383,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Configuring member votes and priorities", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf, false)
+		err = mongo.WriteConfig(ctx, cli, cnf, force)
 		if err != nil {
 			return 0, errors.Wrap(err, "set votes: write mongo config")
 		}
@@ -589,6 +595,41 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 	return errNoRunningMongodContainers
 }
 
+func (r *ReconcilePerconaServerMongoDB) rsStatusCode(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod) (int, error) {
+	var errb, outb bytes.Buffer
+	mongoCmd := "mongo"
+	for {
+		cmd := []string{
+			"sh", "-c", fmt.Sprintf(`%s --quiet --eval "rs.status().code" | tail -1`, mongoCmd),
+		}
+		err := r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		if err != nil {
+			return 0, errors.Wrap(err, "exec rs.status().code")
+		}
+		output := strings.TrimSpace(outb.String())
+		outb.Reset()
+		errb.Reset()
+
+		if output == "" {
+			return 0, errors.Wrap(err, "no output")
+		}
+		statusCode, err := strconv.Atoi(output)
+		if err != nil {
+			return 0, errors.Wrap(err, "failed to parse output")
+		}
+		if statusCode == 13 {
+			clusterAdmin, err := r.getInternalCredentials(ctx, cr, roleClusterAdmin)
+			if err != nil {
+				return 0, errors.Wrap(err, "failed to get clusterAdmin credentials")
+			}
+			mongoCmd += fmt.Sprintf(` -u'%s'`, strings.ReplaceAll(clusterAdmin.Username, `'`, `'"'"'`))
+			mongoCmd += fmt.Sprintf(` -p'%s'`, strings.ReplaceAll(clusterAdmin.Password, `'`, `'"'"'`))
+			continue
+		}
+		return statusCode, nil
+	}
+}
+
 func getRoles(cr *api.PerconaServerMongoDB, role UserRole) []map[string]interface{} {
 	roles := make([]map[string]interface{}, 0)
 	switch role {
@@ -778,6 +819,11 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 	cli, err := r.standaloneClientWithRole(ctx, cr, roleClusterAdmin, host)
 	if err != nil {
 		return errors.Wrap(err, "get standalone client")
+	}
+
+	_, err = r.updateConfigMembers(ctx, cli, cr, replset, true)
+	if err != nil {
+		return errors.Wrap(err, "update config members")
 	}
 
 	cnf, err := mongo.ReadConfig(ctx, cli)

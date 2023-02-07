@@ -1548,7 +1548,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		if err != nil {
 			return nil, errors.Wrap(err, "mongo client")
 		}
-		if _, err := r.updateConfigMembers(ctx, cli, cr, replset); err != nil {
+		if _, err := r.updateConfigMembers(ctx, cli, cr, replset, false); err != nil {
 			return nil, errors.Wrap(err, "update config members")
 		}
 	}
