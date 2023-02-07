@@ -105,7 +105,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 
 	containers, ok := cr.Spec.Sharding.Mongos.MultiAZ.WithSidecars(c)
 	if !ok {
-		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
+		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
 	annotations := cr.Spec.Sharding.Mongos.MultiAZ.Annotations

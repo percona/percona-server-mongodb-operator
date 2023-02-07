@@ -66,6 +66,8 @@ main() {
 
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
 	compare_kubectl service/$cluster
+	compare_kubectl "pvc/mongod-data-one-pod-rs0-0"
+
 	run_mongo \
 		'db.serverCmdLineOpts()' \
 		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
