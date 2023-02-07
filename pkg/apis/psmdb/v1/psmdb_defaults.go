@@ -170,8 +170,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.Size = 0
 		} else {
 			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
-				log.Info(fmt.Sprintf("Mongos size will be changed from %d to %d due to safe config", cr.Spec.Sharding.Mongos.Size, minSafeMongosSize))
-				log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
+				log.Info("Safe config set, updating mongos size",
+					"oldSize", cr.Spec.Sharding.Mongos.Size, "newSize", minSafeMongosSize)
 				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
 			}
 		}
@@ -725,32 +725,30 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 }
 
 func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
-	loginfo := func(msg string, args ...interface{}) {
-		log.Info(msg, args...)
-		log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
-	}
-
 	if rs.Arbiter.Enabled {
 		if rs.Arbiter.Size != 1 {
-			loginfo(fmt.Sprintf("Arbiter size will be changed from %d to 1 due to safe config", rs.Arbiter.Size))
+			log.Info("Setting safe defaults, updating arbiter size", "oldSize", rs.Arbiter.Size, "newSize", 1)
 			rs.Arbiter.Size = 1
 		}
 		if rs.Size < minSafeReplicasetSizeWithArbiter {
-			loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, minSafeReplicasetSizeWithArbiter))
+			log.Info("Setting safe defaults, updating replset size",
+				"oldSize", rs.Size, "newSize", minSafeReplicasetSizeWithArbiter)
 			rs.Size = minSafeReplicasetSizeWithArbiter
 		}
 		if rs.Size%2 != 0 {
-			loginfo(fmt.Sprintf("Arbiter will be switched off. There is no need in arbiter with odd replset size (%d)", rs.Size))
+			log.Info("Setting safe defaults, disabling arbiter due to odd replset size", "size", rs.Size)
 			rs.Arbiter.Enabled = false
 			rs.Arbiter.Size = 0
 		}
 	} else {
 		if rs.Size < 2 {
-			loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize))
+			log.Info("Setting safe defaults, updating replset size to meet the minimum number of replicas",
+				"oldSize", rs.Size, "newSize", defaultMongodSize)
 			rs.Size = defaultMongodSize
 		}
 		if rs.Size%2 == 0 {
-			loginfo(fmt.Sprintf("Replset size will be increased from %d to %d", rs.Size, rs.Size+1))
+			log.Info("Setting safe defaults, increasing replset size to have a odd number of replicas",
+				"oldSize", rs.Size, "newSize", rs.Size+1)
 			rs.Size++
 		}
 	}

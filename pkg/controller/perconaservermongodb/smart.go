@@ -7,10 +7,6 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,11 +14,18 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
 	replset *api.ReplsetSpec) error {
 
+	log := logf.FromContext(ctx)
 	if replset.Size == 0 {
 		return nil
 	}
@@ -129,8 +132,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if err != nil {
 		return fmt.Errorf("get primary pod: %v", err)
 	}
-
-	log.Info(fmt.Sprintf("primary pod is %s", primary))
+	log.Info("Got primary pod", "name", primary)
 
 	waitLimit := int(replset.LivenessProbe.InitialDelaySeconds)
 
@@ -196,6 +198,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 }
 
 func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
+	log := logf.FromContext(ctx)
+
 	if cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
 		return nil
 	}
@@ -262,7 +266,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 			return false, errors.Errorf("failed to get statefulset %s pods: %v", s.Name, err)
 		}
 		if s.Status.UpdatedReplicas < s.Status.Replicas || isSfsChanged(&s, podList) {
-			log.Info("StatefulSet is not up to date", "sts", s.Name)
+			logf.FromContext(ctx).Info("StatefulSet is not up to date", "sts", s.Name)
 			return false, nil
 		}
 	}
@@ -287,7 +291,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr
 
 func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
 	if pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision {
-		log.Info(fmt.Sprintf("pod %s is already updated", pod.Name))
+		logf.FromContext(ctx).Info("Pod already updated", "pod", pod.Name)
 	} else {
 		if err := r.client.Delete(ctx, pod); err != nil {
 			return errors.Wrap(err, "delete pod")
@@ -324,7 +328,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		}
 
 		if pod.Status.Phase == corev1.PodRunning && pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision && ready {
-			log.Info(fmt.Sprintf("pod %s started", pod.Name))
+			logf.FromContext(ctx).Info("Pod started", "pod", pod.Name)
 			return nil
 		}
 	}
