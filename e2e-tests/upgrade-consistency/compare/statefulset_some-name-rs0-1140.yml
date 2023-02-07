@@ -49,7 +49,6 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
@@ -57,7 +56,7 @@ spec:
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: some-name
@@ -73,7 +72,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --ssl
@@ -128,6 +127,8 @@ spec:
               readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: some-name-mongodb-encryption-key
               readOnly: true
@@ -165,6 +166,8 @@ spec:
             defaultMode: 288
             optional: false
             secretName: some-name-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
         - configMap:
             defaultMode: 420
             name: some-name-rs0-mongod
