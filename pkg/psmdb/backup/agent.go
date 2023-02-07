@@ -90,7 +90,6 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
 	}
 
-
 	if cr.CompareVersion("1.14.0") >= 0 {
 		c.Env = append(c.Env, []corev1.EnvVar{
 			{
@@ -114,7 +113,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 				ReadOnly:  false,
 			},
 		}...)
-        }
+	}
 
 	return c
 }
