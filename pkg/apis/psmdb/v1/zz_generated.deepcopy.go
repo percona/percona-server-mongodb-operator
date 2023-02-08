@@ -1232,6 +1232,11 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 	in.PMM.DeepCopyInto(&out.PMM)
 	out.UpgradeOptions = in.UpgradeOptions
 	in.Sharding.DeepCopyInto(&out.Sharding)
+	if in.InitContainerSecurityContext != nil {
+		in, out := &in.InitContainerSecurityContext, &out.InitContainerSecurityContext
+		*out = new(corev1.PodSecurityContext)
+		(*in).DeepCopyInto(*out)
+	}
 	out.MultiCluster = in.MultiCluster
 	if in.TLS != nil {
 		in, out := &in.TLS, &out.TLS
