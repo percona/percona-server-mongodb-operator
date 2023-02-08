@@ -53,11 +53,10 @@ function compare_mongo_config() {
     rs0_0_endpoint="$cluster-rs0-0.$cluster-rs0.$namespace.svc.cluster.local"
   fi
 
-  rs0_0_endpoint_actual=$(run_mongo "rs.conf().members[0].host" "clusterAdmin:clusterAdmin123456@$${cluster}-rs0.${namespace}")
-	cfg_0_endpoint_actual=$(run_mongo "rs.conf().members[0].host" "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}")
-
+  rs0_0_endpoint_actual=$(run_mongo 'var host;var x=0;rs.conf().members.forEach(function(d){ if(d.tags.podName=="some-name-rs0-0"){ host=rs.conf().members[x].host;print(host)};x=x+1; })' "clusterAdmin:clusterAdmin123456@${cluster}-rs0.${namespace}" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
+	cfg_0_endpoint_actual=$(run_mongo 'var host;var x=0;rs.conf().members.forEach(function(d){ if(d.tags.podName=="some-name-cfg-0"){ host=rs.conf().members[x].host;print(host)};x=x+1; })' "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
 	if [[ $rs0_0_endpoint_actual != "$rs0_0_endpoint:27017" || $cfg_0_endpoint_actual != "$cfg_0_endpoint:27017" ]]; then
-	  echo "Actual values rs $rs0_0_endpoint_actual and cfg $cfg_0_endpoint_actual do not match expected rs $rs0_0_endpoint:27017 and cfg $cfg_0_endpoint:27017"
+	  desc "Actual values rs $rs0_0_endpoint_actual and cfg $cfg_0_endpoint_actual do not match expected rs $rs0_0_endpoint:27017 and cfg $cfg_0_endpoint:27017"
 	  exit 1
 	fi
 
@@ -89,11 +88,9 @@ function main() {
   sleep 10
 
   desc 'check if service and statefulset created with expected config'
-#  compare_kubectl statefulset/$cluster-rs0
-#  compare_kubectl statefulset/$cluster-rs1
-#  compare_kubectl statefulset/$cluster-rs2
-#  compare_kubectl statefulset/$cluster-cfg
-#  compare_kubectl statefulset/$cluster-mongos ""
+  compare_kubectl statefulset/$cluster-rs0
+  compare_kubectl statefulset/$cluster-cfg
+  compare_kubectl statefulset/$cluster-mongos ""
 
   kubectl_bin apply -f "$test_dir/conf/mongos-secret.yml"
   sleep 10
@@ -105,6 +102,9 @@ function main() {
   run_mongos \
     'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
     "userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+  run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+		"userAdmin:userAdmin123456@$cluster-rs0-0.$cluster-rs0.${namespace}" "mongodb"
+
   run_mongos \
     'sh.enableSharding("myApp","rs0")' \
     "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
@@ -196,8 +196,24 @@ function main() {
   compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-3nd"
   compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-3nd"
   compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-3nd"
-
+  sleep 60
   compare_mongo_config ${cluster} $namespace
+
+  desc "Pause Exposed cluster (LoadBalancer)"
+  stop_cluster ${cluster}
+	start_cluster ${cluster}
+
+	run_mongos \
+    'use myApp\n db.test.insert({ x: 100504 })' \
+    "myApp:myPass@$cluster-mongos.$namespace"
+  sleep 10 # for minikube
+
+  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
+  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
+
+  compare_mongo_config ${cluster}
 
   desc "Exposed,  LoadBalancer -> ClusterIP"
   kubectl_bin patch psmdb ${cluster} --type=json --patch '[
@@ -241,20 +257,21 @@ function main() {
 
   compare_mongo_config ${cluster} $namespace
 
-  desc "Pause Exposed cluster (ClusterIP)"
-  stop_cluster ${cluster}
-	start_cluster ${cluster}
-	run_mongos \
-    'use myApp\n db.test.insert({ x: 100504 })' \
-    "myApp:myPass@$cluster-mongos.$namespace"
-  sleep 10 # for minikube
+#  desc "Pause Exposed cluster (ClusterIP)"
+#  stop_cluster ${cluster}
+#	start_cluster ${cluster}
 
-  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
-
-  compare_mongo_config ${cluster}
+#	run_mongos \
+#    'use myApp\n db.test.insert({ x: 100504 })' \
+#    "myApp:myPass@$cluster-mongos.$namespace"
+#  sleep 10 # for minikube
+#
+#  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
+#  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
+#  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
+#  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
+#
+#  compare_mongo_config ${cluster}
 
   desc "Exposed -> Unexposed"
 

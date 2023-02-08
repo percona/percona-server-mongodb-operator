@@ -642,8 +642,9 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+  local replica_set=`echo $uri| awk -F "@" '{print $2}' | awk -F "." '{print $1}'| awk -F "-" '{print $3}'`
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 
 }
 
