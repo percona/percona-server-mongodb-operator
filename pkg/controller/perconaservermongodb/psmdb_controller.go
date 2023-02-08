@@ -1401,7 +1401,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			return nil, errors.Wrap(err, "failed to run smartUpdate")
 		}
 
-		log.Info("Restore in progress, skipping reconcilation of statefulset", "name", sfs.Name)
+		log.V(1).Info("Restore in progress, skipping reconcilation of statefulset", "name", sfs.Name)
 		return sfs, nil
 	}
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -16,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -96,34 +94,53 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
-		err := retry.OnError(
-			wait.Backoff{
-				Steps:    4,
-				Duration: 5 * time.Second,
-				Factor:   5.0,
-				Jitter:   0.1,
-			},
-			func(err error) bool {
-				return strings.Contains(err.Error(), "another operation in progress") || strings.Contains(err.Error(), "not found")
-			},
-			func() error {
-				command := []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 
-				log.Info("Starting restore", "command", command)
+		timeout := time.NewTimer(600 * time.Second)
+		defer timeout.Stop()
 
+	outer:
+		for {
+			select {
+			case <-timeout.C:
+				return status, errors.Errorf("timeout while waiting PBM operation to finish")
+			case <-ticker.C:
 				stdoutBuf.Reset()
 				stderrBuf.Reset()
 
-				err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
-				if err != nil {
-					return errors.Wrapf(err, "stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+				command = []string{"/opt/percona/pbm", "status", "--out", "json"}
+				if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+					return status, errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 				}
 
-				return nil
-			},
-		)
+				var pbmStatus struct {
+					Running struct {
+						Type string `json:"type,omitempty"`
+						OpId string `json:"opID,omitempty"`
+					} `json:"running"`
+				}
+
+				if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
+					return status, errors.Wrap(err, "unmarshal PBM status output")
+				}
+
+				if len(pbmStatus.Running.OpId) == 0 {
+					break outer
+				}
+
+				log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
+			}
+		}
+
+		command = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+		log.Info("Starting restore", "command", command)
+
+		stdoutBuf.Reset()
+		stderrBuf.Reset()
+		err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
 		if err != nil {
-			return status, errors.Wrapf(err, "start restore")
+			return status, errors.Wrapf(err, "start restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
 		var out struct {
@@ -147,7 +164,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		"--config", "/etc/pbm/pbm_config.yaml",
 		"--out", "json",
 	}
-	log.Info("Check restore status", "command", command)
+	log.V(1).Info("Check restore status", "command", command)
 	if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
 		return status, errors.Wrap(err, "describe restore")
 	}
@@ -340,6 +357,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
+	log := logf.FromContext(ctx)
+
 	secret := corev1.Secret{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: "pbm-config", Namespace: cluster.Namespace}, &secret)
 	if err == nil {
@@ -347,6 +366,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 	} else if !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "get PBM config secret")
 	}
+
+	log.V(1).Info("Configuring PBM", "storage", bcp.Spec.StorageName)
 
 	storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
 	if err != nil {
