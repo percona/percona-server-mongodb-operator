@@ -809,10 +809,9 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 
 			[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
 		}
-	} else {
-		cnf.Members[0].Priority = cnf.Members[0].Priority + 1
 	}
 
+	cnf.Members[0].Priority = cnf.Members[0].Priority + 1
 	cnf.Version++
 	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
 

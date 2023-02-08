@@ -13,51 +13,210 @@ kubectl_bin apply \
 	-f ${conf_dir}/secrets_with_tls.yml \
 	-f ${conf_dir}/client.yml
 
-apply_cluster ${test_dir}/conf/${cluster}.yml
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+function test_single_replset() {
+	apply_cluster ${test_dir}/conf/${cluster}.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
 
-## Case 1: Kill pods abruptly and wait for recovery
+	## Case 1: Kill pods abruptly and wait for recovery
 
-desc 'kill pods abruptly and wait for recovery'
-for i in $(seq 0 2); do
-	kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
-done
-sleep 10
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+	desc 'kill pods abruptly and wait for recovery'
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
 
-## Case 2: Delete statefulset and wait for recovery
+	## Case 2: Delete statefulset and wait for recovery
 
-desc 'delete statefulset and wait for recovery'
-kubectl delete sts "${cluster}-rs0"
+	desc 'delete statefulset and wait for recovery'
+	kubectl delete sts "${cluster}-rs0"
 
-set +e
-echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
-until ! kubectl get sts "${cluster}-rs0"; do
-	echo -n "."
-	sleep 1
-done
-set -e
+	set +e
+	echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
+	until ! kubectl get sts "${cluster}-rs0"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
 
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
 
-## Case 3: Delete cluster and recreate
+	## Case 3: Delete cluster and recreate
 
-desc 'delete cluster and recreate'
-kubectl delete psmdb "${cluster}"
+	desc 'delete cluster and recreate'
+	kubectl delete psmdb "${cluster}"
 
-set +e
-echo -n "waiting for psmdb/${cluster} to be deleted"
-until ! kubectl get psmdb "${cluster}"; do
-	echo -n "."
-	sleep 1
-done
-set -e
+	set +e
+	echo -n "waiting for psmdb/${cluster} to be deleted"
+	until ! kubectl get psmdb "${cluster}"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
 
-apply_cluster ${test_dir}/conf/${cluster}.yml
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+	apply_cluster ${test_dir}/conf/${cluster}.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete psmdb ${cluster}
+	kubectl delete pvc --all
+}
+
+function test_exposed_single_replset() {
+	apply_cluster ${test_dir}/conf/${cluster}-exposed.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 1: Kill pods abruptly and wait for recovery
+
+	desc 'kill pods abruptly and wait for recovery'
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 2: Delete statefulset and wait for recovery
+
+	desc 'delete statefulset and wait for recovery'
+	kubectl delete sts "${cluster}-rs0"
+
+	set +e
+	echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
+	until ! kubectl get sts "${cluster}-rs0"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 3: Delete cluster and recreate
+
+	desc 'delete cluster and recreate'
+	kubectl delete psmdb "${cluster}"
+
+	set +e
+	echo -n "waiting for psmdb/${cluster} to be deleted"
+	until ! kubectl get psmdb "${cluster}"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	apply_cluster ${test_dir}/conf/${cluster}-exposed.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete psmdb ${cluster}
+	kubectl delete pvc --all
+}
+
+function test_exposed_sharded_cluster() {
+	apply_cluster ${test_dir}/conf/${cluster}-sharded.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 1: Kill pods abruptly and wait for recovery
+
+	desc 'kill pods abruptly and wait for recovery'
+
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs1-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs1" 3
+	wait_cluster_consistency ${cluster}
+
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-cfg-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-cfg" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 2: Delete statefulsets and wait for recovery
+
+	desc 'delete statefulsets and wait for recovery'
+
+	kubectl delete sts "${cluster}-rs0"
+	set +e
+	echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
+	until ! kubectl get sts "${cluster}-rs0"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete sts "${cluster}-rs1"
+	set +e
+	echo -n "waiting for statefulset/${cluster}-rs1 to be deleted"
+	until ! kubectl get sts "${cluster}-rs1"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	wait_for_running "${cluster}-rs1" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete sts "${cluster}-cfg"
+	set +e
+	echo -n "waiting for statefulset/${cluster}-cfg to be deleted"
+	until ! kubectl get sts "${cluster}-cfg"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	wait_for_running "${cluster}-cfg" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 3: Delete cluster and recreate
+
+	desc 'delete cluster and recreate'
+	kubectl delete psmdb "${cluster}"
+
+	set +e
+	echo -n "waiting for psmdb/${cluster} to be deleted"
+	until ! kubectl get psmdb "${cluster}"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	apply_cluster ${test_dir}/conf/${cluster}-sharded.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_for_running "${cluster}-rs1" 3
+	wait_for_running "${cluster}-cfg" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete psmdb ${cluster}
+	kubectl delete pvc --all
+}
+
+desc 'testing unexposed single replset cluster'
+test_single_replset
+
+desc 'testing exposed single replset cluster'
+test_exposed_single_replset
+
+desc 'testing exposed two replsets sharded cluster'
+test_exposed_sharded_cluster
 
 destroy ${namespace}
