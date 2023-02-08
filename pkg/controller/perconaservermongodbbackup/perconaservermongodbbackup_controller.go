@@ -173,7 +173,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}
 	defer bcp.Close(ctx)
 
-	err = r.checkFinalizers(ctx, cr, bcp)
+	err = r.checkFinalizers(ctx, cr, cluster, bcp)
 	if err != nil {
 		return rr, errors.Wrap(err, "failed to run finalizer")
 	}
@@ -307,7 +307,7 @@ func getPBMBackupMeta(cr *psmdbv1.PerconaServerMongoDBBackup) *pbm.BackupMeta {
 	return meta
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, b *Backup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
 	log := logf.FromContext(ctx)
 
 	var err error
@@ -344,30 +344,36 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 						log.Error(err, "failed to run finalizer with dummy pbm", "finalizer", f)
 						finalizers = append(finalizers, f)
 					}
-				} else {
-					var storage psmdbv1.BackupStorageSpec
-					switch {
-					case cr.Status.S3 != nil:
-						storage.Type = psmdbv1.BackupStorageS3
-						storage.S3 = *cr.Status.S3
-					case cr.Status.Azure != nil:
-						storage.Type = psmdbv1.BackupStorageAzure
-						storage.Azure = *cr.Status.Azure
-					}
-					priorities, err := r.getPrioritiesFromBackup(ctx, cr, b.pbm)
-					if err != nil {
-						return errors.Wrap(err, "get priorities from backup")
-					}
-					err = b.pbm.SetConfig(ctx, storage, b.spec.PITR, priorities)
-					if err != nil {
-						return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
-					}
-					e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
-					err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
-					if err != nil {
-						log.Error(err, "failed to run finalizer", "finalizer", f)
-						finalizers = append(finalizers, f)
-					}
+					continue
+				}
+
+				if cluster == nil {
+					return errors.Errorf("PerconaServerMongoDB %s is not found", cr.Spec.GetClusterName())
+				}
+
+				var storage psmdbv1.BackupStorageSpec
+				switch {
+				case cr.Status.S3 != nil:
+					storage.Type = psmdbv1.BackupStorageS3
+					storage.S3 = *cr.Status.S3
+				case cr.Status.Azure != nil:
+					storage.Type = psmdbv1.BackupStorageAzure
+					storage.Azure = *cr.Status.Azure
+				}
+
+				priorities, err := b.pbm.GetPriorities(ctx, r.client, cluster)
+				if err != nil {
+					return errors.Wrap(err, "get priorities")
+				}
+				err = b.pbm.SetConfig(ctx, storage, b.spec.PITR, priorities)
+				if err != nil {
+					return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+				}
+				e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
+				err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
+				if err != nil {
+					log.Error(err, "failed to run finalizer", "finalizer", f)
+					finalizers = append(finalizers, f)
 				}
 			}
 		}
@@ -377,23 +383,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 	err = r.client.Update(ctx, cr)
 
 	return err
-}
-
-func (r *ReconcilePerconaServerMongoDBBackup) getPrioritiesFromBackup(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, pbm *backup.PBM) (map[string]float64, error) {
-	priorities := make(map[string]float64)
-	cluster := new(psmdbv1.PerconaServerMongoDB)
-	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.GetClusterName(), Namespace: cr.Namespace}, cluster)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return priorities, nil
-		}
-		return nil, errors.Wrapf(err, "get cluster %s", cr.Spec.GetClusterName())
-	}
-	priorities, err = pbm.GetPriorities(ctx, r.client, cluster)
-	if err != nil {
-		return nil, errors.Wrap(err, "get priorities")
-	}
-	return priorities, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
