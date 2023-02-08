@@ -1234,7 +1234,7 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 	in.Sharding.DeepCopyInto(&out.Sharding)
 	if in.InitContainerSecurityContext != nil {
 		in, out := &in.InitContainerSecurityContext, &out.InitContainerSecurityContext
-		*out = new(corev1.PodSecurityContext)
+		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
 	out.MultiCluster = in.MultiCluster

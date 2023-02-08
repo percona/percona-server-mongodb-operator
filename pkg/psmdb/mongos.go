@@ -101,7 +101,6 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	initContainers := InitContainers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
-		initContainers[i].SecurityContext = c.SecurityContext
 	}
 
 	containers, ok := cr.Spec.Sharding.Mongos.MultiAZ.WithSidecars(c)
@@ -157,6 +156,10 @@ func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Con
 			Name:      BinVolumeName,
 			MountPath: BinMountPath,
 		})
+	}
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		initContainer.SecurityContext = cr.Spec.InitContainerSecurityContext
 	}
 
 	return []corev1.Container{initContainer}

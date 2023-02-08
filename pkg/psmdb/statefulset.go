@@ -112,7 +112,6 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
-		initContainers[i].SecurityContext = c.SecurityContext
 	}
 
 	containers, ok := multiAZ.WithSidecars(c)
