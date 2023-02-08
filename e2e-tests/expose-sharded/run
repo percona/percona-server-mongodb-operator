@@ -197,19 +197,19 @@ function main() {
 	start_cluster ${cluster}
 
 	run_mongos \
-    'use myApp\n db.test.insert({ x: 100504 })' \
-    "myApp:myPass@$cluster-mongos.$namespace"
-  sleep 10 # for minikube
+		'use myApp\n db.test.insert({ x: 100504 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep 10 # for minikube
 
-  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
 
-  compare_mongo_config ${cluster}
+	compare_mongo_config ${cluster}
 
-  desc "Exposed,  LoadBalancer -> ClusterIP"
-  kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+	desc "Exposed,  LoadBalancer -> ClusterIP"
+	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
           {
               "op": "replace",
               "path": "/spec/replsets/0/expose",
@@ -235,24 +235,24 @@ function main() {
         }
           }]'
 
-  wait_for_running $cluster-rs0 3
-  wait_for_running $cluster-cfg 3 "false"
-  wait_for_running $cluster-mongos 3
-  run_mongos \
-    'use myApp\n db.test.insert({ x: 100503 })' \
-    "myApp:myPass@$cluster-mongos.$namespace"
-  sleep 10 # for minikube
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100503 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep 10 # for minikube
 
-  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-4nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-4nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-4nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-4nd"
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-4nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-4nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-4nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-4nd"
 
-  compare_mongo_config ${cluster} $namespace
+	compare_mongo_config ${cluster} $namespace
 
-  desc "Exposed -> Unexposed"
+	desc "Exposed -> Unexposed"
 
-  kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
           {
               "op": "replace",
               "path": "/spec/replsets/0/expose",
@@ -278,13 +278,13 @@ function main() {
         }
           }]'
 
-  wait_for_running $cluster-rs0 3
-  wait_for_running $cluster-cfg 3 "false"
-  wait_for_running $cluster-mongos 3
-  run_mongos \
-    'use myApp\n db.test.insert({ x: 100505 })' \
-    "myApp:myPass@$cluster-mongos.$namespace"
-  sleep 10 # for minikube
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100505 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep 10 # for minikube
 
   compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
   compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
