@@ -135,12 +135,12 @@ function main() {
         }
           }]'
 
-  wait_for_running $cluster-rs0 3
-  wait_for_running $cluster-cfg 3 "false"
-  wait_for_running $cluster-mongos 3
-  run_mongos \
-    'use myApp\n db.test.insert({ x: 100501 })' \
-    "myApp:myPass@$cluster-mongos.$namespace"
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
 
   sleep 10 # for minikube
 
