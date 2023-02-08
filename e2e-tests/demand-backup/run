@@ -118,7 +118,7 @@ fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}" "aws-s3"
-	#	check_backup_deletion "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}" "gcp-cs"
+	check_backup_deletion "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}" "gcp-cs"
 	check_backup_deletion "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}" "azure-blob"
 fi
 
