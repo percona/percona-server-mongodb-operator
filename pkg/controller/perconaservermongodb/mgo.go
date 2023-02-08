@@ -501,7 +501,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 // This must be ran from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
-func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
+func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
 	log := logf.FromContext(ctx)
 
 	for _, pod := range pods {
@@ -511,14 +511,23 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
 		var errb, outb bytes.Buffer
 
-		mongoCmd := "mongo"
-		if !m.Spec.UnsafeConf {
+		err = r.clientcmd.Exec(&pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
+		}
+
+		mongoCmd := "mongosh"
+		if !strings.Contains(outb.String(), "v6.0") {
+			mongoCmd = "mongo"
+		}
+
+		if !cr.Spec.UnsafeConf {
 			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
 		}
 
@@ -549,7 +558,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 
 		time.Sleep(time.Second * 5)
 
-		userAdmin, err := r.getInternalCredentials(ctx, m, roleUserAdmin)
+		userAdmin, err := r.getInternalCredentials(ctx, cr, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
