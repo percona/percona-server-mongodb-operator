@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   annotations:
     psmdb.percona.com/restore-in-progress: "true"
-  generation: 2
+  generation: 3
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
