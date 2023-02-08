@@ -61,6 +61,36 @@ function compare_mongo_config() {
 
 }
 
+function expose_cluster() {
+   expose_type=$1
+   expose_status=${2:-true}
+
+   kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+          {
+              "op": "replace",
+              "path": "/spec/replsets/0/expose",
+        "value": {
+          "enabled": '$expose_status',
+          "exposeType" : "'"${expose_type}"'"
+        }
+          },
+        {
+              "op": "replace",
+              "path": "/spec/sharding/mongos/expose",
+        "value": {
+          "enabled": '${expose_status}',
+          "exposeType" : "'"${expose_type}"'"
+        }
+          },
+          {
+              "op": "replace",
+              "path": "/spec/sharding/configsvrReplSet/expose",
+        "value": {
+          "enabled": '${expose_status}',
+          "exposeType" : "'"${expose_type}"'"
+        }
+          }]'
+}
 function main() {
 
 	create_infra "$namespace"
@@ -108,32 +138,7 @@ function main() {
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
 	desc 'Unexposed -> Exposed, ClusterIP'
-
-	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
-          {
-              "op": "replace",
-              "path": "/spec/replsets/0/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "ClusterIP"
-        }
-          },
-        {
-              "op": "replace",
-              "path": "/spec/sharding/mongos/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "ClusterIP"
-        }
-          },
-          {
-              "op": "replace",
-              "path": "/spec/sharding/configsvrReplSet/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "ClusterIP"
-        }
-          }]'
+  expose_cluster "ClusterIP"
 
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
@@ -151,31 +156,7 @@ function main() {
 	compare_mongo_config ${cluster} $namespace
 
 	desc 'Exposed, ClusterIP -> LoadBalancer'
-	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
-          {
-              "op": "replace",
-              "path": "/spec/replsets/0/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "LoadBalancer"
-        }
-          },
-        {
-              "op": "replace",
-              "path": "/spec/sharding/mongos/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "LoadBalancer"
-        }
-          },
-          {
-              "op": "replace",
-              "path": "/spec/sharding/configsvrReplSet/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "LoadBalancer"
-        }
-          }]'
+	expose_cluster "LoadBalancer"
 
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
@@ -209,31 +190,7 @@ function main() {
 	compare_mongo_config ${cluster}
 
 	desc "Exposed,  LoadBalancer -> ClusterIP"
-	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
-          {
-              "op": "replace",
-              "path": "/spec/replsets/0/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "ClusterIP"
-        }
-          },
-        {
-              "op": "replace",
-              "path": "/spec/sharding/mongos/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "ClusterIP"
-        }
-          },
-          {
-              "op": "replace",
-              "path": "/spec/sharding/configsvrReplSet/expose",
-        "value": {
-          "enabled": true,
-          "exposeType" : "ClusterIP"
-        }
-          }]'
+	expose_cluster "ClusterIP"
 
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
@@ -251,32 +208,7 @@ function main() {
 	compare_mongo_config ${cluster} $namespace
 
 	desc "Exposed -> Unexposed"
-
-	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
-          {
-              "op": "replace",
-              "path": "/spec/replsets/0/expose",
-        "value": {
-          "enabled": false,
-          "exposeType" : "ClusterIP"
-        }
-          },
-        {
-              "op": "replace",
-              "path": "/spec/sharding/mongos/expose",
-        "value": {
-          "enabled": false,
-          "exposeType" : "ClusterIP"
-        }
-          },
-          {
-              "op": "replace",
-              "path": "/spec/sharding/configsvrReplSet/expose",
-        "value": {
-          "enabled": false,
-          "exposeType" : "ClusterIP"
-        }
-          }]'
+  expose_cluster "ClusterIP" "false"
 
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
