@@ -189,11 +189,11 @@ function main() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-3nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-3nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-3nd"
-  sleep 60
+	sleep 60
 	compare_mongo_config ${cluster} $namespace
 
-  desc "Pause Exposed cluster (LoadBalancer)"
-  stop_cluster ${cluster}
+	desc "Pause Exposed cluster (LoadBalancer)"
+	stop_cluster ${cluster}
 	start_cluster ${cluster}
 
 	run_mongos \
@@ -286,15 +286,15 @@ function main() {
 		"myApp:myPass@$cluster-mongos.$namespace"
 	sleep 10 # for minikube
 
-  compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-6nd"
-  compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-6nd"
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-6nd"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-6nd"
 
-  compare_mongo_config ${cluster} $namespace "false"
+	compare_mongo_config ${cluster} $namespace "false"
 
-  kubectl_bin delete -f "$conf_dir/container-rc.yaml"
-  destroy "$namespace"
+	kubectl_bin delete -f "$conf_dir/container-rc.yaml"
+	destroy "$namespace"
 }
 
 main
