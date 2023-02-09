@@ -461,6 +461,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if cr.Spec.Pause {
+			if cr.Status.State == AppStateStopping {
+				log.Info("Pausing cluster", "replset", replset.Name, "oldSize", replset.Size, "newSize", 0)
+			}
 			replset.Size = 0
 			replset.Arbiter.Enabled = false
 			replset.NonVoting.Enabled = false
