@@ -135,8 +135,6 @@ function main() {
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
-	minikube_sleep
-
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
 	desc 'Unexposed -> Exposed, ClusterIP'
@@ -150,8 +148,6 @@ function main() {
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-
-  minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-2nd"
@@ -171,8 +167,6 @@ function main() {
 		'use myApp\n db.test.insert({ x: 100502 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
-  minikube_sleep
-
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-3nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-3nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-3nd"
@@ -187,8 +181,6 @@ function main() {
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100504 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-
-  minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
@@ -209,8 +201,6 @@ function main() {
 		'use myApp\n db.test.insert({ x: 100503 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
-	minikube_sleep
-
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-4nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-4nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-4nd"
@@ -229,8 +219,6 @@ function main() {
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100505 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-
-	minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
