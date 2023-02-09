@@ -61,10 +61,10 @@ function compare_mongo_config() {
 }
 
 function expose_cluster() {
-   expose_type=$1
-   expose_status=${2:-true}
+	expose_type=$1
+	expose_status=${2:-true}
 
-   kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
           {
               "op": "replace",
               "path": "/spec/replsets/0/expose",
@@ -140,7 +140,7 @@ function main() {
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
 	desc 'Unexposed -> Exposed, ClusterIP'
-  expose_cluster "ClusterIP"
+	expose_cluster "ClusterIP"
 
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
@@ -219,7 +219,7 @@ function main() {
 	compare_mongo_config ${cluster} $namespace
 
 	desc "Exposed -> Unexposed"
-  expose_cluster "ClusterIP" "false"
+	expose_cluster "ClusterIP" "false"
 
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
