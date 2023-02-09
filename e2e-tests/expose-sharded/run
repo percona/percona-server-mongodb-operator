@@ -173,60 +173,60 @@ function main() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-3nd"
 	sleep 60 # Wait LB ip setup
 	compare_mongo_config ${cluster} $namespace
-# TODO: uncomment  after https://jira.percona.com/browse/K8SPSMDB-843
-#	desc "Pause Exposed cluster (LoadBalancer)"
-#	stop_cluster ${cluster}
-#	start_cluster ${cluster}
-#
-#	run_mongos \
-#		'use myApp\n db.test.insert({ x: 100504 })' \
-#		"myApp:myPass@$cluster-mongos.$namespace"
-#
-#	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
-#
-#	compare_mongo_config ${cluster}
-#
-# TODO: uncomment after https://jira.percona.com/browse/K8SPSMDB-841
-#	desc "Exposed,  LoadBalancer -> ClusterIP"
-#	expose_cluster "ClusterIP"
-#
-#	wait_for_running $cluster-rs0 3
-#	wait_for_running $cluster-cfg 3 "false"
-#	wait_for_running $cluster-mongos 3
-#	wait_cluster_consistency "${cluster}" 3
-#
-#	run_mongos \
-#		'use myApp\n db.test.insert({ x: 100503 })' \
-#		"myApp:myPass@$cluster-mongos.$namespace"
-#
-#	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-4nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-4nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-4nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-4nd"
-#
-#	compare_mongo_config ${cluster} $namespace
-#
-#	desc "Exposed -> Unexposed"
-#	expose_cluster "ClusterIP" "false"
-#
-#	wait_for_running $cluster-rs0 3
-#	wait_for_running $cluster-cfg 3 "false"
-#	wait_for_running $cluster-mongos 3
-#	wait_cluster_consistency "${cluster}" 3
-#
-#	run_mongos \
-#		'use myApp\n db.test.insert({ x: 100505 })' \
-#		"myApp:myPass@$cluster-mongos.$namespace"
-#
-#	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-6nd"
-#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-6nd"
-#
-#	compare_mongo_config ${cluster} $namespace "false"
+	# TODO: uncomment  after https://jira.percona.com/browse/K8SPSMDB-843
+	#	desc "Pause Exposed cluster (LoadBalancer)"
+	#	stop_cluster ${cluster}
+	#	start_cluster ${cluster}
+	#
+	#	run_mongos \
+	#		'use myApp\n db.test.insert({ x: 100504 })' \
+	#		"myApp:myPass@$cluster-mongos.$namespace"
+	#
+	#	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-5nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-5nd"
+	#
+	#	compare_mongo_config ${cluster}
+	#
+	# TODO: uncomment after https://jira.percona.com/browse/K8SPSMDB-841
+	#	desc "Exposed,  LoadBalancer -> ClusterIP"
+	#	expose_cluster "ClusterIP"
+	#
+	#	wait_for_running $cluster-rs0 3
+	#	wait_for_running $cluster-cfg 3 "false"
+	#	wait_for_running $cluster-mongos 3
+	#	wait_cluster_consistency "${cluster}" 3
+	#
+	#	run_mongos \
+	#		'use myApp\n db.test.insert({ x: 100503 })' \
+	#		"myApp:myPass@$cluster-mongos.$namespace"
+	#
+	#	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-4nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-4nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-4nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-4nd"
+	#
+	#	compare_mongo_config ${cluster} $namespace
+	#
+	#	desc "Exposed -> Unexposed"
+	#	expose_cluster "ClusterIP" "false"
+	#
+	#	wait_for_running $cluster-rs0 3
+	#	wait_for_running $cluster-cfg 3 "false"
+	#	wait_for_running $cluster-mongos 3
+	#	wait_cluster_consistency "${cluster}" 3
+	#
+	#	run_mongos \
+	#		'use myApp\n db.test.insert({ x: 100505 })' \
+	#		"myApp:myPass@$cluster-mongos.$namespace"
+	#
+	#	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-6nd"
+	#	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-2.$cluster-rs0.$namespace" "-6nd"
+	#
+	#	compare_mongo_config ${cluster} $namespace "false"
 
 	kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 	destroy "$namespace"
