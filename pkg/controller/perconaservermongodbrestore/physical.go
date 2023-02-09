@@ -174,7 +174,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, errors.Wrap(err, "unmarshal PBM describe-restore output")
 	}
 
+	log.V(1).Info("PBM restore status", "status", meta)
+
 	switch meta.Status {
+	case pbm.StatusStarting:
+		for _, rs := range meta.Replsets {
+			if rs.Status == pbm.StatusRunning {
+				status.State = psmdbv1.RestoreStateRunning
+				return status, nil
+			}
+		}
 	case pbm.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
 	case pbm.StatusDone:
