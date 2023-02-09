@@ -45,8 +45,9 @@ if kubectl get nodes | grep "^minikube" >/dev/null; then
 fi
 
 minikube_sleep(){
+  sleep_time=${1:-10}
   if [[ $MINIKUBE == 1 ]]; then
-	  sleep 10
+	  sleep $sleep_time
 	fi
 }
 
