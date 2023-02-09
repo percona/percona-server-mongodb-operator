@@ -30,6 +30,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 
 	status := cr.Status
 
+	if cr.Status.State == psmdbv1.RestoreStateReady {
+		return status, nil
+	}
+
 	cluster := &psmdbv1.PerconaServerMongoDB{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
 	if err != nil {
