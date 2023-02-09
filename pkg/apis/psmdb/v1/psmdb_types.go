@@ -716,11 +716,13 @@ type BackupTaskSpec struct {
 	Name             string                   `json:"name"`
 	Enabled          bool                     `json:"enabled"`
 	Keep             int                      `json:"keep,omitempty"`
-	BackupType       pbm.BackupType           `json:"backupType,omitempty"`
 	Schedule         string                   `json:"schedule,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical}
+	Type pbm.BackupType `json:"type,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {

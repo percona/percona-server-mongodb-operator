@@ -3,6 +3,6 @@ kind: PerconaServerMongoDBBackup
 metadata:
   name:
 spec:
+  type: physical
   clusterName: some-name
   storageName:
-  backupType: physical

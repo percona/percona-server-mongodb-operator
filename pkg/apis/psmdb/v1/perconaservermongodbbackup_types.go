@@ -13,9 +13,11 @@ type PerconaServerMongoDBBackupSpec struct {
 	PSMDBCluster     string                   `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
 	ClusterName      string                   `json:"clusterName,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
-	Type             pbm.BackupType           `json:"backupType,omitempty"`
 	Compression      compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical}
+	Type pbm.BackupType `json:"type,omitempty"`
 }
 
 type BackupState string

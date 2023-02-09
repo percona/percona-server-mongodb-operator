@@ -507,7 +507,7 @@ spec:
 #        enabled: false
 #        schedule: "0 5 * * 0"
 #        keep: 5
-#        backupType: physical
+#        type: physical
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6

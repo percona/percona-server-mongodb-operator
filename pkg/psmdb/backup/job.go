@@ -106,8 +106,8 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 		shortClusterName = shortClusterName[:16]
 	}
 	backupType := pbm.LogicalBackup
-	if len(task.BackupType) > 0 {
-		backupType = task.BackupType
+	if len(task.Type) > 0 {
+		backupType = task.Type
 	}
 	backupCr := &api.PerconaServerMongoDBBackup{
 		TypeMeta: metav1.TypeMeta{

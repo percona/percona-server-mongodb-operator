@@ -58,8 +58,6 @@ spec:
             type: object
           spec:
             properties:
-              backupType:
-                type: string
               clusterName:
                 type: string
               compressionLevel:
@@ -69,6 +67,11 @@ spec:
               psmdbCluster:
                 type: string
               storageName:
+                type: string
+              type:
+                enum:
+                - logical
+                - physical
                 type: string
             type: object
           status:
