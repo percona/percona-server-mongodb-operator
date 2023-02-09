@@ -155,7 +155,7 @@ run_mongos \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$main_cluster-mongos.$namespace"
 
-sleep 10 # for minikube
+minikube_sleep
 desc "Compare data"
 compare_mongos_cmd "find" "myApp:myPass@$main_cluster-mongos.$namespace"
 

@@ -58,7 +58,6 @@ function compare_mongo_config() {
 		desc "Actual values rs $rs0_0_endpoint_actual and cfg $cfg_0_endpoint_actual do not match expected rs $rs0_0_endpoint:27017 and cfg $cfg_0_endpoint:27017"
 		exit 1
 	fi
-
 }
 
 function expose_cluster() {
@@ -90,7 +89,9 @@ function expose_cluster() {
           "exposeType" : "'"${expose_type}"'"
         }
           }]'
+
 }
+
 function main() {
 
 	create_infra "$namespace"
@@ -113,8 +114,7 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
-
-	sleep 10
+	wait_cluster_consistency "${cluster}" 3
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-rs0
@@ -134,7 +134,9 @@ function main() {
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-	sleep 10 # for minikube
+
+	minikube_sleep
+
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
 	desc 'Unexposed -> Exposed, ClusterIP'
@@ -143,11 +145,13 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
+	wait_cluster_consistency "${cluster}" 3
+
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
-	sleep 10 # for minikube
+  minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-2nd"
@@ -161,10 +165,13 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
+	wait_cluster_consistency "${cluster}" 3
+
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100502 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-	sleep 10 # for minikube
+
+  minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-3nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-3nd"
@@ -180,7 +187,8 @@ function main() {
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100504 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-	sleep 10 # for minikube
+
+  minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-5nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-5nd"
@@ -195,10 +203,13 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
+	wait_cluster_consistency "${cluster}" 3
+
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100503 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-	sleep 10 # for minikube
+
+	minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-4nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-4nd"
@@ -213,10 +224,13 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
+	wait_cluster_consistency "${cluster}" 3
+
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100505 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-	sleep 10 # for minikube
+
+	minikube_sleep
 
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-6nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-6nd"
