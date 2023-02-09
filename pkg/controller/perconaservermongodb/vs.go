@@ -32,19 +32,26 @@ func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, end
 	})
 
 	applyParams := &version_service.VersionServiceApplyParams{
-		HTTPClient:            &http.Client{Timeout: 10 * time.Second},
-		Apply:                 vm.Apply,
-		BackupVersion:         &vm.BackupVersion,
-		ClusterWideEnabled:    &vm.ClusterWideEnabled,
-		CustomResourceUID:     &vm.CRUID,
-		DatabaseVersion:       &vm.MongoVersion,
-		HashicorpVaultEnabled: &vm.HashicorpVaultEnabled,
-		KubeVersion:           &vm.KubeVersion,
-		OperatorVersion:       vm.Version,
-		Platform:              &vm.Platform,
-		PmmVersion:            &vm.PMMVersion,
-		Product:               productName,
-		ShardingEnabled:       &vm.ShardingEnabled,
+		HTTPClient:              &http.Client{Timeout: 10 * time.Second},
+		Apply:                   vm.Apply,
+		BackupVersion:           &vm.BackupVersion,
+		ClusterWideEnabled:      &vm.ClusterWideEnabled,
+		CustomResourceUID:       &vm.CRUID,
+		DatabaseVersion:         &vm.MongoVersion,
+		HashicorpVaultEnabled:   &vm.HashicorpVaultEnabled,
+		KubeVersion:             &vm.KubeVersion,
+		OperatorVersion:         vm.Version,
+		Platform:                &vm.Platform,
+		PmmVersion:              &vm.PMMVersion,
+		Product:                 productName,
+		ShardingEnabled:         &vm.ShardingEnabled,
+		PmmEnabled:              &vm.PmmEnabled,
+		HelmDeploy:              &vm.HelmDeploy,
+		SidecarsUsed:            &vm.SidecarsUsed,
+		BackupsUsed:             &vm.BackupsUsed,
+		ClusterSize:             &vm.ClusterSize,
+		PitrUsed:                &vm.PitrUsed,
+		PhysicalBackupScheduled: &vm.PhysicalBackupScheduled,
 	}
 	applyParams = applyParams.WithTimeout(10 * time.Second)
 
@@ -138,15 +145,22 @@ type VersionResponse struct {
 }
 
 type VersionMeta struct {
-	Apply                 string
-	MongoVersion          string
-	KubeVersion           string
-	Platform              string
-	PMMVersion            string
-	BackupVersion         string
-	CRUID                 string
-	Version               string
-	ClusterWideEnabled    bool
-	HashicorpVaultEnabled bool
-	ShardingEnabled       bool
+	Apply                   string
+	MongoVersion            string
+	KubeVersion             string
+	Platform                string
+	PMMVersion              string
+	BackupVersion           string
+	CRUID                   string
+	Version                 string
+	ClusterWideEnabled      bool
+	HashicorpVaultEnabled   bool
+	ShardingEnabled         bool
+	PmmEnabled              bool
+	HelmDeploy              bool
+	SidecarsUsed            bool
+	BackupsUsed             bool
+	ClusterSize             int32
+	PitrUsed                bool
+	PhysicalBackupScheduled bool
 }
