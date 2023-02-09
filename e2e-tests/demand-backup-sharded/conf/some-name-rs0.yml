@@ -60,7 +60,7 @@ spec:
             requests:
               storage: 3Gi
       expose:
-        enabled: true
+        enabled: false
         exposeType: ClusterIP
       sidecars:
       - image: busybox
@@ -88,7 +88,7 @@ spec:
     affinity:
       antiAffinityTopologyKey: none
     expose:
-      enabled: true
+      enabled: false
       exposeType: ClusterIP
     resources:
       limits:
@@ -131,7 +131,7 @@ spec:
     affinity:
       antiAffinityTopologyKey: none
     expose:
-      enabled: true
+      enabled: false
       exposeType: ClusterIP
     resources:
       limits:
@@ -173,7 +173,7 @@ spec:
     affinity:
       antiAffinityTopologyKey: none
     expose:
-      enabled: true
+      enabled: false
       exposeType: ClusterIP
     resources:
       limits:

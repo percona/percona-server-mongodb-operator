@@ -71,6 +71,50 @@ backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
 backup_name_azure="backup-azure-blob"
 
+kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+    {
+        "op": "replace",
+        "path": "/spec/replsets/0/expose",
+  "value": {
+    "enabled": true,
+    "exposeType" : "ClusterIP"
+  }
+    },
+  {
+        "op": "replace",
+        "path": "/spec/replsets/1/expose",
+  "value": {
+    "enabled": true,
+    "exposeType" : "ClusterIP"
+  }
+    },
+  {
+        "op": "replace",
+        "path": "/spec/replsets/2/expose",
+  "value": {
+    "enabled": true,
+    "exposeType" : "ClusterIP"
+  }
+    },
+  {
+        "op": "replace",
+        "path": "/spec/sharding/mongos/expose",
+  "value": {
+    "enabled": true,
+    "exposeType" : "ClusterIP"
+  }
+    },
+    {
+        "op": "replace",
+        "path": "/spec/sharding/configsvrReplSet/expose",
+  "value": {
+    "enabled": true,
+    "exposeType" : "ClusterIP"
+  }
+    }]'
+
+sleep 60
+
 desc 'run backups'
 run_backup minio
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
