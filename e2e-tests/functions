@@ -44,9 +44,9 @@ if kubectl get nodes | grep "^minikube" >/dev/null; then
 	export MINIKUBE=1
 fi
 
-minikube_sleep(){
-  if [[ $MINIKUBE == 1 ]]; then
-	  sleep 10
+minikube_sleep() {
+	if [[ $MINIKUBE == 1 ]]; then
+		sleep 10
 	fi
 }
 
