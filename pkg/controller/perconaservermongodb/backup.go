@@ -154,7 +154,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 			}
 		} else {
-			log.Info("deleting outdated backup job", "name", item.Name, )
+			log.Info("deleting outdated backup job", "name", item.Name)
 			r.deleteBackupTask(cr, item.BackupTaskSpec)
 		}
 
