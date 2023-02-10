@@ -358,11 +358,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 					storage.Azure = *cr.Status.Azure
 				}
 
-				priorities, err := b.pbm.GetPriorities(ctx, r.client, cluster)
-				if err != nil {
-					return errors.Wrap(err, "get priorities")
-				}
-				err = b.pbm.SetConfig(ctx, storage, b.spec.PITR, priorities)
+				err := b.pbm.SetConfig(ctx, r.client, cluster, storage)
 				if err != nil {
 					return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 				}
