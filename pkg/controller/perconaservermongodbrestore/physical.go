@@ -97,18 +97,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
-		stdoutBuf.Reset()
-		stderrBuf.Reset()
-		command = []string{"/opt/percona/pbm", "config", "--force-resync"}
-		log.Info("Resync PBM storage", "command", command)
-		if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-		}
-
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		timeout := time.NewTimer(600 * time.Second)
+		timeout := time.NewTimer(900 * time.Second)
 		defer timeout.Stop()
 
 	outer:
