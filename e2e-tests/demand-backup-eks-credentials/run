@@ -18,7 +18,6 @@ kubectl_bin apply \
 	-f "$conf_dir/secrets.yml" \
 	-f "$conf_dir/client.yml"
 
-
 cluster="some-name-rs0"
 desc "create first PSMDB cluster $cluster"
 apply_cluster $test_dir/conf/$cluster.yml
