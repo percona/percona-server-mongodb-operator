@@ -124,6 +124,7 @@ kubectl_bin delete psmdb ${cluster}
 ### Case 2: Backup and restore on sharded cluster
 desc 'Testing on sharded cluster'
 
+kubectl_bin apply -f "${conf_dir}/secrets.yml"
 apply_cluster "${test_dir}/conf/${cluster}-sharded.yml"
 
 echo "check if all pods started"

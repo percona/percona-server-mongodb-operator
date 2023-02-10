@@ -77,7 +77,7 @@ spec:
         persistentVolumeClaim:
           resources:
             requests:
-              storage: 1Gi
+              storage: 3Gi
       expose:
         enabled: false
         exposeType: ClusterIP
@@ -118,7 +118,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 1Gi
+            storage: 3Gi
     expose:
       enabled: false
       exposeType: ClusterIP
