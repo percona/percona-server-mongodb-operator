@@ -21,6 +21,10 @@ spec:
 #    - name: private-registry-credentials
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+#  ignoreAnnotations:
+#    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
+#  ignoreLabels:
+#    - rack
 #  multiCluster:
 #    enabled: true
 #    DNSSuffix: svc.clusterset.local
@@ -176,6 +180,10 @@ spec:
 #        path: /data
 #        type: Directory
       persistentVolumeClaim:
+#        annotations:
+#          volume.beta.kubernetes.io/storage-class: example-hostpath
+#        labels:
+#          rack: rack-22
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
@@ -233,6 +241,10 @@ spec:
 #          path: /data
 #          type: Directory
         persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
 #          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
@@ -350,6 +362,10 @@ spec:
 #         path: /data
 #         type: Directory
         persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
 #          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
           resources:

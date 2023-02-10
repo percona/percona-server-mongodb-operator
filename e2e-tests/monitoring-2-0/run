@@ -42,13 +42,17 @@ kubectl_bin apply \
 	-f $test_dir/conf/secrets.yml
 sleep 90
 
+
+desc "create first PSMDB cluster $cluster"
+apply_cluster "$test_dir/conf/$cluster-rs0.yml"
+wait_for_running $cluster-rs0 3
+
+desc 'check if pmm-client container is not enabled'
+compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
+
 desc 'add PMM_SERVER_API_KEY for secret some-users'
 API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
 kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": '$API_KEY'}}'
-
-cluster="monitoring"
-desc "create first PSMDB cluster $cluster"
-apply_cluster $test_dir/conf/$cluster-rs0.yml
 
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3

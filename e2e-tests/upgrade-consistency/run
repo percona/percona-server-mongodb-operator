@@ -15,7 +15,7 @@ main() {
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${conf_dir}/secrets.yml"
 
-	desc "create first PSMDB cluster $CLUSTER"
+	desc "create first PSMDB cluster 1.11.0 $CLUSTER" 
 	apply_cluster "$test_dir/conf/${CLUSTER}-rs0.yml"
 
 	desc 'check if Pod started'
@@ -25,17 +25,6 @@ main() {
 	compare_kubectl service/${CLUSTER}-rs0 "-1110"
 	compare_kubectl statefulset/${CLUSTER}-rs0 "-1110"
 
-	desc 'test 1.11.0'
-	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.11.0"}
-    }'
-	desc 'check if Pod started'
-	wait_for_running "${CLUSTER}-rs0" "1" "false"
-
-	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1120"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1120"
-
 	desc 'test 1.12.0'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {"crVersion":"1.12.0"}
@@ -44,12 +33,23 @@ main() {
 	wait_for_running "${CLUSTER}-rs0" "1" "false"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1130"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1130"
+	compare_kubectl service/${CLUSTER}-rs0 "-1120"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1120"
 
 	desc 'test 1.13.0'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {"crVersion":"1.13.0"}
+    }'
+	desc 'check if Pod started'
+	wait_for_running "${CLUSTER}-rs0" "1" "false"
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1130"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1130"
+
+	desc 'test 1.14.0'
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.14.0"}
     }'
 	desc 'check if Pod started'
 	wait_for_running "${CLUSTER}-rs0" "1" "false"

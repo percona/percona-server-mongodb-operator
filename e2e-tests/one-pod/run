@@ -67,10 +67,11 @@ main() {
 	cluster='one-pod-rs0'
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
 
-	desc 'check if service created with expected config'
+	desc 'check if service and pvc created with expected config'
 	compare_kubectl service/$cluster
-
-	desc 'create user'
+	compare_kubectl "pvc/mongod-data-one-pod-rs0-0"
+  
+  desc 'create user'
 	run_mongo \
 		'db.serverCmdLineOpts()' \
 		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
