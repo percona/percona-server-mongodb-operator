@@ -70,8 +70,8 @@ main() {
 	desc 'check if service and pvc created with expected config'
 	compare_kubectl service/$cluster
 	compare_kubectl "pvc/mongod-data-one-pod-rs0-0"
-  
-  desc 'create user'
+
+	desc 'create user'
 	run_mongo \
 		'db.serverCmdLineOpts()' \
 		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
