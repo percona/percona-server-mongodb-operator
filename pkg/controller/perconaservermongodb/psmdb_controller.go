@@ -1171,7 +1171,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
 	}
-	pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongosParams)
+	pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
@@ -1415,7 +1415,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, customLabels,
+	sfsSpec, err := psmdb.StatefulSpec(ctx, cr, replset, containerName, matchLabels, customLabels,
 		multiAZ, size, internalKeyName, inits, logf.FromContext(ctx), customConfig, resources,
 		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
 		configName)
@@ -1511,7 +1511,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
 
-		pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongodParams)
+		pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, *pmmC)
 		}
