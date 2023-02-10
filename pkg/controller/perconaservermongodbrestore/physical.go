@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -116,12 +117,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			case <-timeout.C:
 				return status, errors.Errorf("timeout while waiting PBM operation to finish")
 			case <-ticker.C:
-				stdoutBuf.Reset()
-				stderrBuf.Reset()
+				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
+					stdoutBuf.Reset()
+					stderrBuf.Reset()
 
-				command = []string{"/opt/percona/pbm", "status", "--out", "json"}
-				if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-					return status, errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+					command = []string{"/opt/percona/pbm", "status", "--out", "json"}
+					if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+						return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+					}
+
+					return nil
+				})
+				if err != nil {
+					return status, err
 				}
 
 				var pbmStatus struct {
