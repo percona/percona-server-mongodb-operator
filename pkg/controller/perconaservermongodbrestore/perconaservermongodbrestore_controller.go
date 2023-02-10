@@ -123,6 +123,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
 		}
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
@@ -133,12 +134,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 	err = cr.CheckFields()
 	if err != nil {
-		return rr, fmt.Errorf("fields check: %v", err)
+		return reconcile.Result{}, fmt.Errorf("fields check: %v", err)
 	}
 
 	switch cr.Status.State {
 	case psmdbv1.RestoreStateReady, psmdbv1.RestoreStateError:
-		return rr, nil
+		return reconcile.Result{}, nil
 	}
 
 	bcp, err := r.getBackup(ctx, cr)
@@ -147,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	if bcp.Status.State != psmdbv1.BackupStateReady {
-		return rr, errors.New("backup is not ready")
+		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
 	switch bcp.Status.Type {

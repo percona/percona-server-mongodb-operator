@@ -30,10 +30,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 
 	status := cr.Status
 
-	if cr.Status.State == psmdbv1.RestoreStateReady {
-		return status, nil
-	}
-
 	cluster := &psmdbv1.PerconaServerMongoDB{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
 	if err != nil {
@@ -54,6 +50,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	}
 
 	if cr.Status.State == psmdbv1.RestoreStateNew {
+		pbmConf := corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pbm-config",
+				Namespace: cluster.Namespace,
+			},
+		}
+		if err := r.client.Delete(ctx, &pbmConf); err != nil && !k8serrors.IsNotFound(err) {
+			return status, errors.Wrapf(err, "delete secret pbm-config")
+		}
+
 		status.State = psmdbv1.RestoreStateWaiting
 	}
 
@@ -214,6 +220,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		for _, rs := range replsets {
 			stsName := cluster.Name + "-" + rs.Name
 
+			log.Info("Deleting statefulset", "statefulset", stsName)
+
 			sts := appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      stsName,
@@ -225,17 +233,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
 			}
 		}
-
-		pbmConf := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pbm-config",
-				Namespace: cluster.Namespace,
-			},
-		}
-		if err := r.client.Delete(ctx, &pbmConf); err != nil {
-			return status, errors.Wrapf(err, "delete secret pbm-config")
-		}
-
 	}
 
 	return status, nil
