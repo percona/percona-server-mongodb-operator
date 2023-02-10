@@ -516,7 +516,7 @@ wait_for_running() {
 	let last_pod="$(($2 - 1))" || :
 	local check_cluster_readyness="${3:-true}"
 
-    set_debug
+	set_debug
 	local rs_name=${name/*-/}
 	local cluster_name=${name/-$rs_name/}
 	for i in $(seq 0 $last_pod); do
