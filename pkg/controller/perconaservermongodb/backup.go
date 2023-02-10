@@ -154,7 +154,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 			}
 		} else {
-			log.Info("deleting outdated backup job", "cluster", cr.Name, "name", item.Name, "namespace", cr.Namespace)
+			log.Info("deleting outdated backup job", "name", item.Name, )
 			r.deleteBackupTask(cr, item.BackupTaskSpec)
 		}
 
@@ -171,7 +171,7 @@ func (r *ReconcilePerconaServerMongoDB) createBackupTask(ctx context.Context, cr
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
 		if k8sErrors.IsNotFound(err) {
 			log.Info("cluster is not found, deleting the job",
-				"job name", task.Name, "cluster", cr.Name, "namespace", cr.Namespace)
+				"job name", task.Name)
 			r.deleteBackupTask(cr, task)
 			return
 		}
