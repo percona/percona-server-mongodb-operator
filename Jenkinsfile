@@ -132,9 +132,9 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
         try {
             echo "The $TEST_NAME test was started!"
-            initial_timestamp=sh(script: 'date +%s', , returnStdout: true).trim()
+            def initialTimestamp=sh(script: 'date +%s', , returnStdout: true).trim()
             testsReportMap[TEST_NAME]['status']= "[failed]($testUrl)"
-            testsReportMap[TEST_NAME]['duration']= 0
+            testsReportMap[TEST_NAME]['duration']= $initialTimestamp
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -148,10 +148,10 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                     fi
                 """
             }
-            final_timestamp=sh(script: 'date +%s', , returnStdout: true).trim()
-            test_duration=$final_timestamp - $initial_timestamp
+            def finalTimestamp=sh(script: 'date +%s', , returnStdout: true).trim()
+            def testDuration=$finalTimestamp - $initialTimestamp
             testsReportMap[TEST_NAME]['status']= "[passed]($testUrl)"
-            testsReportMap[TEST_NAME]['duration']= $test_duration
+            testsReportMap[TEST_NAME]['duration']= $testDuration
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
         }
