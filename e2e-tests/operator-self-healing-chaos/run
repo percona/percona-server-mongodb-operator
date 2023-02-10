@@ -129,7 +129,7 @@ main() {
 	destroy_chaos_mesh
 	destroy $namespace
 
-    desc 'test passed'
+	desc 'test passed'
 }
 
 main
