@@ -232,7 +232,6 @@ run_restore() {
 			compare_mongo_cmd "find" "myApp:myPass@$cluster$cluster_pfx-${i}.$cluster$cluster_pfx.$namespace" "-2nd"
 		done
 	fi
-	
 	desc "run restore restore-$backup_name from backup $backup_name"
 	cat $test_dir/conf/restore.yml \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
