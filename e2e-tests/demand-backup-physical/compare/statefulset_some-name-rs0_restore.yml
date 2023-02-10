@@ -1,8 +1,6 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  finalizers:
-  - delete-psmdb-pvc
   annotations:
     psmdb.percona.com/restore-in-progress: "true"
   generation: 2

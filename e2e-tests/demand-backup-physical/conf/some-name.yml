@@ -1,6 +1,8 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
+  finalizers:
+  - delete-psmdb-pvc
   name: some-name
 spec:
   #platform: openshift
