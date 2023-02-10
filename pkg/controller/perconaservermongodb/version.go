@@ -8,15 +8,17 @@ import (
 	"sync/atomic"
 
 	v "github.com/hashicorp/go-version"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
@@ -25,6 +27,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServe
 }
 
 func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+	log := logf.FromContext(ctx)
 	schedule, ok := r.crons.jobs[jobName(cr)]
 	if cr.Spec.UpgradeOptions.Schedule == "" || !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		if ok {
@@ -120,6 +123,8 @@ func canUpgradeVersion(fcv, new string) bool {
 		return new == "4.4"
 	case "4.4":
 		return new == "5.0"
+	case "5.0":
+		return new == "6.0"
 	default:
 		return false
 	}
@@ -210,6 +215,8 @@ func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+	log := logf.FromContext(ctx)
+
 	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		return nil
 	}
@@ -282,27 +289,27 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 	patch := client.MergeFrom(cr.DeepCopy())
 	if cr.Spec.Image != newVersion.MongoImage {
 		if cr.Status.MongoVersion == "" {
-			log.Info(fmt.Sprintf("set Mongo version to %s", newVersion.MongoVersion))
+			log.Info("Set Mongo version", "newVersion", newVersion.MongoImage)
 		} else {
-			log.Info(fmt.Sprintf("update Mongo version from %s to %s", cr.Status.MongoVersion, newVersion.MongoVersion))
+			log.Info("Update Mongo version", "newVersion", newVersion.MongoImage, "oldVersion", cr.Status.MongoVersion)
 		}
 		cr.Spec.Image = newVersion.MongoImage
 	}
 
 	if cr.Spec.Backup.Image != newVersion.BackupImage {
 		if cr.Status.BackupVersion == "" {
-			log.Info(fmt.Sprintf("set Backup version to %s", newVersion.BackupVersion))
+			log.Info("Set backup version", "newVersion", newVersion.BackupVersion)
 		} else {
-			log.Info(fmt.Sprintf("update Backup version from %s to %s", cr.Status.BackupVersion, newVersion.BackupVersion))
+			log.Info("Update backup version", "newVersion", newVersion.BackupVersion, "oldVersion", cr.Status.BackupVersion)
 		}
 		cr.Spec.Backup.Image = newVersion.BackupImage
 	}
 
 	if cr.Spec.PMM.Image != newVersion.PMMImage {
 		if cr.Status.PMMVersion == "" {
-			log.Info(fmt.Sprintf("set PMM version to %s", newVersion.PMMVersion))
+			log.Info("Set PMM version", "newVersion", newVersion.PMMVersion)
 		} else {
-			log.Info(fmt.Sprintf("update PMM version from %s to %s", cr.Status.PMMVersion, newVersion.PMMVersion))
+			log.Info("Update PMM version", "newVersion", newVersion.PMMVersion, "oldVersion", cr.Status.PMMVersion)
 		}
 		cr.Spec.PMM.Image = newVersion.PMMImage
 	}
@@ -335,6 +342,8 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
 	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
 		cr.Status.State != api.AppStateReady ||
 		cr.Status.MongoImage == cr.Spec.Image {

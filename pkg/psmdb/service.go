@@ -170,6 +170,8 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 	return addr, nil
 }
 
+var ErrNoIngressPoints = errors.New("ingress points not found")
+
 func getIngressPoint(ctx context.Context, pod corev1.Pod, cl client.Client) (string, error) {
 	var retries uint64 = 0
 
@@ -183,7 +185,7 @@ func getIngressPoint(ctx context.Context, pod corev1.Pod, cl client.Client) (str
 		retries++
 
 		if retries >= 1000 {
-			return "", errors.New("retries limit reached")
+			return "", ErrNoIngressPoints
 		}
 
 		svc := &corev1.Service{}
@@ -207,7 +209,7 @@ func getIngressPoint(ctx context.Context, pod corev1.Pod, cl client.Client) (str
 
 	}
 
-	return "", errors.Errorf("can't get service %s ingress", pod.Name)
+	return "", ErrNoIngressPoints
 }
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
@@ -253,11 +255,11 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 
 // MongoHost returns the mongo host for given pod
 func MongoHost(ctx context.Context, cl client.Client, m *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
-	if rsExposed {
-		if m.Spec.ClusterServiceDNSMode == api.DnsModeServiceMesh {
-			return GetServiceMeshAddr(m, pod.Name, m.Namespace), nil
-		}
+	if m.Spec.ClusterServiceDNSMode == api.DnsModeServiceMesh {
+		return GetServiceMeshAddr(m, pod.Name, m.Namespace), nil
+	}
 
+	if rsExposed {
 		if m.MCSEnabled() {
 			imported, err := IsServiceImported(ctx, cl, m, pod.Name)
 			if err != nil {
@@ -342,6 +344,8 @@ func GetMCSAddr(m *api.PerconaServerMongoDB, pod string) string {
 	return fmt.Sprintf("%s.%s.%s:%d", pod, m.Namespace, m.Spec.MultiCluster.DNSSuffix, api.DefaultMongodPort)
 }
 
+var ErrServiceNotExists = errors.New("service doesn't exist")
+
 func getExtServices(ctx context.Context, cl client.Client, namespace, podName string) (*corev1.Service, error) {
 	svcMeta := &corev1.Service{}
 
@@ -356,7 +360,7 @@ func getExtServices(ctx context.Context, cl client.Client, namespace, podName st
 		}
 		return svcMeta, nil
 	}
-	return nil, errors.New("failed to fetch service: retries limit reached")
+	return nil, ErrServiceNotExists
 }
 
 func IsServiceImported(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, svcName string) (bool, error) {

@@ -6,7 +6,7 @@ API="psmdb.percona.com/v1"
 OPERATOR_VERSION="1.14.0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod5.0"}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
@@ -762,6 +762,9 @@ compare_mongo_user() {
 	if [[ $IMAGE_MONGOD =~ 5\.0 ]] && [ -f ${test_dir}/compare/$user-50.json ]; then
 		expected_result=${test_dir}/compare/$user-50.json
 	fi
+	if [[ $IMAGE_MONGOD =~ 6\.0 ]] && [ -f ${test_dir}/compare/$user-60.json ]; then
+		expected_result=${test_dir}/compare/$user-60.json
+	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
 		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
@@ -960,12 +963,10 @@ EOF
 
 cat_config() {
 	cat "$1" \
-		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#apply:.*#apply: Never#"
+		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
+		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM"'"' \
+		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
+		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
 
 apply_cluster() {

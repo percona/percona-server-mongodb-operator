@@ -31,8 +31,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
-var log = logf.Log.WithName("controller_perconaservermongodbbackup")
-
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
@@ -92,6 +90,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	log := logf.FromContext(ctx)
+
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
 	}
@@ -173,7 +173,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}
 	defer bcp.Close(ctx)
 
-	err = r.checkFinalizers(ctx, cr, bcp)
+	err = r.checkFinalizers(ctx, cr, cluster, bcp)
 	if err != nil {
 		return rr, errors.Wrap(err, "failed to run finalizer")
 	}
@@ -197,6 +197,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	cr *psmdbv1.PerconaServerMongoDBBackup,
 	bcp *Backup,
 ) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
+	log := logf.FromContext(ctx)
 	status := cr.Status
 	if cluster == nil {
 		return status, errors.New("cluster not found")
@@ -229,7 +230,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	time.Sleep(5 * time.Second)
-	return bcp.Status(cr)
+	return bcp.Status(ctx, cr)
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
@@ -306,7 +307,9 @@ func getPBMBackupMeta(cr *psmdbv1.PerconaServerMongoDBBackup) *pbm.BackupMeta {
 	return meta
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, b *Backup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
+	log := logf.FromContext(ctx)
+
 	var err error
 	if cr.ObjectMeta.DeletionTimestamp == nil {
 		return nil
@@ -338,16 +341,39 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 						return errors.Wrap(err, "get storage")
 					}
 					if err := dummyPBM.DeleteBackupFiles(getPBMBackupMeta(cr), stg); err != nil {
-						log.Error(err, "failed to run finalizer", "finalizer", f)
+						log.Error(err, "failed to run finalizer with dummy pbm", "finalizer", f)
 						finalizers = append(finalizers, f)
 					}
-				} else {
-					e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
-					err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
-					if err != nil {
-						log.Error(err, "failed to run finalizer", "finalizer", f)
-						finalizers = append(finalizers, f)
-					}
+					continue
+				}
+
+				if cluster == nil {
+					return errors.Errorf("PerconaServerMongoDB %s is not found", cr.Spec.GetClusterName())
+				}
+
+				var storage psmdbv1.BackupStorageSpec
+				switch {
+				case cr.Status.S3 != nil:
+					storage.Type = psmdbv1.BackupStorageS3
+					storage.S3 = *cr.Status.S3
+				case cr.Status.Azure != nil:
+					storage.Type = psmdbv1.BackupStorageAzure
+					storage.Azure = *cr.Status.Azure
+				}
+
+				priorities, err := b.pbm.GetPriorities(ctx, r.client, cluster)
+				if err != nil {
+					return errors.Wrap(err, "get priorities")
+				}
+				err = b.pbm.SetConfig(ctx, storage, b.spec.PITR, priorities)
+				if err != nil {
+					return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+				}
+				e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
+				err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
+				if err != nil {
+					log.Error(err, "failed to run finalizer", "finalizer", f)
+					finalizers = append(finalizers, f)
 				}
 			}
 		}
@@ -372,6 +398,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, 
 
 		return r.client.Status().Update(ctx, c)
 	})
+
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
 
 	return errors.Wrap(err, "write status")
 }
