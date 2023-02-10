@@ -119,6 +119,8 @@ run_restore ${backup_name_minio}
 wait_restore ${backup_name_minio}
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}"
 
+kubectl_bin delete psmdb ${cluster}
+
 ### Case 2: Backup and restore on sharded cluster
 desc 'Testing on sharded cluster'
 
