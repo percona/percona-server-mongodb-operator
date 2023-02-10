@@ -113,8 +113,8 @@ void makeReport() {
     def startedTestAmount = testsReportMap.size()
     echo "${testsReportMap}"
     for ( test in testsReportMap ) {
-        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value.status} | ${test.value.duration}|"
-        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value.status}/><duration>${test.value.duration}</duration></testcase>\n"
+        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value['status']} | ${test.value['duration']}|"
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value['status']}/><duration>${test.value['duration']}</duration></testcase>\n"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
     TestsReportXML = TestsReportXML + '</testsuite>\n'
