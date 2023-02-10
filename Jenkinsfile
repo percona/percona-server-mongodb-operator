@@ -12,7 +12,7 @@ void CreateCluster(String CLUSTER_SUFFIX) {
                 gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
                 gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
-                gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.21 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 && \
+                gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.22 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
@@ -290,6 +290,7 @@ pipeline {
                             --rm \
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
+                            -e GOFLAGS='-buildvcs=false' \
                             golang:1.19 sh -c '
                                 go install github.com/google/go-licenses@v1.0.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
@@ -317,6 +318,7 @@ pipeline {
                             --rm \
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
+                            -e GOFLAGS='-buildvcs=false' \
                             golang:1.19 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
@@ -357,10 +359,11 @@ pipeline {
 //                         ShutdownCluster('cluster1')
 //                    }
 //                 }
-                stage('2 OneP Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
+                stage('2 OneP IgnoreLA Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
                     steps {
                         CreateCluster('cluster2')
                         runTest('one-pod', 'cluster2')
+//                         runTest('ignore-labels-annotations', 'cluster2')
 //                         runTest('monitoring-2-0', 'cluster2')
 //                         runTest('arbiter', 'cluster2')
 //                         runTest('service-per-pod', 'cluster2')
