@@ -1,30 +1,34 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
-cluster="some-name-rs0"
+set_debug
 
+cluster="some-name-rs0"
 setup_cluster() {
-	# create cluster
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f $conf_dir/secrets.yml \
 		-f $conf_dir/client.yml
 
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $conf_dir/$cluster.yml
 
+	desc "enable backups"
 	kubectl_bin patch psmdb some-name --type='merge' -p '{"spec":{"backup":{"enabled":true}}}'
 
-	# check if all 3 Pods started
+	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
-	desc 'check data consistency: write data, read from all'
+	desc 'create user myApp'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$cluster.$namespace"
 	sleep 2
+
+	desc 'write data, read from all'
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster.$namespace"
@@ -34,19 +38,21 @@ setup_cluster() {
 }
 
 recreate() {
-	# delete cluster
+	desc "delete PSMDB cluster $cluster"
 	kubectl_bin delete \
 		-f $conf_dir/$cluster.yml
 	wait_for_delete pod/$cluster-2
 	wait_for_delete pod/$cluster-1
 	wait_for_delete pod/$cluster-0
 
-	# recreate cluster
+	desc "create PSMDB cluster $cluster"
 	apply_cluster $conf_dir/$cluster.yml
 
+	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 	sleep 240
 
+	desc 'write data, read from all'
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
@@ -62,7 +68,7 @@ kill_pod() {
 		| kubectl apply -f -
 	sleep 5
 
-	# check if all 3 Pods started
+	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
 	desc 'check data consistency for chaosed Pod'
@@ -79,12 +85,12 @@ failure_pod() {
 		| kubectl apply -f -
 	sleep 10
 
-	# write data
+	desc 'write data'
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster.$namespace"
 
-	# check if all 3 Pods started
+	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
 	desc 'check data consistency for chaosed Pod'
@@ -101,13 +107,13 @@ network_loss() {
 		| kubectl apply -f -
 	sleep 10
 
-	# write data
+	desc 'write data'
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100502 })' \
 		"myApp:myPass@$cluster.$namespace"
 	sleep 60
 
-	# check if all 3 Pods started
+	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
 	desc 'check data consistency for chaosed Pod'
@@ -135,6 +141,8 @@ main() {
 
 	destroy_chaos_mesh
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

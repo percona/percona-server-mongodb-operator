@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
+set_debug
 
 if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
@@ -15,13 +15,15 @@ fi
 deploy_cert_manager
 create_infra "$namespace"
 
-desc 'create PSMDB cluster'
-cluster="some-name"
+desc 'create secrets and start client'
 kubectl_bin apply -f "$conf_dir/secrets.yml"
-apply_cluster "$test_dir/conf/$cluster.yml"
 kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
 
-desc 'check if all 3 Pods started'
+cluster="some-name"
+desc "create first PSMDB cluster $cluster"
+apply_cluster "$test_dir/conf/$cluster.yml"
+
+desc 'check if all Pods started'
 wait_for_running $cluster-cfg 3
 wait_for_running $cluster-rs0 3
 wait_for_running $cluster-rs1 3
@@ -29,7 +31,6 @@ wait_for_running $cluster-rs2 3
 wait_for_running $cluster-mongos 3
 
 desc 'create user'
-
 run_mongos \
 	'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
@@ -58,10 +59,9 @@ run_mongos \
 	'sh.shardCollection("app.city", { _id: 1 } )' \
 	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
 	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-
 sleep 120
-desc 'check chunks'
 
+desc 'check chunks'
 chunks_param1="ns"
 chunks_param2='"app.city"'
 
@@ -97,3 +97,5 @@ if [[ $shards -lt 3 ]]; then
 fi
 
 destroy "$namespace"
+
+desc 'test passed'
