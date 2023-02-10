@@ -135,7 +135,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             Date initial = new Date()
             initialTime= initial.getTime()
             testsReportMap[TEST_NAME]['status']= "[failed]($testUrl)"
-            testsReportMap[TEST_NAME]['duration']= $initialTimestamp
+            testsReportMap[TEST_NAME]['duration']= 0
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
 
             timeout(time: 90, unit: 'MINUTES') {
