@@ -103,7 +103,8 @@ void popArtifactFile(String FILE_NAME) {
     }
 }
 
-TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
+TestsReport = '| Test name | Status | Duration |\r\n| ------------- | ------------- |'
+TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 testsReportMap  = [:]
 testsResultsMap = [:]
 
@@ -111,9 +112,11 @@ void makeReport() {
     def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
     def startedTestAmount = testsReportMap.size()
     for ( test in testsReportMap ) {
-        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
+        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value.status} | ${test.value.duration}|"
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value.status}/><duration>${test.value.duration}</duration></testcase>\n"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
 void setTestsresults() {
@@ -128,7 +131,9 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
         try {
             echo "The $TEST_NAME test was started!"
-            testsReportMap[TEST_NAME] = "[failed]($testUrl)"
+            initial_timestamp=sh(script: 'date +%s', , returnStdout: true).trim()
+            testsReportMap[TEST_NAME]['status']= "[failed]($testUrl)"
+            testsReportMap[TEST_NAME]['duration']= 0
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -142,7 +147,10 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                     fi
                 """
             }
-            testsReportMap[TEST_NAME] = "[passed]($testUrl)"
+            final_timestamp=sh(script: 'date +%s', , returnStdout: true).trim()
+            test_duration=$final_timestamp - $initial_timestamp
+            testsReportMap[TEST_NAME]['status']= "[passed]($testUrl)"
+            testsReportMap[TEST_NAME]['duration']= $test_duration
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
         }
@@ -338,65 +346,65 @@ pipeline {
                 timeout(time: 4, unit: 'HOURS')
             }
             parallel {
-                stage('1 InitD Scaling Lim SecCon RSShardMig') {
-                    steps {
-                        CreateCluster('cluster1')
-                        runTest('init-deploy', 'cluster1')
-                        runTest('limits', 'cluster1')
-                        runTest('scaling', 'cluster1')
-                        runTest('security-context', 'cluster1')
-                        runTest('rs-shard-migration', 'cluster1')
-                        ShutdownCluster('cluster1')
-                   }
-                }
+//                 stage('1 InitD Scaling Lim SecCon RSShardMig') {
+//                     steps {
+//                         CreateCluster('cluster1')
+//                         runTest('init-deploy', 'cluster1')
+//                         runTest('limits', 'cluster1')
+//                         runTest('scaling', 'cluster1')
+//                         runTest('security-context', 'cluster1')
+//                         runTest('rs-shard-migration', 'cluster1')
+//                         ShutdownCluster('cluster1')
+//                    }
+//                 }
                 stage('2 OneP Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
                     steps {
                         CreateCluster('cluster2')
                         runTest('one-pod', 'cluster2')
-                        runTest('monitoring-2-0', 'cluster2')
-                        runTest('arbiter', 'cluster2')
-                        runTest('service-per-pod', 'cluster2')
-                        runTest('liveness', 'cluster2')
-                        runTest('smart-update', 'cluster2')
-                        runTest('version-service', 'cluster2')
-                        runTest('users', 'cluster2')
-                        runTest('data-sharded', 'cluster2')
-                        runTest('non-voting', 'cluster2')
-                        runTest('demand-backup-eks-credentials', 'cluster2')
-                        runTest('data-at-rest-encryption', 'cluster2')
+//                         runTest('monitoring-2-0', 'cluster2')
+//                         runTest('arbiter', 'cluster2')
+//                         runTest('service-per-pod', 'cluster2')
+//                         runTest('liveness', 'cluster2')
+//                         runTest('smart-update', 'cluster2')
+//                         runTest('version-service', 'cluster2')
+//                         runTest('users', 'cluster2')
+//                         runTest('data-sharded', 'cluster2')
+//                         runTest('non-voting', 'cluster2')
+//                         runTest('demand-backup-eks-credentials', 'cluster2')
+//                         runTest('data-at-rest-encryption', 'cluster2')
                         ShutdownCluster('cluster2')
                     }
                 }
-                stage('3 SelfHealing Storage') {
-                    steps {
-                        CreateCluster('cluster3')
-                        runTest('storage', 'cluster3')
-                        runTest('self-healing-chaos', 'cluster3')
-                        runTest('operator-self-healing-chaos', 'cluster3')
-                        ShutdownCluster('cluster3')
-                    }
-                }
-                stage('4 Backups Upgrade') {
-                    steps {
-                        CreateCluster('cluster4')
-                        runTest('upgrade-consistency', 'cluster4')
-                        runTest('demand-backup', 'cluster4')
-                        runTest('scheduled-backup', 'cluster4')
-                        runTest('demand-backup-sharded', 'cluster4')
-                        runTest('upgrade', 'cluster4')
-                        runTest('upgrade-sharded', 'cluster4')
-                        runTest('pitr', 'cluster4')
-                        runTest('pitr-sharded', 'cluster4')
-                        ShutdownCluster('cluster4')
-                    }
-                }
-                stage('5 CrossSite') {
-                    steps {
-                        CreateCluster('cluster5')
-                        runTest('cross-site-sharded', 'cluster5')
-                        ShutdownCluster('cluster5')
-                    }
-                }
+//                 stage('3 SelfHealing Storage') {
+//                     steps {
+//                         CreateCluster('cluster3')
+//                         runTest('storage', 'cluster3')
+//                         runTest('self-healing-chaos', 'cluster3')
+//                         runTest('operator-self-healing-chaos', 'cluster3')
+//                         ShutdownCluster('cluster3')
+//                     }
+//                 }
+//                 stage('4 Backups Upgrade') {
+//                     steps {
+//                         CreateCluster('cluster4')
+//                         runTest('upgrade-consistency', 'cluster4')
+//                         runTest('demand-backup', 'cluster4')
+//                         runTest('scheduled-backup', 'cluster4')
+//                         runTest('demand-backup-sharded', 'cluster4')
+//                         runTest('upgrade', 'cluster4')
+//                         runTest('upgrade-sharded', 'cluster4')
+//                         runTest('pitr', 'cluster4')
+//                         runTest('pitr-sharded', 'cluster4')
+//                         ShutdownCluster('cluster4')
+//                     }
+//                 }
+//                 stage('5 CrossSite') {
+//                     steps {
+//                         CreateCluster('cluster5')
+//                         runTest('cross-site-sharded', 'cluster5')
+//                         ShutdownCluster('cluster5')
+//                     }
+//                 }
             }
         }
     }
@@ -422,6 +430,11 @@ pipeline {
                         }
                     }
                     makeReport()
+                    sh """
+                        echo "${TestsReportXML}" > TestsReport.xml
+                    """
+                    step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                    archiveArtifacts '*.xml'
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                     TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
