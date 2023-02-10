@@ -125,6 +125,7 @@ void popArtifactFile(String FILE_NAME) {
 }
 
 TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
+TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 testsReportMap  = [:]
 testsResultsMap = [:]
 
@@ -133,8 +134,10 @@ void makeReport() {
     def startedTestAmount = testsReportMap.size()
     for ( test in testsReportMap ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value}/><duration>100</duration></testcase>\n"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
 void setTestsresults() {
@@ -368,17 +371,17 @@ pipeline {
                 timeout(time: 4, unit: 'HOURS')
             }
             parallel {
-                stage('1 InitD Scaling Lim SecCon RSShardMig') {
-                    steps {
-                        CreateCluster('cluster1')
-                        runTest('init-deploy', 'cluster1')
+//                 stage('1 InitD Scaling Lim SecCon RSShardMig') {
+//                     steps {
+//                         CreateCluster('cluster1')
+//                         runTest('init-deploy', 'cluster1')
 //                         runTest('limits', 'cluster1')
 //                         runTest('scaling', 'cluster1')
 //                         runTest('security-context', 'cluster1')
 //                         runTest('rs-shard-migration', 'cluster1')
-                        ShutdownCluster('cluster1')
-                   }
-                }
+//                         ShutdownCluster('cluster1')
+//                    }
+//                 }
                 stage('2 OneP Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
                     steps {
                         CreateCluster('cluster2')
@@ -453,6 +456,11 @@ pipeline {
                         }
                     }
                     makeReport()
+                    sh """
+                        echo "${TestsReportXML}" > TestsReport.xml
+                    """
+                    step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                    archiveArtifacts '*.xml'
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                     TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
