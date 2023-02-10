@@ -417,16 +417,16 @@ if [[ $originalArgOne == mongo* ]]; then
 		CA="${MONGO_SSL_DIR}/ca.crt"
 	fi
 	if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
-		cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/opt/percona/tls.pem
-		_mongod_hack_ensure_arg_val --sslPEMKeyFile /opt/percona/tls.pem "${mongodHackedArgs[@]}"
+		cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
+		_mongod_hack_ensure_arg_val --sslPEMKeyFile /tmp/tls.pem "${mongodHackedArgs[@]}"
 		if [ -f "${CA}" ]; then
 			_mongod_hack_ensure_arg_val --sslCAFile "${CA}" "${mongodHackedArgs[@]}"
 		fi
 	fi
 	MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
 	if [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.crt" ]; then
-		cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/opt/percona/tls-internal.pem
-		_mongod_hack_ensure_arg_val --sslClusterFile /opt/percona/tls-internal.pem "${mongodHackedArgs[@]}"
+		cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/tmp/tls-internal.pem
+		_mongod_hack_ensure_arg_val --sslClusterFile /tmp/tls-internal.pem "${mongodHackedArgs[@]}"
 		if [ -f "${MONGO_SSL_INTERNAL_DIR}/ca.crt" ]; then
 			_mongod_hack_ensure_arg_val --sslClusterCAFile "${MONGO_SSL_INTERNAL_DIR}/ca.crt" "${mongodHackedArgs[@]}"
 		fi
