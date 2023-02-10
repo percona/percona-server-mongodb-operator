@@ -19,6 +19,8 @@ spec:
 #    certValidityDuration: 2160h
 #  imagePullSecrets:
 #    - name: private-registry-credentials
+#  initImage: percona/percona-xtradb-cluster-operator:1.13.0
+#  initContainerSecurityContext: {}
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
 #  ignoreAnnotations:
