@@ -111,6 +111,7 @@ testsResultsMap = [:]
 void makeReport() {
     def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
     def startedTestAmount = testsReportMap.size()
+    echo "${testsReportMap}"
     for ( test in testsReportMap ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value.status} | ${test.value.duration}|"
         TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value.status}/><duration>${test.value.duration}</duration></testcase>\n"
