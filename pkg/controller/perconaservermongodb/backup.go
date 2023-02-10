@@ -140,7 +140,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 			if spec.Keep > 0 {
 				oldjobs, err := r.oldScheduledBackups(ctx, cr, item.Name, spec.Keep)
 				if err != nil {
-					log.Error(err, "failed to list old backups", "job name", item.Name)
+					log.Error(err, "failed to list old backups", "job", item.Name)
 					return true
 				}
 
@@ -154,7 +154,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 			}
 		} else {
-			log.Info("deleting outdated backup job", "name", item.Name)
+			log.Info("deleting outdated backup job", "job", item.Name)
 			r.deleteBackupTask(cr, item.BackupTaskSpec)
 		}
 
@@ -170,8 +170,7 @@ func (r *ReconcilePerconaServerMongoDB) createBackupTask(ctx context.Context, cr
 		localCr := &api.PerconaServerMongoDB{}
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
 		if k8sErrors.IsNotFound(err) {
-			log.Info("cluster is not found, deleting the job",
-				"job name", task.Name)
+			log.Info("cluster is not found, deleting the job", "job", task.Name)
 			r.deleteBackupTask(cr, task)
 			return
 		}
