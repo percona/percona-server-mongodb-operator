@@ -351,21 +351,21 @@ pipeline {
                 timeout(time: 4, unit: 'HOURS')
             }
             parallel {
-//                 stage('1 InitD Scaling Lim SecCon RSShardMig') {
-//                     steps {
-//                         CreateCluster('cluster1')
-//                         runTest('init-deploy', 'cluster1')
+                stage('1 InitD Scaling Lim SecCon RSShardMig') {
+                    steps {
+                        CreateCluster('cluster1')
+                        runTest('init-deploy', 'cluster1')
 //                         runTest('limits', 'cluster1')
 //                         runTest('scaling', 'cluster1')
 //                         runTest('security-context', 'cluster1')
 //                         runTest('rs-shard-migration', 'cluster1')
-//                         ShutdownCluster('cluster1')
-//                    }
-//                 }
-                stage('2 OneP IgnoreLA Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
-                    steps {
-                        CreateCluster('cluster2')
-                        runTest('one-pod', 'cluster2')
+                        ShutdownCluster('cluster1')
+                   }
+                }
+//                 stage('2 OneP IgnoreLA Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
+//                     steps {
+//                         CreateCluster('cluster2')
+//                         runTest('one-pod', 'cluster2')
 //                         runTest('ignore-labels-annotations', 'cluster2')
 //                         runTest('monitoring-2-0', 'cluster2')
 //                         runTest('arbiter', 'cluster2')
@@ -378,9 +378,9 @@ pipeline {
 //                         runTest('non-voting', 'cluster2')
 //                         runTest('demand-backup-eks-credentials', 'cluster2')
 //                         runTest('data-at-rest-encryption', 'cluster2')
-                        ShutdownCluster('cluster2')
-                    }
-                }
+//                         ShutdownCluster('cluster2')
+//                     }
+//                 }
 //                 stage('3 SelfHealing Storage') {
 //                     steps {
 //                         CreateCluster('cluster3')
