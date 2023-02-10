@@ -1,16 +1,18 @@
 package psmdb
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
+func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
 	ikeyName string, useConfigFile bool, livenessProbe *api.LivenessProbeExtended, readinessProbe *corev1.Probe,
 	containerSecurityContext *corev1.SecurityContext) (corev1.Container, error) {
 	fvar := false
@@ -82,7 +84,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 		Name:            name,
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args:            containerArgs(cr, replset, resources, useConfigFile),
+		Args:            containerArgs(ctx, cr, replset, resources, useConfigFile),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongodPortName,
@@ -144,27 +146,27 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 }
 
 // containerArgs returns the args to pass to the mSpec container
-func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements,
+func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements,
 	useConfigFile bool) []string {
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
 		"--dbpath=" + MongodContainerDataDir,
-		"--port=" + strconv.Itoa(int(api.MongodPort(m))),
+		"--port=" + strconv.Itoa(int(api.MongodPort(cr))),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
 		"--sslAllowInvalidCertificates",
 	}
 
-	if m.Spec.UnsafeConf {
+	if cr.Spec.UnsafeConf {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)
 	} else {
-		if m.CompareVersion("1.12.0") <= 0 {
+		if cr.CompareVersion("1.12.0") <= 0 {
 			args = append(args, "--sslMode=preferSSL")
 		}
 		args = append(args, "--clusterAuthMode=x509")
@@ -179,7 +181,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	}
 
 	// operationProfiling
-	if mSpec := m.Spec.Mongod; m.CompareVersion("1.12.0") < 0 && mSpec.OperationProfiling != nil {
+	if mSpec := cr.Spec.Mongod; cr.CompareVersion("1.12.0") < 0 && mSpec.OperationProfiling != nil {
 		switch mSpec.OperationProfiling.Mode {
 		case api.OperationProfilingModeAll:
 			args = append(args, "--profile=2")
@@ -194,12 +196,12 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		}
 	}
 
-	encryptionEnabled, err := isEncryptionEnabled(m, replset)
+	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
 	if err != nil {
-		log.Error(err, "failed to check if mongo encryption enabled")
+		logf.FromContext(ctx).Error(err, "failed to check if mongo encryption enabled")
 	}
 
-	if m.CompareVersion("1.12.0") >= 0 && encryptionEnabled && !replset.Configuration.VaultEnabled() {
+	if cr.CompareVersion("1.12.0") >= 0 && encryptionEnabled && !replset.Configuration.VaultEnabled() {
 		args = append(args, "--enableEncryption",
 			"--encryptionKeyFile="+api.MongodRESTencryptDir+"/"+api.EncryptionKeyName,
 		)
@@ -209,12 +211,12 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 	if replset.Storage != nil {
 		switch replset.Storage.Engine {
 		case api.StorageEngineWiredTiger:
-			if m.CompareVersion("1.12.0") < 0 && *m.Spec.Mongod.Security.EnableEncryption {
+			if cr.CompareVersion("1.12.0") < 0 && *cr.Spec.Mongod.Security.EnableEncryption {
 				args = append(args, "--enableEncryption",
 					"--encryptionKeyFile="+api.MongodRESTencryptDir+"/"+api.EncryptionKeyName)
-				if m.Spec.Mongod.Security.EncryptionCipherMode != api.MongodChiperModeUnset {
+				if cr.Spec.Mongod.Security.EncryptionCipherMode != api.MongodChiperModeUnset {
 					args = append(args,
-						"--encryptionCipherMode="+string(m.Spec.Mongod.Security.EncryptionCipherMode),
+						"--encryptionCipherMode="+string(cr.Spec.Mongod.Security.EncryptionCipherMode),
 					)
 				}
 			}
@@ -258,8 +260,8 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		}
 	}
 
-	if m.CompareVersion("1.12.0") < 0 {
-		mSpec := m.Spec.Mongod
+	if cr.CompareVersion("1.12.0") < 0 {
+		mSpec := cr.Spec.Mongod
 
 		// security
 		if mSpec.Security != nil && mSpec.Security.RedactClientLogData {
@@ -318,7 +320,7 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		}
 	}
 
-	if m.CompareVersion("1.9.0") >= 0 && useConfigFile {
+	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", mongodConfigDir))
 	}
 
@@ -334,7 +336,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 // explicitly set the WiredTiger cache size to fix this.
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
-//
 func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64, subtract1GB bool) float64 {
 	maxMemory := resourceList[corev1.ResourceMemory]
 	var size float64
