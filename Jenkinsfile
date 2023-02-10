@@ -92,27 +92,6 @@ void pushLogFile(String FILE_NAME) {
     }
 }
 
-void createMonitoringFile() {
-    echo "Create file to store test duration"
-    sh """
-        mkdir "e2e-tests/test-duration-monitoring"
-        touch "e2e-tests/test-duration-monitoring/monitoring-${env.GIT_SHORT_COMMIT}.json"
-    """
-}
-void pushMonitoringFile() {
-    MONITORING_FILE_PATH="e2e-tests/test-duration-monitoring/monitoring-${env.GIT_SHORT_COMMIT}.json"
-    MONITORING_FILE_NAME="monitoring-${env.GIT_SHORT_COMMIT}.json"
-    echo "Push logfile $MONITORING_FILE_NAME file to gcp bucket!"
-    withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
-        sh """
-            GS_PATH=gs://test-duration-monitoring/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            gsutil ls \$GS_PATH/${MONITORING_FILE_NAME} || :
-            gsutil cp --content-type text/plain --quiet ${MONITORING_FILE_PATH} \$GS_PATH/${MONITORING_FILE_NAME} || :
-        """
-    }
-}
-
-
 void popArtifactFile(String FILE_NAME) {
     echo "Try to get $FILE_NAME file from S3!"
 
@@ -171,7 +150,6 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             final_timestamp=sh(script: 'date +%s', , returnStdout: true).trim()
             test_duration=$final_timestamp - $initial_timestamp
-            echo "{'test': $TEST_NAME, 'test_duration': $test_duration, 'timestamp': $final_timestamp}" >> $MONITORING_FILE_PATH
             return true
         }
         catch (exc) {
