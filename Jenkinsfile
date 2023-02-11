@@ -113,9 +113,11 @@ void makeReport() {
     def startedTestAmount = testsReportMap.size()
     for ( test in testsReportMap ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
-        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value}/></testcase>\n"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    for (testxml in testsResultsMap ) {
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value}/></testcase>\n"
+    }
     TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
