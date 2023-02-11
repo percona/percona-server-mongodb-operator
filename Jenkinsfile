@@ -116,7 +116,7 @@ void makeReport() {
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
     for (testxml in testsResultsMap ) {
-        TestsReportXML = TestsReportXML + "<testcase name=\\\"${test.key}\\\"><${test.value}/></testcase>\n"
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${testxml.key}\\\"><${testxml.value}/></testcase>\n"
     }
     TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
