@@ -213,7 +213,7 @@ func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
 		cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyDisabled
 }
 
-func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *api.PerconaServerMongoDB) (VersionMeta, error) {
+func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *api.PerconaServerMongoDB, operatorNs string) (VersionMeta, error) {
 	watchNs, err := k8s.GetWatchNamespace()
 	if err != nil {
 		return VersionMeta{}, errors.Wrap(err, "get WATCH_NAMESPACE env variable")
@@ -268,10 +268,6 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		}
 	}
 
-	operatorNs, err := k8s.GetOperatorNamespace()
-	if err != nil {
-		return VersionMeta{}, errors.Wrap(err, "failed to get operator namespace")
-	}
 	operatorDepl := new(appsv1.Deployment)
 	if err := r.client.Get(ctx, types.NamespacedName{Name: os.Getenv("HOSTNAME"), Namespace: operatorNs}, operatorDepl); err != nil {
 		return VersionMeta{}, errors.Wrap(err, "failed to get operator deployment")
@@ -294,7 +290,12 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return errors.New("cluster is not ready")
 	}
 
-	vm, err := r.getVersionMeta(ctx, cr)
+	operatorNs, err := k8s.GetOperatorNamespace()
+	if err != nil {
+		return errors.Wrap(err, "failed to get operator namespace")
+	}
+
+	vm, err := r.getVersionMeta(ctx, cr, operatorNs)
 	if err != nil {
 		return errors.Wrap(err, "failed to get version meta")
 	}
