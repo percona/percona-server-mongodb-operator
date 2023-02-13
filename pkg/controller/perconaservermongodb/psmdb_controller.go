@@ -1543,6 +1543,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrap(err, "get rs pods")
 	}
 
+	err = r.createOrUpdate(ctx, sfs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
+	}
+
 	if len(pods.Items) > int(replset.Size+replset.Arbiter.GetSize()+replset.NonVoting.GetSize()) {
 		cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 		if err != nil {
@@ -1551,11 +1556,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		if _, err := r.updateConfigMembers(ctx, cli, cr, replset); err != nil {
 			return nil, errors.Wrap(err, "update config members")
 		}
-	}
-
-	err = r.createOrUpdate(ctx, sfs)
-	if err != nil {
-		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 	}
 
 	err = r.reconcilePDB(ctx, pdbspec, matchLabels, cr.Namespace, sfs)
