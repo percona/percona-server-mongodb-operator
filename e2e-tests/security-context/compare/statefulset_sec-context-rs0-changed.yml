@@ -187,6 +187,9 @@ spec:
             requests:
               cpu: 100m
               memory: 100M
+          securityContext:
+            privileged: false
+            runAsUser: 2002
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
