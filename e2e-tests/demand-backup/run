@@ -14,7 +14,7 @@ run_recovery_check() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
 	run_restore "$backup"
 	wait_restore "$backup" "${cluster/-rs0/}"
-	simple_data_check "$cluster" 3 0 ".svc.cluster.local"
+	simple_data_check "$cluster" 3 0
 }
 
 run_recovery_check_bkp_source() {
@@ -26,8 +26,8 @@ run_recovery_check_bkp_source() {
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
 	run_restore_backupsource "$source" "$backup_dest"
-	wait_restore "$backup" "${cluster/-rs0/}"
-	simple_data_check "$cluster" 3 0 ".svc.cluster.local"
+	wait_restore "$source" "${cluster/-rs0/}"
+	simple_data_check "$cluster" 3 0
 }
 
 create_infra $namespace
