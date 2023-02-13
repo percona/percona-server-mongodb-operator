@@ -40,6 +40,17 @@ if oc get projects; then
 	OPENSHIFT=4
 fi
 
+if kubectl get nodes | grep "^minikube" >/dev/null; then
+	export MINIKUBE=1
+fi
+
+minikube_sleep() {
+	sleep_time=${1:-10}
+	if [[ $MINIKUBE == 1 ]]; then
+		sleep $sleep_time
+	fi
+}
+
 if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
 	EKS=1
 else
@@ -642,8 +653,9 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 
 }
 
