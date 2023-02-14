@@ -48,7 +48,7 @@ spec:
     tasks:
     - name: every-min-minio
       enabled: true
-      backupType: physical
+      type: physical
       schedule: "* * * * *"
       compressionType: gzip
       storageName: minio
