@@ -863,8 +863,6 @@ spec:
                   tasks:
                     items:
                       properties:
-                        backupType:
-                          type: string
                         compressionLevel:
                           type: integer
                         compressionType:
@@ -878,6 +876,11 @@ spec:
                         schedule:
                           type: string
                         storageName:
+                          type: string
+                        type:
+                          enum:
+                          - logical
+                          - physical
                           type: string
                       required:
                       - enabled

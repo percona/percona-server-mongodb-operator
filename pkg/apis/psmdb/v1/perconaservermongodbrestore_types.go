@@ -152,4 +152,4 @@ var (
 	PITRestoreTypeLatest PITRestoreType = "latest"
 )
 
-const AnnotationRestoreInProgress = "psmdb.percona.com/restore-in-progress"
+const AnnotationRestoreInProgress = "percona.com/restore-in-progress"

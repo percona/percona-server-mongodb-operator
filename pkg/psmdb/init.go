@@ -9,9 +9,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
-
 func EntrypointInitContainer(cr *api.PerconaServerMongoDB, name, image string, pullPolicy corev1.PullPolicy, command []string) corev1.Container {
-	if command == nil || len(command) < 1 {
+	if len(command) == 0 {
 		command = []string{"/init-entrypoint.sh"}
 	}
 
