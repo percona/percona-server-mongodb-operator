@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
+	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -741,6 +742,9 @@ type BackupTaskSpec struct {
 	StorageName      string                   `json:"storageName,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical}
+	Type pbm.BackupType `json:"type,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
@@ -964,6 +968,33 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 
 func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
+}
+
+func ClusterLabels(cr *PerconaServerMongoDB) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+}
+
+func MongodLabels(cr *PerconaServerMongoDB) map[string]string {
+	lbls := ClusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "mongod"
+	return lbls
+}
+
+func ArbiterLabels(cr *PerconaServerMongoDB) map[string]string {
+	lbls := ClusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "arbiter"
+	return lbls
+}
+
+func MongosLabels(cr *PerconaServerMongoDB) map[string]string {
+	lbls := ClusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "mongos"
+	return lbls
 }
 
 const (

@@ -1331,6 +1331,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	matchLabels map[string]string,
 	internalKeyName string,
 ) (*appsv1.StatefulSet, error) {
+	log := logf.FromContext(ctx)
+
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
@@ -1391,6 +1393,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	errGet := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
 	if errGet != nil && !k8serrors.IsNotFound(errGet) {
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
+	}
+
+	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
+	if ok {
+		if err := r.smartUpdate(ctx, cr, sfs, replset); err != nil {
+			return nil, errors.Wrap(err, "failed to run smartUpdate")
+		}
+
+		log.V(1).Info("Restore in progress, skipping reconciliation of statefulset", "name", sfs.Name)
+		return sfs, nil
 	}
 
 	inits := []corev1.Container{}

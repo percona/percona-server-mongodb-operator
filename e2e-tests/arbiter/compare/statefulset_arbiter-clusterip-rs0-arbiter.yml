@@ -66,7 +66,7 @@ spec:
         - --wiredTigerIndexPrefixCompression=true
         - --config=/etc/mongodb-config/mongod.conf
         command:
-        - /data/db/ps-entry.sh
+        - /opt/percona/ps-entry.sh
         env:
         - name: SERVICE_NAME
           value: arbiter-clusterip
@@ -82,7 +82,7 @@ spec:
         livenessProbe:
           exec:
             command:
-            - mongodb-healthcheck
+            - /opt/percona/mongodb-healthcheck
             - k8s
             - liveness
             - --startupDelaySeconds
@@ -125,6 +125,8 @@ spec:
           readOnly: true
         - mountPath: /etc/mongodb-config
           name: config
+        - mountPath: /opt/percona
+          name: bin
         - mountPath: /etc/mongodb-encryption
           name: arbiter-clusterip-mongodb-encryption-key
           readOnly: true

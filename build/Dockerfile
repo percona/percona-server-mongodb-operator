@@ -47,6 +47,7 @@ COPY --from=go_builder /usr/local/bin/mongodb-healthcheck /mongodb-healthcheck
 COPY  --from=go_builder /lib/hashicorp /lib
 COPY build/init-entrypoint.sh /init-entrypoint.sh
 COPY build/ps-entry.sh /ps-entry.sh
+COPY build/physical-restore-ps-entry.sh /physical-restore-ps-entry.sh
 COPY build/pbm-entry.sh /pbm-entry.sh
 
 USER 2

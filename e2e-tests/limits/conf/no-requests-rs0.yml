@@ -8,7 +8,7 @@ spec:
   imagePullPolicy: Always
   backup:
     enabled: false
-    image: perconalab/percona-server-mongodb-operator:0.4.0-backup
+    image: perconalab/percona-server-mongodb-operator:main-backup
 #    storages:
 #    tasks:
   replsets:
