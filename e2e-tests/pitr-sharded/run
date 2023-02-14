@@ -12,7 +12,7 @@ write_document() {
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
-	sleep 10 # for minikube
+	minikube_sleep
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" ${cmp_postfix}
 }
 
