@@ -1,0 +1,6 @@
+"mydb-rs0-0.mydb-rs0.main.svc.cluster.local:27017"
+"PRIMARY"
+"mydb-rs0-0.mydb-rs0.external.svc.cluster.local:27017"
+"SECONDARY"
+"mydb-rs0-1.mydb-rs0.external.svc.cluster.local:27017"
+"SECONDARY"

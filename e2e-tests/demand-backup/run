@@ -37,8 +37,8 @@ desc 'write data, read from all'
 run_mongo \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster.$namespace"
-sleep 10 # for minikube
 
+minikube_sleep
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"

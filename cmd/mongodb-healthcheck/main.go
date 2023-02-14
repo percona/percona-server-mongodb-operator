@@ -39,6 +39,15 @@ func main() {
 	startupDelaySeconds := livenessCmd.Flag("startupDelaySeconds", "").Default("7200").Uint64()
 	component := k8sCmd.Flag("component", "").Default("mongod").String()
 
+	restoreInProgress, err := fileExists("/opt/percona/restore-in-progress")
+	if err != nil {
+		log.Fatalf("check if restore in progress: %v", err)
+	}
+
+	if restoreInProgress {
+		os.Exit(0)
+	}
+
 	cnf, err := db.NewConfig(
 		app,
 		pkg.EnvMongoDBClusterMonitorUser,
@@ -107,4 +116,15 @@ func main() {
 			}
 		}
 	}
+}
+
+func fileExists(name string) (bool, error) {
+	_, err := os.Stat(name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

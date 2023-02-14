@@ -17,7 +17,8 @@ setup_cluster() {
 	apply_cluster $conf_dir/$cluster.yml
 
 	# check if all 3 Pods started
-	wait_for_running $cluster 3
+	wait_for_running "$cluster" 3
+	wait_cluster_consistency "${cluster/-rs0/}" 3
 }
 
 fail_pod() {
@@ -35,7 +36,7 @@ fail_pod() {
 	kubectl_bin patch psmdb ${cluster%%-rs0} \
 		--type='json' \
 		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
-	sleep 60
+	sleep 60 # operator is chaosed for 60 sec
 
 	local pod=$(get_operator_pod)
 	local restart_count_after=$(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} ${pod} -ojsonpath='{.status.containerStatuses[0].restartCount}')
@@ -59,6 +60,8 @@ fail_pod() {
 
 	# check scale down
 	wait_for_delete pod/$cluster-3
+	wait_for_running "$cluster" 3
+	wait_cluster_consistency "${cluster/-rs0/}" 3
 }
 
 kill_pod() {
@@ -83,7 +86,8 @@ kill_pod() {
 	sleep 10
 
 	# check scale up
-	wait_for_running $cluster 5
+	wait_for_running "$cluster" 5
+	wait_cluster_consistency "${cluster/-rs0/}" 5
 }
 
 network_loss() {
@@ -103,7 +107,8 @@ network_loss() {
 	sleep 10
 
 	# check scale up
-	wait_for_running $cluster 5
+	wait_for_running "$cluster" 5
+	wait_cluster_consistency "${cluster/-rs0/}" 5
 }
 
 main() {

@@ -106,6 +106,7 @@ void popArtifactFile(String FILE_NAME) {
 TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
 testsReportMap  = [:]
 testsResultsMap = [:]
+TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
 void makeReport() {
     def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
@@ -114,6 +115,10 @@ void makeReport() {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    for (testxml in testsResultsMap ) {
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${testxml.key}\\\"><${testxml.value}/></testcase>\n"
+    }
+    TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
 void setTestsresults() {
@@ -142,6 +147,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                     fi
                 """
             }
+
             testsReportMap[TEST_NAME] = "[passed]($testUrl)"
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
@@ -370,12 +376,13 @@ pipeline {
                         ShutdownCluster('cluster2')
                     }
                 }
-                stage('3 SelfHealing Storage') {
+                stage('3 SelfHealing Storage Expose') {
                     steps {
                         CreateCluster('cluster3')
                         runTest('storage', 'cluster3')
                         runTest('self-healing-chaos', 'cluster3')
                         runTest('operator-self-healing-chaos', 'cluster3')
+                        runTest('expose-sharded', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }
@@ -386,6 +393,7 @@ pipeline {
                         runTest('demand-backup', 'cluster4')
                         runTest('scheduled-backup', 'cluster4')
                         runTest('demand-backup-sharded', 'cluster4')
+                        runTest('demand-backup-physical', 'cluster4')
                         runTest('upgrade', 'cluster4')
                         runTest('upgrade-sharded', 'cluster4')
                         runTest('pitr', 'cluster4')
@@ -397,6 +405,7 @@ pipeline {
                     steps {
                         CreateCluster('cluster5')
                         runTest('cross-site-sharded', 'cluster5')
+                        runTest('serviceless-external-nodes', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
                 }
@@ -425,6 +434,12 @@ pipeline {
                         }
                     }
                     makeReport()
+                    sh """
+                        echo "${TestsReportXML}" > TestsReport.xml
+                    """
+                    step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                    archiveArtifacts '*.xml'
+
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                     TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
