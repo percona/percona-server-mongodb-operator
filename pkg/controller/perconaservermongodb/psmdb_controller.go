@@ -1538,24 +1538,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		sfs.Labels = customLabels
 	}
 
-	pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name, true)
-	if err != nil {
-		return nil, errors.Wrap(err, "get rs pods")
-	}
-
 	err = r.createOrUpdate(ctx, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
-	}
-
-	if len(pods.Items) > int(replset.Size+replset.Arbiter.GetSize()+replset.NonVoting.GetSize()) {
-		cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
-		if err != nil {
-			return nil, errors.Wrap(err, "mongo client")
-		}
-		if _, err := r.updateConfigMembers(ctx, cli, cr, replset); err != nil {
-			return nil, errors.Wrap(err, "update config members")
-		}
 	}
 
 	err = r.reconcilePDB(ctx, pdbspec, matchLabels, cr.Namespace, sfs)
