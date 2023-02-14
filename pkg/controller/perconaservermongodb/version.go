@@ -231,10 +231,10 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		ShardingEnabled:       cr.Spec.Sharding.Enabled,
 		HashicorpVaultEnabled: len(cr.Spec.Secrets.Vault) > 0,
 		ClusterWideEnabled:    len(watchNs) == 0,
-		PmmEnabled:            cr.Spec.PMM.Enabled,
-		BackupsUsed:           len(cr.Spec.Backup.Storages) > 0,
+		PMMEnabled:            cr.Spec.PMM.Enabled,
+		BackupsEnabled:        len(cr.Spec.Backup.Storages) > 0,
 		ClusterSize:           cr.Status.Size,
-		PitrUsed:              cr.Spec.Backup.PITR.Enabled,
+		PITREnabled:           cr.Spec.Backup.PITR.Enabled,
 		// TODO: PhysicalBackupScheduled
 	}
 	if cr.Spec.Platform != nil {

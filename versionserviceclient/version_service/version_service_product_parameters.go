@@ -65,10 +65,10 @@ type VersionServiceProductParams struct {
 	// BackupVersion.
 	BackupVersion *string
 
-	// BackupsUsed.
+	// BackupsEnabled.
 	//
 	// Format: boolean
-	BackupsUsed *bool
+	BackupsEnabled *bool
 
 	// ClusterSize.
 	//
@@ -113,10 +113,10 @@ type VersionServiceProductParams struct {
 	// Format: boolean
 	PhysicalBackupScheduled *bool
 
-	// PitrUsed.
+	// PitrEnabled.
 	//
 	// Format: boolean
-	PitrUsed *bool
+	PitrEnabled *bool
 
 	// Platform.
 	Platform *string
@@ -209,15 +209,15 @@ func (o *VersionServiceProductParams) SetBackupVersion(backupVersion *string) {
 	o.BackupVersion = backupVersion
 }
 
-// WithBackupsUsed adds the backupsUsed to the version service product params
-func (o *VersionServiceProductParams) WithBackupsUsed(backupsUsed *bool) *VersionServiceProductParams {
-	o.SetBackupsUsed(backupsUsed)
+// WithBackupsEnabled adds the backupsEnabled to the version service product params
+func (o *VersionServiceProductParams) WithBackupsEnabled(backupsEnabled *bool) *VersionServiceProductParams {
+	o.SetBackupsEnabled(backupsEnabled)
 	return o
 }
 
-// SetBackupsUsed adds the backupsUsed to the version service product params
-func (o *VersionServiceProductParams) SetBackupsUsed(backupsUsed *bool) {
-	o.BackupsUsed = backupsUsed
+// SetBackupsEnabled adds the backupsEnabled to the version service product params
+func (o *VersionServiceProductParams) SetBackupsEnabled(backupsEnabled *bool) {
+	o.BackupsEnabled = backupsEnabled
 }
 
 // WithClusterSize adds the clusterSize to the version service product params
@@ -341,15 +341,15 @@ func (o *VersionServiceProductParams) SetPhysicalBackupScheduled(physicalBackupS
 	o.PhysicalBackupScheduled = physicalBackupScheduled
 }
 
-// WithPitrUsed adds the pitrUsed to the version service product params
-func (o *VersionServiceProductParams) WithPitrUsed(pitrUsed *bool) *VersionServiceProductParams {
-	o.SetPitrUsed(pitrUsed)
+// WithPitrEnabled adds the pitrEnabled to the version service product params
+func (o *VersionServiceProductParams) WithPitrEnabled(pitrEnabled *bool) *VersionServiceProductParams {
+	o.SetPitrEnabled(pitrEnabled)
 	return o
 }
 
-// SetPitrUsed adds the pitrUsed to the version service product params
-func (o *VersionServiceProductParams) SetPitrUsed(pitrUsed *bool) {
-	o.PitrUsed = pitrUsed
+// SetPitrEnabled adds the pitrEnabled to the version service product params
+func (o *VersionServiceProductParams) SetPitrEnabled(pitrEnabled *bool) {
+	o.PitrEnabled = pitrEnabled
 }
 
 // WithPlatform adds the platform to the version service product params
@@ -454,18 +454,18 @@ func (o *VersionServiceProductParams) WriteToRequest(r runtime.ClientRequest, re
 		}
 	}
 
-	if o.BackupsUsed != nil {
+	if o.BackupsEnabled != nil {
 
-		// query param backupsUsed
-		var qrBackupsUsed bool
+		// query param backupsEnabled
+		var qrBackupsEnabled bool
 
-		if o.BackupsUsed != nil {
-			qrBackupsUsed = *o.BackupsUsed
+		if o.BackupsEnabled != nil {
+			qrBackupsEnabled = *o.BackupsEnabled
 		}
-		qBackupsUsed := swag.FormatBool(qrBackupsUsed)
-		if qBackupsUsed != "" {
+		qBackupsEnabled := swag.FormatBool(qrBackupsEnabled)
+		if qBackupsEnabled != "" {
 
-			if err := r.SetQueryParam("backupsUsed", qBackupsUsed); err != nil {
+			if err := r.SetQueryParam("backupsEnabled", qBackupsEnabled); err != nil {
 				return err
 			}
 		}
@@ -658,18 +658,18 @@ func (o *VersionServiceProductParams) WriteToRequest(r runtime.ClientRequest, re
 		}
 	}
 
-	if o.PitrUsed != nil {
+	if o.PitrEnabled != nil {
 
-		// query param pitrUsed
-		var qrPitrUsed bool
+		// query param pitrEnabled
+		var qrPitrEnabled bool
 
-		if o.PitrUsed != nil {
-			qrPitrUsed = *o.PitrUsed
+		if o.PitrEnabled != nil {
+			qrPitrEnabled = *o.PitrEnabled
 		}
-		qPitrUsed := swag.FormatBool(qrPitrUsed)
-		if qPitrUsed != "" {
+		qPitrEnabled := swag.FormatBool(qrPitrEnabled)
+		if qPitrEnabled != "" {
 
-			if err := r.SetQueryParam("pitrUsed", qPitrUsed); err != nil {
+			if err := r.SetQueryParam("pitrEnabled", qPitrEnabled); err != nil {
 				return err
 			}
 		}
