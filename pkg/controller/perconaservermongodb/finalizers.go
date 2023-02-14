@@ -56,7 +56,12 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
 	done := true
-	for _, rs := range cr.Spec.Replsets {
+	replsets := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	for _, rs := range replsets {
 		sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {

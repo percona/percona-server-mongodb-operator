@@ -32,15 +32,7 @@ function test_single_replset() {
 
 	desc 'delete statefulset and wait for recovery'
 	kubectl delete sts "${cluster}-rs0"
-
-	set +e
-	echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
-	until ! kubectl get sts "${cluster}-rs0"; do
-		echo -n "."
-		sleep 1
-	done
-	set -e
-
+	sleep 5
 	wait_for_running "${cluster}-rs0" 3
 	wait_cluster_consistency ${cluster}
 
@@ -84,15 +76,7 @@ function test_exposed_single_replset() {
 
 	desc 'delete statefulset and wait for recovery'
 	kubectl delete sts "${cluster}-rs0"
-
-	set +e
-	echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
-	until ! kubectl get sts "${cluster}-rs0"; do
-		echo -n "."
-		sleep 1
-	done
-	set -e
-
+	sleep 5
 	wait_for_running "${cluster}-rs0" 3
 	wait_cluster_consistency ${cluster}
 
@@ -150,46 +134,42 @@ function test_exposed_sharded_cluster() {
 	## Case 2: Delete statefulsets and wait for recovery
 
 	desc 'delete statefulsets and wait for recovery'
-
 	kubectl delete sts "${cluster}-rs0"
-	set +e
-	echo -n "waiting for statefulset/${cluster}-rs0 to be deleted"
-	until ! kubectl get sts "${cluster}-rs0"; do
-		echo -n "."
-		sleep 1
-	done
-	set -e
-
+	sleep 5
 	wait_for_running "${cluster}-rs0" 3
 	wait_cluster_consistency ${cluster}
 
 	kubectl delete sts "${cluster}-rs1"
-	set +e
-	echo -n "waiting for statefulset/${cluster}-rs1 to be deleted"
-	until ! kubectl get sts "${cluster}-rs1"; do
-		echo -n "."
-		sleep 1
-	done
-	set -e
-
+	sleep 5
 	wait_for_running "${cluster}-rs1" 3
 	wait_cluster_consistency ${cluster}
 
 	kubectl delete sts "${cluster}-cfg"
-	set +e
-	echo -n "waiting for statefulset/${cluster}-cfg to be deleted"
-	until ! kubectl get sts "${cluster}-cfg"; do
-		echo -n "."
-		sleep 1
-	done
-	set -e
-
+	sleep 5
 	wait_for_running "${cluster}-cfg" 3
 	wait_cluster_consistency ${cluster}
 
-	## Case 3: Delete cluster and recreate
+	## Case 3: Expose and delete cluster then recreate
+	desc 'expose and delete cluster then recreate'
 
-	desc 'delete cluster and recreate'
+	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+		{
+			"op": "replace",
+			"path": "/spec/replsets/0/expose",
+			"value": {
+				"enabled": true,
+				"exposeType" : "ClusterIP"
+			}
+		},
+		{
+			"op": "replace",
+			"path": "/spec/replsets/1/expose",
+			"value": {
+				"enabled": true,
+				"exposeType" : "ClusterIP"
+			}
+		},
+	]'
 	kubectl delete psmdb "${cluster}"
 
 	set +e

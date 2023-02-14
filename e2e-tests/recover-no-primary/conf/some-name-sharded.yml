@@ -27,7 +27,7 @@ spec:
     affinity:
       antiAffinityTopologyKey: none
     expose:
-      enabled: true
+      enabled: false
       exposeType: ClusterIP
     resources:
       limits:
@@ -46,7 +46,7 @@ spec:
     affinity:
       antiAffinityTopologyKey: none
     expose:
-      enabled: true
+      enabled: false
       exposeType: ClusterIP
     resources:
       limits:
