@@ -29,6 +29,8 @@ spec:
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: minio
+  sharding:
+    enabled: false
   replsets:
   - name: rs0
     affinity:
