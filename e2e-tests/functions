@@ -118,8 +118,8 @@ wait_pod() {
 
 	set +o xtrace
 	retry=0
-	echo -n $pod
-	until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep 'true'; do
+	echo -n "waiting for pod/$pod to be ready"
+	until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep --quiet 'true'; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -284,11 +284,12 @@ simple_data_check() {
 wait_restore() {
 	local backup_name=$1
 	local cluster_name=$2
+	local target_state=${3:-"ready"}
 
 	set +o xtrace
 	retry=0
-	echo -n $backup_name
-	until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
+	echo -n "waiting psmdb-restore/${backup_name} to reach ${target_state} state"
+	until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == ${target_state} ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -305,7 +306,10 @@ wait_restore() {
 	done
 	echo
 	set -o xtrace
-	wait_cluster_consistency "${cluster_name}"
+
+	if [ "$target_state" == "ready" ]; then
+		wait_cluster_consistency "${cluster_name}"
+	fi
 }
 
 apply_rbac() {
@@ -1050,13 +1054,14 @@ wait_cluster_consistency() {
 
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
+	echo -n 'waiting for cluster readyness'
 	until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		let retry+=1
 		if [ $retry -ge 32 ]; then
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
-		echo 'waiting for cluster readyness'
+		echo -n .
 		sleep 10
 	done
 }

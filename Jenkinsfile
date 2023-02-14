@@ -393,6 +393,7 @@ pipeline {
                         runTest('demand-backup', 'cluster4')
                         runTest('scheduled-backup', 'cluster4')
                         runTest('demand-backup-sharded', 'cluster4')
+                        runTest('demand-backup-physical', 'cluster4')
                         runTest('upgrade', 'cluster4')
                         runTest('upgrade-sharded', 'cluster4')
                         runTest('pitr', 'cluster4')
