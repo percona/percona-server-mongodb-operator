@@ -57,7 +57,7 @@ spec:
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: another-name
@@ -73,7 +73,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --ssl
@@ -128,6 +128,8 @@ spec:
               readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: another-name-mongodb-encryption-key
               readOnly: true

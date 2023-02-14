@@ -218,6 +218,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
 			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			}
 		}
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds < 1 {
@@ -252,6 +256,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 						"--sslPEMKeyFile", "/tmp/tls.pem")
+			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 			}
 		}
 
@@ -385,6 +393,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				replset.LivenessProbe.Exec.Command = append(
 					replset.LivenessProbe.Exec.Command,
 					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
+			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				replset.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 			}
 		}
 
@@ -660,6 +672,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 				"--sslPEMKeyFile", "/tmp/tls.pem",
 			},
+		}
+
+		if cr.CompareVersion("1.14.0") >= 0 {
+			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 		}
 	}
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
