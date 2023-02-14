@@ -89,7 +89,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if recreated && !cr.Status.Replsets[replset.Name].Initialized {
-		log.Info("Cluster is recreated, assuming replset is initialized already")
+		log.Info("Cluster is recreated, assuming replset is initialized already", "replset", replset.Name)
 		rs := cr.Status.Replsets[replset.Name]
 		rs.Initialized = true
 		cr.Status.Replsets[replset.Name] = rs
@@ -97,7 +97,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
 	if err != nil {
-		log.Error(err, "failed to open connection to mongo")
+		log.Error(err, "failed to open connection to mongo", "replset", replset.Name)
 
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
@@ -110,7 +110,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 					return api.AppStateError, errors.Wrap(err, "dial")
 				}
 
-				log.Error(err, "Cluster crashed, trying to recover", "cluster", cr.Name)
+				log.Error(err, "Cluster crashed, trying to recover", "replset", replset.Name)
 				if err := r.recoverReplsetNoPrimary(ctx, cr, replset, pods.Items[0]); err != nil {
 					return api.AppStateError, errors.Wrap(err, "force reconfig to recover")
 				}
@@ -782,6 +782,8 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 }
 
 func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) error {
+	log := logf.FromContext(ctx)
+
 	host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 	if err != nil {
 		return errors.Wrapf(err, "get mongo hostname for pod/%s", pod.Name)
@@ -797,23 +799,19 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 		return errors.Wrap(err, "get mongo config")
 	}
 
-	// If connection to an exposed replset fails with ReplicaSetNoPrimary,
-	// we'll change the member hosts to local FQDNs and reconfig to recover.
-	if replset.Expose.Enabled {
-		for i := 0; i < len(cnf.Members); i++ {
-			tags := []mongo.ConfigMember(cnf.Members)[i].Tags
-			podName, ok := tags["podName"]
-			if !ok {
-				continue
-			}
-
-			[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
+	for i := 0; i < len(cnf.Members); i++ {
+		member := &cnf.Members[i]
+		podName, ok := member.Tags["podName"]
+		if !ok {
+			continue
 		}
+		member.Host = replset.PodFQDNWithPort(cr, podName)
+		log.Info("Fixing member host", "id", member.ID, "host", member.Host)
 	}
 
 	cnf.Members[0].Priority = cnf.Members[0].Priority + 1
 	cnf.Version++
-	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
+	log.Info("Reconfiguring replset to recover cluster", "replset", replset.Name, "config", cnf)
 
 	if err := mongo.WriteConfig(ctx, cli, cnf, true); err != nil {
 		return errors.Wrap(err, "write mongo config")
