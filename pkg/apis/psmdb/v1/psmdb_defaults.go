@@ -218,6 +218,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
 			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			}
 		}
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds < 1 {
@@ -252,6 +256,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 						"--sslPEMKeyFile", "/tmp/tls.pem")
+			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 			}
 		}
 
@@ -386,6 +394,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					replset.LivenessProbe.Exec.Command,
 					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
 			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				replset.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			}
 		}
 
 		if replset.LivenessProbe.InitialDelaySeconds < 1 {
@@ -436,7 +448,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if cr.Spec.Unmanaged && !replset.Expose.Enabled {
-			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
+			log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", replset.Name)
 		}
 
 		err := replset.SetDefaults(platform, cr, log)
@@ -596,7 +608,7 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 	}
 
 	if len(rs.ExternalNodes) > 0 && !rs.Expose.Enabled {
-		return errors.Errorf("replset %s must be exposed to add external nodes", rs.Name)
+		log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", rs.Name)
 	}
 
 	for _, extNode := range rs.ExternalNodes {
@@ -660,6 +672,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 				"--sslPEMKeyFile", "/tmp/tls.pem",
 			},
+		}
+
+		if cr.CompareVersion("1.14.0") >= 0 {
+			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 		}
 	}
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {

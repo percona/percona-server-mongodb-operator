@@ -29,6 +29,10 @@ spec:
       jsonPath: .status.destination
       name: Destination
       type: string
+    - description: Backup type
+      jsonPath: .status.type
+      name: Type
+      type: string
     - description: Job status
       jsonPath: .status.state
       name: Status
@@ -62,6 +66,11 @@ spec:
               psmdbCluster:
                 type: string
               storageName:
+                type: string
+              type:
+                enum:
+                - logical
+                - physical
                 type: string
             type: object
           status:
@@ -122,6 +131,8 @@ spec:
               state:
                 type: string
               storageName:
+                type: string
+              type:
                 type: string
             type: object
         type: object
@@ -233,6 +244,8 @@ spec:
                   state:
                     type: string
                   storageName:
+                    type: string
+                  type:
                     type: string
                 type: object
               clusterName:
@@ -863,6 +876,11 @@ spec:
                         schedule:
                           type: string
                         storageName:
+                          type: string
+                        type:
+                          enum:
+                          - logical
+                          - physical
                           type: string
                       required:
                       - enabled

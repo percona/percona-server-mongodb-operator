@@ -274,6 +274,11 @@ spec:
                           type: string
                         storageName:
                           type: string
+                        type:
+                          enum:
+                          - logical
+                          - physical
+                          type: string
                       required:
                       - enabled
                       - name
