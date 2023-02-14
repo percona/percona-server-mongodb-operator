@@ -12,6 +12,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -609,7 +610,7 @@ func startFakeVersionService(t *testing.T, addr string, port int, gwport int) er
 	conn, err := grpc.DialContext(
 		context.Background(),
 		fmt.Sprintf("dns:///%s", fmt.Sprintf("%s:%d", addr, port)),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
 	if err != nil {
@@ -651,7 +652,7 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 		return &pbVersion.VersionResponse{}, nil
 	}
 
-	have := pbVersion.ApplyRequest{
+	have := &pbVersion.ApplyRequest{
 		BackupVersion:           req.GetBackupVersion(),
 		ClusterWideEnabled:      req.GetClusterWideEnabled(),
 		CustomResourceUid:       req.GetCustomResourceUid(),
@@ -670,7 +671,7 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 		PitrUsed:                req.GetPitrUsed(),
 		PhysicalBackupScheduled: req.GetPhysicalBackupScheduled(),
 	}
-	want := pbVersion.ApplyRequest{
+	want := &pbVersion.ApplyRequest{
 		BackupVersion:           "backup-version",
 		ClusterWideEnabled:      true,
 		CustomResourceUid:       "custom-resource-uid",
