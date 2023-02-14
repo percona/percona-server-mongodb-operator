@@ -46,6 +46,10 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		})
 	}
 
+	if cr.CompareVersion("1.14.0") >= 0 {
+		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
+	}
+
 	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
 	if err != nil {
 		return corev1.Container{}, err
@@ -140,6 +144,10 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			},
 		}
 		container.Command = []string{"/data/db/ps-entry.sh"}
+	}
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		container.Command = []string{BinMountPath + "/ps-entry.sh"}
 	}
 
 	return container, nil

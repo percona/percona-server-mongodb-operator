@@ -58,7 +58,7 @@ spec:
             - --relaxPermChecks
             - --clusterAuthMode=x509
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: MONGODB_PORT
               value: "27017"
@@ -73,7 +73,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --component
@@ -99,7 +99,7 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - readiness
                 - --component
@@ -130,6 +130,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/users-secret
               name: users-secret-file
               readOnly: true
