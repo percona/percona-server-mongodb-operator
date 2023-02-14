@@ -448,7 +448,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if cr.Spec.Unmanaged && !replset.Expose.Enabled {
-			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
+			log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", replset.Name)
 		}
 
 		err := replset.SetDefaults(platform, cr, log)
@@ -608,7 +608,7 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 	}
 
 	if len(rs.ExternalNodes) > 0 && !rs.Expose.Enabled {
-		return errors.Errorf("replset %s must be exposed to add external nodes", rs.Name)
+		log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", rs.Name)
 	}
 
 	for _, extNode := range rs.ExternalNodes {

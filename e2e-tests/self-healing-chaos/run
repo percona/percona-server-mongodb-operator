@@ -7,6 +7,17 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 cluster="some-name-rs0"
 
+check_pod_restarted() {
+	local pod=$1
+	local nr_restarts=$(kubectl get pod $pod -ojson | jq '.status.containerStatuses[] | select(.name == "mongod") | .restartCount')
+
+	if [ $nr_restarts -eq 0 ]; then
+		echo "Chaos mesh didn't work for some reason. Please check!!!"
+		echo "Pod $pod restarts: $nr_restarts, but it should have been more!"
+		exit 1
+	fi
+}
+
 setup_cluster() {
 	# create cluster
 	kubectl_bin apply \
@@ -18,7 +29,7 @@ setup_cluster() {
 	kubectl_bin patch psmdb some-name --type='merge' -p '{"spec":{"backup":{"enabled":true}}}'
 
 	# check if all 3 Pods started
-	wait_for_running $cluster 3
+	wait_for_running "$cluster" 3
 
 	desc 'check data consistency: write data, read from all'
 	run_mongo \
@@ -44,8 +55,8 @@ recreate() {
 	# recreate cluster
 	apply_cluster $conf_dir/$cluster.yml
 
-	wait_for_running $cluster 3
-	sleep 240
+	wait_for_running "$cluster" 3
+	wait_cluster_consistency "${cluster/-rs0/}" 3
 
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
@@ -63,7 +74,10 @@ kill_pod() {
 	sleep 5
 
 	# check if all 3 Pods started
-	wait_for_running $cluster 3
+	wait_for_running "$cluster" 3
+	wait_cluster_consistency "${cluster/-rs0/}" 3
+
+	check_pod_restarted $pod
 
 	desc 'check data consistency for chaosed Pod'
 	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
@@ -85,7 +99,10 @@ failure_pod() {
 		"myApp:myPass@$cluster.$namespace"
 
 	# check if all 3 Pods started
-	wait_for_running $cluster 3
+	wait_for_running "$cluster" 3
+	wait_cluster_consistency "${cluster/-rs0/}" 3
+
+	check_pod_restarted $pod
 
 	desc 'check data consistency for chaosed Pod'
 	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
@@ -105,10 +122,11 @@ network_loss() {
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100502 })' \
 		"myApp:myPass@$cluster.$namespace"
-	sleep 60
+	sleep 60 # network loss is 60 sec
 
 	# check if all 3 Pods started
-	wait_for_running $cluster 3
+	wait_for_running "$cluster" 3
+	wait_cluster_consistency "${cluster/-rs0/}" 3
 
 	desc 'check data consistency for chaosed Pod'
 	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-3rd"

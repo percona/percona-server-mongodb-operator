@@ -1,0 +1,102 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: mydb
+spec:
+  unmanaged: true
+  allowUnsafeConfigurations: true
+  clusterServiceDNSMode: "Internal"
+  image: percona/percona-server-mongodb:5.0.14-12
+  imagePullPolicy: Always
+  secrets:
+    users: mydb-users
+    ssl: mydb-ssl
+    sslInternal: mydb-ssl-internal
+    encryptionKey: mydb-encryption-key
+  replsets:
+
+  - name: rs0
+    size: 2
+    affinity:
+      antiAffinityTopologyKey: none
+    podDisruptionBudget:
+      maxUnavailable: 1
+    expose:
+      enabled: false
+      exposeType: ClusterIp
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+    nonvoting:
+      enabled: false
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "1G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+    arbiter:
+      enabled: false
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+
+  sharding:
+    enabled: false
+    configsvrReplSet:
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      expose:
+        enabled: false
+        exposeType: ClusterIp
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      expose:
+        exposeType: ClusterIp
