@@ -1,0 +1,115 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+# shellcheck disable=SC1091 # ignoring
+source "${test_dir}"/../functions
+
+db_name="mydb"
+
+main_ns="main"
+external_ns="external"
+operator_ns="operator"
+client_ns="client"
+
+## there is a magic undocumented env var, which forces the operator to run in
+## k8s-cluster-wide mode, with RBAC configured at Cluster level
+OPERATOR_NS="$operator_ns"
+
+function deploy_operator_cw() {
+  desc "Start Operator in Cluster-Wide Mode"
+  create_namespace $OPERATOR_NS
+  deploy_operator
+  kubectl_bin get deployment percona-server-mongodb-operator -n "$operator_ns" -oyaml |
+    yq eval '
+      ((.. | select(.[] == "WATCH_NAMESPACE")) |= .value="'${main_ns},${external_ns}'") |
+      del(.spec.template.metadata.creationTimestamp)' - |
+    kubectl_bin apply -n "$operator_ns" -f -
+
+  sleep 2
+  wait_pod "$(get_operator_pod)"
+}
+
+function deploy_client() {
+  desc "Deploy Client pod"
+  create_namespace "$client_ns"
+  kubectl_bin config set-context "$(kubectl_bin config current-context)" --namespace="$client_ns"
+
+  # shellcheck disable=SC2154 # ignoring - conf_dir is defined in functions - spaghetti anyone?
+  kubectl_bin apply -f "$conf_dir/client.yml"
+  kubectl_bin run network --image wbitt/network-multitool
+}
+
+function start_external_cluster() {
+  desc "Start External Cluster in unmanaged mode"
+  create_namespace "$external_ns"
+  kubectl_bin config set-context "$(kubectl_bin config current-context)" --namespace="$external_ns"
+  kubectl_bin apply -f "$test_dir/conf/secrets.yaml"
+
+  apply_cluster "$test_dir/conf/external.yaml"
+
+  sleep 2
+  wait_for_running "$db_name-rs0" 1
+}
+
+function start_main_cluster() {
+  desc "Start Main Cluster"
+  create_namespace "$main_ns"
+  kubectl_bin config set-context "$(kubectl_bin config current-context)" --namespace="$main_ns"
+  kubectl_bin apply -f "$test_dir/conf/secrets.yaml"
+  apply_cluster "$test_dir/conf/main.yaml"
+
+  sleep 2
+  wait_for_running "$db_name-rs0" 1
+}
+
+function cleanup() {
+  destroy "$external_ns"
+  destroy "$main_ns"
+  destroy "$operator_ns"
+}
+
+function get_connect_url() {
+  echo "$db_name-rs0-0.$db_name-rs0.$main_ns.svc.cluster.local,$db_name-rs0-0.$db_name-rs0.$external_ns.svc.cluster.local,$db_name-rs0-1.$db_name-rs0.$external_ns.svc.cluster.local"
+}
+
+function exec_mongo() {
+  local command="$1"
+  local uri="$2"
+  local client_container
+  client_container=$(kubectl_bin get pods -n $client_ns --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+
+  kubectl_bin exec "${client_container}" -n "$client_ns" -- \
+    bash -c "printf '$command\n' | mongo --quiet $uri"
+
+}
+
+function print_rs_status() {
+  url=$(get_connect_url)
+  exec_mongo \
+    'rs.status().members.forEach(function(z){printjson(z.name);printjson(z.stateStr); })' \
+    "mongodb://clusterAdmin:clusterAdmin123456@$url"
+}
+
+function test_rs_formed() {
+  desc "Testing that replica set with external members is formed..."
+  # shellcheck disable=SC2154 # ignoring - tmp_dir is defined in functions - spaghetti anyone?
+  print_rs_status >"$tmp_dir/rs.txt"
+
+  diff "${test_dir}/compare/rs.txt" "$tmp_dir/rs.txt"
+
+}
+
+function main() {
+  deploy_operator_cw
+  deploy_client
+  start_main_cluster
+  start_external_cluster
+  sleep 10
+
+  test_rs_formed
+}
+
+main

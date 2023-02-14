@@ -3,11 +3,12 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -221,12 +222,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
-		priorities, err := bcp.pbm.GetPriorities(ctx, r.client, cluster)
-		if err != nil {
-			return status, errors.Wrap(err, "get PBM priorities")
-		}
 		time.Sleep(10 * time.Second)
-		return bcp.Start(ctx, cluster, cr, priorities)
+		return bcp.Start(ctx, r.client, cluster, cr)
 	}
 
 	time.Sleep(5 * time.Second)
@@ -361,11 +358,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 					storage.Azure = *cr.Status.Azure
 				}
 
-				priorities, err := b.pbm.GetPriorities(ctx, r.client, cluster)
-				if err != nil {
-					return errors.Wrap(err, "get priorities")
-				}
-				err = b.pbm.SetConfig(ctx, storage, b.spec.PITR, priorities)
+				err := b.pbm.SetConfig(ctx, r.client, cluster, storage)
 				if err != nil {
 					return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 				}

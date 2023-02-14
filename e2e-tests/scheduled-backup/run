@@ -112,6 +112,23 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_restore "$backup_name_azure" 3
 fi
 
+desc 'add physical backup schedule, wait for the first backup'
+apply_cluster "$test_dir/conf/$cluster-3.yml"
+
+sleep 55
+
+apply_cluster "$test_dir/conf/$cluster.yml"
+
+backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print $1}' | tail -1)
+wait_backup "$backup_name_minio"
+
+sleep 5
+
+desc 'check backup and restore -- minio'
+run_restore "$backup_name_minio" 3
+wait_cluster_consistency "some-name"
+wait_restore "$backup_name_minio" 3
+
 unlabel_node
 
 destroy "$namespace"
