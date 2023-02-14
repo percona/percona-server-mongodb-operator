@@ -371,13 +371,25 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	}
 
 	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes(unsafePSA)
+	currMembers.SetVotes(unsafePSA)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
-		cnf.Version++
-
 		log.Info("Configuring member votes and priorities", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		// Non force replica set reconfig can only add or remove at most 1 voting member. So we need to do it step by step.
+		for i := range cnf.Members {
+			cnf.Members[i] = currMembers[i]
+			if (currMembers[i].Votes != cnf.Members[i].Votes) && (currMembers[i].Votes == 0 || cnf.Members[i].Votes == 0) {
+				cnf.Version++
+
+				err := mongo.WriteConfig(ctx, cli, cnf)
+				if err != nil {
+					return 0, errors.Wrap(err, "set votes: write mongo config")
+				}
+			}
+		}
+		cnf.Version++
+
+		err := mongo.WriteConfig(ctx, cli, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "set votes: write mongo config")
 		}
