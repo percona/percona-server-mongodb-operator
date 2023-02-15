@@ -47,7 +47,10 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-4.$cluster.$namespace"
 desc 'scale down from 5 to 3'
 kubectl_bin patch psmdb ${cluster%%-rs0} \
 	--type='json' \
-	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
+	-p='[
+		{"op": "replace", "path": "/spec/replsets/0/size", "value": 3},
+		{"op": "replace", "path": "/spec/replsets/0/expose", "value": {"enabled": true}}
+		]'
 
 desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-3
