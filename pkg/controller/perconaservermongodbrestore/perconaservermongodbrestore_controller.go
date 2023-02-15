@@ -3,6 +3,7 @@ package perconaservermongodbrestore
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -122,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || !reflect.DeepEqual(cr.Status.Conditions, status.Conditions) {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
@@ -164,6 +165,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		}
 	}
 
+	log.V(1).Info("Restore reconciled", "status", status)
+
 	return rr, nil
 }
 
@@ -199,8 +202,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 
 		return &psmdbv1.PerconaServerMongoDBBackup{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        cr.Name,
-				Namespace:   cr.Namespace,
+				Name:      cr.Name,
+				Namespace: cr.Namespace,
 			},
 			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
@@ -228,6 +231,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) error {
+	log := logf.FromContext(ctx)
+
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		c := &psmdbv1.PerconaServerMongoDBRestore{}
 
@@ -237,6 +242,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context,
 		}
 
 		c.Status = cr.Status
+		log.V(1).Info("Updating status", "status", c.Status)
 
 		return r.client.Status().Update(ctx, c)
 	})

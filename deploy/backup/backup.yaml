@@ -5,8 +5,8 @@ metadata:
   - delete-backup
   name: backup1
 spec:
-  clusterName: my-cluster-name
-  storageName: s3-us-west
-#  type: physical
+  clusterName: cluster1
+  storageName: minio
+  type: physical
 #  compressionType: gzip
 #  compressionLevel: 6

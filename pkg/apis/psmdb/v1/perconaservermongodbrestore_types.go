@@ -35,11 +35,12 @@ const (
 
 // PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreStatus struct {
-	State          RestoreState `json:"state,omitempty"`
-	PBMname        string       `json:"pbmName,omitempty"`
-	Error          string       `json:"error,omitempty"`
-	CompletedAt    *metav1.Time `json:"completed,omitempty"`
-	LastTransition *metav1.Time `json:"lastTransition,omitempty"`
+	State          RestoreState       `json:"state,omitempty"`
+	PBMname        string             `json:"pbmName,omitempty"`
+	Error          string             `json:"error,omitempty"`
+	CompletedAt    *metav1.Time       `json:"completed,omitempty"`
+	LastTransition *metav1.Time       `json:"lastTransition,omitempty"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -153,3 +154,11 @@ var (
 )
 
 const AnnotationRestoreInProgress = "percona.com/restore-in-progress"
+
+const (
+	ConditionStatefulsetsPrepared  = "StatefulsetsPrepared"
+	ConditionPreResyncFinished     = "PreResyncFinished"
+	ConditionRestoreFinished       = "RestoreFinished"
+	ConditionStatefulsetsRestarted = "StatefulsetsRestarted"
+	ConditionPostResyncFinished    = "PostResyncFinished"
+)

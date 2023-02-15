@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,6 +29,8 @@ import (
 
 func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	log := logf.FromContext(ctx)
+
+	log.V(1).Info("Reconciling physical restore")
 
 	status := cr.Status
 
@@ -61,24 +64,39 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "delete secret pbm-config")
 		}
 
-		status.State = psmdbv1.RestoreStateWaiting
+		status.State = psmdbv1.RestoreStateRunning
 	}
 
-	if err := r.createPBMConfigSecret(ctx, cr, cluster, bcp); err != nil {
-		return status, errors.Wrap(err, "create PBM config secret")
-	}
+	condition := meta.FindStatusCondition(cr.Status.Conditions, psmdbv1.ConditionStatefulsetsPrepared)
+	if condition == nil || condition.Status != metav1.ConditionTrue {
+		if err := r.createPBMConfigSecret(ctx, cr, cluster, bcp); err != nil {
+			return status, errors.Wrap(err, "create PBM config secret")
+		}
 
-	if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
-		return status, errors.Wrap(err, "prepare statefulsets for physical restore")
-	}
+		if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
+			return status, errors.Wrap(err, "prepare statefulsets for physical restore")
+		}
 
-	ready, err := r.checkIfStatefulSetsAreReadyForPhysicalRestore(ctx, cluster)
-	if err != nil {
-		return status, errors.Wrap(err, "check if statefulsets are ready for physical restore")
-	}
+		ready, err := r.checkIfStatefulSetsAreReadyForPhysicalRestore(ctx, cluster)
+		if err != nil {
+			return status, errors.Wrap(err, "check if statefulsets are ready for physical restore")
+		}
 
-	if (!ready && cr.Status.State != psmdbv1.RestoreStateRunning) || cr.Status.State == psmdbv1.RestoreStateNew {
-		log.Info("Waiting for statefulsets to be ready before restore", "ready", ready)
+		if !ready {
+			log.Info("Waiting for statefulsets to be ready before restore")
+			return status, nil
+		}
+
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               psmdbv1.ConditionStatefulsetsPrepared,
+			Status:             metav1.ConditionTrue,
+			Reason:             psmdbv1.ConditionStatefulsetsPrepared,
+			Message:            "",
+			LastTransitionTime: metav1.Now(),
+		})
+
+		log.V(1).Info("Statefulsets are prepared", "conditions", status.Conditions)
+
 		return status, nil
 	}
 
@@ -90,30 +108,40 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	if cr.Status.State == psmdbv1.RestoreStateWaiting {
-		command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
-		log.Info("Set PBM configuration", "command", command)
-		if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+	condition = meta.FindStatusCondition(cr.Status.Conditions, psmdbv1.ConditionPreResyncFinished)
+	if condition == nil || condition.Status != metav1.ConditionTrue {
+		if condition == nil {
+			command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
+			log.Info("Set PBM configuration", "command", command)
+			if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+				return status, errors.Wrapf(err, "set PBM config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+			}
 		}
 
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		timeout := time.NewTimer(900 * time.Second)
+		timeout := time.NewTimer(30 * time.Second)
 		defer timeout.Stop()
 
 	outer:
 		for {
 			select {
 			case <-timeout.C:
-				return status, errors.Errorf("timeout while waiting PBM operation to finish")
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:               psmdbv1.ConditionPreResyncFinished,
+					Status:             metav1.ConditionFalse,
+					Reason:             "Timeout",
+					Message:            "The operation will be retried",
+					LastTransitionTime: metav1.Now(),
+				})
+				return status, nil
 			case <-ticker.C:
 				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
 					stdoutBuf.Reset()
 					stderrBuf.Reset()
 
-					command = []string{"/opt/percona/pbm", "status", "--out", "json"}
+					command := []string{"/opt/percona/pbm", "status", "--out", "json"}
 					if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
 						return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 					}
@@ -143,7 +171,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			}
 		}
 
-		command = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               psmdbv1.ConditionPreResyncFinished,
+			Status:             metav1.ConditionTrue,
+			Reason:             psmdbv1.ConditionPreResyncFinished,
+			Message:            "",
+			LastTransitionTime: metav1.Now(),
+		})
+	}
+
+	condition = meta.FindStatusCondition(cr.Status.Conditions, psmdbv1.ConditionRestoreFinished)
+	if condition == nil {
+		command := []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
 		log.Info("Starting restore", "command", command)
 
 		stdoutBuf.Reset()
@@ -161,8 +200,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrap(err, "unmarshal PBM restore output")
 		}
 
-		status.State = psmdbv1.RestoreStateRequested
 		status.PBMname = out.Name
+
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               psmdbv1.ConditionRestoreFinished,
+			Status:             metav1.ConditionFalse,
+			Reason:             psmdbv1.ConditionPreResyncFinished,
+			Message:            "Restore started",
+			LastTransitionTime: metav1.Now(),
+		})
 
 		return status, nil
 	}
@@ -179,16 +225,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, errors.Wrap(err, "describe restore")
 	}
 
-	meta := pbm.BackupMeta{}
-	if err := json.Unmarshal(stdoutBuf.Bytes(), &meta); err != nil {
+	backupMeta := pbm.BackupMeta{}
+	if err := json.Unmarshal(stdoutBuf.Bytes(), &backupMeta); err != nil {
 		return status, errors.Wrap(err, "unmarshal PBM describe-restore output")
 	}
 
-	log.V(1).Info("PBM restore status", "status", meta)
+	log.V(1).Info("PBM restore status", "status", backupMeta)
 
-	switch meta.Status {
+	switch backupMeta.Status {
 	case pbm.StatusStarting:
-		for _, rs := range meta.Replsets {
+		for _, rs := range backupMeta.Replsets {
 			if rs.Status == pbm.StatusRunning {
 				status.State = psmdbv1.RestoreStateRunning
 				return status, nil
@@ -197,7 +243,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	case pbm.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
 	case pbm.StatusDone:
-		for _, rs := range meta.Replsets {
+		for _, rs := range backupMeta.Replsets {
 			if rs.Status == pbm.StatusDone {
 				continue
 			}
@@ -208,19 +254,25 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, nil
 		}
 
-		status.State = psmdbv1.RestoreStateReady
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               psmdbv1.ConditionRestoreFinished,
+			Status:             metav1.ConditionTrue,
+			Reason:             psmdbv1.ConditionRestoreFinished,
+			Message:            "",
+			LastTransitionTime: metav1.Now(),
+		})
 	}
 
-	if status.State == psmdbv1.RestoreStateReady {
+	condition = meta.FindStatusCondition(cr.Status.Conditions, psmdbv1.ConditionRestoreFinished)
+	if condition == nil || condition.Status != metav1.ConditionTrue {
 		replsets := cluster.Spec.Replsets
 		if cluster.Spec.Sharding.Enabled {
 			replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
 		}
 
+		readySts := 0
 		for _, rs := range replsets {
 			stsName := cluster.Name + "-" + rs.Name
-
-			log.Info("Deleting statefulset", "statefulset", stsName)
 
 			sts := appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -229,9 +281,36 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 				},
 			}
 
-			if err := r.client.Delete(ctx, &sts); err != nil {
-				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+			if condition == nil {
+				log.Info("Deleting statefulset", "statefulset", stsName)
+
+				if err := r.client.Delete(ctx, &sts); err != nil {
+					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+				}
 			}
+
+			err := r.client.Get(ctx, types.NamespacedName{Name: stsName, Namespace: cluster.Namespace}, &sts)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					continue
+				}
+
+				return status, errors.Wrapf(err, "get statefulset/%s", stsName)
+			}
+
+			if sts.Spec.Replicas == &sts.Status.ReadyReplicas {
+				readySts++
+			}
+		}
+
+		if readySts == len(replsets) {
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:               psmdbv1.ConditionStatefulsetsRestarted,
+				Status:             metav1.ConditionTrue,
+				Reason:             psmdbv1.ConditionStatefulsetsRestarted,
+				Message:            "",
+				LastTransitionTime: metav1.Now(),
+			})
 		}
 	}
 
