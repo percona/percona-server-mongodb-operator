@@ -47,5 +47,11 @@ func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Con
 		}
 	}
 
-	return []corev1.Container{EntrypointInitContainer(cr, "mongo-init", image, cr.Spec.ImagePullPolicy, nil)}
+	init := EntrypointInitContainer(cr, "mongo-init", image, cr.Spec.ImagePullPolicy, nil)
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		init.SecurityContext = cr.Spec.InitContainerSecurityContext
+	}
+
+	return []corev1.Container{init}
 }
