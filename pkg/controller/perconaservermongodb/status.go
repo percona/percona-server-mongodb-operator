@@ -295,7 +295,7 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 	}
 
 	switch {
-	case cr.Spec.Pause && status.Ready > 0:
+	case cr.Spec.Pause && status.Size > 0:
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
@@ -340,7 +340,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 	}
 
 	switch {
-	case cr.Spec.Pause && status.Ready > 0:
+	case cr.Spec.Pause && status.Size > 0:
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused

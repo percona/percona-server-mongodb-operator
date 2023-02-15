@@ -234,6 +234,17 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 
 	if cr.CompareVersion("1.14.0") >= 0 {
 		container.Command = []string{BinMountPath + "/ps-entry.sh"}
+
+		container.Env = append(container.Env, []corev1.EnvVar{
+			{
+				Name:  "CFG_SERVER_EXPOSED",
+				Value: strconv.FormatBool(cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled),
+			},
+			{
+				Name:  "CFG_SERVER_EXPOSE_TYPE",
+				Value: string(cr.Spec.Sharding.ConfigsvrReplSet.Expose.ExposeType),
+			},
+		}...)
 	}
 
 	return container, nil
