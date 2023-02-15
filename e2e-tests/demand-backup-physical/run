@@ -35,6 +35,12 @@ wait_restore() {
 
 	wait_restore_object "${1}" "ready"
 	echo
+	sleep 10
+	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq ".metadata.annotations.'percona.com/resync-pbm'") == null ]; then
+		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
+		exit 1
+	fi
+	echo
 	wait_cluster_consistency "${cluster}"
 	echo
 	set -o xtrace
@@ -190,5 +196,7 @@ backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
 run_restore ${backup_name_minio} "_restore_sharded"
 wait_restore ${backup_name_minio} "_restore_sharded"
 compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
+
+sleep 60 # give PBM resync some time
 
 destroy "$namespace"

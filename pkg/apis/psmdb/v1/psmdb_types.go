@@ -995,3 +995,5 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	orderedFinalizers = append(orderedFinalizers, finalizers...)
 	return orderedFinalizers
 }
+
+const AnnotationResyncPBM = "percona.com/resync-pbm"
