@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -215,7 +216,7 @@ func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
 		cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyDisabled
 }
 
-func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *api.PerconaServerMongoDB, operatorNs string) (VersionMeta, error) {
+func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *api.PerconaServerMongoDB, operatorDepl *appsv1.Deployment) (VersionMeta, error) {
 	watchNs, err := k8s.GetWatchNamespace()
 	if err != nil {
 		return VersionMeta{}, errors.Wrap(err, "get WATCH_NAMESPACE env variable")
@@ -270,15 +271,48 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		}
 	}
 
-	operatorDepl := new(appsv1.Deployment)
-	if err := r.client.Get(ctx, types.NamespacedName{Name: os.Getenv("HOSTNAME"), Namespace: operatorNs}, operatorDepl); err != nil {
-		return VersionMeta{}, errors.Wrap(err, "failed to get operator deployment")
-	}
 	if _, ok := operatorDepl.Labels["helm.sh/chart"]; ok {
 		vm.HelmDeploy = true
 	}
 
 	return vm, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getOperatorDeployment(ctx context.Context) (*appsv1.Deployment, error) {
+	ns, err := k8s.GetOperatorNamespace()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator namespace")
+	}
+	name, err := os.Hostname()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator hostname")
+	}
+
+	pod := new(corev1.Pod)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, pod)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator pod")
+	}
+	if len(pod.OwnerReferences) == 0 {
+		return nil, errors.New("operator pod has no owner reference")
+	}
+
+	rs := new(appsv1.ReplicaSet)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: pod.OwnerReferences[0].Name}, rs)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator replicaset")
+	}
+	if len(rs.OwnerReferences) == 0 {
+		return nil, errors.New("operator replicaset has no owner reference")
+	}
+
+	depl := new(appsv1.Deployment)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: rs.OwnerReferences[0].Name}, depl)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator deployment")
+	}
+
+	return depl, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
@@ -292,12 +326,12 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return errors.New("cluster is not ready")
 	}
 
-	operatorNs, err := k8s.GetOperatorNamespace()
+	operatorDepl, err := r.getOperatorDeployment(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to get operator namespace")
+		return errors.Wrap(err, "failed to get operator deployment")
 	}
 
-	vm, err := r.getVersionMeta(ctx, cr, operatorNs)
+	vm, err := r.getVersionMeta(ctx, cr, operatorDepl)
 	if err != nil {
 		return errors.Wrap(err, "failed to get version meta")
 	}

@@ -544,8 +544,6 @@ func TestVersionMeta(t *testing.T) {
 		},
 	}
 
-	t.Setenv("HOSTNAME", operatorName)
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(k8s.WatchNamespaceEnvVar, currentNs)
@@ -578,11 +576,11 @@ func TestVersionMeta(t *testing.T) {
 			if err := r.setCRVersion(context.TODO(), &tt.cr); err != nil {
 				t.Error(err, "set CR version")
 			}
-			err := tt.cr.CheckNSetDefaults(version.PlatformKubernetes, log)
+			err = tt.cr.CheckNSetDefaults(version.PlatformKubernetes, log)
 			if err != nil {
 				t.Error(err)
 			}
-			vm, err := r.getVersionMeta(context.TODO(), &tt.cr, currentNs)
+			vm, err := r.getVersionMeta(context.TODO(), &tt.cr, &operatorDepl)
 			if err != nil {
 				t.Error(err)
 			}
