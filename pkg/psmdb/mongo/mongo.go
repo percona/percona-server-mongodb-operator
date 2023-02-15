@@ -239,9 +239,11 @@ func AddShard(ctx context.Context, client *mongo.Client, rsName, host string) er
 }
 
 func WriteConfig(ctx context.Context, client *mongo.Client, cfg RSConfig, force bool) error {
-	resp := OKResponse{}
+	log := logf.FromContext(ctx)
 
 	log.V(1).Info("Running replSetReconfig", "cfg", cfg, "force", force)
+
+	resp := OKResponse{}
 
 	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}, {Key: "force", Value: force}})
 	if res.Err() != nil {
