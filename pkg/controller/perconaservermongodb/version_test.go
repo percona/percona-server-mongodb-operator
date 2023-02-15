@@ -342,7 +342,7 @@ func TestVersionMeta(t *testing.T) {
 		helmDeploy  bool
 	}{
 		{
-			name: "Test 1",
+			name: "TestMinimalCR",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -378,7 +378,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 		},
 		{
-			name: "Test 2",
+			name: "TestFullCRWithOldVersion",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -419,6 +419,9 @@ func TestVersionMeta(t *testing.T) {
 							Enabled: true,
 						},
 					},
+					Secrets: &api.SecretsSpec{
+						Vault: "vault-secret",
+					},
 					Sharding: api.Sharding{
 						Enabled: true,
 						ConfigsvrReplSet: &api.ReplsetSpec{
@@ -445,22 +448,21 @@ func TestVersionMeta(t *testing.T) {
 				},
 			},
 			want: VersionMeta{
-				Apply:              "disabled",
-				Version:            "1.13.0",
-				ClusterWideEnabled: true,
-				ShardingEnabled:    true,
-				PMMEnabled:         true,
-				HelmDeploy:         true,
-				SidecarsUsed:       true,
-				BackupsEnabled:     true,
-				ClusterSize:        2,
-				PITREnabled:        true,
+				Apply:                 "disabled",
+				Version:               "1.13.0",
+				HashicorpVaultEnabled: true,
+				ShardingEnabled:       true,
+				PMMEnabled:            true,
+				SidecarsUsed:          true,
+				BackupsEnabled:        true,
+				ClusterSize:           2,
+				PITREnabled:           true,
 			},
-			clusterWide: true,
-			helmDeploy:  true,
+			clusterWide: false,
+			helmDeploy:  false,
 		},
 		{
-			name: "Test 3",
+			name: "TestDisabledBackupWithStorage",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -490,8 +492,42 @@ func TestVersionMeta(t *testing.T) {
 							"minio": {},
 						},
 					},
-					Secrets: &api.SecretsSpec{
-						Vault: "vault-secret",
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			want: VersionMeta{
+				Apply:          "disabled",
+				Version:        version.Version,
+				ClusterSize:    3,
+				BackupsEnabled: true,
+			},
+		},
+		{
+			name: "TestClusterWideHelmDeploy",
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:5.0.11-10",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+							VolumeSpec: &api.VolumeSpec{
+								PersistentVolumeClaim: api.PVCSpec{
+									PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+										Resources: corev1.ResourceRequirements{
+											Requests: map[corev1.ResourceName]resource.Quantity{
+												corev1.ResourceStorage: q,
+											},
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 				Status: api.PerconaServerMongoDBStatus{
@@ -499,15 +535,14 @@ func TestVersionMeta(t *testing.T) {
 				},
 			},
 			want: VersionMeta{
-				Apply:                 "disabled",
-				Version:               version.Version,
-				ClusterWideEnabled:    true,
-				HashicorpVaultEnabled: true,
-				BackupsEnabled:        true,
-				ClusterSize:           4,
+				Apply:              "disabled",
+				Version:            version.Version,
+				HelmDeploy:         true,
+				ClusterWideEnabled: true,
+				ClusterSize:        4,
 			},
 			clusterWide: true,
-			helmDeploy:  false,
+			helmDeploy:  true,
 		},
 	}
 	currentNs := "test-namespace"
