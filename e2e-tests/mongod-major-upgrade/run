@@ -10,8 +10,8 @@ function get_mongod_ver_from_image() {
 	local image=${1}
 
 	local pod_name=${RANDOM}
-	kubectl_bin run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity > /dev/null
-	kubectl_bin wait --for=condition=Ready pod/${pod_name} > /dev/null
+	kubectl_bin run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
+	kubectl_bin wait --for=condition=Ready pod/${pod_name} >/dev/null
 
 	local version_info=$(kubectl_bin exec ${pod_name} -- mongod --version)
 	kubectl_bin delete pod/${pod_name} --grace-period=0 --force > /dev/null
