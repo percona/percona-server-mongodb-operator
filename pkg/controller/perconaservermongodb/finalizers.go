@@ -23,7 +23,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	orderedFinalizers := cr.GetOrderedFinalizers()
 	var finalizers []string
 
-	for _, f := range orderedFinalizers {
+	for i, f := range orderedFinalizers {
 		switch f {
 		case api.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
@@ -43,7 +43,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			default:
 				log.Error(err, "failed to run finalizer", "finalizer", f)
 			}
-			finalizers = append(finalizers, f)
+			finalizers = append(finalizers, orderedFinalizers[i:]...)
 			break
 		}
 	}
