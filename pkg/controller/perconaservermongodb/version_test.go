@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
@@ -421,6 +422,11 @@ func TestVersionMeta(t *testing.T) {
 						PITR: api.PITRSpec{
 							Enabled: true,
 						},
+						Tasks: []api.BackupTaskSpec{
+							{
+								Type: pbm.PhysicalBackup,
+							},
+						},
 					},
 					Secrets: &api.SecretsSpec{
 						Vault: "vault-secret",
@@ -451,16 +457,17 @@ func TestVersionMeta(t *testing.T) {
 				},
 			},
 			want: VersionMeta{
-				Apply:                 "disabled",
-				Version:               "1.13.0",
-				HashicorpVaultEnabled: true,
-				ShardingEnabled:       true,
-				PMMEnabled:            true,
-				SidecarsUsed:          true,
-				BackupsEnabled:        true,
-				ClusterSize:           2,
-				PITREnabled:           true,
-				HelmDeployCR:          true,
+				Apply:                   "disabled",
+				Version:                 "1.13.0",
+				HashicorpVaultEnabled:   true,
+				ShardingEnabled:         true,
+				PMMEnabled:              true,
+				SidecarsUsed:            true,
+				BackupsEnabled:          true,
+				ClusterSize:             2,
+				PITREnabled:             true,
+				HelmDeployCR:            true,
+				PhysicalBackupScheduled: true,
 			},
 			clusterWide: false,
 			helmDeploy:  false,

@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
@@ -236,7 +237,6 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		BackupsEnabled:        len(cr.Spec.Backup.Storages) > 0,
 		ClusterSize:           cr.Status.Size,
 		PITREnabled:           cr.Spec.Backup.PITR.Enabled,
-		// TODO: PhysicalBackupScheduled
 	}
 	if cr.Spec.Platform != nil {
 		vm.Platform = string(*cr.Spec.Platform)
@@ -277,6 +277,13 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 
 	if _, ok := cr.Labels["helm.sh/chart"]; ok {
 		vm.HelmDeployCR = true
+	}
+
+	for _, task := range cr.Spec.Backup.Tasks {
+		if task.Type == pbm.PhysicalBackup {
+			vm.PhysicalBackupScheduled = true
+			break
+		}
 	}
 
 	return vm, nil
