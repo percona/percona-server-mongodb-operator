@@ -36,7 +36,7 @@ function generate_vs_json() {
 		version_service_source=$(echo ${version_service_source} \
 			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
 	done
-	echo ${version_service_source} | jq >${target_path}
+	echo ${version_service_source} | jq '.' >${target_path}
 }
 
 function main() {
