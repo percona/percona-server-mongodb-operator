@@ -57,7 +57,7 @@ spec:
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: sec-context
@@ -73,7 +73,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --ssl
@@ -127,6 +127,8 @@ spec:
               readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: sec-context-mongodb-encryption-key
               readOnly: true
@@ -146,6 +148,9 @@ spec:
             requests:
               cpu: 100m
               memory: 100M
+          securityContext:
+            privileged: false
+            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:

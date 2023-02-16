@@ -11,10 +11,10 @@ import (
 
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/description"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -36,6 +36,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	if replset.Arbiter.Enabled {
 		replsetSize += replset.Arbiter.Size
+	}
+
+	restoreInProgress, err := r.restoreInProgress(ctx, cr, replset)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "check if restore in progress")
+	}
+
+	if restoreInProgress {
+		return api.AppStateInit, nil
 	}
 
 	if replsetSize == 0 {
@@ -80,22 +89,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateInit, nil
 		}
 		if cr.Status.Replsets[replset.Name].Initialized {
-			// If an exposed replset is initialized but connection fails with ReplicaSetNoPrimary,
-			// we'll change the member hosts to local FQDNs and reconfig to recover.
-			serverSelectionError, ok := errors.Cause(err).(topology.ServerSelectionError)
-			if ok && replset.Expose.Enabled {
-				if serverSelectionError.Desc.Kind != description.ReplicaSetNoPrimary {
-					return api.AppStateError, errors.Wrap(err, "dial")
-				}
-
-				log.Error(err, "Cluster crashed, trying to recover", "cluster", cr.Name)
-				if err := r.recoverReplsetNoPrimary(ctx, cr, replset, pods.Items[0]); err != nil {
-					return api.AppStateError, errors.Wrap(err, "force reconfig to recover")
-				}
-
-				return api.AppStateInit, nil
-			}
-
 			return api.AppStateError, errors.Wrap(err, "dial")
 		}
 
@@ -793,6 +786,17 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+	sts := appsv1.StatefulSet{}
+	stsName := cr.Name + "-" + replset.Name
+	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
+	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		return false, errors.Wrapf(err, "get statefulset %s", stsName)
+	}
+	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]
+	return ok, nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod

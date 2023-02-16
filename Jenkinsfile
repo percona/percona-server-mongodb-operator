@@ -393,6 +393,7 @@ pipeline {
                         runTest('demand-backup', 'cluster4')
                         runTest('scheduled-backup', 'cluster4')
                         runTest('demand-backup-sharded', 'cluster4')
+                        runTest('demand-backup-physical', 'cluster4')
                         runTest('upgrade', 'cluster4')
                         runTest('upgrade-sharded', 'cluster4')
                         runTest('pitr', 'cluster4')
@@ -404,6 +405,7 @@ pipeline {
                     steps {
                         CreateCluster('cluster5')
                         runTest('cross-site-sharded', 'cluster5')
+//                         runTest('serviceless-external-nodes', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
                 }
