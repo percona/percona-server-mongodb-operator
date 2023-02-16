@@ -378,10 +378,13 @@ func TestVersionMeta(t *testing.T) {
 			},
 		},
 		{
-			name: "Full CR with old Version",
+			name: "Full CR with old Version deployed with Helm",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
+					Labels: map[string]string{
+						"helm.sh/chart": "psmdb-db-1.13.0",
+					},
 				},
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: "1.13.0",
@@ -457,6 +460,7 @@ func TestVersionMeta(t *testing.T) {
 				BackupsEnabled:        true,
 				ClusterSize:           2,
 				PITREnabled:           true,
+				HelmDeployCR:          true,
 			},
 			clusterWide: false,
 			helmDeploy:  false,
@@ -505,7 +509,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 		},
 		{
-			name: "Cluster-wide and helm deploy",
+			name: "Cluster-wide and operator helm deploy",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -537,7 +541,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:              "disabled",
 				Version:            version.Version,
-				HelmDeploy:         true,
+				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
 			},
@@ -697,7 +701,8 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 		PmmVersion:              req.GetPmmVersion(),
 		ShardingEnabled:         req.GetShardingEnabled(),
 		PmmEnabled:              req.GetPmmEnabled(),
-		HelmDeploy:              req.GetHelmDeploy(),
+		HelmDeployOperator:      req.GetHelmDeployOperator(),
+		HelmDeployCr:            req.GetHelmDeployCr(),
 		SidecarsUsed:            req.GetSidecarsUsed(),
 		BackupsEnabled:          req.GetBackupsEnabled(),
 		ClusterSize:             req.GetClusterSize(),
@@ -716,7 +721,8 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 		PmmVersion:              "pmm-version",
 		ShardingEnabled:         true,
 		PmmEnabled:              true,
-		HelmDeploy:              true,
+		HelmDeployOperator:      true,
+		HelmDeployCr:            true,
 		SidecarsUsed:            true,
 		BackupsEnabled:          true,
 		ClusterSize:             3,
@@ -815,7 +821,8 @@ func TestVersionService(t *testing.T) {
 				HashicorpVaultEnabled:   true,
 				ShardingEnabled:         true,
 				PMMEnabled:              true,
-				HelmDeploy:              true,
+				HelmDeployOperator:      true,
+				HelmDeployCR:            true,
 				SidecarsUsed:            true,
 				BackupsEnabled:          true,
 				ClusterSize:             3,

@@ -94,10 +94,15 @@ type VersionServiceOperatorParams struct {
 	// Format: boolean
 	HashicorpVaultEnabled *bool
 
-	// HelmDeploy.
+	// HelmDeployCr.
 	//
 	// Format: boolean
-	HelmDeploy *bool
+	HelmDeployCr *bool
+
+	// HelmDeployOperator.
+	//
+	// Format: boolean
+	HelmDeployOperator *bool
 
 	// KubeVersion.
 	KubeVersion *string
@@ -289,15 +294,26 @@ func (o *VersionServiceOperatorParams) SetHashicorpVaultEnabled(hashicorpVaultEn
 	o.HashicorpVaultEnabled = hashicorpVaultEnabled
 }
 
-// WithHelmDeploy adds the helmDeploy to the version service operator params
-func (o *VersionServiceOperatorParams) WithHelmDeploy(helmDeploy *bool) *VersionServiceOperatorParams {
-	o.SetHelmDeploy(helmDeploy)
+// WithHelmDeployCr adds the helmDeployCr to the version service operator params
+func (o *VersionServiceOperatorParams) WithHelmDeployCr(helmDeployCr *bool) *VersionServiceOperatorParams {
+	o.SetHelmDeployCr(helmDeployCr)
 	return o
 }
 
-// SetHelmDeploy adds the helmDeploy to the version service operator params
-func (o *VersionServiceOperatorParams) SetHelmDeploy(helmDeploy *bool) {
-	o.HelmDeploy = helmDeploy
+// SetHelmDeployCr adds the helmDeployCr to the version service operator params
+func (o *VersionServiceOperatorParams) SetHelmDeployCr(helmDeployCr *bool) {
+	o.HelmDeployCr = helmDeployCr
+}
+
+// WithHelmDeployOperator adds the helmDeployOperator to the version service operator params
+func (o *VersionServiceOperatorParams) WithHelmDeployOperator(helmDeployOperator *bool) *VersionServiceOperatorParams {
+	o.SetHelmDeployOperator(helmDeployOperator)
+	return o
+}
+
+// SetHelmDeployOperator adds the helmDeployOperator to the version service operator params
+func (o *VersionServiceOperatorParams) SetHelmDeployOperator(helmDeployOperator *bool) {
+	o.HelmDeployOperator = helmDeployOperator
 }
 
 // WithKubeVersion adds the kubeVersion to the version service operator params
@@ -587,18 +603,35 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		}
 	}
 
-	if o.HelmDeploy != nil {
+	if o.HelmDeployCr != nil {
 
-		// query param helmDeploy
-		var qrHelmDeploy bool
+		// query param helmDeployCr
+		var qrHelmDeployCr bool
 
-		if o.HelmDeploy != nil {
-			qrHelmDeploy = *o.HelmDeploy
+		if o.HelmDeployCr != nil {
+			qrHelmDeployCr = *o.HelmDeployCr
 		}
-		qHelmDeploy := swag.FormatBool(qrHelmDeploy)
-		if qHelmDeploy != "" {
+		qHelmDeployCr := swag.FormatBool(qrHelmDeployCr)
+		if qHelmDeployCr != "" {
 
-			if err := r.SetQueryParam("helmDeploy", qHelmDeploy); err != nil {
+			if err := r.SetQueryParam("helmDeployCr", qHelmDeployCr); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.HelmDeployOperator != nil {
+
+		// query param helmDeployOperator
+		var qrHelmDeployOperator bool
+
+		if o.HelmDeployOperator != nil {
+			qrHelmDeployOperator = *o.HelmDeployOperator
+		}
+		qHelmDeployOperator := swag.FormatBool(qrHelmDeployOperator)
+		if qHelmDeployOperator != "" {
+
+			if err := r.SetQueryParam("helmDeployOperator", qHelmDeployOperator); err != nil {
 				return err
 			}
 		}

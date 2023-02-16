@@ -272,7 +272,11 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 	}
 
 	if _, ok := operatorDepl.Labels["helm.sh/chart"]; ok {
-		vm.HelmDeploy = true
+		vm.HelmDeployOperator = true
+	}
+
+	if _, ok := cr.Labels["helm.sh/chart"]; ok {
+		vm.HelmDeployCR = true
 	}
 
 	return vm, nil

@@ -126,7 +126,7 @@ require (
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
-	github.com/Percona-Lab/percona-version-service => github.com/Percona-Lab/percona-version-service v0.0.0-20230214145732-f897e69ee0be // Remove after https://github.com/Percona-Lab/percona-version-service/pull/119 merge
+	github.com/Percona-Lab/percona-version-service => github.com/Percona-Lab/percona-version-service v0.0.0-20230216091902-2394a6335a1b // Remove after https://github.com/Percona-Lab/percona-version-service/pull/119 merge
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.2.0
 	github.com/percona/percona-backup-mongodb => github.com/percona/percona-backup-mongodb v0.0.0-20221024072933-3ec38a5fc670
 )

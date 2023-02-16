@@ -46,7 +46,8 @@ func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, end
 		Product:                 productName,
 		ShardingEnabled:         &vm.ShardingEnabled,
 		PmmEnabled:              &vm.PMMEnabled,
-		HelmDeploy:              &vm.HelmDeploy,
+		HelmDeployOperator:      &vm.HelmDeployOperator,
+		HelmDeployCr:            &vm.HelmDeployCR,
 		SidecarsUsed:            &vm.SidecarsUsed,
 		BackupsEnabled:          &vm.BackupsEnabled,
 		ClusterSize:             &vm.ClusterSize,
@@ -157,7 +158,8 @@ type VersionMeta struct {
 	HashicorpVaultEnabled   bool
 	ShardingEnabled         bool
 	PMMEnabled              bool
-	HelmDeploy              bool
+	HelmDeployOperator      bool
+	HelmDeployCR            bool
 	SidecarsUsed            bool
 	BackupsEnabled          bool
 	ClusterSize             int32
