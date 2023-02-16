@@ -48,8 +48,7 @@ desc 'scale down from 5 to 3'
 kubectl_bin patch psmdb ${cluster%%-rs0} \
 	--type='json' \
 	-p='[
-		{"op": "replace", "path": "/spec/replsets/0/size", "value": 3},
-		{"op": "replace", "path": "/spec/replsets/0/expose", "value": {"enabled": true}}
+		{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}
 		]'
 
 desc 'check if Pod deleted'
@@ -57,12 +56,35 @@ wait_for_delete pod/$cluster-3
 wait_for_delete pod/$cluster-4
 wait_for_running $cluster 3
 
+kubectl_bin delete psmdb --all
+kubectl_bin delete pvc --all
+
+sleep 30
+
+desc 'check scaling on exposed cluster with unsafe config'
+cat_config "$conf_dir/$cluster.yml" \
+	| yq eval '.spec.allowUnsafeConfigurations=true' \
+	| yq eval '.spec.replsets[0].expose.enabled=true' \
+	| yq eval '.spec.replsets[0].expose.exposeType="ClusterIP"' \
+	| kubectl_bin apply -f -
+wait_for_running $cluster 3
+
+desc 'check data consistency: write data, read from all'
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
+sleep 2
+run_mongo \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 desc 'scale up from 3 to 1'
 kubectl_bin patch psmdb ${cluster%%-rs0} \
 	--type='json' \
 	-p='[
-		{"op": "replace", "path": "/spec/replsets/0/size", "value": 1},
-		{"op": "replace", "path": "/spec/allowUnsafeConfigurations", "value": true}
+		{"op": "replace", "path": "/spec/replsets/0/size", "value": 1}
 		]'
 desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-1
