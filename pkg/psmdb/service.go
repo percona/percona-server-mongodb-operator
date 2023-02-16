@@ -255,28 +255,33 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 
 // MongoHost returns the mongo host for given pod
 func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
-	if cr.Spec.ClusterServiceDNSMode == api.DnsModeServiceMesh {
+	switch cr.Spec.ClusterServiceDNSMode {
+	case api.DNSModeServiceMesh:
 		return GetServiceMeshAddr(cr, pod.Name, cr.Namespace), nil
-	}
+	case api.DNSModeInternal:
+		return GetAddr(cr, pod.Name, rsName), nil
+	case api.DNSModeExternal:
+		if rsExposed {
+			if cr.MCSEnabled() {
+				imported, err := IsServiceImported(ctx, cl, cr, pod.Name)
+				if err != nil {
+					return "", errors.Wrapf(err, "check if service imported for %s", pod.Name)
+				}
 
-	if rsExposed {
-		if cr.MCSEnabled() {
-			imported, err := IsServiceImported(ctx, cl, cr, pod.Name)
-			if err != nil {
-				return "", errors.Wrapf(err, "check if service imported for %s", pod.Name)
+				if !imported {
+					return getExtAddr(ctx, cl, cr.Namespace, pod)
+				}
+
+				return GetMCSAddr(cr, pod.Name), nil
 			}
 
-			if !imported {
-				return getExtAddr(ctx, cl, cr.Namespace, pod)
-			}
-
-			return GetMCSAddr(cr, pod.Name), nil
+			return getExtAddr(ctx, cl, cr.Namespace, pod)
 		}
 
-		return getExtAddr(ctx, cl, cr.Namespace, pod)
+		return GetAddr(cr, pod.Name, rsName), nil
+	default:
+		return GetAddr(cr, pod.Name, rsName), nil
 	}
-
-	return GetAddr(cr, pod.Name, rsName), nil
 }
 
 // MongosHost returns the mongos host for given pod
