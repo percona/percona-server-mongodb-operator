@@ -3,7 +3,7 @@ module github.com/percona/percona-server-mongodb-operator
 go 1.18
 
 require (
-	github.com/Percona-Lab/percona-version-service v0.0.0-20230210110923-39ccf9f709d8
+	github.com/Percona-Lab/percona-version-service v0.0.0-20230216094301-f9489c81b52a
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/go-logr/logr v1.2.3
 	github.com/go-openapi/errors v0.20.3
@@ -126,7 +126,6 @@ require (
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
-	github.com/Percona-Lab/percona-version-service => github.com/Percona-Lab/percona-version-service v0.0.0-20230216091902-2394a6335a1b // Remove after https://github.com/Percona-Lab/percona-version-service/pull/119 merge
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.2.0
 	github.com/percona/percona-backup-mongodb => github.com/percona/percona-backup-mongodb v0.0.0-20221024072933-3ec38a5fc670
 )
