@@ -10,7 +10,7 @@ import (
 )
 
 // AgentContainer creates the container object for a backup agent
-func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Container {
+func AgentContainer(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
@@ -45,11 +45,19 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 			},
 			{
 				Name:  "PBM_MONGODB_REPLSET",
-				Value: replsetName,
+				Value: replset.Name,
 			},
 			{
 				Name:  "PBM_MONGODB_PORT",
 				Value: strconv.Itoa(int(api.MongodPort(cr))),
+			},
+			{
+				Name:  "REPLSET_EXPOSED",
+				Value: strconv.FormatBool(replset.Expose.Enabled),
+			},
+			{
+				Name:  "REPLSET_EXPOSED_TYPE",
+				Value: string(replset.Expose.ExposeType),
 			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,

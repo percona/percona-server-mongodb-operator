@@ -113,14 +113,6 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 				Name:  "MONGODB_REPLSET",
 				Value: replset.Name,
 			},
-			{
-				Name:  "REPLSET_EXPOSED",
-				Value: strconv.FormatBool(replset.Expose.Enabled),
-			},
-			{
-				Name:  "REPLSET_EXPOSED_TYPE",
-				Value: string(replset.Expose.ExposeType),
-			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
 			{

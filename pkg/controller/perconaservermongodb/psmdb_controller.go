@@ -1507,7 +1507,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		}
 
 		if cr.Spec.Backup.Enabled {
-			agentC := backup.AgentContainer(cr, replset.Name)
+			agentC := backup.AgentContainer(cr, replset)
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
 
