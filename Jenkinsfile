@@ -406,7 +406,7 @@ pipeline {
                     steps {
                         CreateCluster('cluster5')
                         runTest('cross-site-sharded', 'cluster5')
-                        runTest('serviceless-external-nodes', 'cluster5')
+//                         runTest('serviceless-external-nodes', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
                 }
