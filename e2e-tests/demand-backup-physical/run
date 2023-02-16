@@ -36,7 +36,8 @@ wait_restore() {
 	wait_restore_object "${1}" "ready"
 	echo
 	sleep 10
-	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq ".metadata.annotations.'percona.com/resync-pbm'") == null ]; then
+	kubectl_bin get psmdb ${cluster} -o yaml
+	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
 		exit 1
 	fi
