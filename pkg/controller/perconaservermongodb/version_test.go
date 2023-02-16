@@ -342,7 +342,7 @@ func TestVersionMeta(t *testing.T) {
 		helmDeploy  bool
 	}{
 		{
-			name: "TestMinimalCR",
+			name: "Minimal CR",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -378,7 +378,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 		},
 		{
-			name: "TestFullCRWithOldVersion",
+			name: "Full CR with old Version",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -462,7 +462,7 @@ func TestVersionMeta(t *testing.T) {
 			helmDeploy:  false,
 		},
 		{
-			name: "TestDisabledBackupWithStorage",
+			name: "Disabled Backup with storage",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -505,7 +505,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 		},
 		{
-			name: "TestClusterWideHelmDeploy",
+			name: "Cluster-wide and helm deploy",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
@@ -609,18 +609,18 @@ func TestVersionMeta(t *testing.T) {
 			log := logf.Log.WithName(tt.name)
 
 			if err := r.setCRVersion(context.TODO(), &tt.cr); err != nil {
-				t.Error(err, "set CR version")
+				t.Fatal(err, "set CR version")
 			}
 			err = tt.cr.CheckNSetDefaults(version.PlatformKubernetes, log)
 			if err != nil {
-				t.Error(err)
+				t.Fatal(err)
 			}
 			vm, err := r.getVersionMeta(context.TODO(), &tt.cr, &operatorDepl)
 			if err != nil {
-				t.Error(err)
+				t.Fatal(err)
 			}
 			if vm != tt.want {
-				t.Errorf("Have: %v; Want: %v", vm, tt.want)
+				t.Fatalf("Have: %v; Want: %v", vm, tt.want)
 			}
 		})
 	}
@@ -845,10 +845,10 @@ func TestVersionService(t *testing.T) {
 				if tt.shouldErr {
 					return
 				}
-				t.Error(err)
+				t.Fatal(err)
 			}
 			if dv != tt.want {
-				t.Error(errors.Errorf("Have: %v; Want: %v", dv, tt.want))
+				t.Fatal(errors.Errorf("Have: %v; Want: %v", dv, tt.want))
 			}
 		})
 	}
