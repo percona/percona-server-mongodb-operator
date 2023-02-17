@@ -233,6 +233,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
 			}
 		}
+
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			c := &psmdbv1.PerconaServerMongoDB{}
+			err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, c)
+			if err != nil {
+				return err
+			}
+
+			orig := c.DeepCopy()
+			c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
+
+			return r.client.Patch(ctx, c, client.MergeFrom(orig))
+		})
+		if err != nil {
+			return status, errors.Wrapf(err, "annotate psmdb/%s for PBM resync", cluster.Name)
+		}
+
 	}
 
 	return status, nil
