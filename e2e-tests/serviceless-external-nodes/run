@@ -1,115 +1,66 @@
 #!/bin/bash
 
+cluster="mydb"
+
 set -o errexit
 set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
-# shellcheck disable=SC1091 # ignoring
-source "${test_dir}"/../functions
+. "${test_dir}/../functions"
 
-db_name="mydb"
+if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+else
+	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+fi
+unset OPERATOR_NS
 
-main_ns="main"
-external_ns="external"
-operator_ns="operator"
-client_ns="client"
+desc "Create main cluster"
+create_infra "$namespace"
+kubectl_bin apply \
+	-f "$conf_dir/client.yml" \
+	-f "$test_dir/conf/secrets.yml"
 
-## there is a magic undocumented env var, which forces the operator to run in
-## k8s-cluster-wide mode, with RBAC configured at Cluster level
-OPERATOR_NS="$operator_ns"
+apply_cluster "$test_dir/conf/main.yml"
+wait_for_running "$cluster-rs0" 1
 
-function deploy_operator_cw() {
-  desc "Start Operator in Cluster-Wide Mode"
-  create_namespace $OPERATOR_NS
-  deploy_operator
-  kubectl_bin get deployment percona-server-mongodb-operator -n "$operator_ns" -oyaml |
-    yq eval '
-      ((.. | select(.[] == "WATCH_NAMESPACE")) |= .value="'${main_ns},${external_ns}'") |
-      del(.spec.template.metadata.creationTimestamp)' - |
-    kubectl_bin apply -n "$operator_ns" -f -
+desc "Start External Cluster in unmanaged mode"
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
+create_namespace $replica_namespace 0
+deploy_operator
 
-  sleep 2
-  wait_pod "$(get_operator_pod)"
-}
+kubectl_bin apply \
+	-f "$conf_dir/client.yml" \
+	-f "$test_dir/conf/secrets.yml"
+apply_cluster "$test_dir/conf/external.yml"
 
-function deploy_client() {
-  desc "Deploy Client pod"
-  create_namespace "$client_ns"
-  kubectl_bin config set-context "$(kubectl_bin config current-context)" --namespace="$client_ns"
+#wait_for_running "$cluster-rs0" 1
+sleep 30
 
-  # shellcheck disable=SC2154 # ignoring - conf_dir is defined in functions - spaghetti anyone?
-  kubectl_bin apply -f "$conf_dir/client.yml"
-  kubectl_bin run network --image wbitt/network-multitool
-}
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 
-function start_external_cluster() {
-  desc "Start External Cluster in unmanaged mode"
-  create_namespace "$external_ns"
-  kubectl_bin config set-context "$(kubectl_bin config current-context)" --namespace="$external_ns"
-  kubectl_bin apply -f "$test_dir/conf/secrets.yaml"
+kubectl_bin get psmdb $cluster -o yaml > $tmp_dir/psmdb.yaml
 
-  apply_cluster "$test_dir/conf/external.yaml"
+cat $tmp_dir/psmdb.yaml \
+		| $sed -e "s/- host: mydb-rs0-0.mydb-rs0.external.svc.cluster.local/- host: mydb-rs0-0.mydb-rs0.$replica_namespace.svc.cluster.local/" \
+		| $sed -e "s/- host: mydb-rs0-1.mydb-rs0.external.svc.cluster.local/- host: mydb-rs0-1.mydb-rs0.$replica_namespace.svc.cluster.local/" \
+		| $sed -e "s/- host: mydb-cfg-0.mydb-cfg.external.svc.cluster.local/- host: mydb-cfg-0.mydb-cfg.$replica_namespace.svc.cluster.local/" \
+		| kubectl_bin apply -f -
 
-  sleep 2
-  wait_for_running "$db_name-rs0" 1
-}
+sleep 180 # wait all nodes will be READY
 
-function start_main_cluster() {
-  desc "Start Main Cluster"
-  create_namespace "$main_ns"
-  kubectl_bin config set-context "$(kubectl_bin config current-context)" --namespace="$main_ns"
-  kubectl_bin apply -f "$test_dir/conf/secrets.yaml"
-  apply_cluster "$test_dir/conf/main.yaml"
+run_mongo 'rs.status().members.forEach(function(z){printjson(z.name);printjson(z.stateStr); })' "clusterAdmin:clusterAdmin123456@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "mongodb" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye' > "$tmp_dir/rs.txt"
 
-  sleep 2
-  wait_for_running "$db_name-rs0" 1
-}
+cat "${test_dir}/compare/rs.txt" \
+  | $sed -e "s/mydb-rs0-0.mydb-rs0.main.svc.cluster.local:27017/mydb-rs0-0.mydb-rs0.$namespace.svc.cluster.local:27017/" \
+  | $sed -e "s/mydb-rs0-0.mydb-rs0.external.svc.cluster.local:27017/mydb-rs0-0.mydb-rs0.$replica_namespace.svc.cluster.local:27017/" \
+  | $sed -e "s/mydb-rs0-1.mydb-rs0.external.svc.cluster.local:27017/mydb-rs0-1.mydb-rs0.$replica_namespace.svc.cluster.local:27017/" \
+    >$tmp_dir/rs-expected.txt
 
-function cleanup() {
-  destroy "$external_ns"
-  destroy "$main_ns"
-  destroy "$operator_ns"
-}
+wait_cluster_consistency ${cluster}
 
-function get_connect_url() {
-  echo "$db_name-rs0-0.$db_name-rs0.$main_ns.svc.cluster.local,$db_name-rs0-0.$db_name-rs0.$external_ns.svc.cluster.local,$db_name-rs0-1.$db_name-rs0.$external_ns.svc.cluster.local"
-}
+diff $tmp_dir/rs-expected.txt "$tmp_dir/rs.txt"
 
-function exec_mongo() {
-  local command="$1"
-  local uri="$2"
-  local client_container
-  client_container=$(kubectl_bin get pods -n $client_ns --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
-
-  kubectl_bin exec "${client_container}" -n "$client_ns" -- \
-    bash -c "printf '$command\n' | mongo --quiet $uri"
-
-}
-
-function print_rs_status() {
-  url=$(get_connect_url)
-  exec_mongo \
-    'rs.status().members.forEach(function(z){printjson(z.name);printjson(z.stateStr); })' \
-    "mongodb://clusterAdmin:clusterAdmin123456@$url"
-}
-
-function test_rs_formed() {
-  desc "Testing that replica set with external members is formed..."
-  # shellcheck disable=SC2154 # ignoring - tmp_dir is defined in functions - spaghetti anyone?
-  print_rs_status >"$tmp_dir/rs.txt"
-
-  diff "${test_dir}/compare/rs.txt" "$tmp_dir/rs.txt"
-
-}
-
-function main() {
-  deploy_operator_cw
-  deploy_client
-  start_main_cluster
-  start_external_cluster
-  sleep 10
-
-  test_rs_formed
-}
-
-main
+#destroy "$namespace" "true"
+#
+#destroy $replica_namespace "true"
