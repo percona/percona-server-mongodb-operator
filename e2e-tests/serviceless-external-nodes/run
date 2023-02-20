@@ -34,7 +34,6 @@ kubectl_bin apply \
 	-f "$test_dir/conf/secrets.yml"
 apply_cluster "$test_dir/conf/external.yml"
 
-#wait_for_running "$cluster-rs0" 1
 sleep 30
 
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
@@ -61,6 +60,6 @@ wait_cluster_consistency ${cluster}
 
 diff $tmp_dir/rs-expected.txt "$tmp_dir/rs.txt"
 
-#destroy "$namespace" "true"
-#
-#destroy $replica_namespace "true"
+destroy "$namespace" "true"
+
+destroy $replica_namespace "true"
