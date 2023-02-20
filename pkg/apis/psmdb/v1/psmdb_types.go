@@ -83,7 +83,7 @@ type PerconaServerMongoDBSpec struct {
 	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName                string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
-	ClusterServiceDNSMode        DnsMode                              `json:"clusterServiceDNSMode,omitempty"`
+	ClusterServiceDNSMode        DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
 	Sharding                     Sharding                             `json:"sharding,omitempty"`
 	InitImage                    string                               `json:"initImage,omitempty"`
 	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
@@ -115,16 +115,18 @@ const (
 
 // DNS Mode string describes the mode used to generate fqdn/ip for communication between nodes
 // +enum
-type DnsMode string
+type DNSMode string
 
 const (
-	// DnsModeServiceMesh means a FQDN will be generated, assumming the FQDN is resolvable
-	// and available in all clusters
-	DnsModeServiceMesh DnsMode = "ServiceMesh"
+	// DNSModeServiceMesh means a FQDN (<pod>.<ns>.svc.cluster.local) will be generated,
+	// assumming the FQDN is resolvable and available in all clusters
+	DNSModeServiceMesh DNSMode = "ServiceMesh"
 
-	// DnsModeInternal means a FQDN (svc.cluster.local), a ClusterIP or a public IP will be used
-	// depending on how the service is exposed
-	DnsModeInternal DnsMode = "Internal"
+	// DNSModeInternal means the local FQDN (<pod>.<svc>.<ns>.svc.cluster.local) will be used
+	DNSModeInternal DNSMode = "Internal"
+
+	// DNSModeExternal means external IPs will be used in case of the services are exposed
+	DNSModeExternal DNSMode = "External"
 )
 
 type Sharding struct {
