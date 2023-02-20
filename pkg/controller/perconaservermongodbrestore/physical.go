@@ -50,6 +50,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
+	for _, rs := range cluster.Spec.Replsets {
+		if rs.Arbiter.Enabled {
+			return status, errors.New("physical restores are not supported for deployments with arbiter nodes")
+		}
+	}
+
 	if cr.Status.State == psmdbv1.RestoreStateNew {
 		pbmConf := corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
