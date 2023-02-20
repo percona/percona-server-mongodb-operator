@@ -11,7 +11,7 @@ require (
 	github.com/go-openapi/strfmt v0.21.3
 	github.com/go-openapi/swag v0.22.3
 	github.com/go-openapi/validate v0.22.1
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.2
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.0
 	github.com/hashicorp/go-version v1.6.0
 	github.com/jetstack/cert-manager v1.6.1
 	github.com/percona/percona-backup-mongodb v0.0.0-20221024072933-3ec38a5fc670
