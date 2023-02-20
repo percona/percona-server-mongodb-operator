@@ -115,9 +115,9 @@ function main() {
 					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
 				]'
 
-		sleep 60 # wating for update loop to fire
+		sleep 60 # waiting for update loop to fire
 		wait_for_running "${cluster}" 3
-		sleep 30
+		wait_cluster_consistency "${cluster/-rs0/}"
 
 		compare_generation ${target_generation} "statefulset" "${cluster}"
 
