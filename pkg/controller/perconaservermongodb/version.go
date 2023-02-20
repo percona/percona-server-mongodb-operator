@@ -278,21 +278,16 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		vm.HelmDeployCR = true
 	}
 
+	if len(cr.Spec.Backup.Storages) > 0 && cr.Spec.Backup.Enabled {
+            vm.BackupsEnabled = true
+    }
+
 	for _, task := range cr.Spec.Backup.Tasks {
 		if task.Type == pbm.PhysicalBackup && task.Enabled {
 			vm.PhysicalBackupScheduled = true
 			break
 		}
 	}
-
-    if len(cr.Spec.Backup.Storages) > 0 && cr.Spec.Backup.Enabled {
-        for _, task := range cr.Spec.Backup.Tasks {
-            if task.Enabled {
-                vm.BackupsEnabled = true
-                break
-            }
-        }
-    }
 
 	return vm, nil
 }
