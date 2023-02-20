@@ -9,12 +9,12 @@ set_debug
 label_node() {
 	LABELED_NODE=$(kubectl_bin get nodes -o custom-columns=NAME:.metadata.name --no-headers=true | head -n1)
 
-	desc 'add lebels'
+	desc 'add labels'
 	kubectl_bin label nodes "${LABELED_NODE}" backupWorker=True --overwrite
 }
 
 unlabel_node() {
-	desc 'remove lebels'
+	desc 'remove labels'
 	kubectl_bin label nodes "${LABELED_NODE}" backupWorker- --overwrite
 }
 

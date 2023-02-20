@@ -39,7 +39,7 @@ check_cr_config() {
 		| grep '"host" :' \
 		| grep "$arbiter_ip"
 
-	desc 'Create user'
+	desc 'create user'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$URI" \
