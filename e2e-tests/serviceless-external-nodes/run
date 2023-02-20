@@ -39,7 +39,7 @@ wait_pod ${cluster}-rs0-1
 
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 
-kubectl_bin get psmdb $cluster -o yaml > $tmp_dir/psmdb.yaml
+kubectl_bin get psmdb $cluster -o yaml >$tmp_dir/psmdb.yaml
 
 cat $tmp_dir/psmdb.yaml \
 	| $sed -e "s/- host: mydb-rs0-0.mydb-rs0.external.svc.cluster.local/- host: mydb-rs0-0.mydb-rs0.$replica_namespace.svc.cluster.local/" \
