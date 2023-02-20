@@ -529,7 +529,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	if cr.Spec.ClusterServiceDNSMode == "" {
-		cr.Spec.ClusterServiceDNSMode = DnsModeInternal
+		cr.Spec.ClusterServiceDNSMode = DNSModeInternal
 	}
 
 	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
