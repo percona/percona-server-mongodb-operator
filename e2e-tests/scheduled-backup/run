@@ -154,8 +154,10 @@ sleep 5
 
 desc 'check backup and restore -- minio'
 run_restore "$backup_name_minio" 3
-wait_cluster_consistency "some-name"
-wait_restore "$backup_name_minio" 3
+wait_restore "$backup_name_minio" "${cluster/-rs0/}"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 sleep 60 # give PBM resync some time
 
