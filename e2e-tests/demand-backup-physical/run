@@ -35,6 +35,11 @@ run_recovery_check() {
 	compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
 
 	wait_restore "${backup}" "${cluster}" "ready"
+	kubectl_bin get psmdb ${cluster} -o yaml
+	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
+		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
+		exit 1
+	fi
 	echo
 	set -o xtrace
 }
@@ -189,5 +194,7 @@ backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
 run_restore ${backup_name_minio} "_restore_sharded"
 run_recovery_check ${backup_name_minio} "_restore_sharded"
 compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
+
+sleep 60 # give PBM resync some time
 
 destroy "$namespace"
