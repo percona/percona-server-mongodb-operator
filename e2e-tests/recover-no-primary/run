@@ -1,0 +1,202 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+create_infra ${namespace}
+
+cluster="some-name"
+kubectl_bin apply \
+	-f ${conf_dir}/secrets_with_tls.yml \
+	-f ${conf_dir}/client.yml
+
+function test_single_replset() {
+	apply_cluster ${test_dir}/conf/${cluster}.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 1: Kill pods abruptly and wait for recovery
+
+	desc 'kill pods abruptly and wait for recovery'
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 2: Delete statefulset and wait for recovery
+
+	desc 'delete statefulset and wait for recovery'
+	kubectl delete sts "${cluster}-rs0"
+	sleep 5
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 3: Delete cluster and recreate
+
+	desc 'delete cluster and recreate'
+	kubectl delete psmdb "${cluster}"
+
+	set +e
+	echo -n "waiting for psmdb/${cluster} to be deleted"
+	until ! kubectl get psmdb "${cluster}"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	apply_cluster ${test_dir}/conf/${cluster}.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete psmdb ${cluster}
+	kubectl delete pvc --all
+}
+
+function test_exposed_single_replset() {
+	apply_cluster ${test_dir}/conf/${cluster}-exposed.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 1: Kill pods abruptly and wait for recovery
+
+	desc 'kill pods abruptly and wait for recovery'
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 2: Delete statefulset and wait for recovery
+
+	desc 'delete statefulset and wait for recovery'
+	kubectl delete sts "${cluster}-rs0"
+	sleep 5
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 3: Delete cluster and recreate
+
+	desc 'delete cluster and recreate'
+	kubectl delete psmdb "${cluster}"
+
+	set +e
+	echo -n "waiting for psmdb/${cluster} to be deleted"
+	until ! kubectl get psmdb "${cluster}"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	apply_cluster ${test_dir}/conf/${cluster}-exposed.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete psmdb ${cluster}
+	kubectl delete pvc --all
+}
+
+function test_exposed_sharded_cluster() {
+	apply_cluster ${test_dir}/conf/${cluster}-sharded.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 1: Kill pods abruptly and wait for recovery
+
+	desc 'kill pods abruptly and wait for recovery'
+
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs0-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-rs1-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-rs1" 3
+	wait_cluster_consistency ${cluster}
+
+	for i in $(seq 0 2); do
+		kubectl_bin exec ${cluster}-cfg-${i} -c mongod -- kill 1
+	done
+	sleep 10
+	wait_for_running "${cluster}-cfg" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 2: Delete statefulsets and wait for recovery
+
+	desc 'delete statefulsets and wait for recovery'
+	kubectl delete sts "${cluster}-rs0"
+	sleep 5
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete sts "${cluster}-rs1"
+	sleep 5
+	wait_for_running "${cluster}-rs1" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete sts "${cluster}-cfg"
+	sleep 5
+	wait_for_running "${cluster}-cfg" 3
+	wait_cluster_consistency ${cluster}
+
+	## Case 3: Expose and delete cluster then recreate
+	desc 'expose and delete cluster then recreate'
+
+	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
+		{
+			"op": "replace",
+			"path": "/spec/replsets/0/expose",
+			"value": {
+				"enabled": true,
+				"exposeType" : "ClusterIP"
+			}
+		},
+		{
+			"op": "replace",
+			"path": "/spec/replsets/1/expose",
+			"value": {
+				"enabled": true,
+				"exposeType" : "ClusterIP"
+			}
+		},
+	]'
+	kubectl delete psmdb "${cluster}"
+
+	set +e
+	echo -n "waiting for psmdb/${cluster} to be deleted"
+	until ! kubectl get psmdb "${cluster}"; do
+		echo -n "."
+		sleep 1
+	done
+	set -e
+
+	apply_cluster ${test_dir}/conf/${cluster}-sharded.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_for_running "${cluster}-rs1" 3
+	wait_for_running "${cluster}-cfg" 3
+	wait_cluster_consistency ${cluster}
+
+	kubectl delete psmdb ${cluster}
+	kubectl delete pvc --all
+}
+
+desc 'testing unexposed single replset cluster'
+test_single_replset
+
+desc 'testing exposed single replset cluster'
+test_exposed_single_replset
+
+desc 'testing exposed two replsets sharded cluster'
+test_exposed_sharded_cluster
+
+destroy ${namespace}
