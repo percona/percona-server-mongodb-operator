@@ -1,36 +1,17 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
-  name: version-service-major
-  finalizers:
-    - delete-psmdb-pvc
+  name: some-name
 spec:
-  crVersion: 9.9.9
+  #platform: openshift
   image:
-  initImage: #initImage
   imagePullPolicy: Always
-  allowUnsafeConfigurations: false
-  updateStrategy: SmartUpdate
-  upgradeOptions:
-    versionServiceEndpoint: http://version-service:11000
-    apply: 5.0-latest
-    schedule: "0 2 * * *"
+  allowUnsafeConfigurations: true
+  backup:
+    enabled: false
+    image: perconalab/percona-server-mongodb-operator:0.4.0-backup
   replsets:
   - name: rs0
-    affinity:
-      antiAffinityTopologyKey: none
-    resources:
-      limits:
-        cpu: 500m
-        memory: 0.5G
-      requests:
-        cpu: 100m
-        memory: 0.1G
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1Gi
     size: 3
     configuration: |
       operationProfiling:
@@ -53,5 +34,22 @@ spec:
             journalCompressor: snappy
           indexConfig:
             prefixCompression: true
+    expose:
+      enabled: true
+      exposeType: ClusterIP
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 0.5G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
   secrets:
     users: some-users
