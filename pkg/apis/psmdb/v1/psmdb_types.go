@@ -980,13 +980,12 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	copy(finalizers, cr.GetFinalizers())
 	orderedFinalizers := make([]string, 0, len(finalizers))
 
-	i := 0
 	for _, v := range order {
-		for i < len(finalizers) {
+		for i := 0; i < len(finalizers); {
 			if v == finalizers[i] {
 				orderedFinalizers = append(orderedFinalizers, v)
 				finalizers = append(finalizers[:i], finalizers[i+1:]...)
-				break
+				continue
 			}
 			i++
 		}
@@ -995,3 +994,5 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	orderedFinalizers = append(orderedFinalizers, finalizers...)
 	return orderedFinalizers
 }
+
+const AnnotationResyncPBM = "percona.com/resync-pbm"
