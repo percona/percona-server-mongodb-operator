@@ -285,6 +285,7 @@ wait_restore() {
 	local backup_name=$1
 	local cluster_name=$2
 	local target_state=${3:-"ready"}
+	local wait_cluster_consistency=${4:-1}
 
 	set +o xtrace
 	retry=0
@@ -307,7 +308,7 @@ wait_restore() {
 	echo
 	set -o xtrace
 
-	if [ "$target_state" == "ready" ]; then
+	if [ $wait_cluster_consistency -eq 1 ]; then
 		wait_cluster_consistency "${cluster_name}"
 	fi
 }
