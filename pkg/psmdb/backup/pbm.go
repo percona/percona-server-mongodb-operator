@@ -102,7 +102,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
 	rs := cluster.Spec.Replsets[0]
 
-	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name)
+	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name, false)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
