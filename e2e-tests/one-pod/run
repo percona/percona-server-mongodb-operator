@@ -71,7 +71,7 @@ main() {
 	compare_kubectl service/$cluster
 	compare_kubectl "pvc/mongod-data-one-pod-rs0-0"
 
-	desc 'create user'
+	desc 'check system log'
 	run_mongo \
 		'db.serverCmdLineOpts()' \
 		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \

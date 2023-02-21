@@ -42,6 +42,7 @@ kubectl_bin apply \
 	-f $test_dir/conf/secrets.yml
 sleep 90
 
+cluster="monitoring"
 desc "create first PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 wait_for_running $cluster-rs0 3
