@@ -15,7 +15,7 @@ wait_service_export() {
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
 	echo -n 'waiting for cluster readyness'
-	until [[ $(kubectl_bin get serviceexport --all-namespaces | grep -v 'NAME' | wc -l) == 9 ]]; do
+	until [[ "$(kubectl_bin get serviceexport --all-namespaces | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
 		let retry+=1
 		if [ $retry -ge 32 ]; then
 			echo max retry count $retry reached. Something went wrong with operator or kubernetes cluster. We can not export services.
@@ -26,24 +26,15 @@ wait_service_export() {
 	done
 }
 
-wait_service_import() {
-	retry=0
-	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
-	echo -n 'waiting for cluster readyness'
-	until [[ $(kubectl_bin get serviceimport --all-namespaces | grep -v 'NAME' | wc -l) == 9 ]]; do
-		let retry+=1
-		if [ $retry -ge 32 ]; then
-			echo max retry count $retry reached. Something went wrong with operator or kubernetes cluster. We can not import services.
-			exit 1
-		fi
-		echo -n .
-		sleep 10
-	done
-}
-
 desc "add settings to k8s cluster"
 k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
 k8s_cluster_zone='us-central1-a'
+
+# commnads list which should be apply to the project. https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services
+#gcloud services enable multiclusterservicediscovery.googleapis.com gkehub.googleapis.com cloudresourcemanager.googleapis.com trafficdirector.googleapis.com dns.googleapis.com
+#gcloud container fleet multi-cluster-services enable
+#gcloud projects add-iam-policy-binding cloud-dev-112233 --member "serviceAccount:cloud-dev-112233.svc.id.goog[gke-mcs/gke-mcs-importer]" --role "roles/compute.networkViewer"
+
 gcloud container hub memberships register $k8s_cluster_name --gke-cluster $k8s_cluster_zone/$k8s_cluster_name --enable-workload-identity
 
 create_infra "$namespace"
@@ -69,10 +60,9 @@ wait_for_running $cluster-mongos 3
 wait_cluster_consistency "${cluster}" 3
 
 desc "check if exportService and importService objects exist in cluster"
-# Uncommnet after https://jira.percona.com/browse/K8SPSMDB-867
-#wait_service_export
-#wait_service_import
-desc "delete memberships"
+wait_service_export
+
+#desc "delete memberships"
 gcloud container fleet memberships delete $k8s_cluster_name --quiet
 
 destroy $namespace
