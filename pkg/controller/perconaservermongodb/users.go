@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -22,6 +23,8 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{
@@ -34,6 +37,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	} else if err != nil {
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
+	}
+
+	if !cr.Spec.PMM.HasSecret(&sysUsersSecretObj) && cr.Spec.PMM.Enabled {
+		log.Info(fmt.Sprintf(`Can't enable PMM: "%s" or "%s" with "%s" keys don't exist in the secrets, or secrets and internal secrets are out of sync`,
+			api.PMMAPIKey, api.PMMUserKey, api.PMMPasswordKey), "secrets", cr.Spec.Secrets.Users, "internalSecrets", api.InternalUserSecretName(cr))
 	}
 
 	secretName := api.InternalUserSecretName(cr)
@@ -83,7 +91,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	}
 
-	log.Info("Secret data changed. Updating users...")
+	logf.FromContext(ctx).Info("Secret data changed. Updating users...")
 
 	containers, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
@@ -115,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		}
 
 		for _, name := range containers {
-			err = r.killcontainer(pods, name)
+			err = r.killcontainer(ctx, pods, name)
 			if err != nil {
 				return errors.Wrapf(err, "failed to kill %s container", name)
 			}
@@ -131,11 +139,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) killcontainer(pods []corev1.Pod, containerName string) error {
+func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
-				log.Info("Restarting container", "pod", pod.Name, "container", c.Name)
+				logf.FromContext(ctx).Info("Restarting container", "pod", pod.Name, "container", c.Name)
 
 				err := retry.OnError(retry.DefaultBackoff, func(_ error) bool { return true }, func() error {
 					stderrBuf := &bytes.Buffer{}
@@ -303,7 +311,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(ctx context.Context, cr *api
 
 			defer func() {
 				if err := client.Disconnect(gCtx); err != nil {
-					log.Error(err, "failed to close connection")
+					logf.FromContext(ctx).Error(err, "failed to close connection")
 				}
 			}()
 

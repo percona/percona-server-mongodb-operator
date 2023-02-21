@@ -45,7 +45,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 }
 
 func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service) error {
-	ls := clusterLabels(cr)
+	ls := api.ClusterLabels(cr)
 	if !cr.Spec.MultiCluster.Enabled {
 		return nil
 	}
@@ -64,7 +64,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 		return nil
 	}
 
-	ls := clusterLabels(cr)
+	ls := api.ClusterLabels(cr)
 
 	seList := mcs.ServiceExportList()
 	err := r.client.List(ctx,

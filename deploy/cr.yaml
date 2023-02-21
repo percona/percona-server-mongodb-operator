@@ -19,6 +19,8 @@ spec:
 #    certValidityDuration: 2160h
 #  imagePullSecrets:
 #    - name: private-registry-credentials
+#  initImage: percona/percona-xtradb-cluster-operator:1.13.0
+#  initContainerSecurityContext: {}
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
 #  ignoreAnnotations:
@@ -500,6 +502,14 @@ spec:
 #        enabled: false
 #        schedule: "0 0 * * 0"
 #        keep: 5
+#        storageName: s3-us-west
+#        compressionType: gzip
+#        compressionLevel: 6
+#      - name: weekly-s3-us-west-physical
+#        enabled: false
+#        schedule: "0 5 * * 0"
+#        keep: 5
+#        type: physical
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6

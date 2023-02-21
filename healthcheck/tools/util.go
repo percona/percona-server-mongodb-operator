@@ -15,7 +15,7 @@
 package tools
 
 import (
-	"io/ioutil"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -68,7 +68,7 @@ func StringFromFile(fileName string) *string {
 			return nil
 		}
 		defer file.Close()
-		bytes, err := ioutil.ReadAll(file)
+		bytes, err := io.ReadAll(file)
 		if err == nil {
 			data := strings.TrimSpace(string(bytes))
 			return &data

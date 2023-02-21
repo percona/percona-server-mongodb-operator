@@ -1,6 +1,7 @@
 package psmdb
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -326,14 +327,12 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 }
 
 // AddPMMContainer creates the container object for a pmm-client
-func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) *corev1.Container {
+func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) *corev1.Container {
 	if !cr.Spec.PMM.Enabled {
 		return nil
 	}
 
 	if !cr.Spec.PMM.HasSecret(secret) {
-		log.Info(fmt.Sprintf(`Can't enable PMM: "%s" or "%s" with "%s" keys don't exist in the secrets, or secrets and internal secrets are out of sync`,
-			api.PMMAPIKey, api.PMMUserKey, api.PMMPasswordKey), "secrets", cr.Spec.Secrets.Users, "internalSecrets", api.InternalUserSecretName(cr))
 		return nil
 	}
 

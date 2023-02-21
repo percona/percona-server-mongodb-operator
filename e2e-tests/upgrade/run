@@ -8,7 +8,6 @@ test_dir=$(realpath $(dirname $0))
 
 cluster='upgrade'
 CLUSTER_SIZE=3
-TARGET_API="${API}"
 TARGET_OPERATOR_VER="${OPERATOR_VERSION}"
 TARGET_IMAGE="${IMAGE}"
 TARGET_IMAGE_MONGOD="${IMAGE_MONGOD}"
@@ -31,7 +30,7 @@ fi
 GIT_TAG="v${INIT_OPERATOR_VER}"
 INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
 OPERATOR_NAME='percona-server-mongodb-operator'
-API="psmdb.percona.com/v${INIT_OPERATOR_VER//./-}"
+
 IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
 # we use the starting image from the same repo so we don't need to use initImage option
 if [[ "$(echo ${TARGET_IMAGE} | cut -d'/' -f1)" == "perconalab" ]]; then
@@ -41,8 +40,8 @@ IMAGE_MONGOD=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.mongod
 IMAGE_PMM=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.pmm[].imagePath')
 IMAGE_BACKUP=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.backup[].imagePath')
 
-if [[ ${TARGET_API} == "${API}" ]]; then
-	echo "API and TARGET_API variables are the same: ${API}! Something is wrong!"
+if [[ ${TARGET_OPERATOR_VER} == "${INIT_OPERATOR_VER}" ]]; then
+	echo "OPERATOR VERSION and INIT OPERATOR VERSION variables are the same: ${TARGET_OPERATOR_VER} ${INIT_OPERATOR_VER}! Something is wrong!"
 	exit 1
 fi
 
@@ -209,8 +208,11 @@ function main() {
 		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
 		| grep ${backup_dest_minio}_rs0.dump.gz
-	run_restore $backup_name_minio 3 0 "-rs0"
-	wait_restore $backup_name_minio 3 0 "-rs0"
+
+	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
+	run_restore "$backup_name_minio"
+	wait_restore "$backup_name_minio" "${cluster}"
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
 	desc 'cleanup'

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
+	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -63,30 +64,31 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Pause                   bool                                 `json:"pause,omitempty"`
-	Unmanaged               bool                                 `json:"unmanaged,omitempty"`
-	CRVersion               string                               `json:"crVersion,omitempty"`
-	Platform                *version.Platform                    `json:"platform,omitempty"`
-	Image                   string                               `json:"image"`
-	ImagePullSecrets        []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
-	UnsafeConf              bool                                 `json:"allowUnsafeConfigurations,omitempty"`
-	IgnoreLabels            []string                             `json:"ignoreLabels,omitempty"`
-	IgnoreAnnotations       []string                             `json:"ignoreAnnotations,omitempty"`
-	Mongod                  *MongodSpec                          `json:"mongod,omitempty"`
-	Replsets                []*ReplsetSpec                       `json:"replsets,omitempty"`
-	Secrets                 *SecretsSpec                         `json:"secrets,omitempty"`
-	Backup                  BackupSpec                           `json:"backup,omitempty"`
-	ImagePullPolicy         corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
-	PMM                     PMMSpec                              `json:"pmm,omitempty"`
-	UpdateStrategy          appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
-	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	SchedulerName           string                               `json:"schedulerName,omitempty"`
-	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
-	ClusterServiceDNSMode   DnsMode                              `json:"clusterServiceDNSMode,omitempty"`
-	Sharding                Sharding                             `json:"sharding,omitempty"`
-	InitImage               string                               `json:"initImage,omitempty"`
-	MultiCluster            MultiCluster                         `json:"multiCluster,omitempty"`
-	TLS                     *TLSSpec                             `json:"tls,omitempty"`
+	Pause                        bool                                 `json:"pause,omitempty"`
+	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
+	CRVersion                    string                               `json:"crVersion,omitempty"`
+	Platform                     *version.Platform                    `json:"platform,omitempty"`
+	Image                        string                               `json:"image"`
+	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
+	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
+	Mongod                       *MongodSpec                          `json:"mongod,omitempty"`
+	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
+	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
+	Backup                       BackupSpec                           `json:"backup,omitempty"`
+	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
+	PMM                          PMMSpec                              `json:"pmm,omitempty"`
+	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	SchedulerName                string                               `json:"schedulerName,omitempty"`
+	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	ClusterServiceDNSMode        DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
+	Sharding                     Sharding                             `json:"sharding,omitempty"`
+	InitImage                    string                               `json:"initImage,omitempty"`
+	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
+	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
+	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 }
 
 type TLSSpec struct {
@@ -113,16 +115,18 @@ const (
 
 // DNS Mode string describes the mode used to generate fqdn/ip for communication between nodes
 // +enum
-type DnsMode string
+type DNSMode string
 
 const (
-	// DnsModeServiceMesh means a FQDN will be generated, assumming the FQDN is resolvable
-	// and available in all clusters
-	DnsModeServiceMesh DnsMode = "ServiceMesh"
+	// DNSModeServiceMesh means a FQDN (<pod>.<ns>.svc.cluster.local) will be generated,
+	// assumming the FQDN is resolvable and available in all clusters
+	DNSModeServiceMesh DNSMode = "ServiceMesh"
 
-	// DnsModeInternal means a FQDN (svc.cluster.local), a ClusterIP or a public IP will be used
-	// depending on how the service is exposed
-	DnsModeInternal DnsMode = "Internal"
+	// DNSModeInternal means the local FQDN (<pod>.<svc>.<ns>.svc.cluster.local) will be used
+	DNSModeInternal DNSMode = "Internal"
+
+	// DNSModeExternal means external IPs will be used in case of the services are exposed
+	DNSModeExternal DNSMode = "External"
 )
 
 type Sharding struct {
@@ -719,6 +723,9 @@ type BackupTaskSpec struct {
 	StorageName      string                   `json:"storageName,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical}
+	Type pbm.BackupType `json:"type,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
@@ -937,6 +944,33 @@ func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }
 
+func ClusterLabels(cr *PerconaServerMongoDB) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+}
+
+func MongodLabels(cr *PerconaServerMongoDB) map[string]string {
+	lbls := ClusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "mongod"
+	return lbls
+}
+
+func ArbiterLabels(cr *PerconaServerMongoDB) map[string]string {
+	lbls := ClusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "arbiter"
+	return lbls
+}
+
+func MongosLabels(cr *PerconaServerMongoDB) map[string]string {
+	lbls := ClusterLabels(cr)
+	lbls["app.kubernetes.io/component"] = "mongos"
+	return lbls
+}
+
 const (
 	FinalizerDeletePVC              = "delete-psmdb-pvc"
 	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
@@ -948,13 +982,12 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	copy(finalizers, cr.GetFinalizers())
 	orderedFinalizers := make([]string, 0, len(finalizers))
 
-	i := 0
 	for _, v := range order {
-		for i < len(finalizers) {
+		for i := 0; i < len(finalizers); {
 			if v == finalizers[i] {
 				orderedFinalizers = append(orderedFinalizers, v)
 				finalizers = append(finalizers[:i], finalizers[i+1:]...)
-				break
+				continue
 			}
 			i++
 		}
@@ -963,3 +996,5 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	orderedFinalizers = append(orderedFinalizers, finalizers...)
 	return orderedFinalizers
 }
+
+const AnnotationResyncPBM = "percona.com/resync-pbm"

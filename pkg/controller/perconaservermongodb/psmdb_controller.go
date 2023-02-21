@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strconv"
@@ -46,10 +45,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
-var (
-	secretFileMode int32 = 288
-	log                  = logf.Log.WithName("controller_psmdb")
-)
+var secretFileMode int32 = 288
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -69,7 +65,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "get server version")
 	}
 
-	log.Info("server version", "platform", sv.Platform, "version", sv.Info)
+	mgr.GetLogger().Info("server version", "platform", sv.Platform, "version", sv.Info)
 
 	cli, err := clientcmd.NewClient()
 	if err != nil {
@@ -106,7 +102,7 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return "", err
 	}
@@ -216,7 +212,7 @@ const (
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	logger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := logf.FromContext(ctx)
 
 	rr := reconcile.Result{
 		RequeueAfter: r.reconcileIn,
@@ -254,7 +250,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	defer func() {
 		err = r.updateStatus(ctx, cr, err, clusterStatus)
 		if err != nil {
-			logger.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
+			log.Error(err, "failed to update cluster status", "replset", cr.Spec.Replsets[0].Name)
 		}
 	}()
 
@@ -338,7 +334,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
 		err := r.ensureVersion(ctx, cr, VersionServiceClient{})
 		if err != nil {
-			logger.Info("failed to ensure version, running with default", "error", err)
+			log.Info("failed to ensure version, running with default", "error", err)
 		}
 	}
 
@@ -358,7 +354,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	if ikCreated {
-		logger.Info("Created a new mongo key", "KeyName", internalKey)
+		log.Info("Created a new mongo key", "KeyName", internalKey)
 	}
 
 	if is1120 := cr.CompareVersion("1.12.0") >= 0; is1120 || (!is1120 && *cr.Spec.Mongod.Security.EnableEncryption) {
@@ -368,7 +364,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, err
 		}
 		if created {
-			logger.Info("Created a new mongo key", "KeyName", cr.Spec.EncryptionKeySecretName())
+			log.Info("Created a new mongo key", "KeyName", cr.Spec.EncryptionKeySecretName())
 		}
 	}
 
@@ -490,7 +486,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 		clusterStatus, err = r.reconcileCluster(ctx, cr, replset, pods, mongosPods.Items)
 		if err != nil {
-			logger.Error(err, "failed to reconcile cluster", "replset", replset.Name)
+			log.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
 
 		if err := r.fetchVersionFromMongo(ctx, cr, replset); err != nil {
@@ -544,9 +540,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 	}
 
-	// DB cluster can be not ready yet so it's requeued after some time
 	if err = r.updatePITR(ctx, cr); err != nil {
 		return rr, err
+	}
+
+	err = r.resyncPBMIfNeeded(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "resync PBM if needed")
 	}
 
 	return rr, nil
@@ -564,7 +564,7 @@ func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *ap
 		return errors.Wrap(err, "patch CR")
 	}
 
-	log.Info("Set CR version", "version", cr.Spec.CRVersion)
+	logf.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
 
 	return nil
 }
@@ -658,6 +658,8 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
+	log := logf.FromContext(ctx)
+
 	systemDBs := map[string]struct{}{
 		"local":  {},
 		"admin":  {},
@@ -752,7 +754,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 					podName := strings.TrimPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-")
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
-						log.Info("remove orphan pvc", "pvc", pvc.Name)
+						logf.FromContext(ctx).Info("remove orphan pvc", "pvc", pvc.Name)
 						err := r.client.Delete(ctx, &pvc)
 						if err != nil {
 							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
@@ -1045,6 +1047,8 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Cont
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -1171,7 +1175,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
 	}
-	pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongosParams)
+	pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
@@ -1331,6 +1335,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	matchLabels map[string]string,
 	internalKeyName string,
 ) (*appsv1.StatefulSet, error) {
+	log := logf.FromContext(ctx)
+
 	sfsName := cr.Name + "-" + replset.Name
 	size := replset.Size
 	containerName := "mongod"
@@ -1393,6 +1399,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
+	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
+	if ok {
+		if err := r.smartUpdate(ctx, cr, sfs, replset); err != nil {
+			return nil, errors.Wrap(err, "failed to run smartUpdate")
+		}
+
+		log.V(1).Info("Restore in progress, skipping reconciliation of statefulset", "name", sfs.Name)
+		return sfs, nil
+	}
+
 	inits := []corev1.Container{}
 	if cr.CompareVersion("1.5.0") >= 0 {
 		inits = append(inits, psmdb.InitContainers(cr, r.initImage)...)
@@ -1403,8 +1419,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(cr, replset, containerName, matchLabels, customLabels,
-		multiAZ, size, internalKeyName, inits, log, customConfig, resources,
+	sfsSpec, err := psmdb.StatefulSpec(ctx, cr, replset, containerName, matchLabels, customLabels,
+		multiAZ, size, internalKeyName, inits, logf.FromContext(ctx), customConfig, resources,
 		podSecurityContext, containerSecurityContext, livenessProbe, readinessProbe,
 		configName)
 	if err != nil {
@@ -1499,14 +1515,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
 		}
 
-		pmmC := psmdb.AddPMMContainer(cr, secret, cr.Spec.PMM.MongodParams)
+		pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, *pmmC)
 		}
 	}
 
-	sfsSpec.Template.Spec.Volumes = multiAZ.WithSidecarVolumes(log, sfsSpec.Template.Spec.Volumes)
-	sfsSpec.VolumeClaimTemplates = multiAZ.WithSidecarPVCs(log, sfsSpec.VolumeClaimTemplates)
+	sfsSpec.Template.Spec.Volumes = multiAZ.WithSidecarVolumes(logf.FromContext(ctx), sfsSpec.Template.Spec.Volumes)
+	sfsSpec.VolumeClaimTemplates = multiAZ.WithSidecarPVCs(logf.FromContext(ctx), sfsSpec.VolumeClaimTemplates)
 
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
@@ -1588,7 +1604,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, sts *
 		patch := client.MergeFrom(orig)
 
 		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			log.Error(err, "patch PVC", "PVC", pvc.Name)
+			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
 		}
 	}
 
