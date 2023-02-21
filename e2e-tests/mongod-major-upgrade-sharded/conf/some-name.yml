@@ -4,6 +4,11 @@ metadata:
   name: some-name
 spec:
   #platform: openshift
+  upgradeOptions:
+    versionServiceEndpoint: http://version-service:11000
+    apply: disabled
+    schedule: "* * * * *"
+    setFCV: false
   image:
   imagePullPolicy: Always
   backup:
@@ -20,7 +25,7 @@ spec:
           insecureSkipTLSVerify: false
     tasks:
     - name: weekly
-      enabled: true
+      enabled: false
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: minio
