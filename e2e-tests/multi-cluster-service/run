@@ -15,7 +15,7 @@ wait_service_export() {
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
 	echo -n 'waiting for cluster readyness'
-	until [[ $(kubectl_bin get serviceexport  --all-namespaces | grep -v 'NAME' | wc -l)  == 9 ]]; do
+	until [[ $(kubectl_bin get serviceexport --all-namespaces | grep -v 'NAME' | wc -l) == 9 ]]; do
 		let retry+=1
 		if [ $retry -ge 32 ]; then
 			echo max retry count $retry reached. Something went wrong with operator or kubernetes cluster. We can not export services.
@@ -30,7 +30,7 @@ wait_service_import() {
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
 	echo -n 'waiting for cluster readyness'
-	until [[ $(kubectl_bin get serviceimport  --all-namespaces | grep -v 'NAME' | wc -l)  == 9 ]]; do
+	until [[ $(kubectl_bin get serviceimport --all-namespaces | grep -v 'NAME' | wc -l) == 9 ]]; do
 		let retry+=1
 		if [ $retry -ge 32 ]; then
 			echo max retry count $retry reached. Something went wrong with operator or kubernetes cluster. We can not import services.
@@ -50,23 +50,23 @@ create_infra "$namespace"
 desc 'create first PSMDB cluster'
 cluster="some-name"
 
-	kubectl_bin apply \
-		-f "$conf_dir/secrets.yml" \
-		-f "$conf_dir/client.yml"
+kubectl_bin apply \
+	-f "$conf_dir/secrets.yml" \
+	-f "$conf_dir/client.yml"
 
-	apply_s3_storage_secrets
-	if version_gt "1.19" && [ $EKS -ne 1 ]; then
-		cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-	else
-		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
-	fi
+apply_s3_storage_secrets
+if version_gt "1.19" && [ $EKS -ne 1 ]; then
+	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+else
+	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
+fi
 
-	apply_cluster "$test_dir/conf/$cluster.yml"
-	desc 'check if all 3 Pods started'
-	wait_for_running $cluster-rs0 3
-	wait_for_running $cluster-cfg 3 "false"
-	wait_for_running $cluster-mongos 3
-	wait_cluster_consistency "${cluster}" 3
+apply_cluster "$test_dir/conf/$cluster.yml"
+desc 'check if all 3 Pods started'
+wait_for_running $cluster-rs0 3
+wait_for_running $cluster-cfg 3 "false"
+wait_for_running $cluster-mongos 3
+wait_cluster_consistency "${cluster}" 3
 
 desc "check if exportService and importService objects exist in cluster"
 # Uncommnet after https://jira.percona.com/browse/K8SPSMDB-867
