@@ -424,7 +424,8 @@ func TestVersionMeta(t *testing.T) {
 						},
 						Tasks: []api.BackupTaskSpec{
 							{
-								Type: pbm.PhysicalBackup,
+								Type:    pbm.PhysicalBackup,
+								Enabled: true,
 							},
 						},
 					},
@@ -512,7 +513,7 @@ func TestVersionMeta(t *testing.T) {
 				Apply:          "disabled",
 				Version:        version.Version,
 				ClusterSize:    3,
-				BackupsEnabled: true,
+				BackupsEnabled: false,
 			},
 		},
 		{
