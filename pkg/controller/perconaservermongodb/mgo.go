@@ -228,12 +228,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			break
 		}
 
-		exposed := false
-		if cr.Spec.ClusterServiceDNSMode == api.DNSModeExternal {
-			exposed = replset.Expose.Enabled
-		}
-
-		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, exposed, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return api.AppStateError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
