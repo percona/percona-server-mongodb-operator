@@ -6,52 +6,22 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-spinup_psmdb() {
-	local cluster=$1
-	local config=$2
-	local size="${3:-3}"
-
-	desc "create first PSMDB cluster $cluster"
-	apply_cluster $config
-
-	desc 'check if Pod is started'
-	wait_for_running "${cluster}" "$size"
-	sleep 20
-
-	desc 'check if statefulset created with expected config'
-	compare_kubectl "statefulset/${cluster}"
-
-	desc 'create user myApp'
-	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
-		"userAdmin:userAdmin123456@${cluster}.${namespace}"
-
-	desc 'write data'
-	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
-}
-
-run_backup() {
-	local cluster=$1
-	local backup1=$2
-
-	desc "make backup $backup1"
-	kubectl_bin apply \
-		-f $test_dir/conf/$backup1.yml
-	wait_backup $backup1
-}
-
 run_recovery_check() {
 	local cluster=$1
 	local backup1=$2
 
 	desc 'write data after backup'
+	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}.${namespace}"
 
 	desc 'recover backup'
-	run_restore ${backup1} 1
-
-	wait_restore ${backup1} 1
+	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
+	run_restore "${backup1}"
+	wait_restore "${backup1}" "${cluster/-rs0/}"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "" ".svc.cluster.local" "myApp" "test"
 
 	kubectl_bin delete -f "$test_dir/conf/${backup1}.yml"
 	wait_for_running "${cluster}" 1
+	wait_cluster_consistency "${cluster/-rs0/}"
 }
 
 main() {
@@ -110,9 +80,8 @@ main() {
 			>$tmp_dir/parsed_systemLog_secret-2.json
 	diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog_secret-2.json $tmp_dir/parsed_systemLog_secret-2.json
 
-	run_backup "$cluster" "backup-minio"
-	sleep 20
-
+	run_backup "minio"
+	wait_backup "backup-minio"
 	run_recovery_check "$cluster" "backup-minio"
 
 	destroy $namespace

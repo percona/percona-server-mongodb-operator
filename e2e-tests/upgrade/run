@@ -212,8 +212,11 @@ function main() {
 		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio} \
 		| grep ${backup_dest_minio}_rs0.dump.gz
-	run_restore $backup_name_minio 3 0 "-rs0"
-	wait_restore $backup_name_minio 3 0 "-rs0"
+
+	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
+	run_restore "$backup_name_minio"
+	wait_restore "$backup_name_minio" "${cluster}"
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
 	desc 'cleanup'
