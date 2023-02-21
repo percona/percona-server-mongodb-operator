@@ -124,7 +124,7 @@ function main() {
 
 		compare_generation ${target_generation} "statefulset" "${cluster}-cfg"
 		compare_generation ${target_generation} "statefulset" "${cluster}-rs0"
-		compare_generation ${target_generation} "statefulset" "${cluster}-mongos"
+		compare_generation 2 "statefulset" "${cluster}-mongos" # generation is 2 because mongos gets deleted on restore
 
 		run_mongos \
 			'use myApp\n db.test.insert({ x: 10050'${target_generation}' })' \
