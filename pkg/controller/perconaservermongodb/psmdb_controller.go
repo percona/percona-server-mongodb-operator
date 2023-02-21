@@ -396,7 +396,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			"app.kubernetes.io/component":  "mongod",
 		}
 
-		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
+		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name, false)
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
@@ -484,7 +484,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
 		}
 
-		clusterStatus, err = r.reconcileCluster(ctx, cr, replset, pods, mongosPods.Items)
+		clusterStatus, err = r.reconcileCluster(ctx, cr, replset, mongosPods.Items)
 		if err != nil {
 			log.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 		}
@@ -1117,7 +1117,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
+	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName, false)
 	if err != nil {
 		return errors.Wrap(err, "get configsvr pods")
 	}

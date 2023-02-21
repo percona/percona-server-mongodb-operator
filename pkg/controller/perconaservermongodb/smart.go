@@ -72,7 +72,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		if err != nil {
 			return errors.Wrapf(err, "get config statefulset %s/%s", cr.Namespace, cr.Name+"-"+api.ConfigReplSetName)
 		}
-		cfgList, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
+		cfgList, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName, false)
 		if err != nil {
 			return errors.Wrap(err, "get cfg pod list")
 		}
