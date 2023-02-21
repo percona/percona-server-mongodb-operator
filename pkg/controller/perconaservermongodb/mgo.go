@@ -372,7 +372,6 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
 	cnf.Members.SetVotes(unsafePSA)
-	log.Info("current members", "currMembers", currMembers, "members", cnf.Members)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
 
