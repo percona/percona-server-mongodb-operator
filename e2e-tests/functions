@@ -58,7 +58,7 @@ else
 fi
 
 if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "gke") ]; then
-        GKE=1
+	GKE=1
 else
         GKE=0
 fi
