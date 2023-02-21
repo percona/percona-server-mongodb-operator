@@ -402,11 +402,12 @@ pipeline {
                         ShutdownCluster('cluster4')
                     }
                 }
-                stage('5 CrossSite') {
+                stage('5 CrossSite DemBPSharded') {
                     steps {
                         CreateCluster('cluster5')
                         runTest('cross-site-sharded', 'cluster5')
                         runTest('serviceless-external-nodes', 'cluster5')
+                        runTest('demand-backup-physical-sharded', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
                 }
