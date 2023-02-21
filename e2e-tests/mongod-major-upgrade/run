@@ -133,14 +133,14 @@ function main() {
 			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 			/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio}/rs0/ \
 			| grep myApp.test.gz
-		apply_restore ${backup_name_minio} 3
-		wait_restore ${backup_name_minio} 3
+		run_mongo 'use myApp\n db.test.insert({ x: 100600 })' "myApp:myPass@$cluster.$namespace"
+		run_restore "${backup_name_minio}"
+		wait_restore "${backup_name_minio}" "${cluster/-rs0/}"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 		target_generation=$((target_generation + 1))
-
 	done
 
 	destroy ${namespace}
