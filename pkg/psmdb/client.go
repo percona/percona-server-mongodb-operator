@@ -18,7 +18,7 @@ type Credentials struct {
 }
 
 func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (*mgo.Client, error) {
-	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name)
+	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name, false)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
