@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"context"
+	"sort"
 
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +37,7 @@ func mongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return lbls
 }
 
-func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
+func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string, includeOutdated bool) (corev1.PodList, error) {
 	pods := corev1.PodList{}
 	err := k8sclient.List(ctx,
 		&pods,
@@ -45,8 +46,61 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			LabelSelector: labels.SelectorFromSet(rsLabels(cr, rsName)),
 		},
 	)
+	if err != nil {
+		return pods, errors.Wrap(err, "failed to list pods")
+	}
 
-	return pods, err
+	if includeOutdated {
+		return pods, nil
+	}
+
+	sort.Slice(pods.Items, func(i, j int) bool {
+		return pods.Items[i].Name < pods.Items[j].Name
+	})
+
+	rs := cr.Spec.Replset(rsName)
+	if rs == nil {
+		return pods, errors.Errorf("replset %s is not found", rsName)
+	}
+
+	var rsPods []corev1.Pod
+	if rs.ClusterRole == api.ClusterRoleConfigSvr {
+		rsPods = filterPodsByComponent(pods, api.ConfigReplSetName)
+	} else {
+		rsPods = filterPodsByComponent(pods, "mongod")
+	}
+
+	arbiterPods := filterPodsByComponent(pods, "arbiter")
+	nvPods := filterPodsByComponent(pods, "nonVoting")
+
+	if len(rsPods) >= int(rs.Size) {
+		rsPods = rsPods[:rs.Size]
+	}
+	if len(arbiterPods) >= int(rs.Arbiter.Size) {
+		arbiterPods = arbiterPods[:rs.Arbiter.Size]
+	}
+	if len(nvPods) >= int(rs.NonVoting.Size) {
+		nvPods = nvPods[:rs.NonVoting.Size]
+	}
+	pods.Items = rsPods
+	pods.Items = append(pods.Items, arbiterPods...)
+	pods.Items = append(pods.Items, nvPods...)
+
+	return pods, nil
+}
+
+func filterPodsByComponent(list corev1.PodList, component string) []corev1.Pod {
+	var pods []corev1.Pod
+	for _, pod := range list.Items {
+		v, ok := pod.Labels["app.kubernetes.io/component"]
+		if !ok {
+			continue
+		}
+		if v == component {
+			pods = append(pods, pod)
+		}
+	}
+	return pods
 }
 
 func GetPrimaryPod(ctx context.Context, client *mgo.Client) (string, error) {
