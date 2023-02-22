@@ -407,6 +407,7 @@ pipeline {
                         CreateCluster('cluster5')
                         runTest('cross-site-sharded', 'cluster5')
                         runTest('demand-backup-physical-sharded', 'cluster5')
+                        runTest('multi-cluster-service', 'cluster5')
 //                         runTest('serviceless-external-nodes', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
