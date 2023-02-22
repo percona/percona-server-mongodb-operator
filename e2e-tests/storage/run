@@ -1,28 +1,30 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 check_cr_config() {
 	local cluster="$1"
 
-	# apply cr config
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster.yml
 
-	# check if all 3 Pod started
+	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
-	# check if statefulset created with expected config
+	desc 'check if statefulset created with expected config'
 	compare_kubectl statefulset/$cluster
 
-	# write data, read from all
+	desc 'create user myApp'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$cluster.$namespace"
 	sleep 2
+
+	desc 'write data, read from all'
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster.$namespace"
@@ -30,7 +32,7 @@ check_cr_config() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
-	# delete cluster
+	desc 'delete PSMDB cluster'
 	kubectl_bin delete \
 		-f $test_dir/conf/$cluster.yml
 }
@@ -38,6 +40,8 @@ check_cr_config() {
 main() {
 	deploy_cert_manager
 	create_infra $namespace
+
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f $conf_dir/client.yml \
 		-f $conf_dir/secrets.yml \
@@ -50,6 +54,8 @@ main() {
 	check_cr_config "hostpath-rs0"
 
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

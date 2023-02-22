@@ -40,7 +40,7 @@ if [ -f "$conf_dir/cloud-secret.yml" ]; then
 	SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
 fi
 
-if oc get projects; then
+if oc get projects 2>/dev/null; then
 	OPENSHIFT=4
 fi
 
@@ -63,6 +63,13 @@ fi
 
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
+set_debug() {
+	if [ -n "${DEBUG_TESTS}" ]; then
+		set -o xtrace
+	else
+		set +o xtrace
+	fi
+}
 version_gt() {
 	# return true if kubernetes version equal or greater than desired
 	if [ $(echo "${KUBE_VERSION} >= $1" | bc -l) -eq 1 ]; then
@@ -73,6 +80,7 @@ version_gt() {
 }
 
 apply_s3_storage_secrets() {
+	desc 'create secrets for cloud storages'
 	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 		kubectl_bin apply \
 			-f $conf_dir/minio-secret.yml \
@@ -88,6 +96,7 @@ create_namespace() {
 	local skip_clean_namespace="$2"
 
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
+		desc 'cleaned up all old namespaces'
 		kubectl_bin get ns \
 			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^NAME" \
 			| awk '{print$1}' \
@@ -95,17 +104,24 @@ create_namespace() {
 	fi
 
 	if [ -n "${OPENSHIFT}" ]; then
+		desc 'cleaned up all old namespaces'
 		if [ -n "$OPERATOR_NS" -a $(oc get project "$OPERATOR_NS" -o json | jq -r '.metadata.name') ]; then
 			oc delete --grace-period=0 --force=true project "$namespace" && sleep 120 || :
 		else
 			oc delete project "$namespace" && sleep 40 || :
 		fi
+
+		desc "create namespace $namespace"
 		oc new-project "$namespace"
 		oc project "$namespace"
 		oc adm policy add-scc-to-user hostaccess -z default || :
 	else
+
+		desc "cleaned up old namespaces $namespace"
 		kubectl_bin delete namespace "$namespace" --ignore-not-found || :
 		kubectl_bin wait --for=delete namespace "$namespace" || :
+    
+    desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
 		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 	fi
@@ -140,7 +156,7 @@ wait_pod() {
 			exit 1
 		fi
 	done
-	set -o xtrace
+	set_debug
 }
 
 wait_cron() {
@@ -164,7 +180,7 @@ wait_cron() {
 			exit 1
 		fi
 	done
-	set -o xtrace
+	set_debug
 }
 
 wait_backup_agent() {
@@ -185,7 +201,7 @@ wait_backup_agent() {
 		fi
 	done
 	echo
-	set -o xtrace
+	set_debug
 }
 
 wait_backup() {
@@ -210,7 +226,7 @@ wait_backup() {
 		fi
 	done
 	echo
-	set -o xtrace
+	set_debug
 }
 
 run_restore() {
@@ -227,6 +243,7 @@ run_restore_backupsource() {
 	local backupDest=$2
 	local storageName=$3
 
+	desc "run restore restore-$backupName from backup $backupName destination is $backupDest"
 	if [ -z "$storageName" ]; then
 		cat $test_dir/conf/restore-backupsource.yml \
 			| $sed -e "s/name:/name: restore-$backupName/" \
@@ -327,7 +344,7 @@ apply_rbac() {
 }
 
 deploy_operator() {
-	desc 'start operator'
+	desc 'start PSMDB operator'
 
 	local cr_file
 	if [ -f "${test_dir}/conf/crd.yaml" ]; then
@@ -494,6 +511,7 @@ wait_for_running() {
 	let last_pod="$(($2 - 1))" || :
 	local check_cluster_readyness="${3:-true}"
 
+	set_debug
 	local rs_name=${name/*-/}
 	local cluster_name=${name/-$rs_name/}
 	for i in $(seq 0 $last_pod); do
@@ -525,7 +543,7 @@ wait_for_running() {
 			fi
 		done
 		echo
-		set -x
+		set_debug
 	fi
 }
 
@@ -550,7 +568,7 @@ wait_for_delete() {
 			exit 1
 		fi
 	done
-	set -o xtrace
+	set_debug
 }
 
 compare_generation() {
@@ -734,6 +752,7 @@ get_mongo_primary() {
 	local uri="$1"
 	local cluster="$2"
 
+	set_debug
 	endpoint=$(get_mongo_primary_endpoint $uri)
 	if [[ $endpoint =~ ".$cluster" ]]; then
 		echo $endpoint \
@@ -792,6 +811,8 @@ run_pumba() {
 }
 
 deploy_cert_manager() {
+	desc 'deploy cert manager'
+
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl_bin apply -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
@@ -799,6 +820,8 @@ deploy_cert_manager() {
 }
 
 delete_crd() {
+	desc 'get and delete old CRDs and RBAC'
+  
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" --ignore-not-found --wait=false || :
 	for crd_name in $(yq eval '.metadata.name' "${src_dir}/deploy/crd.yaml" | grep -v '\-\-\-'); do
 		kubectl get ${crd_name} --all-namespaces -o wide \
@@ -812,14 +835,16 @@ delete_crd() {
 	if [ -n "${OPERATOR_NS}" ]; then
 		rbac_yaml='cw-rbac.yaml'
 	fi
+
 	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
 }
 
 destroy() {
 	local namespace="$1"
-	local ignore_logs="${2:-false}"
+	local ignore_logs="${2:-true}"
 
-	if [[ ${ignore_logs} == "false" ]]; then
+	desc 'destroy cluster/operator and all other resources'
+	if [ ${ignore_logs} == "false" -o -n "${DEBUG_TESTS}" ]; then
 		kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 			| grep -v 'level=info' \
 			| grep -v 'level=debug' \
@@ -857,7 +882,7 @@ desc() {
 	printf "\n\n-----------------------------------------------------------------------------------\n"
 	printf "$msg"
 	printf "\n-----------------------------------------------------------------------------------\n\n"
-	set -o xtrace
+	set_debug
 }
 
 get_backup_dest() {
@@ -1009,12 +1034,13 @@ kubectl_bin() {
 	local LAST_ERR="$(mktemp)"
 	local exit_status=0
 	local timeout=4
+
 	for i in $(seq 0 2); do
 		set +e
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
-		if [[ ${exit_status} != 0 ]]; then
+		if [ ${exit_status} != 0 -a -n "${DEBUG_TESTS}" ]; then
 			cat "$LAST_OUT"
 			cat "$LAST_ERR" >&2
 			sleep "$((timeout * i))"
@@ -1022,6 +1048,7 @@ kubectl_bin() {
 			break
 		fi
 	done
+
 	cat "$LAST_OUT"
 	cat "$LAST_ERR" >&2
 	rm "$LAST_OUT" "$LAST_ERR"
@@ -1073,6 +1100,8 @@ wait_cluster_consistency() {
 run_backup() {
 	local storage=$1
 	local backup_name=${2:-"backup-${storage}"}
+
+	desc "run backup $backup_name"
 
 	yq eval '.metadata.name = "'${backup_name}'"
 			| .spec.storageName = "'${storage}'"' \

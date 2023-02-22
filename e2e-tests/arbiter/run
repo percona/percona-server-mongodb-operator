@@ -1,25 +1,28 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 check_cr_config() {
 	local cluster="$1"
 
 	# apply cr config
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster.yml
 
-	# check if at least 1 Pod started
+	desc 'check if arbiter was started'
 	wait_pod $cluster-arbiter-0
+
+	desc 'check if all Pods started'
 	wait_for_running $cluster 2 "false"
 
-	# check if statefulset created with expected config
+	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-arbiter
 
-	# wait for convergence
+	desc 'wait for convergence'
 	local arbiter_ip=$(get_service_ip $cluster-arbiter-0)
 	local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)"
 	sleep 240
@@ -36,12 +39,14 @@ check_cr_config() {
 		| grep '"host" :' \
 		| grep "$arbiter_ip"
 
-	# check read and write
+	desc 'create user'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$URI" \
 		"mongodb" ":27017"
 	sleep 2
+
+	desc 'write data, read it'
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$URI" \
@@ -59,7 +64,7 @@ check_cr_config() {
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 
-	# delete cluster
+	desc "delete PSMDB cluster $cluster"
 	kubectl_bin delete \
 		-f $test_dir/conf/$cluster.yml
 }
@@ -67,6 +72,8 @@ check_cr_config() {
 main() {
 	deploy_cert_manager
 	create_infra $namespace
+
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f $conf_dir/client.yml \
 		-f $conf_dir/secrets.yml
@@ -79,6 +86,8 @@ main() {
 	#check_cr_config "arbiter-clusterip-rs0"
 
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

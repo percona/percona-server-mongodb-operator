@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 run_recovery_check() {
 	local backup=$1
@@ -34,25 +34,30 @@ create_infra $namespace
 
 deploy_minio
 
-desc 'create first PSMDB cluster'
+desc 'create secrets and start client'
 cluster="some-name-rs0"
 kubectl_bin apply \
 	-f "$conf_dir/secrets.yml" \
 	-f "$conf_dir/client.yml"
 
 apply_s3_storage_secrets
+
+desc "create first PSMDB cluster $cluster"
 apply_cluster $test_dir/conf/$cluster.yml
+
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster
 
-desc 'write data, read from all'
+desc 'create user'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$cluster.$namespace"
 sleep 2
+
+desc 'write data, read from all'
 run_mongo \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster.$namespace"
@@ -176,3 +181,5 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 destroy $namespace
+
+desc 'test passed'

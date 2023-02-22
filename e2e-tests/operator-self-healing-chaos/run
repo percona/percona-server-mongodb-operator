@@ -1,17 +1,19 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
+
 cluster="some-name-rs0"
 
 setup_cluster() {
-	# create cluster
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f $conf_dir/secrets.yml
 
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $conf_dir/$cluster.yml
 
 	# check if all 3 Pods started
@@ -118,7 +120,6 @@ main() {
 	fi
 	deploy_chaos_mesh $test_namespace
 
-	desc 'create PSMDB cluster'
 	setup_cluster
 
 	desc 'kill operator'
@@ -132,6 +133,8 @@ main() {
 
 	destroy_chaos_mesh
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

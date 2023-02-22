@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 if [ $EKS -ne 1 ]; then
 	echo "Skip the test. We run it for EKS only"
@@ -13,24 +13,28 @@ fi
 
 create_infra $namespace
 
-desc 'create first PSMDB cluster'
-cluster="some-name-rs0"
+desc 'create secrets and start client'
 kubectl_bin apply \
 	-f "$conf_dir/secrets.yml" \
 	-f "$conf_dir/client.yml"
 
+cluster="some-name-rs0"
+desc "create first PSMDB cluster $cluster"
 apply_cluster $test_dir/conf/$cluster.yml
+
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster
 
-desc 'write data, read from all'
+desc 'create user'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$cluster.$namespace"
 sleep 2
+
+desc 'write data, read from all'
 run_mongo \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster.$namespace"
@@ -65,3 +69,5 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 destroy $namespace
+
+desc 'test passed'

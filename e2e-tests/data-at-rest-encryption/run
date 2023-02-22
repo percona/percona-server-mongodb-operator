@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 create_infra $namespace
 deploy_vault
@@ -12,38 +12,42 @@ deploy_minio
 
 apply_s3_storage_secrets
 
-desc 'create PSMDB cluster'
-
-cluster="some-name"
+desc 'create secrets and start client'
 kubectl_bin apply -f "$conf_dir/secrets.yml" -f "$conf_dir/client.yml"
 
+cluster='some-name'
+desc "create PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/$cluster.yml"
-desc 'check if all 3 Pods started'
+desc 'check if all Pods started'
 wait_for_running $cluster-rs0 3
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 
+desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl statefulset/$cluster-cfg
 
-desc 'write data'
+desc 'create user'
 run_mongos \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 sleep 2
+
+desc 'write data, read it'
 run_mongos \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster-mongos.$namespace"
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
 desc 'run backups'
-
 backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
 
+desc "run minio backup $backup_name_minio"
 run_backup minio
 wait_backup "$backup_name_minio"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	desc "run minio backup $backup_name_gcp"
 	run_backup gcp-cs
 
 	wait_backup "$backup_name_gcp"
@@ -51,7 +55,7 @@ fi
 
 sleep 5
 
-desc 'check backup and restore -- minio'
+desc "check backup and restore -- minio"
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
@@ -74,7 +78,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 fi
 
-desc 'Check logs that cluster encrypted'
+desc 'check logs that cluster encrypted'
 encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 -c mongod -n $namespace | grep -i "Encryption keys DB is initialized successfully")
 
 echo "$encrypted_cluster_log"
@@ -83,8 +87,7 @@ if [ -z "$encrypted_cluster_log" ]; then
 	exit 1
 fi
 
-desc "Check logs for unencrypted cluster"
-
+desc "check logs for unencrypted cluster"
 apply_cluster "$test_dir/conf/$cluster-unencrypted.yml"
 sleep 30
 
@@ -107,3 +110,5 @@ done
 
 destroy_vault
 destroy $namespace
+
+desc 'test passed'

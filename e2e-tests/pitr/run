@@ -1,14 +1,15 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 write_document() {
 	local cmp_postfix=$1
 
+	desc 'write initial data, read from all'
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster.$namespace"
@@ -19,7 +20,7 @@ write_document() {
 }
 
 write_initial_data() {
-	desc 'write initial data, read from all'
+	desc 'create user myApp'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$cluster.$namespace"
@@ -96,18 +97,20 @@ main() {
 	create_infra $namespace
 	deploy_minio
 
-	desc 'create PSMDB cluster'
-	cluster="some-name-rs0"
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f "$conf_dir/secrets.yml" \
 		-f "$conf_dir/client.yml" \
 		-f $conf_dir/minio-secret.yml
+
+	cluster="some-name-rs0"
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster.yml
 
 	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
-	desc 'check if service and statefulset created with expected config'
+	desc 'check if statefulset created with expected config'
 	compare_kubectl statefulset/$cluster
 
 	write_initial_data
@@ -146,6 +149,8 @@ main() {
 	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${cluster/-rs0/}"
 
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

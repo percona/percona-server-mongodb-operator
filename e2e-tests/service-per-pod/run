@@ -1,33 +1,35 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 check_cr_config() {
 	local cluster="$1"
 
-	# apply cr config
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster.yml
 
-	# check if at least 1 Pod started
+	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3 "false"
 
-	# check if statefulset created with expected config
+	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster
 	compare_kubectl service/$cluster-0
 
 	local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"
 	sleep 20
 
-	# check read and write
+	desc 'create user myApp'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$URI" \
 		"mongodb" ":27017"
 	sleep 10
+
+	desc 'write data, read from all'
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$URI" \
@@ -37,6 +39,7 @@ check_cr_config() {
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
 
+	desc 'add service-per-pod lebel and annotation'
 	if [[ $cluster == "node-port-rs0" ]]; then
 		old_node_port=$(kubectl_bin get svc node-port-rs0-0 -o 'jsonpath={.spec.ports[0].nodePort}')
 		kubectl_bin patch psmdb node-port --type=json --patch '[
@@ -55,6 +58,8 @@ check_cr_config() {
 			}
 		}]'
 		sleep 5 # waiting for reconcile
+
+		desc 'check if service created with expected config'
 		compare_kubectl service/node-port-rs0-0 "-updated"
 		current_node_port=$(kubectl_bin get svc node-port-rs0-0 -o 'jsonpath={.spec.ports[0].nodePort}')
 		if [[ $current_node_port != "$old_node_port" ]]; then
@@ -63,7 +68,7 @@ check_cr_config() {
 		fi
 	fi
 
-	# delete cluster
+	desc "delete PSMDB cluster $cluster"
 	kubectl_bin delete \
 		-f $test_dir/conf/$cluster.yml
 }
@@ -71,6 +76,8 @@ check_cr_config() {
 main() {
 	deploy_cert_manager
 	create_infra $namespace
+
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f $conf_dir/client.yml \
 		-f $conf_dir/secrets.yml
@@ -85,6 +92,8 @@ main() {
 	check_cr_config "node-port-rs0"
 
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main
