@@ -397,6 +397,7 @@ pipeline {
                         runTest('demand-backup-physical', 'cluster4')
                         runTest('upgrade', 'cluster4')
                         runTest('upgrade-sharded', 'cluster4')
+                        runTest('mongod-major-upgrade', 'cluster4')
                         runTest('pitr', 'cluster4')
                         runTest('pitr-sharded', 'cluster4')
                         ShutdownCluster('cluster4')
@@ -406,9 +407,9 @@ pipeline {
                     steps {
                         CreateCluster('cluster5')
                         runTest('cross-site-sharded', 'cluster5')
+                        runTest('serviceless-external-nodes', 'cluster5')
                         runTest('demand-backup-physical-sharded', 'cluster5')
                         runTest('multi-cluster-service', 'cluster5')
-//                         runTest('serviceless-external-nodes', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
                 }
