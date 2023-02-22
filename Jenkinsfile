@@ -111,11 +111,11 @@ TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 void makeReport() {
     def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
     def startedTestAmount = testsReportMap.size()
-    for ( test in testsReportMap ) {
+    for ( test in testsReportMap.sort() ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
-    for (testxml in testsResultsMap ) {
+    for (testxml in testsResultsMap.sort() ) {
         TestsReportXML = TestsReportXML + "<testcase name=\\\"${testxml.key}\\\"><${testxml.value}/></testcase>\n"
     }
     TestsReportXML = TestsReportXML + '</testsuite>\n'
