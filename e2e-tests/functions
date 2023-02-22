@@ -1100,7 +1100,7 @@ create_infra() {
 	local ns="$1"
 
 	delete_crd
-	# check_crd_for_deletion "${GIT_BRANCH}"
+	check_crd_for_deletion "${GIT_BRANCH}"
 	if [ -n "$OPERATOR_NS" ]; then
 		create_namespace $OPERATOR_NS
 		deploy_operator
