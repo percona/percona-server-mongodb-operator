@@ -93,7 +93,7 @@ fi
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'
-wait_for_running $cluster-rs0 3 
+wait_for_running $cluster-rs0 3
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 wait_cluster_consistency "${cluster}" 3
