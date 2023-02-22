@@ -404,6 +404,7 @@ pipeline {
                         runTest('demand-backup-physical', 'cluster4')
                         runTest('upgrade', 'cluster4')
                         runTest('upgrade-sharded', 'cluster4')
+                        runTest('mongod-major-upgrade', 'cluster4')
                         runTest('pitr', 'cluster4')
                         runTest('pitr-sharded', 'cluster4')
                         ShutdownCluster('cluster4')
