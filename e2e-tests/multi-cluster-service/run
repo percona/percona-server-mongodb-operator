@@ -55,15 +55,16 @@ wait_service_export() {
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
 	echo -n 'waiting for cluster services to be exported'
-	until [[ "$(kubectl_bin get serviceexport | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
+	until [[ "$(kubectl_bin get serviceexport --ignore-not-found | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
 		let retry+=1
 		if [ $retry -ge 32 ]; then
-			echo max retry count $retry reached. Something went wrong with operator or kubernetes cluster. We can not export services.
+			echo max retry count $retry reached. Something went wrong with MCS, probably a problem in gke-mcs-exporter.
 			exit 1
 		fi
 		echo -n .
 		sleep 10
 	done
+	echo
 	set -o xtrace
 }
 
