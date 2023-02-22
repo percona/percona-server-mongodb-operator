@@ -131,9 +131,9 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
     def retryCount = 0
     sh """
         if [ $retryCount -eq 0 ]; then
-            export DEBUG_TESTS = 0
+            export DEBUG_TESTS=0
         else
-            export DEBUG_TESTS = 1
+            export DEBUG_TESTS=1
         fi
     """
     waitUntil {
