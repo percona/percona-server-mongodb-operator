@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Prerequisites for using multi cluster services in GKE
+# gcloud services enable multiclusterservicediscovery.googleapis.com gkehub.googleapis.com cloudresourcemanager.googleapis.com trafficdirector.googleapis.com dns.googleapis.com
+# gcloud container fleet multi-cluster-services enable
+# gcloud projects add-iam-policy-binding cloud-dev-112233 --member "serviceAccount:cloud-dev-112233.svc.id.goog[gke-mcs/gke-mcs-importer]" --role "roles/compute.networkViewer"
+# Check https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services for more
+
 set -o errexit
 set -o xtrace
 
@@ -11,11 +17,45 @@ if [ $GKE -ne 1 ]; then
 	exit 0
 fi
 
+wait_mcs_api() {
+	set +o xtrace
+	echo -n 'waiting for MCS APIs are registered'
+	until [[ $(kubectl_bin api-resources | grep ServiceExport | wc -l) -eq 1 ]]; do
+		let retry+=1
+		if [ $retry -ge 32 ]; then
+			echo max retry count $retry reached. Something went wrong with MCS, probably a problem on GCP side.
+			exit 1
+		fi
+		echo -n .
+		sleep 5
+	done
+	echo
+	set -o xtrace
+}
+
+wait_service_import() {
+	set +o xtrace
+	retry=0
+	echo -n 'waiting for cluster services to be imported'
+	until [[ "$(kubectl_bin get serviceimport --ignore-not-found | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
+		let retry+=1
+		if [ $retry -ge 64 ]; then
+			echo max retry count $retry reached. Something went wrong with MCS, probably a problem in gke-mcs-importer.
+			exit 1
+		fi
+		echo -n .
+		sleep 10
+	done
+	echo
+	set -o xtrace
+}
+
 wait_service_export() {
+	set +o xtrace
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
-	echo -n 'waiting for cluster readyness'
-	until [[ "$(kubectl_bin get serviceexport --all-namespaces | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
+	echo -n 'waiting for cluster services to be exported'
+	until [[ "$(kubectl_bin get serviceexport | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
 		let retry+=1
 		if [ $retry -ge 32 ]; then
 			echo max retry count $retry reached. Something went wrong with operator or kubernetes cluster. We can not export services.
@@ -24,18 +64,16 @@ wait_service_export() {
 		echo -n .
 		sleep 10
 	done
+	set -o xtrace
 }
 
-desc "add settings to k8s cluster"
+desc "Register Kubernetes cluster"
 k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
-k8s_cluster_zone='us-central1-a'
+k8s_cluster_region=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
 
-# commnads list which should be apply to the project. https://cloud.google.com/kubernetes-engine/docs/how-to/multi-cluster-services
-#gcloud services enable multiclusterservicediscovery.googleapis.com gkehub.googleapis.com cloudresourcemanager.googleapis.com trafficdirector.googleapis.com dns.googleapis.com
-#gcloud container fleet multi-cluster-services enable
-#gcloud projects add-iam-policy-binding cloud-dev-112233 --member "serviceAccount:cloud-dev-112233.svc.id.goog[gke-mcs/gke-mcs-importer]" --role "roles/compute.networkViewer"
+gcloud container hub memberships register ${k8s_cluster_name} --gke-cluster ${k8s_cluster_region}/${k8s_cluster_name} --enable-workload-identity
 
-gcloud container hub memberships register $k8s_cluster_name --gke-cluster $k8s_cluster_zone/$k8s_cluster_name --enable-workload-identity
+wait_mcs_api
 
 create_infra "$namespace"
 desc 'create first PSMDB cluster'
@@ -54,15 +92,20 @@ fi
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'
-wait_for_running $cluster-rs0 3
+wait_for_running $cluster-rs0 3 
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 wait_cluster_consistency "${cluster}" 3
 
-desc "check if exportService and importService objects exist in cluster"
-wait_service_export
+desc "enable MCS"
+kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/multiCluster/enabled","value":true}]'
 
-#desc "delete memberships"
+desc "check if ServiceExport objects are created"
+wait_service_export
+wait_service_import
+wait_cluster_consistency "${cluster}" 3
+
+desc "delete cluster membership"
 gcloud container fleet memberships delete $k8s_cluster_name --quiet
 
 destroy $namespace
