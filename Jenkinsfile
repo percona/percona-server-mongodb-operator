@@ -12,7 +12,7 @@ void CreateCluster(String CLUSTER_SUFFIX) {
                 gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
                 gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
-                gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.21 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 && \
+                gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.22 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
@@ -106,6 +106,7 @@ void popArtifactFile(String FILE_NAME) {
 TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
 testsReportMap  = [:]
 testsResultsMap = [:]
+TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
 void makeReport() {
     def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
@@ -114,6 +115,10 @@ void makeReport() {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    for (testxml in testsResultsMap ) {
+        TestsReportXML = TestsReportXML + "<testcase name=\\\"${testxml.key}\\\"><${testxml.value}/></testcase>\n"
+    }
+    TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
 void setTestsresults() {
@@ -149,6 +154,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                     fi
                 """
             }
+
             testsReportMap[TEST_NAME] = "[passed]($testUrl)"
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
@@ -289,6 +295,7 @@ pipeline {
                             --rm \
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
+                            -e GOFLAGS='-buildvcs=false' \
                             golang:1.19 sh -c '
                                 go install github.com/google/go-licenses@v1.0.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
@@ -316,6 +323,7 @@ pipeline {
                             --rm \
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
+                            -e GOFLAGS='-buildvcs=false' \
                             golang:1.19 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
@@ -356,10 +364,11 @@ pipeline {
                         ShutdownCluster('cluster1')
                    }
                 }
-                stage('2 OneP Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
+                stage('2 OneP IgnoreLA Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
                     steps {
                         CreateCluster('cluster2')
                         runTest('one-pod', 'cluster2')
+                        runTest('ignore-labels-annotations', 'cluster2')
                         runTest('monitoring-2-0', 'cluster2')
                         runTest('arbiter', 'cluster2')
                         runTest('service-per-pod', 'cluster2')
@@ -374,12 +383,14 @@ pipeline {
                         ShutdownCluster('cluster2')
                     }
                 }
-                stage('3 SelfHealing Storage') {
+                stage('3 SelfHealing Storage Expose') {
                     steps {
                         CreateCluster('cluster3')
                         runTest('storage', 'cluster3')
                         runTest('self-healing-chaos', 'cluster3')
                         runTest('operator-self-healing-chaos', 'cluster3')
+                        runTest('expose-sharded', 'cluster3')
+                        runTest('recover-no-primary', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }
@@ -390,6 +401,7 @@ pipeline {
                         runTest('demand-backup', 'cluster4')
                         runTest('scheduled-backup', 'cluster4')
                         runTest('demand-backup-sharded', 'cluster4')
+                        runTest('demand-backup-physical', 'cluster4')
                         runTest('upgrade', 'cluster4')
                         runTest('upgrade-sharded', 'cluster4')
                         runTest('pitr', 'cluster4')
@@ -397,10 +409,12 @@ pipeline {
                         ShutdownCluster('cluster4')
                     }
                 }
-                stage('5 CrossSite') {
+                stage('5 CrossSite DemBPSharded') {
                     steps {
                         CreateCluster('cluster5')
                         runTest('cross-site-sharded', 'cluster5')
+                        runTest('demand-backup-physical-sharded', 'cluster5')
+//                         runTest('serviceless-external-nodes', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
                 }
@@ -429,6 +443,12 @@ pipeline {
                         }
                     }
                     makeReport()
+                    sh """
+                        echo "${TestsReportXML}" > TestsReport.xml
+                    """
+                    step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                    archiveArtifacts '*.xml'
+
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                     TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"

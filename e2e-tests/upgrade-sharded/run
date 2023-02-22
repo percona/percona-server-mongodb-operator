@@ -1,14 +1,13 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 cluster="upgrade-sharded"
 CLUSTER_SIZE=3
-TARGET_API="${API}"
 TARGET_OPERATOR_VER="${OPERATOR_VERSION}"
 TARGET_IMAGE="${IMAGE}"
 TARGET_IMAGE_MONGOD="${IMAGE_MONGOD}"
@@ -29,7 +28,6 @@ fi
 GIT_TAG="v${INIT_OPERATOR_VER}"
 INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
 OPERATOR_NAME='percona-server-mongodb-operator'
-API="psmdb.percona.com/v${INIT_OPERATOR_VER//./-}"
 IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
 # we use the starting image from the same repo so we don't need to use initImage option
 if [[ "$(echo ${TARGET_IMAGE} | cut -d'/' -f1)" == "perconalab" ]]; then
@@ -39,8 +37,8 @@ IMAGE_MONGOD=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.mongod
 IMAGE_PMM=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.pmm[].imagePath')
 IMAGE_BACKUP=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.backup[].imagePath')
 
-if [[ ${TARGET_API} == "${API}" ]]; then
-	echo "API and TARGET_API variables are the same: ${API}! Something is wrong!"
+if [[ ${TARGET_OPERATOR_VER} == "${INIT_OPERATOR_VER}" ]]; then
+	echo "OPERATOR VERSION and INIT OPERATOR VERSION variables are the same: ${TARGET_OPERATOR_VER} ${INIT_OPERATOR_VER}! Something is wrong!"
 	exit 1
 fi
 
@@ -157,27 +155,34 @@ function main() {
 	apply_s3_storage_secrets
 	deploy_minio
 
+	desc 'create secrets and start client'
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${tmp_dir}/secrets.yaml"
 
+	desc "create first PSMDB cluster $cluster"
 	local cr_yaml="${tmp_dir}/cr_${GIT_TAG}.yaml"
 	prepare_cr_yaml "${cr_yaml}"
 	apply_cluster "${cr_yaml}"
+
+	desc 'check if all Pods started'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+
+	desc 'create user myApp'
 	run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
 
+	desc 'write data, read from all'
 	run_mongos 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-mongos.${namespace}"
 
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
 	compare_generation "1" "psmdb" "${cluster}"
 
-	# create backup
 	backup_name_minio="backup-minio"
+	desc "create backup $backup_name_minio"
 	wait_backup_agent $cluster-rs0-0
 	wait_backup_agent $cluster-rs0-1
 	wait_backup_agent $cluster-rs0-2
@@ -190,6 +195,8 @@ function main() {
 	desc 'upgrade operator'
 	kubectl_bin apply --server-side --force-conflicts -f "${src_dir}/deploy/crd.yaml"
 	kubectl_bin apply -f "${src_dir}/deploy/${rbac}.yaml" ${OPERATOR_NS:+-n $OPERATOR_NS}
+
+	desc "use new image ${TARGET_IMAGE}"
 	kubectl_bin patch deployment ${OPERATOR_NS:+-n $OPERATOR_NS} "${OPERATOR_NAME}" \
 		-p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${TARGET_IMAGE}"'"}]}}}}'
 	kubectl_bin rollout status deployment/"${OPERATOR_NAME}" ${OPERATOR_NS:+-n $OPERATOR_NS}
@@ -206,6 +213,7 @@ function main() {
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+
 	check_applied_images "operator"
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
@@ -247,12 +255,17 @@ function main() {
 		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://operator-testing/${backup_dest_minio}" \
 		| grep "${backup_dest_minio}_rs0.dump.gz"
-	run_restore $backup_name_minio 3 1 "-mongos"
-	wait_restore $backup_name_minio 3 1 "-mongos"
+
+	run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}-mongos.${namespace}"
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
+	run_restore "$backup_name_minio"
+	wait_restore "$backup_name_minio" "${cluster}"
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
 	desc 'cleanup'
 	destroy "${namespace}"
+
+	desc 'test passed'
 }
 
 main

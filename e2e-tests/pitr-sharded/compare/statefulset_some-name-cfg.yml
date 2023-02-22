@@ -67,7 +67,7 @@ spec:
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: some-name
@@ -83,7 +83,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --ssl
@@ -130,6 +130,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: some-name-mongodb-encryption-key
               readOnly: true
@@ -147,7 +149,7 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
         - args:
-            - pbm-agent
+            - pbm-agent-entrypoint
           command:
             - /opt/percona/pbm-entry.sh
           env:
@@ -167,8 +169,19 @@ spec:
               value: cfg
             - name: PBM_MONGODB_PORT
               value: "27017"
+            - name: PBM_AGENT_SIDECAR
+              value: "true"
+            - name: PBM_AGENT_SIDECAR_SLEEP
+              value: "5"
             - name: SHARDED
               value: "TRUE"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: PBM_MONGODB_URI
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
           imagePullPolicy: Always
           name: backup-agent
           resources: {}
@@ -184,6 +197,8 @@ spec:
             - mountPath: /opt/percona
               name: bin
               readOnly: true
+            - mountPath: /data/db
+              name: mongod-data
       dnsPolicy: ClusterFirst
       initContainers:
         - command:

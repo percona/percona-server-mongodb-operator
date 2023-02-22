@@ -170,8 +170,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.Size = 0
 		} else {
 			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
-				log.Info(fmt.Sprintf("Mongos size will be changed from %d to %d due to safe config", cr.Spec.Sharding.Mongos.Size, minSafeMongosSize))
-				log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
+				log.Info("Safe config set, updating mongos size",
+					"oldSize", cr.Spec.Sharding.Mongos.Size, "newSize", minSafeMongosSize)
 				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
 			}
 		}
@@ -218,6 +218,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
 			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			}
 		}
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds < 1 {
@@ -252,6 +256,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 						"--sslPEMKeyFile", "/tmp/tls.pem")
+			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 			}
 		}
 
@@ -386,6 +394,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 					replset.LivenessProbe.Exec.Command,
 					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
 			}
+
+			if cr.CompareVersion("1.14.0") >= 0 {
+				replset.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			}
 		}
 
 		if replset.LivenessProbe.InitialDelaySeconds < 1 {
@@ -436,7 +448,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if cr.Spec.Unmanaged && !replset.Expose.Enabled {
-			return errors.Errorf("replset %s needs to be exposed if cluster is unmanaged", replset.Name)
+			log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", replset.Name)
 		}
 
 		err := replset.SetDefaults(platform, cr, log)
@@ -449,6 +461,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if cr.Spec.Pause {
+			if cr.Status.State == AppStateStopping {
+				log.Info("Pausing cluster", "replset", replset.Name, "oldSize", replset.Size, "newSize", 0)
+			}
 			replset.Size = 0
 			replset.Arbiter.Enabled = false
 			replset.NonVoting.Enabled = false
@@ -514,7 +529,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 
 	if cr.Spec.ClusterServiceDNSMode == "" {
-		cr.Spec.ClusterServiceDNSMode = DnsModeInternal
+		cr.Spec.ClusterServiceDNSMode = DNSModeInternal
 	}
 
 	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
@@ -593,7 +608,7 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 	}
 
 	if len(rs.ExternalNodes) > 0 && !rs.Expose.Enabled {
-		return errors.Errorf("replset %s must be exposed to add external nodes", rs.Name)
+		log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", rs.Name)
 	}
 
 	for _, extNode := range rs.ExternalNodes {
@@ -658,6 +673,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"--sslPEMKeyFile", "/tmp/tls.pem",
 			},
 		}
+
+		if cr.CompareVersion("1.14.0") >= 0 {
+			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+		}
 	}
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		nv.LivenessProbe.ProbeHandler.Exec.Command = append(
@@ -709,32 +728,30 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 }
 
 func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
-	loginfo := func(msg string, args ...interface{}) {
-		log.Info(msg, args...)
-		log.Info("Set allowUnsafeConfigurations=true to disable safe configuration")
-	}
-
 	if rs.Arbiter.Enabled {
 		if rs.Arbiter.Size != 1 {
-			loginfo(fmt.Sprintf("Arbiter size will be changed from %d to 1 due to safe config", rs.Arbiter.Size))
+			log.Info("Setting safe defaults, updating arbiter size", "oldSize", rs.Arbiter.Size, "newSize", 1)
 			rs.Arbiter.Size = 1
 		}
 		if rs.Size < minSafeReplicasetSizeWithArbiter {
-			loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, minSafeReplicasetSizeWithArbiter))
+			log.Info("Setting safe defaults, updating replset size",
+				"oldSize", rs.Size, "newSize", minSafeReplicasetSizeWithArbiter)
 			rs.Size = minSafeReplicasetSizeWithArbiter
 		}
 		if rs.Size%2 != 0 {
-			loginfo(fmt.Sprintf("Arbiter will be switched off. There is no need in arbiter with odd replset size (%d)", rs.Size))
+			log.Info("Setting safe defaults, disabling arbiter due to odd replset size", "size", rs.Size)
 			rs.Arbiter.Enabled = false
 			rs.Arbiter.Size = 0
 		}
 	} else {
 		if rs.Size < 2 {
-			loginfo(fmt.Sprintf("Replset size will be changed from %d to %d due to safe config", rs.Size, defaultMongodSize))
+			log.Info("Setting safe defaults, updating replset size to meet the minimum number of replicas",
+				"oldSize", rs.Size, "newSize", defaultMongodSize)
 			rs.Size = defaultMongodSize
 		}
 		if rs.Size%2 == 0 {
-			loginfo(fmt.Sprintf("Replset size will be increased from %d to %d", rs.Size, rs.Size+1))
+			log.Info("Setting safe defaults, increasing replset size to have a odd number of replicas",
+				"oldSize", rs.Size, "newSize", rs.Size+1)
 			rs.Size++
 		}
 	}
@@ -786,11 +803,11 @@ func (m *MultiAZ) reconcileAffinityOpts() {
 }
 
 func (v *VolumeSpec) reconcileOpts() error {
-	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
-		v.PersistentVolumeClaim = &corev1.PersistentVolumeClaimSpec{}
+	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+		v.PersistentVolumeClaim.PersistentVolumeClaimSpec = &corev1.PersistentVolumeClaimSpec{}
 	}
 
-	if v.PersistentVolumeClaim != nil {
+	if v.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 		_, ok := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 		if !ok {
 			return fmt.Errorf("volume.resources.storage can't be empty")

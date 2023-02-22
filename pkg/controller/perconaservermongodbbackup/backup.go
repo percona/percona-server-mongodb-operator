@@ -10,6 +10,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -36,7 +38,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, clu
 }
 
 // Start requests backup on PBM
-func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup, priority map[string]float64) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	var status api.PerconaServerMongoDBBackupStatus
 
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
@@ -44,7 +46,7 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
-	err := b.pbm.SetConfig(ctx, stg, b.spec.PITR, priority)
+	err := b.pbm.SetConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
 		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
@@ -61,6 +63,7 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 		Cmd: pbm.CmdBackup,
 		Backup: &pbm.BackupCmd{
 			Name:             name,
+			Type:             cr.Spec.Type,
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
 		},
@@ -102,7 +105,7 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 }
 
 // Status return backup status
-func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
 	meta, err := b.pbm.C.GetBackupMeta(cr.Status.PBMname)
@@ -111,7 +114,7 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 	}
 
 	if meta == nil || meta.Name == "" || errors.Is(err, pbm.ErrNotFound) {
-		log.Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
+		logf.FromContext(ctx).Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
 
@@ -146,6 +149,7 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 	status.LastTransition = &metav1.Time{
 		Time: time.Unix(meta.LastTransitionTS, 0),
 	}
+	status.Type = cr.Spec.Type
 
 	return status, nil
 }

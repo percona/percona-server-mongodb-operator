@@ -8,7 +8,6 @@ set_debug
 
 max_conn=10
 
-desc 'start PSMDB operator'
 create_infra $namespace
 
 desc 'create secrets and start client'
@@ -43,11 +42,13 @@ compare_mongo_user "clusterMonitor:clusterMonitor123456@$cluster.$namespace"
 (run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "test:test@$cluster.$namespace" || :) 2>&1 \
 	| grep 'Authentication failed'
 
-desc 'write data, read from all'
+desc 'create user'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$cluster.$namespace"
 sleep 2
+
+desc 'write data, read from all'
 run_mongo \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster.$namespace"
@@ -94,7 +95,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
 
-desc 'destroy cluster/operator and all other resources'
+desc 'delete custom RuntimeClass'
 kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 destroy $namespace
 

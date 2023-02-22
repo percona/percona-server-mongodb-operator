@@ -11,10 +11,11 @@ import (
 
 	"github.com/pkg/errors"
 	mgo "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/description"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -24,8 +25,9 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error,
-) {
+	pods corev1.PodList, mongosPods []corev1.Pod) (api.AppState, error) {
+	log := logf.FromContext(ctx)
+
 	replsetSize := replset.Size
 
 	if replset.NonVoting.Enabled {
@@ -34,6 +36,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	if replset.Arbiter.Enabled {
 		replsetSize += replset.Arbiter.Size
+	}
+
+	restoreInProgress, err := r.restoreInProgress(ctx, cr, replset)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "check if restore in progress")
+	}
+
+	if restoreInProgress {
+		return api.AppStateInit, nil
 	}
 
 	if replsetSize == 0 {
@@ -78,22 +89,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateInit, nil
 		}
 		if cr.Status.Replsets[replset.Name].Initialized {
-			// If an exposed replset is initialized but connection fails with ReplicaSetNoPrimary,
-			// we'll change the member hosts to local FQDNs and reconfig to recover.
-			serverSelectionError, ok := errors.Cause(err).(topology.ServerSelectionError)
-			if ok && replset.Expose.Enabled {
-				if serverSelectionError.Desc.Kind != description.ReplicaSetNoPrimary {
-					return api.AppStateError, errors.Wrap(err, "dial")
-				}
-
-				log.Error(err, "Cluster crashed, trying to recover", "cluster", cr.Name)
-				if err := r.recoverReplsetNoPrimary(ctx, cr, replset, pods.Items[0]); err != nil {
-					return api.AppStateError, errors.Wrap(err, "force reconfig to recover")
-				}
-
-				return api.AppStateInit, nil
-			}
-
 			return api.AppStateError, errors.Wrap(err, "dial")
 		}
 
@@ -233,7 +228,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			break
 		}
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+		exposed := false
+		if cr.Spec.ClusterServiceDNSMode == api.DNSModeExternal {
+			exposed = replset.Expose.Enabled
+		}
+
+		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, exposed, pod)
 		if err != nil {
 			return api.AppStateError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -425,6 +425,8 @@ func mongoInitAdminUser(user, pwd string) string {
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
+	log := logf.FromContext(ctx)
+
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
@@ -459,7 +461,7 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, c
 	}
 }
 
-func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
+func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
 	mongosPod corev1.Pod) error {
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
 		return errors.Errorf("rsPod %s is not ready", rspod.Name)
@@ -468,12 +470,12 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 		return errors.New("mongos pod is not ready")
 	}
 
-	host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, rspod)
+	host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, rspod)
 	if err != nil {
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
 
-	cli, err := r.mongosClientWithRole(ctx, m, roleClusterAdmin)
+	cli, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos client")
 	}
@@ -481,7 +483,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 	defer func() {
 		err := cli.Disconnect(ctx)
 		if err != nil {
-			log.Error(err, "failed to close mongos connection")
+			logf.FromContext(ctx).Error(err, "failed to close mongos connection")
 		}
 	}()
 
@@ -497,7 +499,9 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 // This must be ran from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
-func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
+func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
+	log := logf.FromContext(ctx)
+
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
 			continue
@@ -505,14 +509,23 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
 		var errb, outb bytes.Buffer
 
-		mongoCmd := "mongo"
-		if !m.Spec.UnsafeConf {
+		err = r.clientcmd.Exec(&pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
+		if err != nil {
+			return fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
+		}
+
+		mongoCmd := "mongosh"
+		if !strings.Contains(outb.String(), "v6.0") {
+			mongoCmd = "mongo"
+		}
+
+		if !cr.Spec.UnsafeConf {
 			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
 		}
 
@@ -543,7 +556,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 
 		time.Sleep(time.Second * 5)
 
-		userAdmin, err := r.getInternalCredentials(ctx, m, roleUserAdmin)
+		userAdmin, err := r.getInternalCredentials(ctx, cr, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
@@ -668,6 +681,8 @@ func compareRoles(x []map[string]interface{}, y []map[string]interface{}) bool {
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
 	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleUserAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
@@ -769,13 +784,24 @@ func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Cont
 	}
 
 	cnf.Version++
-	log.Info("Writing replicaset config", "config", cnf)
+	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
 
 	if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
 		return errors.Wrap(err, "write mongo config")
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+	sts := appsv1.StatefulSet{}
+	stsName := cr.Name + "-" + replset.Name
+	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
+	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		return false, errors.Wrapf(err, "get statefulset %s", stsName)
+	}
+	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]
+	return ok, nil
 }
 
 // isMongodPod returns a boolean reflecting if a pod

@@ -6,7 +6,7 @@ API="psmdb.percona.com/v1"
 OPERATOR_VERSION="1.14.0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod5.0"}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
@@ -40,6 +40,17 @@ if oc get projects 2>/dev/null; then
 	OPENSHIFT=4
 fi
 
+if kubectl get nodes | grep "^minikube" >/dev/null; then
+	export MINIKUBE=1
+fi
+
+minikube_sleep() {
+	sleep_time=${1:-10}
+	if [[ $MINIKUBE == 1 ]]; then
+		sleep $sleep_time
+	fi
+}
+
 if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
 	EKS=1
 else
@@ -65,6 +76,7 @@ version_gt() {
 }
 
 apply_s3_storage_secrets() {
+	desc 'create secrets for cloud storages'
 	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 		kubectl_bin apply \
 			-f $conf_dir/minio-secret.yml \
@@ -80,6 +92,7 @@ create_namespace() {
 	local skip_clean_namespace="$2"
 
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
+		desc 'cleaned up all old namespaces'
 		kubectl_bin get ns \
 			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^NAME" \
 			| awk '{print$1}' \
@@ -87,17 +100,23 @@ create_namespace() {
 	fi
 
 	if [ -n "${OPENSHIFT}" ]; then
+		desc 'cleaned up all old namespaces'
 		if [ -n "$OPERATOR_NS" -a $(oc get project "$OPERATOR_NS" -o json | jq -r '.metadata.name') ]; then
 			oc delete --grace-period=0 --force=true project "$namespace" && sleep 120 || :
 		else
 			oc delete project "$namespace" && sleep 40 || :
 		fi
+
+		desc "create namespace $namespace"
 		oc new-project "$namespace"
 		oc project "$namespace"
 		oc adm policy add-scc-to-user hostaccess -z default || :
 	else
+		desc "cleaned up old namespaces $namespace"
 		kubectl_bin delete namespace "$namespace" || :
 		wait_for_delete "namespace/$namespace"
+
+		desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
 		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 	fi
@@ -114,8 +133,8 @@ wait_pod() {
 
 	set +o xtrace
 	retry=0
-	echo -n $pod
-	until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep 'true'; do
+	echo -n "waiting for pod/$pod to be ready"
+	until kubectl_bin get pod/$pod -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep --quiet 'true'; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -207,23 +226,7 @@ wait_backup() {
 
 run_restore() {
 	local backup_name=$1
-	let last_pod="$2-1" || :
-	local isSharded=${3:-0}
-	local cluster_pfx=$4
-	if [ $isSharded -eq 1 ]; then
-		run_mongos \
-			'use myApp\n db.test.insert({ x: 100501 })' \
-			"myApp:myPass@$cluster$cluster_pfx.$namespace"
-		compare_mongos_cmd "find" "myApp:myPass@$cluster$cluster_pfx.$namespace" "-2nd"
-	else
-		run_mongo \
-			'use myApp\n db.test.insert({ x: 100501 })' \
-			"myApp:myPass@$cluster$cluster_pfx.$namespace"
 
-		for i in $(seq 0 $last_pod); do
-			compare_mongo_cmd "find" "myApp:myPass@$cluster$cluster_pfx-${i}.$cluster$cluster_pfx.$namespace" "-2nd"
-		done
-	fi
 	cat $test_dir/conf/restore.yml \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
@@ -235,6 +238,7 @@ run_restore_backupsource() {
 	local backupDest=$2
 	local storageName=$3
 
+	desc "run restore restore-$backupName from backup $backupName destination is $backupDest"
 	if [ -z "$storageName" ]; then
 		cat $test_dir/conf/restore-backupsource.yml \
 			| $sed -e "s/name:/name: restore-$backupName/" \
@@ -250,18 +254,6 @@ run_restore_backupsource() {
 		| $sed -e "s/BACKUP-NAME/$backupDest/" \
 		| $sed -e "s/storageName:/storageName: $storageName/" \
 		| kubectl_bin apply -f -
-}
-
-wait_restore() {
-	local isSharded=${3:-0}
-	local cluster_pfx=$4
-
-	wait_restore_object "${1}"
-	echo
-	set_debug
-
-	sleep 20
-	simple_data_check "${cluster}" "${2}" "$isSharded" "$cluster_pfx"
 }
 
 wait_deployment() {
@@ -289,7 +281,7 @@ wait_deployment() {
 }
 
 simple_data_check() {
-	cluster_name=${1}
+	local cluster_name=${1}
 	let last_pod="$2-1" || :
 	local isSharded=${3:-0}
 	local cluster_pfx=$4
@@ -305,13 +297,16 @@ simple_data_check() {
 	fi
 }
 
-wait_restore_object() {
+wait_restore() {
 	local backup_name=$1
+	local cluster_name=$2
+	local target_state=${3:-"ready"}
+	local wait_cluster_consistency=${4:-1}
 
 	set +o xtrace
 	retry=0
-	echo -n $backup_name
-	until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
+	echo -n "waiting psmdb-restore/${backup_name} to reach ${target_state} state"
+	until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == ${target_state} ]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -326,6 +321,12 @@ wait_restore_object() {
 			exit 1
 		fi
 	done
+	echo
+	set -o xtrace
+
+	if [ $wait_cluster_consistency -eq 1 ]; then
+		wait_cluster_consistency "${cluster_name}"
+	fi
 }
 
 apply_rbac() {
@@ -338,7 +339,7 @@ apply_rbac() {
 }
 
 deploy_operator() {
-	desc 'start operator'
+	desc 'start PSMDB operator'
 
 	local cr_file
 	if [ -f "${test_dir}/conf/crd.yaml" ]; then
@@ -367,7 +368,7 @@ deploy_operator() {
 	wait_pod $(get_operator_pod)
 }
 
-function deploy_operator_gh() {
+deploy_operator_gh() {
 	local git_tag="$1"
 
 	desc 'start operator'
@@ -464,11 +465,7 @@ deploy_chaos_mesh() {
 
 	desc 'install chaos-mesh'
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	if version_gt "1.19"; then
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.1.5 --set clusterScoped=false --set controllerManager.targetNamespace=${chaos_mesh_ns}
-	else
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set dashboard.create=false --version 2.1.5 --set clusterScoped=false --set controllerManager.targetNamespace=${chaos_mesh_ns}
-	fi
+	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
 	sleep 10
 }
 
@@ -483,6 +480,9 @@ destroy_chaos_mesh() {
 	timeout 30 kubectl delete crd $(kubectl get crd | grep 'chaos-mesh.org' | awk '{print $1}') || :
 	timeout 30 kubectl delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'chaos-mesh' | awk '{print $1}') || :
 	timeout 30 kubectl delete clusterrole $(kubectl get clusterrole | grep 'chaos-mesh' | awk '{print $1}') || :
+	timeout 30 kubectl delete MutatingWebhookConfiguration $(kubectl get MutatingWebhookConfiguration | grep 'chaos-mesh' | awk '{print $1}') || :
+	timeout 30 kubectl delete ValidatingWebhookConfiguration $(kubectl get ValidatingWebhookConfiguration | grep 'chaos-mesh' | awk '{print $1}') || :
+	timeout 30 kubectl delete ValidatingWebhookConfiguration $(kubectl get ValidatingWebhookConfiguration | grep 'validate-auth' | awk '{print $1}') || :
 }
 
 retry() {
@@ -506,7 +506,7 @@ wait_for_running() {
 	let last_pod="$(($2 - 1))" || :
 	local check_cluster_readyness="${3:-true}"
 
-    set_debug
+	set_debug
 	local rs_name=${name/*-/}
 	local cluster_name=${name/-$rs_name/}
 	for i in $(seq 0 $last_pod); do
@@ -566,7 +566,7 @@ wait_for_delete() {
 	set_debug
 }
 
-function compare_generation() {
+compare_generation() {
 	local generation="$1"
 	local resource_type="$2"
 	local resource_name="$3"
@@ -650,8 +650,9 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=rs0 $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 
 }
 
@@ -708,12 +709,14 @@ compare_mongo_cmd() {
 	local uri="$2"
 	local postfix="$3"
 	local suffix="$4"
+	local database="${5:-myApp}"
+	local collection="${6:-test}"
 
-	run_mongo "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
+	run_mongo "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
-			>$tmp_dir/${command}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+			>$tmp_dir/${command}${postfix}
+	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
 }
 
 compare_mongos_cmd() {
@@ -721,12 +724,14 @@ compare_mongos_cmd() {
 	local uri="$2"
 	local postfix="$3"
 	local suffix="$4"
+	local database="${5:-myApp}"
+	local collection="${6:-test}"
 
-	run_mongos "use myApp\n db.test.${command}()" "$uri" "mongodb" "$suffix" \
+	run_mongos "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
-			>$tmp_dir/${command}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+			>$tmp_dir/${command}${postfix}
+	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
 }
 
 get_mongo_primary_endpoint() {
@@ -771,6 +776,9 @@ compare_mongo_user() {
 	if [[ $IMAGE_MONGOD =~ 5\.0 ]] && [ -f ${test_dir}/compare/$user-50.json ]; then
 		expected_result=${test_dir}/compare/$user-50.json
 	fi
+	if [[ $IMAGE_MONGOD =~ 6\.0 ]] && [ -f ${test_dir}/compare/$user-60.json ]; then
+		expected_result=${test_dir}/compare/$user-60.json
+	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
 		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
@@ -798,6 +806,8 @@ run_pumba() {
 }
 
 deploy_cert_manager() {
+	desc 'deploy cert manager'
+
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl_bin apply -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
@@ -828,6 +838,7 @@ destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
 
+	desc 'destroy cluster/operator and all other resources'
 	if [ ${ignore_logs} == "false" -o -n "${DEBUG_TESTS}" ]; then
 		kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 			| grep -v 'level=info' \
@@ -971,12 +982,10 @@ EOF
 
 cat_config() {
 	cat "$1" \
-		| $sed -e "s#image:\$#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image:.*-pmm\$#image: $IMAGE_PMM#" \
-		| $sed -e "s#image:.*-backup\$#image: $IMAGE_BACKUP#" \
-		| $sed -e "s#image: .*-mongod[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#image: .*-mongodb:[34].*#image: $IMAGE_MONGOD#" \
-		| $sed -e "s#apply:.*#apply: Never#"
+		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
+		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM"'"' \
+		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
+		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
 
 apply_cluster() {
@@ -1023,7 +1032,6 @@ kubectl_bin() {
 
 	for i in $(seq 0 2); do
 		set +e
-		echo "kubectl $@" >&2
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
@@ -1068,16 +1076,18 @@ check_mongo_auth() {
 }
 
 wait_cluster_consistency() {
-	cluster_name=$1
+	local cluster_name=$1
+
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
+	echo -n 'waiting for cluster readyness'
 	until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		let retry+=1
 		if [ $retry -ge 32 ]; then
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
-		echo 'waiting for cluster readyness'
+		echo -n .
 		sleep 10
 	done
 }
@@ -1085,6 +1095,7 @@ wait_cluster_consistency() {
 run_backup() {
 	local storage=$1
 
+	desc "run backup $storage"
 	kubectl_bin apply -f $test_dir/conf/backup-$storage.yml
 }
 
@@ -1119,7 +1130,7 @@ create_infra() {
 	fi
 }
 
-function create_infra_gh() {
+create_infra_gh() {
 	local ns="$1"
 	local git_tag="$2"
 
@@ -1134,7 +1145,7 @@ function create_infra_gh() {
 	fi
 }
 
-function check_crd_for_deletion() {
+check_crd_for_deletion() {
 	# 1.24 rejects CR object creation if the corresponding CRD object is to be removed.
 	# We need to make sure that it will happen before the next CR creation request.
 	local git_tag="$1"

@@ -8,15 +8,20 @@ import (
 	"sync/atomic"
 
 	v "github.com/hashicorp/go-version"
+	"github.com/pkg/errors"
+	"github.com/robfig/cron/v3"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-backup-mongodb/pbm"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
-	"github.com/pkg/errors"
-	"github.com/robfig/cron/v3"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
@@ -25,6 +30,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServe
 }
 
 func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+	log := logf.FromContext(ctx)
 	schedule, ok := r.crons.jobs[jobName(cr)]
 	if cr.Spec.UpgradeOptions.Schedule == "" || !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		if ok {
@@ -120,6 +126,8 @@ func canUpgradeVersion(fcv, new string) bool {
 		return new == "4.4"
 	case "4.4":
 		return new == "5.0"
+	case "5.0":
+		return new == "6.0"
 	default:
 		return false
 	}
@@ -209,35 +217,11 @@ func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
 		cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyDisabled
 }
 
-func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
-	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
-		return nil
-	}
-
-	if cr.Status.State != v1.AppStateReady && cr.Status.MongoVersion != "" {
-		return errors.New("cluster is not ready")
-	}
-
-	fcv := ""
-	if cr.Status.MongoVersion != "" {
-		f, err := r.getFCV(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "failed to get FCV")
-		}
-
-		fcv = f
-	}
-
-	req, err := majorUpgradeRequested(cr, fcv)
-	if err != nil {
-		return errors.Wrap(err, "failed to check if major update requested")
-	}
-
+func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *api.PerconaServerMongoDB, operatorDepl *appsv1.Deployment) (VersionMeta, error) {
 	watchNs, err := k8s.GetWatchNamespace()
 	if err != nil {
-		return errors.Wrap(err, "get WATCH_NAMESPACE env variable")
+		return VersionMeta{}, errors.Wrap(err, "get WATCH_NAMESPACE env variable")
 	}
-
 	vm := VersionMeta{
 		Apply:                 string(cr.Spec.UpgradeOptions.Apply),
 		KubeVersion:           r.serverVersion.Info.GitVersion,
@@ -249,11 +233,27 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		ShardingEnabled:       cr.Spec.Sharding.Enabled,
 		HashicorpVaultEnabled: len(cr.Spec.Secrets.Vault) > 0,
 		ClusterWideEnabled:    len(watchNs) == 0,
+		PMMEnabled:            cr.Spec.PMM.Enabled,
+		ClusterSize:           cr.Status.Size,
+		PITREnabled:           cr.Spec.Backup.PITR.Enabled,
 	}
 	if cr.Spec.Platform != nil {
 		vm.Platform = string(*cr.Spec.Platform)
 	}
 
+	fcv := ""
+	if cr.Status.MongoVersion != "" {
+		f, err := r.getFCV(ctx, cr)
+		if err != nil {
+			return VersionMeta{}, errors.Wrap(err, "failed to get FCV")
+		}
+
+		fcv = f
+	}
+	req, err := majorUpgradeRequested(cr, fcv)
+	if err != nil {
+		return VersionMeta{}, errors.Wrap(err, "failed to check if major update requested")
+	}
 	if req.Ok {
 		if len(req.Apply) != 0 {
 			vm.Apply = req.Apply
@@ -261,6 +261,93 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		} else {
 			vm.Apply = req.NewVersion
 		}
+	}
+
+	for _, rs := range cr.Spec.Replsets {
+		if len(rs.Sidecars) > 0 {
+			vm.SidecarsUsed = true
+			break
+		}
+	}
+
+	if _, ok := operatorDepl.Labels["helm.sh/chart"]; ok {
+		vm.HelmDeployOperator = true
+	}
+
+	if _, ok := cr.Labels["helm.sh/chart"]; ok {
+		vm.HelmDeployCR = true
+	}
+
+	if len(cr.Spec.Backup.Storages) > 0 && cr.Spec.Backup.Enabled {
+		vm.BackupsEnabled = true
+	}
+
+	for _, task := range cr.Spec.Backup.Tasks {
+		if task.Type == pbm.PhysicalBackup && task.Enabled {
+			vm.PhysicalBackupScheduled = true
+			break
+		}
+	}
+
+	return vm, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getOperatorDeployment(ctx context.Context) (*appsv1.Deployment, error) {
+	ns, err := k8s.GetOperatorNamespace()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator namespace")
+	}
+	name, err := os.Hostname()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator hostname")
+	}
+
+	pod := new(corev1.Pod)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, pod)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator pod")
+	}
+	if len(pod.OwnerReferences) == 0 {
+		return nil, errors.New("operator pod has no owner reference")
+	}
+
+	rs := new(appsv1.ReplicaSet)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: pod.OwnerReferences[0].Name}, rs)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator replicaset")
+	}
+	if len(rs.OwnerReferences) == 0 {
+		return nil, errors.New("operator replicaset has no owner reference")
+	}
+
+	depl := new(appsv1.Deployment)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: rs.OwnerReferences[0].Name}, depl)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get operator deployment")
+	}
+
+	return depl, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+	log := logf.FromContext(ctx)
+
+	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
+		return nil
+	}
+
+	if cr.Status.State != v1.AppStateReady && cr.Status.MongoVersion != "" {
+		return errors.New("cluster is not ready")
+	}
+
+	operatorDepl, err := r.getOperatorDeployment(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get operator deployment")
+	}
+
+	vm, err := r.getVersionMeta(ctx, cr, operatorDepl)
+	if err != nil {
+		return errors.Wrap(err, "failed to get version meta")
 	}
 
 	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != api.GetDefaultVersionServiceEndpoint()) {
@@ -282,27 +369,27 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 	patch := client.MergeFrom(cr.DeepCopy())
 	if cr.Spec.Image != newVersion.MongoImage {
 		if cr.Status.MongoVersion == "" {
-			log.Info(fmt.Sprintf("set Mongo version to %s", newVersion.MongoVersion))
+			log.Info("Set Mongo version", "newVersion", newVersion.MongoImage)
 		} else {
-			log.Info(fmt.Sprintf("update Mongo version from %s to %s", cr.Status.MongoVersion, newVersion.MongoVersion))
+			log.Info("Update Mongo version", "newVersion", newVersion.MongoImage, "oldVersion", cr.Status.MongoVersion)
 		}
 		cr.Spec.Image = newVersion.MongoImage
 	}
 
 	if cr.Spec.Backup.Image != newVersion.BackupImage {
 		if cr.Status.BackupVersion == "" {
-			log.Info(fmt.Sprintf("set Backup version to %s", newVersion.BackupVersion))
+			log.Info("Set backup version", "newVersion", newVersion.BackupVersion)
 		} else {
-			log.Info(fmt.Sprintf("update Backup version from %s to %s", cr.Status.BackupVersion, newVersion.BackupVersion))
+			log.Info("Update backup version", "newVersion", newVersion.BackupVersion, "oldVersion", cr.Status.BackupVersion)
 		}
 		cr.Spec.Backup.Image = newVersion.BackupImage
 	}
 
 	if cr.Spec.PMM.Image != newVersion.PMMImage {
 		if cr.Status.PMMVersion == "" {
-			log.Info(fmt.Sprintf("set PMM version to %s", newVersion.PMMVersion))
+			log.Info("Set PMM version", "newVersion", newVersion.PMMVersion)
 		} else {
-			log.Info(fmt.Sprintf("update PMM version from %s to %s", cr.Status.PMMVersion, newVersion.PMMVersion))
+			log.Info("Update PMM version", "newVersion", newVersion.PMMVersion, "oldVersion", cr.Status.PMMVersion)
 		}
 		cr.Spec.PMM.Image = newVersion.PMMImage
 	}
@@ -335,6 +422,8 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
 	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
 		cr.Status.State != api.AppStateReady ||
 		cr.Status.MongoImage == cr.Spec.Image {
