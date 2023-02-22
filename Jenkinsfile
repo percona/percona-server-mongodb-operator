@@ -129,6 +129,13 @@ void setTestsresults() {
 
 void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
     def retryCount = 0
+    sh """
+        if [ $retryCount -eq 0 ]; then
+            export DEBUG_TESTS=0
+        else
+            export DEBUG_TESTS=1
+        fi
+    """
     waitUntil {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
         try {
@@ -401,6 +408,7 @@ pipeline {
                         runTest('mongod-major-upgrade', 'cluster4')
                         runTest('pitr', 'cluster4')
                         runTest('pitr-sharded', 'cluster4')
+                        runTest('mongod-major-upgrade-sharded', 'cluster4')
                         ShutdownCluster('cluster4')
                     }
                 }

@@ -1,11 +1,11 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 deploy_dir=$(realpath $(dirname $0)/../../deploy)
 . ${test_dir}/../functions
+set_debug
 
 # Since we've switched to 4 mongo pods as a safe configuration for arbiter
 # such a test requires more than 3 kubernetes nodes due to anti-affinity settings
@@ -46,8 +46,11 @@ function main() {
 	create_infra "$namespace"
 	cluster="my-cluster-name"
 
-	desc 'startup default PSMDB cluster'
+	desc 'create secrets and start client'
 	kubectl_bin apply -f $deploy_dir/secrets.yaml
+	kubectl_bin apply -f $conf_dir/client.yml
+
+	desc "create first PSMDB cluster $cluster"
 	kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} --server-side --force-conflicts -f $deploy_dir/crd.yaml
 	if [ -n "$OPERATOR_NS" ]; then
 		apply_rbac cw-rbac
@@ -57,7 +60,6 @@ function main() {
 		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" \
 			| kubectl_bin apply -f -
 	fi
-	kubectl_bin apply -f $conf_dir/client.yml
 
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com" |
 		.spec.replsets[].affinity.antiAffinityTopologyKey = "none" |
@@ -66,9 +68,11 @@ function main() {
 		.spec.sharding.configsvrReplSet.affinity.antiAffinityTopologyKey = "none" |
 		.spec.sharding.mongos.affinity.antiAffinityTopologyKey = "none"' $deploy_dir/cr.yaml \
 		| kubectl_bin apply -f -
+
 	desc 'check if all 3 Pods started'
 	wait_cluster_consistency $cluster
 
+	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-rs0
 	compare_kubectl statefulset/$cluster-cfg
 
@@ -77,7 +81,7 @@ function main() {
 	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
-	desc 'starting PMM up'
+	desc 'starting PMM server'
 	if [ ! -z "$OPENSHIFT" ]; then
 		platform=openshift
 		oc create sa pmm-server
@@ -108,11 +112,13 @@ function main() {
 	wait_cluster_consistency $cluster
 	wait_pod $cluster-rs0-arbiter-0
 
-	desc 'checking write/read'
+	desc 'create user'
 	run_mongos \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 	sleep 2
+
+	desc 'checking write/read'
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
@@ -123,15 +129,18 @@ function main() {
 	start_cluster ${cluster}
 	simple_data_check "${cluster}" 4 1 "-mongos"
 
+	desc "delete cluster $cluster"
 	kubectl_bin delete -f $deploy_dir/cr.yaml
 
+	desc 'create secrets'
 	cluster="minimal-cluster"
 	yq eval '.metadata.name = "'${cluster}'"' $deploy_dir/secrets.yaml | kubectl_bin apply -f -
 
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml | kubectl_bin apply -f -
-	desc 'check if all 3 Pods started'
+	desc 'check if all Pods started'
 	wait_cluster_consistency "${cluster}"
 
+	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/"${cluster}"-rs0
 	compare_kubectl statefulset/"${cluster}"-cfg
 
@@ -140,17 +149,21 @@ function main() {
 	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
-	desc 'checking write/read'
+	desc 'create user'
 	run_mongos \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 	sleep 2
+
+	desc 'write data, read it'
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 	simple_data_check "${cluster}" 4 1 "-mongos"
 
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

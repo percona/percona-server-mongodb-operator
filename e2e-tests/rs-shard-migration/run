@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
+set_debug
 
 function get_shard_parameter() {
 	local cluster_name=$1
@@ -17,13 +17,17 @@ function get_shard_parameter() {
 function main() {
 	create_infra $namespace
 
+	desc 'create secrets and start client'
 	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
 	cluster="some-name"
 	CLUSTER_SIZE=3
 
-	desc 'create first PSMDB cluster'
 	spinup_psmdb ${cluster}-rs0 $conf_dir/${cluster}-rs0.yml
+
+	desc 'check if statefulset created with expected config'
 	compare_kubectl "statefulset/${cluster}-rs0"
+
+	desc 'write data, read from all'
 	simple_data_check "${cluster}-rs0" ${CLUSTER_SIZE}
 
 	desc 'initiate migration from replicaset to sharded cluster'
@@ -45,6 +49,7 @@ function main() {
 	run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
 
+	desc 'write data, read from all'
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
 	if [[ -z "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
@@ -53,7 +58,7 @@ function main() {
 		exit 1
 	fi
 
-	desc 'Get back from sharded cluster to replicaset'
+	desc 'get back from sharded cluster to replicaset'
 	kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
 	sleep 20
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "true"
@@ -69,11 +74,13 @@ function main() {
 		exit 1
 	fi
 
-	desc 'cleanup'
+	desc 'cleanup CRDs and RBAC'
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
 	#   kubectl_bin delete pvc --all
 	destroy "${namespace}"
+
+	desc 'test passed'
 }
 
 main

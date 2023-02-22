@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 cluster="upgrade-sharded"
 CLUSTER_SIZE=3
@@ -155,27 +155,34 @@ function main() {
 	apply_s3_storage_secrets
 	deploy_minio
 
+	desc 'create secrets and start client'
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${tmp_dir}/secrets.yaml"
 
+	desc "create first PSMDB cluster $cluster"
 	local cr_yaml="${tmp_dir}/cr_${GIT_TAG}.yaml"
 	prepare_cr_yaml "${cr_yaml}"
 	apply_cluster "${cr_yaml}"
+
+	desc 'check if all Pods started'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+
+	desc 'create user myApp'
 	run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
 
+	desc 'write data, read from all'
 	run_mongos 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-mongos.${namespace}"
 
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
 	compare_generation "1" "psmdb" "${cluster}"
 
-	# create backup
 	backup_name_minio="backup-minio"
+	desc "create backup $backup_name_minio"
 	wait_backup_agent $cluster-rs0-0
 	wait_backup_agent $cluster-rs0-1
 	wait_backup_agent $cluster-rs0-2
@@ -188,6 +195,8 @@ function main() {
 	desc 'upgrade operator'
 	kubectl_bin apply --server-side --force-conflicts -f "${src_dir}/deploy/crd.yaml"
 	kubectl_bin apply -f "${src_dir}/deploy/${rbac}.yaml" ${OPERATOR_NS:+-n $OPERATOR_NS}
+
+	desc "use new image ${TARGET_IMAGE}"
 	kubectl_bin patch deployment ${OPERATOR_NS:+-n $OPERATOR_NS} "${OPERATOR_NAME}" \
 		-p'{"spec":{"template":{"spec":{"containers":[{"name":"'"${OPERATOR_NAME}"'","image":"'"${TARGET_IMAGE}"'"}]}}}}'
 	kubectl_bin rollout status deployment/"${OPERATOR_NAME}" ${OPERATOR_NS:+-n $OPERATOR_NS}
@@ -204,6 +213,7 @@ function main() {
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+
 	check_applied_images "operator"
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
@@ -254,6 +264,8 @@ function main() {
 
 	desc 'cleanup'
 	destroy "${namespace}"
+
+	desc 'test passed'
 }
 
 main

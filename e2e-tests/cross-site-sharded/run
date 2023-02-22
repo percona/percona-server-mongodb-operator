@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
+set_debug
 
 if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
@@ -16,33 +16,37 @@ unset OPERATOR_NS
 main_cluster="cross-site-sharded-main"
 replica_cluster="cross-site-sharded-replica"
 
-desc "Create main cluster"
+desc "create main cluster"
 create_infra "$namespace"
+
+desc 'create secrets and start client'
 kubectl_bin apply \
 	-f "$conf_dir/client.yml" \
 	-f "$test_dir/conf/secrets.yml"
 
+desc "create main PSMDB cluster $main_cluster."
 apply_cluster "$test_dir/conf/$main_cluster.yml"
+
 desc 'check if all 3 Pods started'
 wait_for_running $main_cluster-rs0 3
 wait_for_running $main_cluster-cfg 3 "false"
 
-desc 'Create user'
+desc 'create user'
 run_mongos \
 	'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$main_cluster-mongos.$namespace"
 sleep 2
 
-desc 'Set chunk size to 2 MB'
+desc 'set chunk size to 2 MB'
 run_mongos \
 	"use config\n db.settings.save( { _id:\"chunksize\", value: 2 } )" \
 	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
 sleep 2
 
-desc 'Write data'
+desc 'write data'
 run_script_mongos "${test_dir}/data.js" "user:pass@$main_cluster-mongos.$namespace"
 
-desc 'Shard collection'
+desc 'shard collection'
 run_mongos \
 	'sh.enableSharding("app")' \
 	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
@@ -51,8 +55,8 @@ sleep 2
 run_mongos \
 	'sh.shardCollection("app.city", { _id: 1 } )' \
 	"clusterAdmin:clusterAdmin123456@$main_cluster-mongos.$namespace"
-
 sleep 120
+
 desc 'Check chunks'
 chunks_param1="ns"
 chunks_param2='"app.city"'
@@ -84,15 +88,15 @@ if [[ $shards -lt 2 ]]; then
 	exit 1
 fi
 
-desc "Create replica_cluster"
+desc "create replica cluster"
 create_namespace $replica_namespace 0
 deploy_operator
 
+desc 'start client'
 kubectl_bin apply \
 	-f "$conf_dir/client.yml"
 
-desc "Copy secrets from main to replica namespace"
-
+desc "copy secrets from main to replica namespace and create all of them"
 kubectl get secret ${main_cluster}-secrets -o yaml -n ${namespace} \
 	| yq eval '
 		del(.metadata) |
@@ -115,6 +119,7 @@ kubectl_bin get secret ${main_cluster}-ssl -o yaml -n ${namespace} \
 
 sleep 30
 
+desc "create replica PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/${replica_cluster}.yml"
 sleep 600
 
@@ -141,16 +146,18 @@ kubectl_bin patch psmdb ${main_cluster} --type=merge --patch '{
 
 sleep 60
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
+
 desc 'check if all 3 Pods started'
 wait_for_running $replica_cluster-rs0 3
 wait_for_running $replica_cluster-cfg 3 "false"
 
-desc 'Write data, read from all'
-
+desc 'create user'
 run_mongos \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$main_cluster-mongos.$namespace"
 sleep 2
+
+desc 'write data, read from all'
 run_mongos \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$main_cluster-mongos.$namespace"
@@ -159,7 +166,7 @@ minikube_sleep
 desc "Compare data"
 compare_mongos_cmd "find" "myApp:myPass@$main_cluster-mongos.$namespace"
 
-desc 'Test failover'
+desc 'test failover'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 kubectl_bin delete psmdb $main_cluster
 sleep 60
@@ -170,10 +177,13 @@ run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin1
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
 kubectl_bin patch psmdb ${replica_cluster} --type=merge --patch '{"spec":{"unmanaged": false}}'
 sleep 120
-desc "Check failover status"
+
+desc "check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
 desc "Failover check finished successfully"
 
 destroy "$namespace" "true"
 
 destroy $replica_namespace "true"
+
+desc 'test passed'

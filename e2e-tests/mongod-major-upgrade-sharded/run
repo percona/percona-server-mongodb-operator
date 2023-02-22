@@ -1,0 +1,151 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+function get_mongod_ver_from_image() {
+	local image=${1}
+
+	local pod_name=${RANDOM}
+	kubectl_bin run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
+	kubectl_bin wait --for=condition=Ready pod/${pod_name} >/dev/null
+
+	local version_info=$(kubectl_bin exec ${pod_name} -- mongod --version)
+	kubectl_bin delete pod/${pod_name} --grace-period=0 --force >/dev/null
+	version_info=$(echo ${version_info} | head -n2 | $sed -r 's/^.*db version v(([0-9]+\.){2}[0-9]+-[0-9]+).*$/\1/g')
+
+	if [[ ! ${version_info} =~ ^([0-9]+\.){2}[0-9]+-[0-9]+$ ]]; then
+		printf "No mongod version obtained from %s. Exiting" ${image}
+		exit 1
+	fi
+	echo ${version_info}
+}
+
+function generate_vs_json() {
+	local template_path=${1}
+	local target_path=${2}
+
+	local version_service_source=$(jq '.versions[0].operator="'${OPERATOR_VERSION}'"' ${template_path})
+
+	for image_mongod in ${IMAGE_MONGOD_CHAIN[@]}; do
+		current_mongod_version=$(get_mongod_ver_from_image ${image_mongod})
+
+		version_service_source=$(echo ${version_service_source} \
+			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
+	done
+	echo ${version_service_source} | jq '.' >${target_path}
+}
+
+function main() {
+	rbac="rbac"
+	if [ -n "$OPERATOR_NS" ]; then
+		rbac="cw-rbac"
+	fi
+
+	create_infra "${namespace}"
+
+	apply_s3_storage_secrets
+	deploy_minio
+
+	kubectl_bin apply -f "${conf_dir}/client.yml" \
+		-f "${conf_dir}/secrets.yml"
+
+	desc 'install version service'
+
+	cp $test_dir/conf/operator.main.psmdb-operator.dep.json ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.dep.json
+	generate_vs_json $test_dir/conf/operator.main.psmdb-operator.json ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.json
+
+	kubectl_bin create configmap ${OPERATOR_NS:+-n $OPERATOR_NS} versions \
+		--from-file ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.dep.json \
+		--from-file ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.json
+
+	cat $test_dir/conf/vs.yml | $sed -r 's#operator.9.9.9.psmdb-operator#operator.'${OPERATOR_VERSION}.psmdb-operator'#g' | kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
+
+	version_matrix=$(jq '.[] | .[] |.matrix.mongod' ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.json)
+
+	current_mongod_version=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
+	version_matrix=$(echo ${version_matrix} | jq '. += {"'${current_mongod_version}'":{"image_path":"'${IMAGE_MONGOD}'"}}')
+
+	version_matrix=$(echo ${version_matrix} | jq 'to_entries
+												 | sort_by( .key | split("[[:punct:]]";"g") | map(tonumber) )
+												 | map({(.key): .value}) ')
+
+	current_version_index=$(echo ${version_matrix} | jq 'map(keys[] == "'${current_mongod_version}'") | index(true)')
+
+	version_matrix=$(echo ${version_matrix} | jq '.['$((current_version_index + 1))':]')
+
+	versions_to_verify=$(echo ${version_matrix} | jq -r '.[] | keys | .[] | split(".") | .[:2] | join(".")' | uniq | grep -v ${current_mongod_version:0:3})
+
+	cluster="some-name"
+	desc 'Starting the cluster with IMAGE_MONGOD '${IMAGE_MONGOD}''
+
+	apply_cluster "${test_dir}/conf/${cluster}.yml"
+
+	desc 'check if all 3 Pods started'
+	wait_for_running "${cluster}-cfg" 3
+	wait_for_running "${cluster}-rs0" 3
+	wait_for_running "${cluster}-mongos" 3
+	wait_cluster_consistency "${cluster}"
+
+	desc 'write data, read from all'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+	sleep 2
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@${cluster}-mongos.${namespace}"
+	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	desc 'Starting to follow mongod upgrade images chain'
+
+	target_generation=2
+	for version in ${versions_to_verify[@]}; do
+
+		backup_name_minio="backup-minio-${target_generation}"
+		run_backup minio ${backup_name_minio}
+		wait_backup ${backup_name_minio}
+
+		kubectl_bin patch psmdb/${cluster%%-rs0} \
+			--type=json \
+			-p='[
+					{"op":"replace","path":"/spec/upgradeOptions/apply","value": "'${version}'-recommended"},
+					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
+				]'
+
+		sleep 60 # waiting for update loop to fire
+		wait_for_running "${cluster}-cfg" 3
+		wait_for_running "${cluster}-rs0" 3
+		wait_for_running "${cluster}-mongos" 3
+		wait_cluster_consistency "${cluster}"
+
+		compare_generation ${target_generation} "statefulset" "${cluster}-cfg"
+		compare_generation ${target_generation} "statefulset" "${cluster}-rs0"
+		compare_generation 2 "statefulset" "${cluster}-mongos" # generation is 2 because mongos gets deleted on restore
+
+		run_mongos \
+			'use myApp\n db.test.insert({ x: 10050'${target_generation}' })' \
+			"myApp:myPass@${cluster}-mongos.${namespace}"
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-${target_generation}"
+
+		backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
+		kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+			/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio}/rs0/ \
+			| grep myApp.test.gz
+
+		run_mongos 'use myApp\n db.test.insert({ x: 100600 })' "myApp:myPass@${cluster}-mongos.${namespace}"
+		run_restore "${backup_name_minio}"
+		wait_restore "${backup_name_minio}" "${cluster}"
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+		target_generation=$((target_generation + 1))
+	done
+
+	destroy ${namespace}
+}
+
+main
