@@ -1,0 +1,36 @@
+{
+  "versions": [
+    {
+      "operator": "1.14.0",
+      "product": "psmdb-operator",
+      "matrix": {
+        "mongod": {
+        },
+        "pmm": {
+          "2.27.0": {
+            "image_path": "percona/pmm-client:2.27.0",
+            "image_hash": "4f4d4508afe4ef3b5d72e2ebec6485be84204902b0b2b23c3a9e7c2fe4726884",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "backup": {
+          "2.0.3": {
+            "image_path": "perconalab/percona-server-mongodb-operator:main-backup",
+            "image_hash": "01388bcc310de0190cad0c4cfbe8cf8edc07c5c7ea057edec137e8f58931696b",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "operator": {
+          "1.14.0": {
+            "image_path": "perconalab/percona-server-mongodb-operator:main",
+            "image_hash": "e9ed11994cef3f7ab33e126484d5d5991cccc00b54d066183d1c7abe8e29b802",
+            "status": "recommended",
+            "critical": false
+          }
+        }
+      }
+    }
+  ]
+}
