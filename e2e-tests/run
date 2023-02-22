@@ -25,6 +25,7 @@ fail() {
 "$dir/limits/run" || fail "limits"
 "$dir/liveness/run" || fail "liveness"
 "$dir/mongod-major-upgrade/run" || fail "mongod-major-upgrade"
+"$dir/mongod-major-upgrade-sharded/run" || fail "mongod-major-upgrade-sharded"
 "$dir/monitoring-2-0/run" || fail "monitoring-2-0"
 "$dir/non-voting/run" || fail "non-voting"
 "$dir/one-pod/run" || fail "one-pod"

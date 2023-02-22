@@ -407,6 +407,7 @@ pipeline {
                         runTest('mongod-major-upgrade', 'cluster4')
                         runTest('pitr', 'cluster4')
                         runTest('pitr-sharded', 'cluster4')
+                        runTest('mongod-major-upgrade-sharded', 'cluster4')
                         ShutdownCluster('cluster4')
                     }
                 }

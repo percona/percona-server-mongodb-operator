@@ -1,0 +1,72 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  #platform: openshift
+  upgradeOptions:
+    versionServiceEndpoint: http://version-service:11000
+    apply: disabled
+    schedule: "* * * * *"
+    setFCV: false
+  image:
+  imagePullPolicy: Always
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
+    tasks:
+    - name: weekly
+      enabled: false
+      schedule: "0 0 * * 0"
+      compressionType: gzip
+      storageName: minio
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        exposeType: ClusterIP
+
+  replsets:
+
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+
+  secrets:
+    users: some-users
