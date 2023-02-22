@@ -1,0 +1,100 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  #platform: openshift
+  image:
+  imagePullPolicy: Always
+  multiCluster:
+    enabled: true
+  backup:
+    enabled: false
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+    tasks:
+    runtimeClassName: container-rc
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      size: 3
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+      expose:
+        enabled: true
+        exposeType: ClusterIP
+      sidecars:
+        - image: busybox
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+          name: cfg-sidecar-1
+      runtimeClassName: container-rc
+
+    mongos:
+      size: 3
+      configuration: |
+        replication:
+          localPingThresholdMs: 15
+      expose:
+        exposeType: ClusterIP
+      sidecars:
+        - image: busybox
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+          name: mongos-sidecar-1
+      runtimeClassName: container-rc
+  replsets:
+    - name: rs0
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        enabled: true
+        exposeType: ClusterIP
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+      runtimeClassName: container-rc
+      size: 3
+      configuration: |
+        net:
+          port: 27017
+        operationProfiling:
+          mode: slowOp
+          slowOpThresholdMs: 100
+        security:
+          enableEncryption: true
+          redactClientLogData: false
+        setParameter:
+          ttlMonitorSleepSecs: 60
+          wiredTigerConcurrentReadTransactions: 128
+          wiredTigerConcurrentWriteTransactions: 128
+        storage:
+          engine: wiredTiger
+          wiredTiger:
+            collectionConfig:
+              blockCompressor: snappy
+            engineConfig:
+              directoryForIndexes: false
+              journalCompressor: snappy
+            indexConfig:
+              prefixCompression: true
+      sidecars:
+        - image: busybox
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+          name: rs-sidecar-1
+  secrets:
+    users: some-users
