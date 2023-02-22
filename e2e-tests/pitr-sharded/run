@@ -1,14 +1,15 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 write_document() {
 	local cmp_postfix="$1"
 
+	desc 'write initial data, read from all'
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
@@ -17,7 +18,7 @@ write_document() {
 }
 
 write_initial_data() {
-	desc 'write initial data, read from all'
+	desc 'create user myApp'
 	run_mongos \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
@@ -30,7 +31,6 @@ run_backup() {
 	local idx=$2
 
 	desc "run backup $name-$idx"
-
 	cat $test_dir/conf/$name.yml \
 		| $sed -e "s/name:/name: $name-$idx/" \
 		| kubectl_bin apply -f -
@@ -78,19 +78,21 @@ main() {
 	create_infra $namespace
 	deploy_minio
 
-	desc 'create PSMDB cluster'
-	cluster="some-name"
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f "$conf_dir/secrets.yml" \
 		-f "$conf_dir/client.yml" \
 		-f $conf_dir/minio-secret.yml
 
+	desc 'create custom RuntimeClass'
 	if version_gt "1.19" && [ $EKS -ne 1 ]; then
 		cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
 	else
 		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 	fi
 
+	cluster="some-name"
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster-rs0.yml
 
 	desc 'check if all 3 Pods started'
@@ -98,7 +100,7 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	sleep 10
 
-	desc 'check if service and statefulset created with expected config'
+	desc 'check if statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-rs0
 	compare_kubectl statefulset/$cluster-rs1
 	compare_kubectl statefulset/$cluster-rs2
@@ -118,7 +120,6 @@ main() {
 	wait_backup_agent $cluster-rs2-2
 
 	backup_name_minio="backup-minio"
-
 	run_backup $backup_name_minio 0
 
 	write_document "-2nd"
@@ -132,8 +133,11 @@ main() {
 
 	check_recovery $backup_name_minio-1 latest "" "-3rd" "$cluster"
 
+	desc 'delete custom RuntimeClass'
 	kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

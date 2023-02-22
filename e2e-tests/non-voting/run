@@ -1,34 +1,34 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 spinup_psmdb() {
 	local cluster=$1
 	local config=$2
 	local size="${3:-3}"
 
-	desc 'create first PSMDB cluster'
+	desc "create first PSMDB cluster $cluster"
 	apply_cluster $config
 
 	desc 'check if Pod is started'
 	wait_for_running "${cluster}" "$size"
 	sleep 20
 
+	desc 'check if statefulset created with expected config'
 	compare_kubectl "statefulset/${cluster}-nv"
 
-	desc 'write data'
-
+	desc 'create user myApp'
 	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}.${namespace}"
 
+	desc 'read data'
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
 	sleep 10
 
-	desc 'read data'
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-nv-0.$cluster.$namespace"
 }
@@ -37,6 +37,8 @@ main() {
 	local cluster="nonvoting-rs0"
 	deploy_cert_manager
 	create_infra $namespace
+
+	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f $conf_dir/client.yml \
 		-f $conf_dir/secrets.yml
@@ -45,6 +47,8 @@ main() {
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml"
 
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main

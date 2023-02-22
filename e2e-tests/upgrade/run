@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 cluster='upgrade'
 CLUSTER_SIZE=3
@@ -134,6 +134,7 @@ function main() {
 	apply_s3_storage_secrets
 	deploy_minio
 
+	desc 'create secrets and start client'
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${tmp_dir}/secrets.yaml"
@@ -148,15 +149,18 @@ function main() {
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}"
 	sleep 20
 
-	desc 'write data'
+	desc 'create user myApp'
 	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+
+	desc 'write data'
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
 
+	desc 'check if cr and statefulset created with expected config'
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "psmdb" "${cluster}"
 
-	# create backup
+	desc "create backup $backup_name_minio"
 	backup_name_minio="backup-minio"
 	run_backup minio
 	wait_backup "$backup_name_minio"
@@ -217,6 +221,8 @@ function main() {
 
 	desc 'cleanup'
 	destroy "${namespace}"
+
+	desc 'test passed'
 }
 
 main

@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 function check_telemetry_transfer() {
 
@@ -12,12 +12,12 @@ function check_telemetry_transfer() {
 	local cr_vs_channel=${2:-"disabled"}
 	local telemetry_state=${3:-"enabled"}
 
-	desc 'create PSMDB minimal cluster'
 	cluster="minimal-cluster"
-
+	desc 'create secrets and start client'
 	kubectl_bin apply -f $conf_dir/client.yml
 	yq eval '.metadata.name = "'${cluster}'"' $conf_dir/secrets.yml | kubectl_bin apply -f -
 
+	desc "create PSMDB minimal cluster $cluster"
 	yq eval '
 		.spec.upgradeOptions.versionServiceEndpoint = "'${cr_vs_uri}'" |
 		.spec.upgradeOptions.apply = "'${cr_vs_channel}'" |
@@ -33,12 +33,14 @@ function check_telemetry_transfer() {
 	wait_for_running "${cluster}-rs0" 1
 	sleep 20
 
-	desc 'write data'
+	desc 'create user myApp'
 	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
 
+	desc 'write data, read from all'
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
 
+	desc 'check telemetry'
 	kubectl_bin logs $(kubectl get pods --selector=run=version-service-cr -o jsonpath='{.items[0].metadata.name}' ${OPERATOR_NS:+-n $OPERATOR_NS}) \
 		${OPERATOR_NS:+-n $OPERATOR_NS} \
 		| grep -E 'server request payload|unary call' \
@@ -60,7 +62,7 @@ function check_telemetry_transfer() {
 			>${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json
 
 	local telemetry_log_file="${telemetry_state}_telemetry.version-service.log${OPERATOR_NS:+-cw}.json"
-	# telemetry was disabled in CR but in operator not
+	desc 'telemetry was disabled in CR but in operator not'
 	if [ "${cr_vs_channel}" == 'disabled' -a "${telemetry_state}" == 'enabled' ]; then
 		# operator fallback VS should have telemetry
 		diff ${test_dir}/compare/${telemetry_log_file} <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json ${test_dir}/compare/${telemetry_log_file})
@@ -70,7 +72,7 @@ function check_telemetry_transfer() {
 
 	local telemetry_cr_log_file="${telemetry_state}_telemetry.version-service-cr.log${OPERATOR_NS:+-cw}.json"
 	local image_prefix=${cr_vs_channel%'-recommended'}
-	# telemetry was disabled in operator but not in CR
+	desc 'telemetry was disabled in operator but not in CR'
 	if [ "${cr_vs_channel}" == "${image_prefix}-recommended" -a "${telemetry_state}" == 'disabled' ]; then
 		# cr VS should have telemetry
 		diff ${test_dir}/compare/${telemetry_cr_log_file} <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json ${test_dir}/compare/${telemetry_cr_log_file})
@@ -78,7 +80,7 @@ function check_telemetry_transfer() {
 		[[ -s ${tmp_dir}/disabled_telemetry.version-service.log.json ]] && exit 1
 	fi
 
-	# telemetry was disabled in CR as well as in operator
+	desc 'telemetry was disabled in CR as well as in operator'
 	if [ "${cr_vs_channel}" == 'disabled' -a "${telemetry_state}" == 'disabled' ]; then
 		# CR VS should not have telemetry
 		[[ -s ${tmp_dir}/disabled_telemetry.version-service-cr.log.json ]] && exit 1
@@ -109,7 +111,7 @@ yq eval '(.. | select(tag == "!!str")) |= sub("version-service$", "version-servi
 kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} set env deploy/percona-server-mongodb-operator PERCONA_VS_FALLBACK_URI=http://version-service:11000
 sleep 30
 
-desc "Enable telemetry on operator level"
+desc "enable telemetry on operator level"
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
 	| yq eval '(.spec.template.spec.containers[0].env[] | select(.name == "DISABLE_TELEMETRY").value) = "false"' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
@@ -118,7 +120,7 @@ wait_deployment 'percona-server-mongodb-operator'
 
 check_telemetry_transfer "http://version-service-cr:11000" "disabled" "enabled"
 
-desc "Disabling telemetry on the operator level"
+desc "disabling telemetry on the operator level"
 kubectl_bin delete pod -l run=version-service-cr ${OPERATOR_NS:+-n $OPERATOR_NS}
 kubectl_bin delete pod -l run=version-service ${OPERATOR_NS:+-n $OPERATOR_NS}
 
@@ -166,11 +168,15 @@ for i in "${!cases[@]}"; do
 	desc 'check if Pod is started'
 	wait_for_running "${cluster}-rs0" 3
 	sleep 20
+
+	desc 'check if statefulset created with expected config'
 	compare_kubectl "statefulset/${cluster}-rs0"
-	desc 'write data'
+
+	desc 'create user myApp'
 	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
 
+	desc 'write data, read from all'
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
 	compare_kubectl "statefulset/${cluster}-rs0"
 
@@ -194,3 +200,5 @@ for i in "${!cases[@]}"; do
 done
 
 destroy $namespace
+
+desc 'test passed'

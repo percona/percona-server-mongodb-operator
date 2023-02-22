@@ -1,24 +1,24 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 check_cr_config() {
 	local cluster="$1"
 
-	# apply cr config
+	desc "create PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster.yml
 
-	# check if at least 1 Pod started
+	desc 'check if at least 1 Pod started'
 	wait_for_running $cluster 1 "false"
 
-	# check if statefulset created with expected config
+	desc 'check if statefulset created with expected config'
 	compare_kubectl statefulset/$cluster
 
-	# change resources
+	desc 'change resources'
 	cat_config $test_dir/conf/$cluster.yml \
 		| sed -e 's/300m/600m/' \
 		| sed -e 's/500M/1G/' \
@@ -26,10 +26,10 @@ check_cr_config() {
 		| kubectl_bin apply -f-
 	sleep 20
 
-	# check if statefulset was updated with expected config
+	desc 'check if statefulset created with expected config'
 	compare_kubectl statefulset/$cluster "-increased"
 
-	# delete cluster
+	desc "delete PSMDB cluster $cluster"
 	kubectl_bin delete \
 		-f $test_dir/conf/$cluster.yml
 }
@@ -37,20 +37,22 @@ check_cr_config() {
 no_storage() {
 	local cluster="no-storage-rs0"
 
-	# apply cr config
+	desc "create PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster.yml
 	sleep 20
 
 	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 		| grep "volumeSpec should be specified"
 
-	# delete cluster
+	desc "delete PSMDB cluster $cluster"
 	kubectl_bin delete \
 		-f $test_dir/conf/$cluster.yml
 }
 
 main() {
 	create_infra $namespace
+
+	desc 'create secrets'
 	kubectl_bin apply -f $conf_dir/secrets.yml
 
 	desc 'check if possible to create cluster without CPU/Memory limits'
@@ -66,6 +68,8 @@ main() {
 	no_storage
 
 	destroy $namespace
+
+	desc 'test passed'
 }
 
 main
