@@ -12,7 +12,7 @@ void CreateCluster(String CLUSTER_SUFFIX) {
                 gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
                 gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
-                gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.22 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 && \
+                gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.22 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 --enable-ip-alias --workload-pool=cloud-dev-112233.svc.id.goog && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
@@ -111,11 +111,11 @@ TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 void makeReport() {
     def wholeTestAmount=sh(script: 'grep "runTest(.*)$" Jenkinsfile | grep -v wholeTestAmount | wc -l', , returnStdout: true).trim().toInteger()
     def startedTestAmount = testsReportMap.size()
-    for ( test in testsReportMap ) {
+    for ( test in testsReportMap.sort() ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
-    for (testxml in testsResultsMap ) {
+    for (testxml in testsResultsMap.sort() ) {
         TestsReportXML = TestsReportXML + "<testcase name=\\\"${testxml.key}\\\"><${testxml.value}/></testcase>\n"
     }
     TestsReportXML = TestsReportXML + '</testsuite>\n'
@@ -417,6 +417,7 @@ pipeline {
                         runTest('cross-site-sharded', 'cluster5')
                         runTest('serviceless-external-nodes', 'cluster5')
                         runTest('demand-backup-physical-sharded', 'cluster5')
+                        runTest('multi-cluster-service', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
                 }

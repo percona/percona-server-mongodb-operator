@@ -259,6 +259,19 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 	case api.DNSModeServiceMesh:
 		return GetServiceMeshAddr(cr, pod.Name, cr.Namespace), nil
 	case api.DNSModeInternal:
+		if rsExposed && cr.MCSEnabled() {
+			imported, err := IsServiceImported(ctx, cl, cr, pod.Name)
+			if err != nil {
+				return "", errors.Wrapf(err, "check if service imported for %s", pod.Name)
+			}
+
+			if !imported {
+				return GetAddr(cr, pod.Name, rsName), nil
+			}
+
+			return GetMCSAddr(cr, pod.Name), nil
+		}
+
 		return GetAddr(cr, pod.Name, rsName), nil
 	case api.DNSModeExternal:
 		if rsExposed {
