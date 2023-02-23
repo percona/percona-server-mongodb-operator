@@ -61,6 +61,11 @@ else
 	EKS=0
 fi
 
+if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "gke") ]; then
+	GKE=1
+else
+	GKE=0
+fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 set_debug() {
@@ -96,9 +101,10 @@ create_namespace() {
 	local skip_clean_namespace="$2"
 
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
+		destroy_chaos_mesh
 		desc 'cleaned up all old namespaces'
 		kubectl_bin get ns \
-			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^NAME" \
+			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|gke-mcs|^NAME" \
 			| awk '{print$1}' \
 			| xargs kubectl delete ns &
 	fi
@@ -156,6 +162,7 @@ wait_pod() {
 			exit 1
 		fi
 	done
+	echo ".OK"
 	set_debug
 }
 
