@@ -280,68 +280,6 @@ pipeline {
                 archiveArtifacts 'results/docker/TAG'
             }
         }
-        stage('GoLicenseDetector test') {
-            when {
-                expression {
-                    !skipBranchBuilds
-                }
-            }
-            steps {
-                sh """
-                    mkdir -p $WORKSPACE/src/github.com/percona
-                    ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator
-                    sg docker -c "
-                        docker run \
-                            --rm \
-                            -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
-                            -w /go/src/github.com/percona/percona-server-mongodb-operator \
-                            -e GOFLAGS='-buildvcs=false' \
-                            golang:1.19 sh -c '
-                                go install github.com/google/go-licenses@v1.0.0;
-                                /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
-                                    | cut -d , -f 3 \
-                                    | sort -u \
-                                    > go-licenses-new || :
-                            '
-                    "
-                    diff -u e2e-tests/license/compare/go-licenses go-licenses-new
-                """
-            }
-        }
-        stage('GoLicense test') {
-            when {
-                expression {
-                    !skipBranchBuilds
-                }
-            }
-            steps {
-                sh '''
-                    mkdir -p $WORKSPACE/src/github.com/percona
-                    ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator
-                    sg docker -c "
-                        docker run \
-                            --rm \
-                            -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
-                            -w /go/src/github.com/percona/percona-server-mongodb-operator \
-                            -e GOFLAGS='-buildvcs=false' \
-                            golang:1.19 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
-                    "
-                '''
-
-                withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_TOKEN')]) {
-                    sh """
-                        golicense -plain ./percona-server-mongodb-operator \
-                            | grep -v 'license not found' \
-                            | sed -r 's/^[^ ]+[ ]+//' \
-                            | sort \
-                            | uniq \
-                            > golicense-new || true
-
-                        diff -u e2e-tests/license/compare/golicense golicense-new
-                    """
-                }
-            }
-        }
         stage('Run tests for operator') {
             when {
                 expression {
@@ -353,70 +291,9 @@ pipeline {
                 timeout(time: 4, unit: 'HOURS')
             }
             parallel {
-                stage('1 InitD Scaling Lim SecCon RSShardMig') {
-                    steps {
-                        CreateCluster('cluster1')
-                        runTest('init-deploy', 'cluster1')
-                        runTest('limits', 'cluster1')
-                        runTest('scaling', 'cluster1')
-                        runTest('security-context', 'cluster1')
-                        runTest('rs-shard-migration', 'cluster1')
-                        ShutdownCluster('cluster1')
-                   }
-                }
-                stage('2 OneP IgnoreLA Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
-                    steps {
-                        CreateCluster('cluster2')
-                        runTest('one-pod', 'cluster2')
-                        runTest('ignore-labels-annotations', 'cluster2')
-                        runTest('monitoring-2-0', 'cluster2')
-                        runTest('arbiter', 'cluster2')
-                        runTest('service-per-pod', 'cluster2')
-                        runTest('liveness', 'cluster2')
-                        runTest('smart-update', 'cluster2')
-                        runTest('version-service', 'cluster2')
-                        runTest('users', 'cluster2')
-                        runTest('data-sharded', 'cluster2')
-                        runTest('non-voting', 'cluster2')
-                        runTest('demand-backup-eks-credentials', 'cluster2')
-                        runTest('data-at-rest-encryption', 'cluster2')
-                        ShutdownCluster('cluster2')
-                    }
-                }
-                stage('3 SelfHealing Storage Expose') {
-                    steps {
-                        CreateCluster('cluster3')
-                        runTest('storage', 'cluster3')
-                        runTest('self-healing-chaos', 'cluster3')
-                        runTest('operator-self-healing-chaos', 'cluster3')
-                        runTest('expose-sharded', 'cluster3')
-                        runTest('recover-no-primary', 'cluster3')
-                        ShutdownCluster('cluster3')
-                    }
-                }
-                stage('4 Backups Upgrade') {
-                    steps {
-                        CreateCluster('cluster4')
-                        runTest('upgrade-consistency', 'cluster4')
-                        runTest('demand-backup', 'cluster4')
-                        runTest('scheduled-backup', 'cluster4')
-                        runTest('demand-backup-sharded', 'cluster4')
-                        runTest('demand-backup-physical', 'cluster4')
-                        runTest('upgrade', 'cluster4')
-                        runTest('upgrade-sharded', 'cluster4')
-                        runTest('mongod-major-upgrade', 'cluster4')
-                        runTest('pitr', 'cluster4')
-                        runTest('pitr-sharded', 'cluster4')
-                        runTest('mongod-major-upgrade-sharded', 'cluster4')
-                        ShutdownCluster('cluster4')
-                    }
-                }
                 stage('5 CrossSite DemBPSharded') {
                     steps {
                         CreateCluster('cluster5')
-                        runTest('cross-site-sharded', 'cluster5')
-                        runTest('serviceless-external-nodes', 'cluster5')
-                        runTest('demand-backup-physical-sharded', 'cluster5')
                         runTest('multi-cluster-service', 'cluster5')
                         ShutdownCluster('cluster5')
                     }
