@@ -104,8 +104,6 @@ kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/mu
 desc "check if ServiceExport objects are created"
 wait_service_export
 wait_service_import
-
-sleep infinity
 wait_cluster_consistency "${cluster}" 3
 
 desc "delete cluster membership"
