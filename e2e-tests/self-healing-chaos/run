@@ -82,6 +82,7 @@ kill_pod() {
 	# check if all 3 Pods started
 	wait_for_running "$cluster" 3
 	wait_cluster_consistency "${cluster/-rs0/}"
+    sleep 1000
 
 	check_pod_restarted $pod
 
