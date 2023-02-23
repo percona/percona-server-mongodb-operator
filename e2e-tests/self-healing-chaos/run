@@ -10,11 +10,13 @@ cluster="some-name-rs0"
 
 check_pod_restarted() {
 	local pod=$1
-	local nr_restarts=$(kubectl get pod $pod -ojson | jq '.status.containerStatuses[] | select(.name == "mongod") | .restartCount')
+	local old_resourceVersion=$2
 
-	if [ $nr_restarts -eq 0 ]; then
+	local new_resourceVersion=$(kubectl get pod $pod -ojson | jq '.metadata.resourceVersion' | tr -d '"')
+
+	if [[ "$old_resourceVersion" == "$new_resourceVersion" ]]; then
 		echo "Chaos mesh didn't work for some reason. Please check!!!"
-		echo "Pod $pod restarts: $nr_restarts, but it should have been more!"
+		echo "The resourceVersion was not changed: $new_resourceVersion"
 		exit 1
 	fi
 }
@@ -71,6 +73,7 @@ recreate() {
 
 kill_pod() {
 	local pod=$1
+	local old_resourceVersion=$(kubectl get pod $pod -ojson | jq '.metadata.resourceVersion' | tr -d '"')
 
 	yq eval '
         .metadata.name = "chaos-cluster-pod-kill" |
@@ -83,7 +86,7 @@ kill_pod() {
 	wait_for_running "$cluster" 3
 	wait_cluster_consistency "${cluster/-rs0/}"
 
-	check_pod_restarted $pod
+	check_pod_restarted $pod $old_resourceVersion
 
 	desc 'check data consistency for chaosed Pod'
 	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace"
@@ -91,6 +94,7 @@ kill_pod() {
 
 failure_pod() {
 	local pod=$1
+	local old_resourceVersion=$(kubectl get pod $pod -ojson | jq '.metadata.resourceVersion' | tr -d '"')
 
 	yq eval '
         .metadata.name = "chaos-cluster-pod-failure" |
@@ -108,7 +112,7 @@ failure_pod() {
 	wait_for_running "$cluster" 3
 	wait_cluster_consistency "${cluster/-rs0/}"
 
-	check_pod_restarted $pod
+	check_pod_restarted $pod $old_resourceVersion
 
 	desc 'check data consistency for chaosed Pod'
 	compare_mongo_cmd "find" "myApp:myPass@$pod.$cluster.$namespace" "-2nd"
