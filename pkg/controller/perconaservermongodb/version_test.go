@@ -671,12 +671,16 @@ func startFakeVersionService(t *testing.T, addr string, port int, gwport int) er
 		Addr:    fmt.Sprintf("%s:%d", addr, gwport),
 		Handler: gwmux,
 	}
-
+	gwLis, err := net.Listen("tcp", gwServer.Addr)
+	if err != nil {
+		return errors.Wrap(err, "failed to listen gateway")
+	}
 	go func() {
-		if err := gwServer.ListenAndServe(); err != nil {
+		if err := gwServer.Serve(gwLis); err != nil {
 			t.Error("failed to serve gRPC-Gateway", err)
 		}
 	}()
+
 	return nil
 }
 
