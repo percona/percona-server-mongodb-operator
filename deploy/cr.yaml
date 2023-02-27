@@ -19,7 +19,7 @@ spec:
 #    certValidityDuration: 2160h
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: percona/percona-server-mongodb-operator:1.13.0
+#  initImage: percona/percona-server-mongodb-operator:1.14.0
 #  initContainerSecurityContext: {}
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
