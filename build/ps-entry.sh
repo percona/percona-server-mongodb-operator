@@ -33,7 +33,7 @@ fi
 
 MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
-mongo_shell=mongosh
+mongo_shell="HOME=${TMPDIR:-/tmp} mongosh"
 if [ "$MONGODB_VERSION" != 'v6.0' ]; then
 	echo "MongoDB version $MONGODB_VERSION present, using mongo shell"
     mongo_shell=mongo
@@ -213,7 +213,7 @@ _parse_config() {
 	if configPath="$(_mongod_hack_get_arg_val --config "$@")"; then
 		# if --config is specified, parse it into a JSON file so we can remove a few problematic keys (especially SSL-related keys)
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
-		if [ $mongo_shell == 'mongosh' ]; then
+		if [[ $mongo_shell =~ 'mongosh' ]]; then
 			echo "parsing config with mongosh"
 			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js','/fs.js'); JSON.stringify((jsyaml.load(fs.readFileSync($(_js_escape "$configPath"),'utf8'))),null,2)" >"$jsonConfigFile"
 		else
