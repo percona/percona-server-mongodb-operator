@@ -33,7 +33,7 @@ fi
 
 MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
-mongo_shell="HOME=${TMPDIR:-/tmp} mongosh"
+mongo_shell="env HOME=${TMPDIR:-/tmp} mongosh"
 if [ "$MONGODB_VERSION" != 'v6.0' ]; then
 	echo "MongoDB version $MONGODB_VERSION present, using mongo shell"
     mongo_shell=mongo
@@ -220,7 +220,7 @@ _parse_config() {
 			echo "parsing config with mongo"
 			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
 		fi
-	
+
 		jq 'del(.systemLog, .processManagement, .net, .security)' "$jsonConfigFile" >"$tempConfigFile"
 		return 0
 	fi
