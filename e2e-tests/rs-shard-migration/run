@@ -62,7 +62,7 @@ function main() {
 	kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
 	sleep 20
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "true"
-
+  wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
 	if [[ -n "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
