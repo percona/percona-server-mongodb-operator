@@ -40,6 +40,34 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
    }
 }
 
+void deleteOldClusters(String FILTER) {
+    withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
+        sh """
+            if [ -f $HOME/google-cloud-sdk/path.bash.inc ]; then
+                export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+                source $HOME/google-cloud-sdk/path.bash.inc
+                gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
+                gcloud config set project $GCP_PROJECT
+                for GKE_CLUSTER in \$(gcloud container clusters list --format='csv[no-heading](name)' --filter="$FILTER"); do
+                    GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
+                    retry=0
+                    while [ "\$GKE_CLUSTER_STATUS" == "PROVISIONING" ]; do
+                        echo "Cluster \$GKE_CLUSTER is being provisioned, waiting before delete."
+                        sleep 10
+                        GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
+                        let retry+=1
+                        if [ \$retry -ge 60 ]; then
+                            echo "Cluster \$GKE_CLUSTER to delete is being provisioned for too long. Skipping..."
+                            break
+                        fi
+                    done
+                    gcloud container clusters delete --async --zone $GKERegion --quiet \$GKE_CLUSTER || true
+                done
+            fi
+        """
+   }
+}
+
 void pushArtifactFile(String FILE_NAME) {
     echo "Push $FILE_NAME file to S3!"
 
@@ -49,6 +77,30 @@ void pushArtifactFile(String FILE_NAME) {
             S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
             aws s3 ls \$S3_PATH/${FILE_NAME} || :
             aws s3 cp --quiet ${FILE_NAME} \$S3_PATH/${FILE_NAME} || :
+        """
+    }
+}
+
+void pushLogFile(String FILE_NAME) {
+    def LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
+    def LOG_FILE_NAME="${FILE_NAME}.log"
+    echo "Push logfile $LOG_FILE_NAME file to S3!"
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
+            aws s3 cp --content-type text/plain --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
+        """
+    }
+}
+
+void popArtifactFile(String FILE_NAME) {
+    echo "Try to get $FILE_NAME file from S3!"
+
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            aws s3 cp --quiet \$S3_PATH/${FILE_NAME} ${FILE_NAME} || :
         """
     }
 }
@@ -82,58 +134,6 @@ void markPassedTests() {
                 tests[i]["result"] = "passed"
             }
         }
-    }
-}
-
-void deleteOldClusters(String FILTER) {
-    withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
-        sh """
-            if [ -f $HOME/google-cloud-sdk/path.bash.inc ]; then
-                export USE_GKE_GCLOUD_AUTH_PLUGIN=True
-                source $HOME/google-cloud-sdk/path.bash.inc
-                gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-                gcloud config set project $GCP_PROJECT
-                for GKE_CLUSTER in \$(gcloud container clusters list --format='csv[no-heading](name)' --filter="$FILTER"); do
-                    GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
-                    retry=0
-                    while [ "\$GKE_CLUSTER_STATUS" == "PROVISIONING" ]; do
-                        echo "Cluster \$GKE_CLUSTER is being provisioned, waiting before delete."
-                        sleep 10
-                        GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
-                        let retry+=1
-                        if [ \$retry -ge 60 ]; then
-                            echo "Cluster \$GKE_CLUSTER to delete is being provisioned for too long. Skipping..."
-                            break
-                        fi
-                    done
-                    gcloud container clusters delete --async --zone $GKERegion --quiet \$GKE_CLUSTER || true
-                done
-            fi
-        """
-   }
-}
-
-void pushLogFile(String FILE_NAME) {
-    def LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
-    def LOG_FILE_NAME="${FILE_NAME}.log"
-    echo "Push logfile $LOG_FILE_NAME file to S3!"
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
-        sh """
-            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
-            aws s3 cp --content-type text/plain --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
-        """
-    }
-}
-
-void popArtifactFile(String FILE_NAME) {
-    echo "Try to get $FILE_NAME file from S3!"
-
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
-        sh """
-            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            aws s3 cp --quiet \$S3_PATH/${FILE_NAME} ${FILE_NAME} || :
-        """
     }
 }
 
