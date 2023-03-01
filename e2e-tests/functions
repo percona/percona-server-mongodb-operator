@@ -126,7 +126,7 @@ create_namespace() {
 		desc "cleaned up old namespaces $namespace"
 		kubectl_bin delete namespace "$namespace" --ignore-not-found || :
 		kubectl_bin wait --for=delete namespace "$namespace" || :
-    
+
     desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
 		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
@@ -432,14 +432,30 @@ deploy_minio() {
 }
 
 deploy_vault() {
-	desc 'install Vault'
+	name=${1:-vault-service}
+
+	desc "install Vault $name"
 	helm uninstall vault-service || :
 	helm repo remove hashicorp || :
 	helm repo add hashicorp https://helm.releases.hashicorp.com
 
 	destroy_vault
 
-	retry 10 60 helm install vault-service hashicorp/vault
+	if [[ -n ${OPENSHIFT} ]]; then
+		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+
+		retry 10 60 helm install $name hashicorp/vault \
+			--disable-openapi-validation \
+			--set dataStorage.enabled=false \
+			--set global.openshift=true \
+			--set injector.image.repository="docker.io/hashicorp/vault-k8s" \
+			--set injector.agentImage.repository="docker.io/hashicorp/vault" \
+			--set server.image.repository="docker.io/hashicorp/vault"
+	else
+		retry 10 60 helm install $name hashicorp/vault \
+			--disable-openapi-validation \
+			--set dataStorage.enabled=false
+	fi
 
 	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
 		sleep 1
@@ -828,7 +844,7 @@ deploy_cert_manager() {
 
 delete_crd() {
 	desc 'get and delete old CRDs and RBAC'
-  
+
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" --ignore-not-found --wait=false || :
 	for crd_name in $(yq eval '.metadata.name' "${src_dir}/deploy/crd.yaml" | grep -v '\-\-\-'); do
 		kubectl get ${crd_name} --all-namespaces -o wide \
