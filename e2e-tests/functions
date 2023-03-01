@@ -126,7 +126,7 @@ create_namespace() {
 		desc "cleaned up old namespaces $namespace"
 		kubectl_bin delete namespace "$namespace" --ignore-not-found || :
 		kubectl_bin wait --for=delete namespace "$namespace" || :
-    
+
     desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
 		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
@@ -444,7 +444,7 @@ deploy_vault() {
 	local platform=kubernetes
 	if [[ -n ${OPENSHIFT} ]]; then
 		platform=openshift
-		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "attributeRestrictions":null, "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
 	fi
 
 	retry 10 60 helm install $name hashicorp/vault \
@@ -839,7 +839,7 @@ deploy_cert_manager() {
 
 delete_crd() {
 	desc 'get and delete old CRDs and RBAC'
-  
+
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" --ignore-not-found --wait=false || :
 	for crd_name in $(yq eval '.metadata.name' "${src_dir}/deploy/crd.yaml" | grep -v '\-\-\-'); do
 		kubectl get ${crd_name} --all-namespaces -o wide \
