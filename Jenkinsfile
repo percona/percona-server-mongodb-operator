@@ -159,18 +159,6 @@ void makeReport() {
     TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
-void setTestsResults() {
-    for (int i=0; i<tests.size(); i++) {
-        def testName = tests[i]["name"]
-        def testResult = tests[i]["result"]
-        def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName"
-
-        if (testResult == "passed") {
-            pushArtifactFile(file)
-        }
-    }
-}
-
 void clusterRunner(String cluster) {
     def clusterCreated=0
 
@@ -217,6 +205,7 @@ void runTest(Integer TEST_ID) {
                 """
             }
 
+            pushArtifactFile("${params.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
             tests[TEST_ID]["result"] = "passed"
             return true
         }
@@ -229,6 +218,7 @@ void runTest(Integer TEST_ID) {
             return false
         }
         finally {
+            pushLogFile("$testName")
             echo "The $testName test was finished!"
         }
     }
@@ -468,7 +458,6 @@ pipeline {
         always {
             script {
                 echo "CLUSTER ASSIGNMENTS\n" + tests.toString().replace("], ","]\n").replace("]]","]").replaceFirst("\\[","")
-                setTestsResults()
                 if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.nextBuild == null) {
                     try {
                         slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
