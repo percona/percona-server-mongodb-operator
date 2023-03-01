@@ -128,9 +128,10 @@ kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS
 	| yq eval '(.spec.template.spec.containers[0].env[] | select(.name == "DISABLE_TELEMETRY").value) = "true"' \
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
-IMAGE_PREFIX=$(echo -n "${IMAGE_MONGOD}" | sed -r 's/.*([0-9].[0-9])(.[0-9].*)?$/\1/')
+ACTUAL_MONGOD_VERSION=$(get_mongod_ver_from_image "${IMAGE_MONGOD}")
+
 wait_deployment 'percona-server-mongodb-operator'
-check_telemetry_transfer "http://version-service-cr:11000" "${IMAGE_PREFIX}-recommended" "disabled"
+check_telemetry_transfer "http://version-service-cr:11000" "${ACTUAL_MONGOD_VERSION:0:3}-recommended" "disabled"
 
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
 	| yq eval '(.spec.template.spec.containers[0].env[] | select(.name == "DISABLE_TELEMETRY").value) = "true"' \
