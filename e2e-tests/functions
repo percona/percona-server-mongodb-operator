@@ -432,14 +432,25 @@ deploy_minio() {
 }
 
 deploy_vault() {
-	desc 'install Vault'
+	name=${1:-vault-service}
+
+	desc "install Vault $name"
 	helm uninstall vault-service || :
 	helm repo remove hashicorp || :
 	helm repo add hashicorp https://helm.releases.hashicorp.com
 
 	destroy_vault
 
-	retry 10 60 helm install vault-service hashicorp/vault
+	local platform=kubernetes
+	if [[ -n ${OPENSHIFT} ]]; then
+		platform=openshift
+		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "attributeRestrictions":null, "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+	fi
+
+	retry 10 60 helm install $name hashicorp/vault \
+		--disable-openapi-validation \
+		--set dataStorage.enabled=false \
+		--set global.platform="${platform}"
 
 	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
 		sleep 1
