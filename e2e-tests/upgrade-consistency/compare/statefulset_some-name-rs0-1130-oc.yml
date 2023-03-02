@@ -115,8 +115,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /opt/percona
-              name: bin
             - mountPath: /etc/mongodb-secrets
               name: some-name-mongodb-keyfile
               readOnly: true
@@ -152,6 +150,8 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}

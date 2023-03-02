@@ -13,11 +13,8 @@ TARGET_IMAGE="${IMAGE}"
 TARGET_IMAGE_MONGOD="${IMAGE_MONGOD}"
 TARGET_IMAGE_PMM="${IMAGE_PMM}"
 TARGET_IMAGE_BACKUP="${IMAGE_BACKUP}"
-if [[ ${TARGET_IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	MONGO_VER=$(echo -n "${TARGET_IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-else
-	MONGO_VER=$(echo -n "${TARGET_IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-fi
+FULL_VER=$(get_mongod_ver_from_image ${TARGET_IMAGE_MONGOD})
+MONGO_VER=${FULL_VER:0:3}
 
 INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator \
 	| jq -r '.versions[].operator' | sort -V | tail -n1)
