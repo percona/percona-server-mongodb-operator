@@ -57,6 +57,12 @@ function main() {
 
 	current_version_index=$(echo ${version_matrix} | jq 'map(keys[] == "'${current_mongod_version}'") | index(true)')
 
+	if [[ $((current_version_index + 1)) == $(echo ${version_matrix} | jq length) ]]; then
+		desc 'IMAGE_MONGOD '${IMAGE_MONGOD}' has '${current_mongod_version}' is the last in upgrade chain. Exiting...'
+		destroy ${namespace}
+		exit 0
+	fi
+
 	version_matrix=$(echo ${version_matrix} | jq '.['$((current_version_index + 1))':]')
 
 	versions_to_verify=$(echo ${version_matrix} | jq -r '.[] | keys | .[] | split(".") | .[:2] | join(".")' | uniq | grep -v ${current_mongod_version:0:3})

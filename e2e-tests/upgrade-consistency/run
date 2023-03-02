@@ -51,6 +51,8 @@ main() {
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {"crVersion":"1.14.0"}
     }'
+	# Wait for at least one reconciliation
+	sleep 10
 	desc 'check if Pod started'
 	wait_for_running "${CLUSTER}-rs0" "1" "false"
 
