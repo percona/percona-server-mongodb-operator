@@ -20,6 +20,7 @@ check_cr_config() {
 	compare_kubectl service/$cluster-0
 
 	local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"
+	# Wait a bit longer for ELB availability on Openshift
 	sleep 30
 
 	desc 'create user myApp'
