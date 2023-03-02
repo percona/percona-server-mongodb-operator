@@ -23,7 +23,21 @@ if [[ ${INIT_OPERATOR_VER} == "${TARGET_OPERATOR_VER}" ]]; then
 	INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator | jq -r '.versions[].operator' | sort -V | tail -n2 | head -n1)
 fi
 GIT_TAG="v${INIT_OPERATOR_VER}"
-INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
+
+case $(curl -s -o /dev/null -w "%{http_code}" 'https://check.percona.com/versions/v1/psmdb-operator/'${INIT_OPERATOR_VER}/'latest?databaseVersion='${MONGO_VER}'') in
+	'200')
+		INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
+		;;
+	'404')
+		desc 'No latest mongod '${MONGO_VER}' for operator '${INIT_OPERATOR_VER}' found. Exiting...'
+		exit 0
+		;;
+	*)
+		desc 'Unable to get latest '${MONGO_VER}' for operator '${INIT_OPERATOR_VER}'. Try again later.'
+		exit 1
+		;;
+esac
+
 OPERATOR_NAME='percona-server-mongodb-operator'
 IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
 # we use the starting image from the same repo so we don't need to use initImage option
