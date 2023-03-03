@@ -6,11 +6,8 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-else
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-fi
+FULL_VER=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
+MONGO_VER=${FULL_VER:0:3}
 unset OPERATOR_NS
 
 main_cluster="cross-site-sharded-main"

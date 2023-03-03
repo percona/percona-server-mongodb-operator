@@ -4,6 +4,7 @@ set -o errexit
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
+set_debug
 
 run_backup() {
 	local storage=$1
