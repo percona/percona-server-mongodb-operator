@@ -69,7 +69,7 @@ fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 set_debug() {
-	if [ -n "${DEBUG_TESTS}" ]; then
+	if [[ "${DEBUG_TESTS}" == 1 ]]; then
 		set -o xtrace
 	else
 		set +o xtrace
