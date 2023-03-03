@@ -5,6 +5,7 @@ set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
+set_debug
 
 insert_data() {
 	local data=$1
