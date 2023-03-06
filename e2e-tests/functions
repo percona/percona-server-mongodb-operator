@@ -127,7 +127,7 @@ create_namespace() {
 		kubectl_bin delete namespace "$namespace" --ignore-not-found || :
 		kubectl_bin wait --for=delete namespace "$namespace" || :
 
-    desc "create namespace $namespace"
+		desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
 		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 	fi
