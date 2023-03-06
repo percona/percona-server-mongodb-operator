@@ -19,7 +19,7 @@ main() {
 	apply_cluster "$test_dir/conf/${CLUSTER}-rs0.yml"
 
 	desc 'check if Pod started'
-	wait_for_running "${CLUSTER}-rs0" "1" "false"
+	wait_for_running "${CLUSTER}-rs0" "3" "true"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1110"
@@ -30,7 +30,7 @@ main() {
         "spec": {"crVersion":"1.12.0"}
     }'
 	desc 'check if Pod started'
-	wait_for_running "${CLUSTER}-rs0" "1" "false"
+	wait_for_running "${CLUSTER}-rs0" "3" "true"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1120"
@@ -41,7 +41,7 @@ main() {
         "spec": {"crVersion":"1.13.0"}
     }'
 	desc 'check if Pod started'
-	wait_for_running "${CLUSTER}-rs0" "1" "false"
+	wait_for_running "${CLUSTER}-rs0" "3" "true"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1130"
@@ -54,7 +54,7 @@ main() {
 	# Wait for at least one reconciliation
 	sleep 10
 	desc 'check if Pod started'
-	wait_for_running "${CLUSTER}-rs0" "1" "false"
+	wait_for_running "${CLUSTER}-rs0" "3" "true"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1140"
