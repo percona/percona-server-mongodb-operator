@@ -318,18 +318,22 @@ wait_restore() {
 	set +o xtrace
 	retry=0
 	echo -n "waiting psmdb-restore/${backup_name} to reach ${target_state} state"
-	until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == ${target_state} ]; do
+	local current_state=
+	until [[ ${current_state} == ${target_state} ]]; do
 		sleep 1
 		echo -n .
 		let retry+=1
-		if [ $retry -ge 720 ]; then
+		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
+		if [[ $retry -ge 720 || ${current_state} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
-			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+
+			echo "Restore object restore-${backup_name} is in ${current_state} state."
+			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
