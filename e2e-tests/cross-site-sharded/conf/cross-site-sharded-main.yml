@@ -4,6 +4,7 @@ metadata:
   name: cross-site-sharded-main
 spec:
   #platform: openshift
+  clusterServiceDNSMode: External
   unmanaged: false
   image:
   imagePullPolicy: Always
