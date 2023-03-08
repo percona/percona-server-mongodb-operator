@@ -129,6 +129,12 @@ function main() {
 		run_mongos 'use myApp\n db.test.insert({ x: 100600 })' "myApp:myPass@${cluster}-mongos.${namespace}"
 		run_restore "${backup_name_minio}"
 		wait_restore "${backup_name_minio}" "${cluster}"
+
+		if [[ ${version} =~ 5.0 ]]; then
+			run_mongos 'db.adminCommand({setFeatureCompatibilityVersion:"4.4"})' "clusterAdmin:clusterAdmin123456@${cluster}-mongos.${namespace}"
+			sleep 5
+			run_mongos 'db.adminCommand({setFeatureCompatibilityVersion:"5.0"})' "clusterAdmin:clusterAdmin123456@${cluster}-mongos.${namespace}"
+		fi
 		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
 
 		target_generation=$((target_generation + 1))
