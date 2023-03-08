@@ -3,6 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: cross-site-sharded-replica
 spec:
+  clusterServiceDNSMode: External
   unmanaged: true
   image:
   imagePullPolicy: Always
