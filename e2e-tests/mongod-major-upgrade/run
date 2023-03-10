@@ -20,7 +20,7 @@ function generate_vs_json() {
 			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
 	done
 	version_service_source=$(echo ${version_service_source} \
-			| jq '.versions[0].matrix.backup += {"'$(get_pbm_version ${IMAGE_BACKUP})'": {"image_path":"'${IMAGE_BACKUP}'","status":"recommended"}}')
+		| jq '.versions[0].matrix.backup += {"'$(get_pbm_version ${IMAGE_BACKUP})'": {"image_path":"'${IMAGE_BACKUP}'","status":"recommended"}}')
 
 	echo ${version_service_source} | jq '.' >${target_path}
 }
