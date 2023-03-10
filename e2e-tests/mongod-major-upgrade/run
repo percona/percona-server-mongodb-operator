@@ -114,7 +114,7 @@ function main() {
 		wait_cluster_consistency "${cluster%%-rs0}"
 
 		currentFCV=$(run_mongos 'db.adminCommand({getParameter:1,featureCompatibilityVersion:1})' "clusterAdmin:clusterAdmin123456@${cluster}.${namespace}" \
-					 | grep -A2 'featureCompatibilityVersion' | grep -Eo '[0-9]+\.[0-9]+')
+			| grep -A2 'featureCompatibilityVersion' | grep -Eo '[0-9]+\.[0-9]+')
 
 		if [[ ${currentFCV} != ${version} ]]; then
 			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."
