@@ -19,6 +19,10 @@ function generate_vs_json() {
 		version_service_source=$(echo ${version_service_source} \
 			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
 	done
+
+	version_service_source=$(echo ${version_service_source} \
+			| jq '.versions[0].matrix.backup += {"'$(get_pbm_version ${IMAGE_BACKUP})'": {"image_path":"'${IMAGE_BACKUP}'","status":"recommended"}}')
+
 	echo ${version_service_source} | jq '.' >${target_path}
 }
 
@@ -82,16 +86,10 @@ function main() {
 
 	target_generation=2
 	for version in ${versions_to_verify[@]}; do
-
-		backup_name_minio="backup-minio-${target_generation}"
-		run_backup minio ${backup_name_minio}
-		wait_backup ${backup_name_minio}
-
 		kubectl_bin patch psmdb/${cluster%%-rs0} \
 			--type=json \
 			-p='[
 					{"op":"replace","path":"/spec/upgradeOptions/apply","value": "'${version}'-recommended"},
-					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
 				]'
 
 		sleep 60 # waiting for update loop to fire
@@ -103,6 +101,26 @@ function main() {
 		compare_generation ${target_generation} "statefulset" "${cluster}-cfg"
 		compare_generation ${target_generation} "statefulset" "${cluster}-rs0"
 		compare_generation 2 "statefulset" "${cluster}-mongos" # generation is 2 because mongos gets deleted on restore
+
+		kubectl_bin patch psmdb/${cluster%%-rs0} \
+			--type=json \
+			-p='[
+					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
+				]'
+		sleep 10
+		wait_cluster_consistency "${cluster}"
+
+		currentFCV=$(run_mongos 'db.adminCommand({getParameter:1,featureCompatibilityVersion:1})' "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}" \
+					 | grep -A2 'featureCompatibilityVersion' | grep -Eo '[0-9]+\.[0-9]+')
+
+		if [[ ${currentFCV} != ${version} ]]; then
+			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."
+			exit 1
+		fi
+
+		backup_name_minio="backup-minio-${target_generation}"
+		run_backup minio ${backup_name_minio}
+		wait_backup ${backup_name_minio}
 
 		run_mongos \
 			'use myApp\n db.test.insert({ x: 10050'${target_generation}' })' \

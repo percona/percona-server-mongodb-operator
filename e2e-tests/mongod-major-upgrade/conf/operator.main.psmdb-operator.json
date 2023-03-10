@@ -15,12 +15,6 @@
           }
         },
         "backup": {
-          "2.0.3": {
-            "image_path": "perconalab/percona-server-mongodb-operator:main-backup",
-            "image_hash": "01388bcc310de0190cad0c4cfbe8cf8edc07c5c7ea057edec137e8f58931696b",
-            "status": "recommended",
-            "critical": false
-          }
         },
         "operator": {
           "1.14.0": {

@@ -19,6 +19,9 @@ function generate_vs_json() {
 		version_service_source=$(echo ${version_service_source} \
 			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
 	done
+	version_service_source=$(echo ${version_service_source} \
+			| jq '.versions[0].matrix.backup += {"'$(get_pbm_version ${IMAGE_BACKUP})'": {"image_path":"'${IMAGE_BACKUP}'","status":"recommended"}}')
+
 	echo ${version_service_source} | jq '.' >${target_path}
 }
 
@@ -82,16 +85,10 @@ function main() {
 
 	target_generation=2
 	for version in ${versions_to_verify[@]}; do
-
-		backup_name_minio="backup-minio-${target_generation}"
-		run_backup minio ${backup_name_minio}
-		wait_backup ${backup_name_minio}
-
 		kubectl_bin patch psmdb/${cluster%%-rs0} \
 			--type=json \
 			-p='[
-					{"op":"replace","path":"/spec/upgradeOptions/apply","value": "'${version}'-recommended"},
-					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
+					{"op":"replace","path":"/spec/upgradeOptions/apply","value": "'${version}'-recommended"}
 				]'
 
 		sleep 60 # waiting for update loop to fire
@@ -107,6 +104,27 @@ function main() {
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-${target_generation}"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-${target_generation}"
 
+		kubectl_bin patch psmdb/${cluster%%-rs0} \
+			--type=json \
+			-p='[
+					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
+				]'
+
+		sleep 10
+		wait_cluster_consistency "${cluster%%-rs0}"
+
+		currentFCV=$(run_mongos 'db.adminCommand({getParameter:1,featureCompatibilityVersion:1})' "clusterAdmin:clusterAdmin123456@${cluster}.${namespace}" \
+					 | grep -A2 'featureCompatibilityVersion' | grep -Eo '[0-9]+\.[0-9]+')
+
+		if [[ ${currentFCV} != ${version} ]]; then
+			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."
+			exit 1
+		fi
+
+		backup_name_minio="backup-minio-${target_generation}"
+		run_backup minio ${backup_name_minio}
+		wait_backup ${backup_name_minio}
+
 		backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
 		kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
@@ -115,6 +133,7 @@ function main() {
 		run_mongo 'use myApp\n db.test.insert({ x: 100600 })' "myApp:myPass@$cluster.$namespace"
 		run_restore "${backup_name_minio}"
 		wait_restore "${backup_name_minio}" "${cluster/-rs0/}"
+		sleep 10
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
