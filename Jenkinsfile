@@ -164,7 +164,7 @@ void clusterRunner(String cluster) {
 
     for (int i=0; i<tests.size(); i++) {
         if (tests[i]["result"] == "NA") {
-            tests[i]["result"] = "failed"
+            tests[i]["result"] = "failure"
             tests[i]["cluster"] = cluster
             if (clusterCreated == 0) {
                 createCluster(cluster)
@@ -195,7 +195,7 @@ void runTest(Integer TEST_ID) {
     waitUntil {
         try {
             echo "The $testName test was started on cluster $CLUSTER_NAME-$clusterSuffix !"
-            tests[TEST_ID]["result"] = "failed"
+            tests[TEST_ID]["result"] = "failure"
 
             timeout(time: 90, unit: 'MINUTES') {
                 sh """
@@ -205,7 +205,7 @@ void runTest(Integer TEST_ID) {
                 """
             }
 
-            pushArtifactFile("${params.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
+            pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
             tests[TEST_ID]["result"] = "passed"
             return true
         }
