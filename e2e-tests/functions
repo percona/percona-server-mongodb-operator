@@ -1236,3 +1236,25 @@ function run_simple_cli_inside_image() {
 	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
 	echo ${output}
 }
+
+function generate_vs_json() {
+	local template_path=${1}
+	local target_path=${2}
+
+	local version_service_source=$(jq '.versions[0].operator="'${OPERATOR_VERSION}'"' ${template_path})
+
+	for image_mongod in ${IMAGE_MONGOD_CHAIN[@]}; do
+		current_mongod_version=$(get_mongod_ver_from_image ${image_mongod})
+
+		version_service_source=$(echo ${version_service_source} \
+			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
+	done
+
+	version_service_source=$(echo ${version_service_source} \
+		| jq '.versions[0].matrix.backup += {"'$(get_pbm_version ${IMAGE_BACKUP})'": {"image_path":"'${IMAGE_BACKUP}'","status":"recommended"}}')
+
+	version_service_source=$(echo ${version_service_source} \
+		| jq '.versions[0].matrix.operator += {"'${OPERATOR_VERSION}'": {"image_path":"'${IMAGE}'","status":"recommended"}}')
+
+	echo ${version_service_source} | jq '.' >${target_path}
+}

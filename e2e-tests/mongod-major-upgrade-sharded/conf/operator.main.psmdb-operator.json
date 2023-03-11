@@ -17,12 +17,6 @@
         "backup": {
         },
         "operator": {
-          "1.14.0": {
-            "image_path": "perconalab/percona-server-mongodb-operator:main",
-            "image_hash": "e9ed11994cef3f7ab33e126484d5d5991cccc00b54d066183d1c7abe8e29b802",
-            "status": "recommended",
-            "critical": false
-          }
         }
       }
     }
