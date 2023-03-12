@@ -111,7 +111,7 @@ void initTests() {
     def records = readCSV file: 'e2e-tests/run-pr.csv'
 
     for (int i=0; i<records.size(); i++) {
-        tests.add(["name": records[i][0], "cluster": "NA", "result": "NA"])
+        tests.add(["name": records[i][0], "cluster": "NA", "result": "NA", "time": "0"])
     }
 
     markPassedTests()
@@ -147,13 +147,14 @@ void makeReport() {
     for (int i=0; i<tests.size(); i++) {
         def testName = tests[i]["name"]
         def testResult = tests[i]["result"]
+        def testTime = tests[i]["time"]
         def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testName}.log"
 
         if (tests[i]["result"] != "NA") {
             startedTestAmount++
         }
         TestsReport = TestsReport + "\r\n| "+ testName +" | ["+ testResult +"]("+ testUrl +") |"
-        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\"><'+ testResult +'/></testcase>\n'
+        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
     TestsReportXML = TestsReportXML + '</testsuite>\n'
@@ -193,6 +194,7 @@ void runTest(Integer TEST_ID) {
     """
 
     waitUntil {
+        def timeStart = new Date().getTime()
         try {
             echo "The $testName test was started on cluster $CLUSTER_NAME-$clusterSuffix !"
             tests[TEST_ID]["result"] = "failure"
@@ -218,6 +220,9 @@ void runTest(Integer TEST_ID) {
             return false
         }
         finally {
+            def timeStop = new Date().getTime()
+            def durationSec = (timeStop - timeStart) / 1000
+            tests[TEST_ID]["time"] = durationSec
             pushLogFile("$testName")
             echo "The $testName test was finished!"
         }
