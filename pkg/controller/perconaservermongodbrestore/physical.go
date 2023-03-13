@@ -173,19 +173,30 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, nil
 	}
 
-	stdoutBuf.Reset()
-	stderrBuf.Reset()
-	command := []string{
-		"/opt/percona/pbm", "describe-restore", cr.Status.PBMname,
-		"--config", "/etc/pbm/pbm_config.yaml",
-		"--out", "json",
-	}
-	log.V(1).Info("Check restore status", "command", command)
-	if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-		return status, errors.Wrap(err, "describe restore")
+	meta := pbm.BackupMeta{}
+
+	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "container is not created or running") }, func() error {
+		stdoutBuf.Reset()
+		stderrBuf.Reset()
+
+		command := []string{
+			"/opt/percona/pbm", "describe-restore", cr.Status.PBMname,
+			"--config", "/etc/pbm/pbm_config.yaml",
+			"--out", "json",
+		}
+
+		log.V(1).Info("Check restore status", "command", command)
+		if err := r.clientcmd.Exec(&pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+			return errors.Wrap(err, "describe restore")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return status, err
 	}
 
-	meta := pbm.BackupMeta{}
+	
 	if err := json.Unmarshal(stdoutBuf.Bytes(), &meta); err != nil {
 		return status, errors.Wrap(err, "unmarshal PBM describe-restore output")
 	}

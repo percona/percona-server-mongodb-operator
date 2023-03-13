@@ -5,7 +5,7 @@ metadata:
 spec:
   allowUnsafeConfigurations: true
   clusterServiceDNSMode: "Internal"
-  image: percona/percona-server-mongodb:5.0.14-12
+  image: percona/percona-server-mongodb:6.0.4-3
   imagePullPolicy: Always
   secrets:
     users: mydb-users

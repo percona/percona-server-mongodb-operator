@@ -1,8 +1,9 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  annotations: {}
-  generation: 3
+  annotations:
+    percona.com/restore-in-progress: "true"
+  generation: 2
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -50,13 +51,14 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/physical-restore-ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: some-name
@@ -64,6 +66,23 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
+            - name: PBM_AGENT_MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_USER
+                  name: some-users
+            - name: PBM_AGENT_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_PASSWORD
+                  name: some-users
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: PBM_MONGODB_URI
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -72,7 +91,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --ssl
@@ -104,7 +123,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 500M
+              memory: 1G
             requests:
               cpu: 100m
               memory: 100M
@@ -126,11 +145,16 @@ spec:
               readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: some-name-mongodb-encryption-key
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
+            - mountPath: /etc/pbm/
+              name: pbm-config
+              readOnly: true
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -141,10 +165,24 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 500M
+              memory: 1G
             requests:
               cpu: 100m
               memory: 100M
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
+        - command:
+            - bash
+            - -c
+            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent
+          imagePullPolicy: Always
+          name: pbm-init
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -190,6 +228,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-config
+          secret:
+            defaultMode: 420
+            secretName: pbm-config
   updateStrategy:
     rollingUpdate:
       partition: 0
@@ -202,6 +244,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 3Gi
       status:
         phase: Pending

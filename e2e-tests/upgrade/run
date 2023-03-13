@@ -13,11 +13,8 @@ TARGET_IMAGE="${IMAGE}"
 TARGET_IMAGE_MONGOD="${IMAGE_MONGOD}"
 TARGET_IMAGE_PMM="${IMAGE_PMM}"
 TARGET_IMAGE_BACKUP="${IMAGE_BACKUP}"
-if [[ ${TARGET_IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	MONGO_VER=$(echo -n "${TARGET_IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-else
-	MONGO_VER=$(echo -n "${TARGET_IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-fi
+FULL_VER=$(get_mongod_ver_from_image ${TARGET_IMAGE_MONGOD})
+MONGO_VER=${FULL_VER:0:3}
 
 INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator \
 	| jq -r '.versions[].operator' | sort -V | tail -n1)
@@ -28,7 +25,21 @@ if [[ ${INIT_OPERATOR_VER} == "${TARGET_OPERATOR_VER}" ]]; then
 		| jq -r '.versions[].operator' | sort -V | tail -n2 | head -n1)
 fi
 GIT_TAG="v${INIT_OPERATOR_VER}"
-INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
+
+case $(curl -s -o /dev/null -w "%{http_code}" 'https://check.percona.com/versions/v1/psmdb-operator/'${INIT_OPERATOR_VER}'/latest?databaseVersion='${MONGO_VER}'') in
+	'200')
+		INIT_OPERATOR_IMAGES=$(curl -s "https://check.percona.com/versions/v1/psmdb-operator/${INIT_OPERATOR_VER}/latest?databaseVersion=${MONGO_VER}")
+		;;
+	'404')
+		desc 'No latest mongod '${MONGO_VER}' for operator '${INIT_OPERATOR_VER}' found. Exiting...'
+		exit 0
+		;;
+	*)
+		desc 'Unable to get latest '${MONGO_VER}' for operator '${INIT_OPERATOR_VER}'. Try again later.'
+		exit 1
+		;;
+esac
+
 OPERATOR_NAME='percona-server-mongodb-operator'
 
 IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')

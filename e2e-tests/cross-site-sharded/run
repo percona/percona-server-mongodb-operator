@@ -6,11 +6,8 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-else
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-fi
+FULL_VER=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
+MONGO_VER=${FULL_VER:0:3}
 unset OPERATOR_NS
 
 main_cluster="cross-site-sharded-main"
@@ -121,7 +118,7 @@ sleep 30
 
 desc "create replica PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/${replica_cluster}.yml"
-sleep 600
+sleep 300
 
 replica_cfg_0_endpoint=$(get_service_ip cross-site-sharded-replica-cfg-0 'cfg')
 replica_cfg_1_endpoint=$(get_service_ip cross-site-sharded-replica-cfg-1 'cfg')
@@ -170,10 +167,17 @@ desc 'test failover'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 kubectl_bin delete psmdb $main_cluster
 sleep 60
+
+desc 'run disaster recovery script for replset: cfg'
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
+
+desc 'run disaster recovery script for replset: rs0'
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs0_0_endpoint" "mongodb" ":27017"
+
+desc 'run disaster recovery script for replset: rs1'
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs1_0_endpoint" "mongodb" ":27017"
 
+desc 'make replica cluster managed'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
 kubectl_bin patch psmdb ${replica_cluster} --type=merge --patch '{"spec":{"unmanaged": false}}'
 sleep 120
@@ -181,6 +185,8 @@ sleep 120
 desc "check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
 desc "Failover check finished successfully"
+
+wait_cluster_consistency ${replica_cluster}
 
 destroy "$namespace" "true"
 

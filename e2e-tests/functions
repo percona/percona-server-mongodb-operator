@@ -69,7 +69,7 @@ fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 set_debug() {
-	if [ -n "${DEBUG_TESTS}" ]; then
+	if [[ ${DEBUG_TESTS} == 1 ]]; then
 		set -o xtrace
 	else
 		set +o xtrace
@@ -126,8 +126,8 @@ create_namespace() {
 		desc "cleaned up old namespaces $namespace"
 		kubectl_bin delete namespace "$namespace" --ignore-not-found || :
 		kubectl_bin wait --for=delete namespace "$namespace" || :
-    
-    desc "create namespace $namespace"
+
+		desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
 		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 	fi
@@ -217,18 +217,21 @@ wait_backup() {
 	set +o xtrace
 	retry=0
 	echo -n $backup_name
-	until [ "$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')" == "ready" ]; do
+	local current_status=
+	until [[ ${current_status} == "ready" ]]; do
 		sleep 1
 		echo -n .
 		let retry+=1
-		if [ $retry -ge 360 ]; then
+		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
+		if [[ $retry -ge 360 || ${current_status} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
-			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			echo "Backup object psmdb-backup/${backup_name} is in ${current_state} state."
+			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
@@ -318,18 +321,22 @@ wait_restore() {
 	set +o xtrace
 	retry=0
 	echo -n "waiting psmdb-restore/${backup_name} to reach ${target_state} state"
-	until [ "$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')" == ${target_state} ]; do
+	local current_state=
+	until [[ ${current_state} == ${target_state} ]]; do
 		sleep 1
 		echo -n .
 		let retry+=1
-		if [ $retry -ge 720 ]; then
+		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
+		if [[ $retry -ge 720 || ${current_state} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
-			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+
+			echo "Restore object restore-${backup_name} is in ${current_state} state."
+			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
@@ -432,14 +439,30 @@ deploy_minio() {
 }
 
 deploy_vault() {
-	desc 'install Vault'
+	name=${1:-vault-service}
+
+	desc "install Vault $name"
 	helm uninstall vault-service || :
 	helm repo remove hashicorp || :
 	helm repo add hashicorp https://helm.releases.hashicorp.com
 
 	destroy_vault
 
-	retry 10 60 helm install vault-service hashicorp/vault
+	if [[ -n ${OPENSHIFT} ]]; then
+		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+
+		retry 10 60 helm install $name hashicorp/vault \
+			--disable-openapi-validation \
+			--set dataStorage.enabled=false \
+			--set global.openshift=true \
+			--set injector.image.repository="docker.io/hashicorp/vault-k8s" \
+			--set injector.agentImage.repository="docker.io/hashicorp/vault" \
+			--set server.image.repository="docker.io/hashicorp/vault"
+	else
+		retry 10 60 helm install $name hashicorp/vault \
+			--disable-openapi-validation \
+			--set dataStorage.enabled=false
+	fi
 
 	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
 		sleep 1
@@ -828,7 +851,7 @@ deploy_cert_manager() {
 
 delete_crd() {
 	desc 'get and delete old CRDs and RBAC'
-  
+
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" --ignore-not-found --wait=false || :
 	for crd_name in $(yq eval '.metadata.name' "${src_dir}/deploy/crd.yaml" | grep -v '\-\-\-'); do
 		kubectl get ${crd_name} --all-namespaces -o wide \
@@ -1175,4 +1198,22 @@ check_crd_for_deletion() {
 				|| :
 		fi
 	done
+}
+
+function get_mongod_ver_from_image() {
+	local image=${1}
+
+	local pod_name=${RANDOM}
+	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
+	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
+
+	local version_info=$(kubectl_bin -n default exec ${pod_name} -- mongod --version)
+	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
+	version_info=$(echo ${version_info} | head -n2 | $sed -r 's/^.*db version v(([0-9]+\.){2}[0-9]+-[0-9]+).*$/\1/g')
+
+	if [[ ! ${version_info} =~ ^([0-9]+\.){2}[0-9]+-[0-9]+$ ]]; then
+		printf "No mongod version obtained from %s. Exiting" ${image}
+		exit 1
+	fi
+	echo ${version_info}
 }

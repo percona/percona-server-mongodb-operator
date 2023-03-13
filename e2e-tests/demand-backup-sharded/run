@@ -5,6 +5,7 @@ set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
+set_debug
 
 insert_data() {
 	local data=$1
@@ -36,6 +37,8 @@ kubectl_bin apply \
 
 apply_s3_storage_secrets
 if version_gt "1.19" && [ $EKS -ne 1 ]; then
+	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+elif version_gt "1.24" && [ $EKS -eq 1 ]; then
 	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
 else
 	kubectl_bin apply -f "$conf_dir/container-rc.yaml"

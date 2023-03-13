@@ -9,6 +9,7 @@ spec:
 #    type: date
 #    date: YYYY-MM-DD HH:MM:SS
 #  backupSource:
+#    type: physical
 #    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/BACKUP-DESTINATION
 #    s3:
 #      credentialsSecret: my-cluster-name-backup-s3
