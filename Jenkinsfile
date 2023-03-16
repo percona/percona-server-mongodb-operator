@@ -111,7 +111,7 @@ void initTests() {
     def records = readCSV file: 'e2e-tests/run-pr.csv'
 
     for (int i=0; i<records.size(); i++) {
-        tests.add(["name": records[i][0], "cluster": "NA", "result": "NA", "time": "0"])
+        tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
     }
 
     markPassedTests()
@@ -150,7 +150,7 @@ void makeReport() {
         def testTime = tests[i]["time"]
         def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testName}.log"
 
-        if (tests[i]["result"] != "NA") {
+        if (tests[i]["result"] != "skipped") {
             startedTestAmount++
         }
         TestsReport = TestsReport + "\r\n| "+ testName +" | ["+ testResult +"]("+ testUrl +") |"
@@ -164,7 +164,7 @@ void clusterRunner(String cluster) {
     def clusterCreated=0
 
     for (int i=0; i<tests.size(); i++) {
-        if (tests[i]["result"] == "NA") {
+        if (tests[i]["result"] == "skipped" && currentBuild.nextBuild == null) {
             tests[i]["result"] = "failure"
             tests[i]["cluster"] = cluster
             if (clusterCreated == 0) {
@@ -212,7 +212,7 @@ void runTest(Integer TEST_ID) {
             return true
         }
         catch (exc) {
-            if (retryCount >= 1) {
+            if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
                 return true
             }
@@ -230,7 +230,7 @@ void runTest(Integer TEST_ID) {
 }
 
 def skipBranchBuilds = true
-if ( env.CHANGE_URL ) {
+if (env.CHANGE_URL) {
     skipBranchBuilds = false
 }
 
@@ -260,7 +260,7 @@ pipeline {
             steps {
                 initTests()
                 script {
-                    if ( AUTHOR_NAME == 'null' )  {
+                    if (AUTHOR_NAME == 'null') {
                         AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
                     }
                     for (comment in pullRequest.comments) {
@@ -455,6 +455,7 @@ pipeline {
         always {
             script {
                 echo "CLUSTER ASSIGNMENTS\n" + tests.toString().replace("], ","]\n").replace("]]","]").replaceFirst("\\[","")
+
                 if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.nextBuild == null) {
                     try {
                         slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
@@ -464,6 +465,7 @@ pipeline {
                     }
 
                 }
+
                 if (env.CHANGE_URL && currentBuild.nextBuild == null) {
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
