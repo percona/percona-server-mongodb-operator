@@ -12,6 +12,7 @@ import (
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -760,6 +761,7 @@ type BackupStorageS3Spec struct {
 	Region                string `json:"region,omitempty"`
 	EndpointURL           string `json:"endpointUrl,omitempty"`
 	CredentialsSecret     string `json:"credentialsSecret,omitempty"`
+	ServerSideEncryption  s3.AWSsse `json:"serverSideEncryption,omitempty"`
 	UploadPartSize        int    `json:"uploadPartSize,omitempty"`
 	MaxUploadParts        int    `json:"maxUploadParts,omitempty"`
 	StorageClass          string `json:"storageClass,omitempty"`

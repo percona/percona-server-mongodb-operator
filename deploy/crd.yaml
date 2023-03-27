@@ -112,6 +112,17 @@ spec:
                     type: string
                   insecureSkipTLSVerify:
                     type: boolean
+                  serverSideEncryption:
+                    properties:
+                      sseAlgorithm:
+                        type: string
+                      kmsKeyID:
+                        type: string
+                      sseCustomerAlgorithm:
+                        type: string
+                      sseCustomerKey:
+                        type: string
+                    type: object
                   maxUploadParts:
                     type: integer
                   prefix:
@@ -225,6 +236,17 @@ spec:
                         type: string
                       insecureSkipTLSVerify:
                         type: boolean
+                      serverSideEncryption:
+                        properties:
+                          sseAlgorithm:
+                            type: string
+                          kmsKeyID:
+                            type: string
+                          sseCustomerAlgorithm:
+                            type: string
+                          sseCustomerKey:
+                            type: string
+                        type: object  
                       maxUploadParts:
                         type: integer
                       prefix:
@@ -853,6 +875,17 @@ spec:
                               type: string
                             insecureSkipTLSVerify:
                               type: boolean
+                            serverSideEncryption:
+                              properties:
+                                sseAlgorithm:
+                                  type: string
+                                kmsKeyID:
+                                  type: string
+                                sseCustomerAlgorithm:
+                                  type: string
+                                sseCustomerKey:
+                                  type: string
+                              type: object  
                             maxUploadParts:
                               type: integer
                             prefix:
