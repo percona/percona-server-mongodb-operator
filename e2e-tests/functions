@@ -874,7 +874,7 @@ destroy() {
 	local ignore_logs="${2:-true}"
 
 	desc 'destroy cluster/operator and all other resources'
-	if [ ${ignore_logs} == "false" -o -n "${DEBUG_TESTS}" ]; then
+	if [ ${ignore_logs} == "false" ] &&  [ "${DEBUG_TESTS}" == 1 ]; then
 		kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 			| grep -v 'level=info' \
 			| grep -v 'level=debug' \
