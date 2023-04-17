@@ -185,14 +185,6 @@ void runTest(Integer TEST_ID) {
     def testName = tests[TEST_ID]["name"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
 
-    sh """
-        if [ $retryCount -eq 0 ]; then
-            export DEBUG_TESTS=0
-        else
-            export DEBUG_TESTS=1
-        fi
-    """
-
     waitUntil {
         def timeStart = new Date().getTime()
         try {
@@ -201,6 +193,11 @@ void runTest(Integer TEST_ID) {
 
             timeout(time: 90, unit: 'MINUTES') {
                 sh """
+                    if [ $retryCount -eq 0 ]; then
+                        export DEBUG_TESTS=0
+                    else
+                        export DEBUG_TESTS=1
+                    fi
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
                     source $HOME/google-cloud-sdk/path.bash.inc
                     ./e2e-tests/$testName/run
