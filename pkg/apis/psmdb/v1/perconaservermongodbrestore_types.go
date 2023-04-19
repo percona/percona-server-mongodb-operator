@@ -140,6 +140,10 @@ func (t *PITRestoreDate) UnmarshalJSON(b []byte) (err error) {
 	return nil
 }
 
+func (t *PITRestoreDate) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.Time.Format("2006-01-02 15:04:05"))
+}
+
 type PITRestoreSpec struct {
 	Type PITRestoreType  `json:"type,omitempty"`
 	Date *PITRestoreDate `json:"date,omitempty"`
