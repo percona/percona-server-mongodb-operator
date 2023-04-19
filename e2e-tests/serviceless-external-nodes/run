@@ -62,3 +62,5 @@ diff $tmp_dir/rs-expected.txt "$tmp_dir/rs.txt"
 destroy "$namespace" "true"
 
 destroy $replica_namespace "true"
+
+desc "test passed"
