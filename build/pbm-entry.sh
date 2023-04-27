@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -o xtrace
-
 PBM_MONGODB_URI="mongodb://${PBM_AGENT_MONGODB_USERNAME}:${PBM_AGENT_MONGODB_PASSWORD}@localhost:${PBM_MONGODB_PORT}/?replicaSet=${PBM_MONGODB_REPLSET}"
 
 MONGO_SSL_DIR=/etc/mongodb-ssl
