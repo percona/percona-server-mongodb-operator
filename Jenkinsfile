@@ -35,6 +35,15 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
             source $HOME/google-cloud-sdk/path.bash.inc
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
+            for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
+                kubectl delete deployments --all -n \$namespace --force --grace-period=0 || true
+                kubectl delete sts --all -n \$namespace --force --grace-period=0 || true
+                kubectl delete replicasets --all -n \$namespace --force --grace-period=0 || true
+                kubectl delete poddisruptionbudget --all -n \$namespace --force --grace-period=0 || true
+                kubectl delete services --all -n \$namespace --force --grace-period=0 || true
+                kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
+            done
+            kubectl get svc --all-namespaces || true
             gcloud container clusters delete --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX}
         """
    }
@@ -185,14 +194,6 @@ void runTest(Integer TEST_ID) {
     def testName = tests[TEST_ID]["name"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
 
-    sh """
-        if [ $retryCount -eq 0 ]; then
-            export DEBUG_TESTS=0
-        else
-            export DEBUG_TESTS=1
-        fi
-    """
-
     waitUntil {
         def timeStart = new Date().getTime()
         try {
@@ -201,6 +202,11 @@ void runTest(Integer TEST_ID) {
 
             timeout(time: 90, unit: 'MINUTES') {
                 sh """
+                    if [ $retryCount -eq 0 ]; then
+                        export DEBUG_TESTS=0
+                    else
+                        export DEBUG_TESTS=1
+                    fi
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
                     source $HOME/google-cloud-sdk/path.bash.inc
                     ./e2e-tests/$testName/run
