@@ -75,7 +75,7 @@ Percona welcomes and encourages community contributions to help improve Percona 
 
 See the [Contribution Guide](CONTRIBUTING.md) and [Building and Testing Guide](e2e-tests/README.md) for more information.
 
-## Join Percona Kubernetes Squad!                                                                           
+# Join Percona Kubernetes Squad!                                                                           
 ```                                                                                     
                     %                        _____                
                    %%%                      |  __ \                                          
