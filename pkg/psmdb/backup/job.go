@@ -151,7 +151,6 @@ func newBackupCronJobContainerArgs(cr *api.PerconaServerMongoDB, task *api.Backu
 	return []string{
 		"-c",
 		fmt.Sprintf(`curl \
-			-vvv \
 			-X POST \
 			--cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt \
 			-H "Content-Type: application/json" \
