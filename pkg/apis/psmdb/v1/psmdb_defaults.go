@@ -15,10 +15,9 @@ import (
 // DefaultDNSSuffix is a default dns suffix for the cluster service
 const DefaultDNSSuffix = "svc.cluster.local"
 
-// ConfigReplSetName is the only possible name for config replica set
 const (
-	ConfigReplSetName = "cfg"
-	WorkloadSA        = "default"
+	DefaultConfigReplSetName = "cfg"
+	WorkloadSA               = "default"
 )
 
 var (
@@ -153,7 +152,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 
-		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
+		if len(cr.Spec.Sharding.ConfigsvrReplSet.Name) == 0 {
+			cr.Spec.Sharding.ConfigsvrReplSet.Name = DefaultConfigReplSetName
+		}
 
 		if cr.Spec.Sharding.Mongos.Port == 0 {
 			cr.Spec.Sharding.Mongos.Port = 27017
@@ -389,7 +390,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ReadinessProbe.SuccessThreshold = 1
 		}
 		if replset.ReadinessProbe.FailureThreshold < 1 {
-			if cr.CompareVersion("1.11.0") >= 0 && replset.Name == ConfigReplSetName {
+			if cr.CompareVersion("1.11.0") >= 0 && replset.IsConfigServer() {
 				replset.ReadinessProbe.FailureThreshold = 3
 			} else {
 				replset.ReadinessProbe.FailureThreshold = 8

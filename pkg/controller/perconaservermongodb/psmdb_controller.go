@@ -340,8 +340,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(request reconcile.Request) (re
 			shards++
 		}
 
-		if cr.Spec.Sharding.Enabled && replset.ClusterRole != api.ClusterRoleConfigSvr && replset.Name == api.ConfigReplSetName {
-			return reconcile.Result{}, errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
+		if cr.Spec.Sharding.Enabled && replset.ClusterRole != api.ClusterRoleConfigSvr && replset.Name == api.DefaultConfigReplSetName {
+			return reconcile.Result{}, errors.Errorf("%s is reserved name for config server replset", api.DefaultConfigReplSetName)
 		}
 
 		matchLabels := map[string]string{
@@ -524,6 +524,10 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(cr *api.PerconaServer
 		}
 	}
 
+	if len(cr.Status.ConfigServerReplSet) > 0 && cr.Spec.Sharding.ConfigsvrReplSet.Name != cr.Status.ConfigServerReplSet {
+		return errors.New("you can't change config server replset name on the fly")
+	}
+
 	return nil
 }
 
@@ -568,12 +572,8 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(cr *api.PerconaServerMongo
 	}
 
 	for _, v := range sfsList.Items {
-		if v.Name == cr.Name+"-"+api.ConfigReplSetName {
-			continue
-		}
-
 		component := v.Labels["app.kubernetes.io/component"]
-		if component == "arbiter" || component == "nonVoting" {
+		if component == "arbiter" || component == "nonVoting" || component == "cfg" {
 			continue
 		}
 
@@ -663,7 +663,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 		return nil
 	}
 
-	sfsName := cr.Name + "-" + api.ConfigReplSetName
+	sfsName := cr.Name + "-" + cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name()
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
 
 	err := r.client.Delete(context.TODO(), sfs)
@@ -672,7 +672,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(cr *api.PerconaServerM
 	}
 
 	svc := corev1.Service{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &svc)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name(), Namespace: cr.Namespace}, &svc)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to get config service")
 	}
@@ -774,7 +774,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(cr *api.PerconaServ
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	for _, rs := range repls {
-		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+		name := psmdb.MongodCustomConfigName(cr.Name, rs.RFC1123Name())
 
 		if rs.Configuration == "" {
 			if err := deleteConfigMapIfExists(r.client, cr, name); err != nil {
@@ -954,7 +954,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	cfgPods, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
+	cfgPods, err := psmdb.GetRSPods(r.client, cr, cr.Spec.Sharding.ConfigsvrReplSet.Name)
 	if err != nil {
 		return errors.Wrap(err, "get configsvr pods")
 	}
@@ -966,7 +966,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(cr *api.PerconaServerMon
 
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
-		host, err := psmdb.MongoHost(r.client, cr, api.ConfigReplSetName, cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(r.client, cr, cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name(), cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled, pod)
 		if err != nil {
 			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}
@@ -1138,7 +1138,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	matchLabels map[string]string,
 	internalKeyName string,
 ) (*appsv1.StatefulSet, error) {
-	sfsName := cr.Name + "-" + replset.Name
+	sfsName := cr.Name + "-" + replset.RFC1123Name()
 	size := replset.Size
 	containerName := "mongod"
 	multiAZ := replset.MultiAZ
@@ -1152,8 +1152,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	configuration := replset.Configuration
 	configName := psmdb.MongodCustomConfigName(cr.Name, replset.Name)
 
-	if replset.ClusterRole == api.ClusterRoleConfigSvr {
-		matchLabels["app.kubernetes.io/component"] = api.ConfigReplSetName
+	if replset.IsConfigServer() {
+		matchLabels["app.kubernetes.io/component"] = api.DefaultConfigReplSetName
 	}
 
 	switch matchLabels["app.kubernetes.io/component"] {

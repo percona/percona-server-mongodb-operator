@@ -32,7 +32,7 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name + "-" + replset.Name,
+			Name:      m.Name + "-" + replset.RFC1123Name(),
 			Namespace: m.Namespace,
 		},
 		Spec: corev1.ServiceSpec{

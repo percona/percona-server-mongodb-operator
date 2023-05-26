@@ -129,7 +129,7 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(cr *api.PerconaServer
 func (r *ReconcilePerconaServerMongoDB) getCfgStatefulset(cr *api.PerconaServerMongoDB) (appsv1.StatefulSet, error) {
 	sts := appsv1.StatefulSet{}
 	err := r.client.Get(context.TODO(),
-		types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &sts)
+		types.NamespacedName{Name: cr.Name + "-" + cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name(), Namespace: cr.Namespace}, &sts)
 
 	return sts, err
 }

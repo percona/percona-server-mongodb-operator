@@ -62,13 +62,13 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	if cr.Spec.Sharding.Enabled && sfs.Name != cr.Name+"-"+api.ConfigReplSetName {
+	if cr.Spec.Sharding.Enabled && sfs.Name != cr.Name+"-"+cr.Spec.Sharding.ConfigsvrReplSet.Name {
 		cfgSfs := appsv1.StatefulSet{}
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &cfgSfs)
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name + "-" + cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name(), Namespace: cr.Namespace}, &cfgSfs)
 		if err != nil {
-			return errors.Wrapf(err, "get config statefulset %s/%s", cr.Namespace, cr.Name+"-"+api.ConfigReplSetName)
+			return errors.Wrapf(err, "get config statefulset %s/%s", cr.Namespace, cr.Name+"-"+cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name())
 		}
-		cfgList, err := psmdb.GetRSPods(r.client, cr, api.ConfigReplSetName)
+		cfgList, err := psmdb.GetRSPods(r.client, cr, cr.Spec.Sharding.ConfigsvrReplSet.Name)
 		if err != nil {
 			return errors.Wrap(err, "get cfg pod list")
 		}
@@ -104,7 +104,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 		return nil
 	}
 
-	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
+	if sfs.Name == cr.Name+"-"+cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name() {
 		err = r.disableBalancer(cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to stop balancer")
@@ -139,7 +139,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(cr *api.PerconaServerMongoDB
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
 		if replset.Expose.Enabled {
-			host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+			host, err := psmdb.MongoHost(r.client, cr, replset.RFC1123Name(), replset.Expose.Enabled, pod)
 			if err != nil {
 				return errors.Wrapf(err, "get mongo host for pod %s", pod.Name)
 			}

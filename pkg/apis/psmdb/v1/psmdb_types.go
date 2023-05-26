@@ -148,21 +148,22 @@ const (
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                  `json:"state,omitempty"`
-	MongoVersion       string                    `json:"mongoVersion,omitempty"`
-	MongoImage         string                    `json:"mongoImage,omitempty"`
-	Message            string                    `json:"message,omitempty"`
-	Conditions         []ClusterCondition        `json:"conditions,omitempty"`
-	Replsets           map[string]*ReplsetStatus `json:"replsets,omitempty"`
-	Mongos             *MongosStatus             `json:"mongos,omitempty"`
-	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
-	BackupStatus       AppState                  `json:"backup,omitempty"`
-	BackupVersion      string                    `json:"backupVersion,omitempty"`
-	PMMStatus          AppState                  `json:"pmmStatus,omitempty"`
-	PMMVersion         string                    `json:"pmmVersion,omitempty"`
-	Host               string                    `json:"host,omitempty"`
-	Size               int32                     `json:"size"`
-	Ready              int32                     `json:"ready"`
+	State               AppState                  `json:"state,omitempty"`
+	MongoVersion        string                    `json:"mongoVersion,omitempty"`
+	MongoImage          string                    `json:"mongoImage,omitempty"`
+	Message             string                    `json:"message,omitempty"`
+	Conditions          []ClusterCondition        `json:"conditions,omitempty"`
+	Replsets            map[string]*ReplsetStatus `json:"replsets,omitempty"`
+	ConfigServerReplSet string                    `json:"configSvrReplSet,omitempty"`
+	Mongos              *MongosStatus             `json:"mongos,omitempty"`
+	ObservedGeneration  int64                     `json:"observedGeneration,omitempty"`
+	BackupStatus        AppState                  `json:"backup,omitempty"`
+	BackupVersion       string                    `json:"backupVersion,omitempty"`
+	PMMStatus           AppState                  `json:"pmmStatus,omitempty"`
+	PMMVersion          string                    `json:"pmmVersion,omitempty"`
+	Host                string                    `json:"host,omitempty"`
+	Size                int32                     `json:"size"`
+	Ready               int32                     `json:"ready"`
 }
 
 type ConditionStatus string
@@ -315,6 +316,14 @@ type ReplsetSpec struct {
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
 	MultiAZ
+}
+
+func (r *ReplsetSpec) IsConfigServer() bool {
+	return r.ClusterRole == ClusterRoleConfigSvr
+}
+
+func (r *ReplsetSpec) RFC1123Name() string {
+	return strings.ToLower(r.Name)
 }
 
 type LivenessProbeExtended struct {

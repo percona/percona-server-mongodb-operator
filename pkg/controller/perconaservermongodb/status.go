@@ -53,7 +53,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
 	} else {
-		delete(cr.Status.Replsets, api.ConfigReplSetName)
+		delete(cr.Status.Replsets, cr.Spec.Sharding.ConfigsvrReplSet.RFC1123Name())
 		for i := range cr.Status.Replsets {
 			cr.Status.Replsets[i].AddedAsShard = nil
 		}
@@ -124,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		cr.Status.Ready += status.Ready
 
 		if !inProgress {
-			inProgress, err = r.upgradeInProgress(cr, rs.Name)
+			inProgress, err = r.upgradeInProgress(cr, rs.RFC1123Name())
 			if err != nil {
 				return errors.Wrapf(err, "set upgradeInProgres")
 			}
@@ -164,6 +164,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(cr *api.PerconaServerMongoD
 		if mongosStatus.Ready > mongosStatus.Size {
 			mongosStatus.Ready = mongosStatus.Size
 		}
+
+		cr.Status.ConfigServerReplSet = cr.Spec.Sharding.ConfigsvrReplSet.Name
 
 		cr.Status.Mongos = &mongosStatus
 		cr.Status.Size += int32(mongosStatus.Size)

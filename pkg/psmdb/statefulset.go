@@ -117,7 +117,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 	}
 
 	return appsv1.StatefulSetSpec{
-		ServiceName: m.Name + "-" + replset.Name,
+		ServiceName: m.Name + "-" + replset.RFC1123Name(),
 		Replicas:    &size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,

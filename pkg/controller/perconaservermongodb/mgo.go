@@ -148,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			break
 		}
 
-		host, err := psmdb.MongoHost(r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(r.client, cr, replset.RFC1123Name(), replset.Expose.Enabled, pod)
 		if err != nil {
 			return api.AppStateError, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -333,7 +333,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 		return errors.New("mongos pod is not ready")
 	}
 
-	host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, rspod)
+	host, err := psmdb.MongoHost(r.client, m, replset.RFC1123Name(), replset.Expose.Enabled, rspod)
 	if err != nil {
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
@@ -362,7 +362,6 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 // This must be ran from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
-//
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
@@ -371,7 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(m *api.PerconaServerMo
 
 		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(r.client, m, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(r.client, m, replset.RFC1123Name(), replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
