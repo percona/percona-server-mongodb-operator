@@ -11,6 +11,7 @@ spec:
 #  unmanaged: false
   crVersion: 1.11.0
   image: percona/percona-server-mongodb:4.4.10-11
+  initImage: percona/percona-server-mongodb-operator:1.11.0
   imagePullPolicy: Always
 #  imagePullSecrets:
 #    - name: private-registry-credentials
@@ -19,7 +20,7 @@ spec:
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
-    apply: 4.4-recommended
+    apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
   secrets:
