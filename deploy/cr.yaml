@@ -56,7 +56,13 @@ spec:
 #      votes: 0
 #      priority: 0
 #    - host: 34.124.76.92
-#    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+    configuration: |
+      net:
+        tls:
+          mode: requireTLS
+      systemLog:
+        verbosity: 2
+      #    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #    configuration: |
 #      net:
 #        tls:
