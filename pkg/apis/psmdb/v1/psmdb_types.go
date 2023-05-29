@@ -11,6 +11,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -315,6 +316,25 @@ type ReplsetSpec struct {
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 
 	MultiAZ
+}
+
+func (r ReplsetSpec) CustomReplsetName() (string, error) {
+	var cfg struct {
+		Replication struct {
+			ReplSetName string `yaml:"replSetName,omitempty"`
+		} `yaml:"replication,omitempty"`
+	}
+
+	err := yaml.Unmarshal([]byte(r.Configuration), &cfg)
+	if err != nil {
+		return cfg.Replication.ReplSetName, errors.Wrap(err, "unmarshal configuration")
+	}
+
+	if len(cfg.Replication.ReplSetName) == 0 {
+		return cfg.Replication.ReplSetName, errors.New("replSetName is not configured")
+	}
+
+	return cfg.Replication.ReplSetName, nil
 }
 
 type LivenessProbeExtended struct {

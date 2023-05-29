@@ -125,8 +125,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 }
 
 // containerArgs returns the args to pass to the mSpec container
-func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements,
-	useConfigFile bool) []string {
+func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements, useConfigFile bool) []string {
 	mSpec := m.Spec.Mongod
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
@@ -138,6 +137,11 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
 		"--sslAllowInvalidCertificates",
+	}
+
+	name, err := replset.CustomReplsetName()
+	if err == nil {
+		args[4] = "--replSet=" + name
 	}
 
 	if m.Spec.UnsafeConf {
@@ -303,7 +307,6 @@ func containerArgs(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resour
 // explicitly set the WiredTiger cache size to fix this.
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
-//
 func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64, subtract1GB bool) float64 {
 	maxMemory := resourceList[corev1.ResourceMemory]
 	var size float64

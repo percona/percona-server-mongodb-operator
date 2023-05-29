@@ -26,6 +26,7 @@ require (
 	go.mongodb.org/mongo-driver v1.7.0
 	golang.org/x/tools v0.0.0-20201028153306-37f0764111ff // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
 	k8s.io/api v0.18.0
 	k8s.io/apimachinery v0.18.0
