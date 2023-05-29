@@ -523,7 +523,13 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			continue
 		}
 
-		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
+		replsetName := replset.Name
+		name, err := replset.CustomReplsetName()
+		if err == nil {
+			replsetName = name
+		}
+
+		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
@@ -560,7 +566,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 					}
 				)
 				EOF
-			`, mongoCmd, replset.Name, host),
+			`, mongoCmd, replsetName, host),
 		}
 
 		errb.Reset()
@@ -585,7 +591,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		log.Info("replset initialized", "replset", replset.Name, "pod", pod.Name)
+		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
 
 		return nil
 	}
