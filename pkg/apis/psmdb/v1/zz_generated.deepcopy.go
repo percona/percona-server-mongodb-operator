@@ -621,6 +621,13 @@ func (in *MongosSpec) DeepCopyInto(out *MongosSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.HostAliases != nil {
+		in, out := &in.HostAliases, &out.HostAliases
+		*out = make([]corev1.HostAlias, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.ResourcesSpec != nil {
 		in, out := &in.ResourcesSpec, &out.ResourcesSpec
 		*out = new(ResourcesSpec)
@@ -1374,6 +1381,13 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		}
 	}
 	in.NonVoting.DeepCopyInto(&out.NonVoting)
+	if in.HostAliases != nil {
+		in, out := &in.HostAliases, &out.HostAliases
+		*out = make([]corev1.HostAlias, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 	return
 }
