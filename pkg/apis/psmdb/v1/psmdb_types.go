@@ -521,6 +521,7 @@ type ReplsetSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
+	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
 func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
@@ -601,6 +602,7 @@ type MongosSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
 type MongodSpec struct {
