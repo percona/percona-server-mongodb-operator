@@ -81,6 +81,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, operatorPod corev1.Pod, 
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
+				HostAliases:       cr.Spec.Sharding.Mongos.HostAliases,
 				SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
 				Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 				NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,

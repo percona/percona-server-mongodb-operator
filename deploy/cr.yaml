@@ -240,6 +240,11 @@ spec:
         resources:
           requests:
             storage: 3Gi
+#    hostAliases:
+#    - ip: "10.10.0.2"
+#      hostnames:
+#      - "host1"
+#      - "host2"
 
   sharding:
     enabled: true
@@ -339,6 +344,11 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
     mongos:
       size: 3
@@ -407,6 +417,11 @@ spec:
 #        destination: file
 #        format: BSON
 #        filter: '{}'
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
   mongod:
     net:
