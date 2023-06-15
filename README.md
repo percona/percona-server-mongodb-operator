@@ -1,4 +1,6 @@
-![Percona Distribution for MongoDB Operator](operator.png)
+# Percona Operator for MongoDB
+
+![Percona Kubernetes Operators](kubernetes.svg)
 
 <div align="center">
 
@@ -8,8 +10,6 @@
 ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/percona/percona-server-mongodb-operator)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/percona/percona-server-mongodb-operator)
 [![Go Report Card](https://goreportcard.com/badge/github.com/percona/percona-server-mongodb-operator)](https://goreportcard.com/report/github.com/percona/percona-server-mongodb-operator)
-
-</div>
 
 [Percona Server for MongoDB](https://www.percona.com/software/mongodb/percona-server-for-mongodb) (PSMDB) is an open-source enterprise MongoDB solution that helps you to ensure data availability for your applications while improving security and simplifying the development of new applications in the most demanding public, private, and hybrid cloud environments.
 
