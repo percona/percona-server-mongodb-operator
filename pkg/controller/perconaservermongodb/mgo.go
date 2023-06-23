@@ -116,20 +116,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(cr *api.PerconaServerMo
 			}
 		}()
 
-		in, err := inShard(mongosSession, replset.Name)
+		rsName := replset.Name
+		name, err := replset.CustomReplsetName()
+		if err == nil {
+			rsName = name
+		}
+
+		in, err := inShard(mongosSession, rsName)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "get shard")
 		}
 
 		if !in {
-			log.Info("adding rs to shard", "rs", replset.Name)
+			log.Info("adding rs to shard", "rs", rsName)
 
 			err := r.handleRsAddToShard(cr, replset, pods.Items[0], mongosPods[0])
 			if err != nil {
 				return api.AppStateError, errors.Wrap(err, "add shard")
 			}
 
-			log.Info("added to shard", "rs", replset.Name)
+			log.Info("added to shard", "rs", rsName)
 		}
 
 		t := true
@@ -350,7 +356,12 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(m *api.PerconaServerM
 		}
 	}()
 
-	err = mongo.AddShard(context.Background(), cli, replset.Name, host)
+	rsName := replset.Name
+	name, err := replset.CustomReplsetName()
+	if err == nil {
+		rsName = name
+	}
+	err = mongo.AddShard(context.Background(), cli, rsName, host)
 	if err != nil {
 		return errors.Wrap(err, "failed to add shard")
 	}
