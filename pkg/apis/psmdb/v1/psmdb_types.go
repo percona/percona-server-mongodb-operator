@@ -6,12 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,13 +28,13 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDB is the Schema for the perconaservermongodbs API
-//+k8s:openapi-gen=true
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="psmdb"
-//+kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
-//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName="psmdb"
+// +kubebuilder:printcolumn:name="ENDPOINT",type="string",JSONPath=".status.host"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type PerconaServerMongoDB struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -481,6 +480,7 @@ type ReplsetSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
+	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
 func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
@@ -497,6 +497,25 @@ func (r *ReplsetSpec) PodFQDN(cr *PerconaServerMongoDB, podName string) string {
 
 func (r *ReplsetSpec) PodFQDNWithPort(cr *PerconaServerMongoDB, podName string) string {
 	return fmt.Sprintf("%s:%d", r.PodFQDN(cr, podName), MongodPort(cr))
+}
+
+func (r ReplsetSpec) CustomReplsetName() (string, error) {
+	var cfg struct {
+		Replication struct {
+			ReplSetName string `yaml:"replSetName,omitempty"`
+		} `yaml:"replication,omitempty"`
+	}
+
+	err := yaml.Unmarshal([]byte(r.Configuration), &cfg)
+	if err != nil {
+		return cfg.Replication.ReplSetName, errors.Wrap(err, "unmarshal configuration")
+	}
+
+	if len(cfg.Replication.ReplSetName) == 0 {
+		return cfg.Replication.ReplSetName, errors.New("replSetName is not configured")
+	}
+
+	return cfg.Replication.ReplSetName, nil
 }
 
 type LivenessProbeExtended struct {
@@ -554,6 +573,7 @@ type MongosSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
 type MongodSpec struct {

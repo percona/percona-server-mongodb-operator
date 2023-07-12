@@ -123,6 +123,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
+			HostAliases:       cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
 			Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 			NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
@@ -259,9 +260,15 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
+	cfgRsName := cfgRs.Name
+	name, err := cfgRs.CustomReplsetName()
+	if err == nil {
+		cfgRsName = name
+	}
+
 	// sort config instances to prevent unnecessary updates
 	sort.Strings(cfgInstances)
-	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstances, ","))
+	configDB := fmt.Sprintf("%s/%s", cfgRsName, strings.Join(cfgInstances, ","))
 	args := []string{
 		"mongos",
 		"--bind_ip_all",

@@ -16,6 +16,7 @@ package healthcheck
 
 import (
 	"context"
+	"encoding/json"
 
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -111,14 +112,31 @@ func HealthCheckMongodLiveness(client *mgo.Client, startupDelaySeconds int64) (*
 		// standalone mongod nodes in an unmanaged cluster doesn't need
 		// to die before they added to a replset
 		if res.Err().Error() == ErrNoReplsetConfigStr {
-			return nil, nil
+			state := mongo.MemberStateUnknown
+			return &state, nil
 		}
 		return nil, errors.Wrap(res.Err(), "get replsetGetStatus response")
 	}
 
+	// this is a workaround to fix decoding of empty interfaces
+	// https://jira.mongodb.org/browse/GODRIVER-988
 	rsStatus := ReplSetStatus{}
-	if err := res.Decode(&rsStatus); err != nil {
-		return nil, errors.Wrap(err, "get replsetGetStatus response")
+	tempResult := bson.M{}
+	err = res.Decode(&tempResult)
+	if err != nil {
+		return nil, errors.Wrap(err, "decode replsetGetStatus response")
+	}
+
+	if err == nil {
+		result, err := json.Marshal(tempResult)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal temp result")
+		}
+
+		err = json.Unmarshal(result, &rsStatus)
+		if err != nil {
+			return nil, errors.Wrap(err, "unmarshal temp result")
+		}
 	}
 
 	oplogRs := OplogRs{}
