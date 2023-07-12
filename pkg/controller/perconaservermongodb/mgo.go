@@ -170,20 +170,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			}
 		}()
 
-		in, err := inShard(ctx, mongosSession, replset.Name)
+		rsName := replset.Name
+		name, err := replset.CustomReplsetName()
+		if err == nil {
+			rsName = name
+		}
+
+		in, err := inShard(ctx, mongosSession, rsName)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "get shard")
 		}
 
 		if !in {
-			log.Info("adding rs to shard", "rs", replset.Name)
+			log.Info("adding rs to shard", "rs", rsName)
 
 			err := r.handleRsAddToShard(ctx, cr, replset, pods.Items[0], mongosPods[0])
 			if err != nil {
 				return api.AppStateError, errors.Wrap(err, "add shard")
 			}
 
-			log.Info("added to shard", "rs", replset.Name)
+			log.Info("added to shard", "rs", rsName)
 		}
 
 		rs := cr.Status.Replsets[replset.Name]
@@ -425,7 +431,12 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 		}
 	}()
 
-	err = mongo.AddShard(ctx, cli, replset.Name, host)
+	rsName := replset.Name
+	name, err := replset.CustomReplsetName()
+	if err == nil {
+		rsName = name
+	}
+	err = mongo.AddShard(ctx, cli, rsName, host)
 	if err != nil {
 		return errors.Wrap(err, "failed to add shard")
 	}
@@ -437,14 +448,19 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 // This must be ran from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://docs.mongodb.com/manual/core/security-users/#localhost-exception
-//
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
 			continue
 		}
 
-		log.Info("initiating replset", "replset", replset.Name, "pod", pod.Name)
+		replsetName := replset.Name
+		name, err := replset.CustomReplsetName()
+		if err == nil {
+			replsetName = name
+		}
+
+		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
 
 		host, err := psmdb.MongoHost(ctx, r.client, m, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
@@ -467,7 +483,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 					}
 				)
 				EOF
-			`, replset.Name, host)
+			`, replsetName, host)
+
 		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
@@ -488,7 +505,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, m
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		log.Info("replset was initialized", "replset", replset.Name, "pod", pod.Name)
+		log.Info("replset was initialized", "replset", replsetName, "pod", pod.Name)
 
 		return nil
 	}

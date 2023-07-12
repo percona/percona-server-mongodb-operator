@@ -2,11 +2,12 @@ package psmdb
 
 import (
 	"fmt"
-	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,6 +124,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
+			HostAliases:       cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
 			Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 			NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
@@ -249,9 +251,15 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
+	cfgRsName := cfgRs.Name
+	name, err := cfgRs.CustomReplsetName()
+	if err == nil {
+		cfgRsName = name
+	}
+
 	// sort config instances to prevent unnecessary updates
 	sort.Strings(cfgInstances)
-	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstances, ","))
+	configDB := fmt.Sprintf("%s/%s", cfgRsName, strings.Join(cfgInstances, ","))
 	args := []string{
 		"mongos",
 		"--bind_ip_all",
