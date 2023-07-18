@@ -205,7 +205,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				},
 			}
 
-			if cr.CompareVersion("1.7.0") >= 0 {
+			if cr.CompareVersion("1.7.0") >= 0 && !cr.Spec.UnsafeConf {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command =
 					append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 						"--ssl", "--sslInsecure",
@@ -250,7 +250,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				},
 			}
 
-			if cr.CompareVersion("1.7.0") >= 0 {
+			if cr.CompareVersion("1.7.0") >= 0 && !cr.Spec.UnsafeConf {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command =
 					append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
 						"--ssl", "--sslInsecure",
@@ -380,7 +380,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 			if cr.CompareVersion("1.6.0") >= 0 {
 				replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
-				if cr.CompareVersion("1.7.0") >= 0 {
+				if cr.CompareVersion("1.7.0") >= 0 && !cr.Spec.UnsafeConf {
 					replset.LivenessProbe.Probe.Exec.Command =
 						append(replset.LivenessProbe.Probe.Exec.Command,
 							"--ssl", "--sslInsecure",
@@ -664,14 +664,14 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	}
 	if nv.LivenessProbe.ProbeHandler.Exec == nil {
 		nv.LivenessProbe.Probe.ProbeHandler.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/data/db/mongodb-healthcheck",
-				"k8s",
-				"liveness",
-				"--ssl", "--sslInsecure",
-				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-				"--sslPEMKeyFile", "/tmp/tls.pem",
-			},
+			Command: []string{"/data/db/mongodb-healthcheck", "k8s", "liveness"},
+		}
+
+		if !cr.Spec.UnsafeConf {
+			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
+				nv.LivenessProbe.Probe.ProbeHandler.Exec.Command,
+				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+			)
 		}
 
 		if cr.CompareVersion("1.14.0") >= 0 {
