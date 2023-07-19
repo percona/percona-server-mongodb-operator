@@ -646,6 +646,8 @@ compare_kubectl() {
 			del(.. | select(has("volume.beta.kubernetes.io/storage-provisioner"))."volume.beta.kubernetes.io/storage-provisioner") |
 			del(.. | select(has("volume.kubernetes.io/storage-provisioner"))."volume.kubernetes.io/storage-provisioner") |
 			del(.spec.volumeMode) |
+			del(.. | select(has("volume.beta.kubernetes.io/storage-provisioner")."volume.beta.kubernetes.io/storage-provisioner"))
+			del(.. | select(has("volume.beta.kubernetes.io/storage-provisioner")."volume.beta.kubernetes.io/storage-provisioner"))
 			del(.. | select(has("volume.kubernetes.io/selected-node"))."volume.kubernetes.io/selected-node") |
 			del(.. | select(has("percona.com/last-config-hash"))."percona.com/last-config-hash") |
 			del(.. | select(has("percona.com/configuration-hash"))."percona.com/configuration-hash") |
@@ -761,8 +763,14 @@ compare_mongos_cmd() {
 	run_mongos "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
+<<<<<<< HEAD
 			>$tmp_dir/${command}${postfix}
 	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+=======
+			>$tmp_dir/${command}
+
+	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
+>>>>>>> 8617f8f8 (fix tests)
 }
 
 get_mongo_primary_endpoint() {

@@ -6,6 +6,7 @@ void CreateCluster(String CLUSTER_SUFFIX) {
             export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
             export USE_GKE_GCLOUD_AUTH_PLUGIN=True
             source $HOME/google-cloud-sdk/path.bash.inc
+<<<<<<< HEAD
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
@@ -21,6 +22,13 @@ void CreateCluster(String CLUSTER_SUFFIX) {
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
                 exit 1
             fi
+=======
+            gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
+            gcloud config set project $GCP_PROJECT
+            gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_PREFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
+            gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_PREFIX} --cluster-version=1.24 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --labels delete-cluster-after-hours=6 --subnetwork=jenkins-${CLUSTER_PREFIX} --no-enable-autoupgrade
+            kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com
+>>>>>>> 8617f8f8 (fix tests)
         """
    }
 }
@@ -150,6 +158,8 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
+                        export IMAGE_MONGOD=percona/percona-server-mongodb:4.4.10-11
+                        export IMAGE_BACKUP=percona/percona-server-mongodb-operator:1.11.0-backup
                         ./e2e-tests/$TEST_NAME/run
                     fi
                 """

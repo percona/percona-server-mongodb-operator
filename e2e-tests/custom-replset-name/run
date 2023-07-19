@@ -68,4 +68,8 @@ fi
 
 desc 'check backup and restore -- minio'
 run_restore $backup_name_minio 3 1 "-mongos"
+
+sleep 120
 wait_restore $backup_name_minio 3 1 "-mongos"
+
+destroy $namespace
