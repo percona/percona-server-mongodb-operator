@@ -646,8 +646,6 @@ compare_kubectl() {
 			del(.. | select(has("volume.beta.kubernetes.io/storage-provisioner"))."volume.beta.kubernetes.io/storage-provisioner") |
 			del(.. | select(has("volume.kubernetes.io/storage-provisioner"))."volume.kubernetes.io/storage-provisioner") |
 			del(.spec.volumeMode) |
-			del(.. | select(has("volume.beta.kubernetes.io/storage-provisioner")."volume.beta.kubernetes.io/storage-provisioner"))
-			del(.. | select(has("volume.beta.kubernetes.io/storage-provisioner")."volume.beta.kubernetes.io/storage-provisioner"))
 			del(.. | select(has("volume.kubernetes.io/selected-node"))."volume.kubernetes.io/selected-node") |
 			del(.. | select(has("percona.com/last-config-hash"))."percona.com/last-config-hash") |
 			del(.. | select(has("percona.com/configuration-hash"))."percona.com/configuration-hash") |
