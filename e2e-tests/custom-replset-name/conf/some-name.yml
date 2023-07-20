@@ -10,7 +10,6 @@ spec:
     image: percona/percona-backup-mongodb:2.0.4
     pitr:
       enabled: false
-    restartOnFailure: true
     serviceAccountName: percona-server-mongodb-operator
     storages:
       aws-s3:
@@ -184,13 +183,11 @@ spec:
             storage: 2Gi
         storageClassName: standard-rwo
   secrets:
-    key: some-key
     users: some-users
   sharding:
     configsvrReplSet:
       affinity:
         antiAffinityTopologyKey: topology.kubernetes.io/zone
-      annotations: restarted-at: 18-07-23
       configuration: |
         replication:
           replSetName: csReplSet
