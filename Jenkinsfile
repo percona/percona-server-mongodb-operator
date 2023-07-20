@@ -99,7 +99,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
                         export IMAGE_MONGOD=percona/percona-server-mongodb:4.4.10-11
-                        export IMAGE_BACKUP=percona/percona-server-mongodb-operator:1.11.0-backup
+                        export IMAGE_BACKUP=percona/percona-backup-mongodb:1.8.1
                         ./e2e-tests/$TEST_NAME/run
                     fi
                 """
