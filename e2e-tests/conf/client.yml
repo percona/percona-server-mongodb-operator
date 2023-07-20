@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: psmdb-client
-          image: percona/percona-server-mongodb:4.0
+          image: percona/percona-server-mongodb:4.4
           imagePullPolicy: Always
           command:
           - sleep
