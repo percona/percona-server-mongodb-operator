@@ -5,8 +5,8 @@ GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]
 API="psmdb.percona.com/v1-12-0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod4.4"}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"percona/percona-server-mongodb:4.4.10-11"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"percona/percona-backup-mongodb:1.7.0"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-$(curl https://raw.githubusercontent.com/Percona-Lab/percona-openshift/main/helm/pmm-server/Chart.yaml | awk '/^version/{print $NF}')}
 IMAGE_PMM_SERVER_REPO=${IMAGE_PMM_SERVER_REPO:-"perconalab/pmm-server"}
@@ -638,6 +638,7 @@ compare_mongos_cmd() {
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}
+
 	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}
 }
 
@@ -902,17 +903,19 @@ spinup_psmdb() {
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
 }
 
+
 kubectl_bin() {
 	local LAST_OUT="$(mktemp)"
 	local LAST_ERR="$(mktemp)"
 	local exit_status=0
 	local timeout=4
+
 	for i in $(seq 0 2); do
 		set +e
 		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
-		if [[ ${exit_status} != 0 ]]; then
+		if [ ${exit_status} != 0  ]; then
 			cat "$LAST_OUT"
 			cat "$LAST_ERR" >&2
 			sleep "$((timeout * i))"
@@ -920,6 +923,7 @@ kubectl_bin() {
 			break
 		fi
 	done
+
 	cat "$LAST_OUT"
 	cat "$LAST_ERR" >&2
 	rm "$LAST_OUT" "$LAST_ERR"
