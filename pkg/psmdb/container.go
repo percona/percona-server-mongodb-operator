@@ -59,6 +59,10 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			MountPath: "/etc/users-secret",
 		})
 	}
+	rsName := replset.Name
+	if name, err := replset.CustomReplsetName(); err == nil {
+		rsName = name
+	}
 	container := corev1.Container{
 		Name:            name,
 		Image:           cr.Spec.Image,
@@ -86,7 +90,7 @@ func container(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name stri
 			},
 			{
 				Name:  "MONGODB_REPLSET",
-				Value: replset.Name,
+				Value: rsName,
 			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
