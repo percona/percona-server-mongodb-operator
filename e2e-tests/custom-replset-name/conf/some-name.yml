@@ -1,0 +1,230 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  crVersion: 1.13.0
+  allowUnsafeConfigurations: true
+  backup:
+    enabled: true
+    image: percona/percona-backup-mongodb:1.8.1
+    pitr:
+      enabled: false
+    serviceAccountName: percona-server-mongodb-operator
+    storages:
+      aws-s3:
+        type: s3
+        s3:
+          credentialsSecret: aws-s3-secret
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+      gcp-cs:
+        type: s3
+        s3:
+          credentialsSecret: gcp-cs-secret
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb
+          endpointUrl: https://storage.googleapis.com
+  image: percona/percona-server-mongodb:4.4.10-11
+  imagePullPolicy: Always
+  mongod:
+    net:
+      hostPort: 0
+      port: 27017
+    operationProfiling:
+      mode: slowOp
+      rateLimit: 100
+      slowOpThresholdMs: 100
+    security:
+      enableEncryption: false
+      encryptionCipherMode: AES256-CBC
+      encryptionKeySecret: tee-pro-mongodb-encryption-key
+      redactClientLogData: false
+    setParameter:
+      ttlMonitorSleepSecs: 60
+      wiredTigerConcurrentReadTransactions: 128
+      wiredTigerConcurrentWriteTransactions: 128
+    storage:
+      engine: wiredTiger
+      inMemory:
+        engineConfig:
+          inMemorySizeRatio: 0.9
+      wiredTiger:
+        collectionConfig:
+          blockCompressor: snappy
+        engineConfig:
+          cacheSizeRatio: 0.5
+          directoryForIndexes: false
+          journalCompressor: snappy
+        indexConfig:
+          prefixCompression: true
+  pmm:
+    enabled: false
+  replsets:
+  - affinity:
+      antiAffinityTopologyKey: topology.kubernetes.io/zone
+    arbiter:
+      affinity:
+        antiAffinityTopologyKey: topology.kubernetes.io/zone
+      enabled: false
+      size: 1
+    configuration: |
+      storage:
+        directoryPerDB: true
+        wiredTiger:
+          engineConfig:
+            directoryForIndexes: true
+    expose:
+      enabled: true
+      exposeType: ClusterIP
+      serviceAnnotations:
+        networking.gke.io/load-balancer-type: Internal
+    name: shard1
+    podDisruptionBudget:
+      maxUnavailable: 1
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2Gi
+        storageClassName: standard-rwo
+  - affinity:
+      antiAffinityTopologyKey: topology.kubernetes.io/zone
+    arbiter:
+      affinity:
+        antiAffinityTopologyKey: topology.kubernetes.io/zone
+      enabled: false
+      size: 1
+    configuration: |
+      storage:
+        directoryPerDB: true
+        wiredTiger:
+          engineConfig:
+            directoryForIndexes: true
+    expose:
+      enabled: true
+      exposeType: ClusterIP
+      serviceAnnotations:
+        networking.gke.io/load-balancer-type: Internal
+    name: shard3
+    podDisruptionBudget:
+      maxUnavailable: 1
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2Gi
+        storageClassName: standard-rwo
+  - affinity:
+      antiAffinityTopologyKey: topology.kubernetes.io/zone
+    arbiter:
+      affinity:
+        antiAffinityTopologyKey: topology.kubernetes.io/zone
+      enabled: false
+      size: 1
+    configuration: |
+      storage:
+        directoryPerDB: true
+        wiredTiger:
+          engineConfig:
+            directoryForIndexes: true
+    expose:
+      enabled: true
+      exposeType: ClusterIP
+      serviceAnnotations:
+        networking.gke.io/load-balancer-type: Internal
+    name: shard5
+    podDisruptionBudget:
+      maxUnavailable: 1
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2Gi
+        storageClassName: standard-rwo
+  - affinity:
+      antiAffinityTopologyKey: topology.kubernetes.io/zone
+    arbiter:
+      affinity:
+        antiAffinityTopologyKey: topology.kubernetes.io/zone
+      enabled: false
+      size: 1
+    configuration: |
+      storage:
+        directoryPerDB: true
+        wiredTiger:
+          engineConfig:
+            directoryForIndexes: true
+    expose:
+      enabled: true
+      exposeType: ClusterIP
+      serviceAnnotations:
+        networking.gke.io/load-balancer-type: Internal
+    name: shard7
+    podDisruptionBudget:
+      maxUnavailable: 1
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2Gi
+        storageClassName: standard-rwo
+  secrets:
+    users: some-users
+  sharding:
+    configsvrReplSet:
+      affinity:
+        antiAffinityTopologyKey: topology.kubernetes.io/zone
+      configuration: |
+        replication:
+          replSetName: csReplSet
+        storage:
+          directoryPerDB: true
+          wiredTiger:
+            engineConfig:
+              directoryForIndexes: true
+      expose:
+        enabled: true
+        exposeType: ClusterIP
+        serviceAnnotations:
+          networking.gke.io/load-balancer-type: Internal
+      podDisruptionBudget:
+        maxUnavailable: 1
+      size: 3
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 5Gi
+          storageClassName: standard-rwo
+    enabled: true
+    mongos:
+      affinity:
+        antiAffinityTopologyKey: kubernetes.io/hostname
+      expose:
+        exposeType: LoadBalancer
+        serviceAnnotations:
+          networking.gke.io/load-balancer-type: Internal
+      podDisruptionBudget:
+        maxUnavailable: 1
+      size: 3
+  unmanaged: false
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    apply: Disabled
+    schedule: 0 2 * * *
+    setFCV: false
+    versionServiceEndpoint: https://check.percona.com
