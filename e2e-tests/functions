@@ -6,12 +6,8 @@ API="psmdb.percona.com/v1"
 OPERATOR_VERSION="1.14.0"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod5.0"}
-IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
-perconalab/percona-server-mongodb-operator:main-mongod4.4
-perconalab/percona-server-mongodb-operator:main-mongod5.0
-perconalab/percona-server-mongodb-operator:main-mongod6.0'}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"percona/percona-server-mongodb:4.4.10-11"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"percona/percona-backup-mongodb:2.0.4"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_SERVER_REPO=${IMAGE_PMM_SERVER_REPO:-"perconalab/pmm-server"}

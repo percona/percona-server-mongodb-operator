@@ -80,10 +80,17 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			MountPath: "/etc/users-secret",
 		})
 	}
+
 	hostPort := int32(0)
 	if cr.CompareVersion("1.12.0") < 0 {
 		hostPort = cr.Spec.Mongod.Net.HostPort
 	}
+
+	rsName := replset.Name
+	if name, err := replset.CustomReplsetName(); err == nil {
+		rsName = name
+	}
+
 	container := corev1.Container{
 		Name:            name,
 		Image:           cr.Spec.Image,
@@ -111,7 +118,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			},
 			{
 				Name:  "MONGODB_REPLSET",
-				Value: replset.Name,
+				Value: rsName,
 			},
 		},
 		EnvFrom: []corev1.EnvFromSource{

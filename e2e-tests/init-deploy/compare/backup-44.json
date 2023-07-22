@@ -388,7 +388,6 @@
         },
         "actions": [
           "appendOplogNote",
-          "applyOps",
           "checkFreeMonitoringStatus",
           "connPoolStats",
           "forceUUID",

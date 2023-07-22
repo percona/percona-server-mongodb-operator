@@ -150,6 +150,8 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
                         source $HOME/google-cloud-sdk/path.bash.inc
+                        export IMAGE_MONGOD=percona/percona-server-mongodb:4.4.10-11
+                        export IMAGE_BACKUP=percona/percona-backup-mongodb:2.0.4
                         ./e2e-tests/$TEST_NAME/run
                     fi
                 """
@@ -367,6 +369,7 @@ pipeline {
                 stage('2 OneP IgnoreLA Mon Arb SerPP Live SmU VerS Users DataS NonV DemBEKS DataAREnc') {
                     steps {
                         CreateCluster('cluster2')
+                        runTest('custom-replset-name', 'cluster2')
                         runTest('one-pod', 'cluster2')
                         runTest('ignore-labels-annotations', 'cluster2')
                         runTest('monitoring-2-0', 'cluster2')
