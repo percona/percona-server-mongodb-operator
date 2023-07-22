@@ -235,6 +235,9 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 
 	if cr.CompareVersion("1.14.0") >= 0 {
 		container.Command = []string{BinMountPath + "/ps-entry.sh"}
+
+		container.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+		container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 	}
 
 	return container, nil
