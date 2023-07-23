@@ -17156,7 +17156,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:1.14.0-custom-147
+          image: perconalab/percona-server-mongodb-operator:1.14.0-custom-149
           ports:
           - containerPort: 60000
             protocol: TCP
