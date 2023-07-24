@@ -227,18 +227,12 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 }
 
 func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
-	if cr.CompareVersion("1.12.0") >= 0 {
-		enabled, err := replset.Configuration.IsEncryptionEnabled()
-		if err != nil {
-			return false, errors.Wrap(err, "failed to parse replset configuration")
-		}
-		if enabled == nil {
-			if cr.Spec.Mongod.Security != nil && cr.Spec.Mongod.Security.EnableEncryption != nil {
-				return *cr.Spec.Mongod.Security.EnableEncryption, nil
-			}
-			return true, nil // true by default
-		}
-		return *enabled, nil
+	enabled, err := replset.Configuration.IsEncryptionEnabled()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse replset configuration")
 	}
-	return *cr.Spec.Mongod.Security.EnableEncryption, nil
+	if enabled == nil {
+		return true, nil // true by default
+	}
+	return *enabled, nil
 }
