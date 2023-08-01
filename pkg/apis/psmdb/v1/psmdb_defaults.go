@@ -759,6 +759,7 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 
 func (m *MultiAZ) reconcileOpts() {
 	m.reconcileAffinityOpts()
+	m.reconcileTopologySpreadConstraints()
 
 	if m.PodDisruptionBudget == nil {
 		defaultMaxUnavailable := intstr.FromInt(1)
@@ -798,6 +799,26 @@ func (m *MultiAZ) reconcileAffinityOpts() {
 	case m.Affinity != nil && m.Affinity.TopologyKey != nil:
 		if _, ok := affinityValidTopologyKeys[*m.Affinity.TopologyKey]; !ok {
 			m.Affinity.TopologyKey = &defaultAffinityTopologyKey
+		}
+	}
+}
+
+func (m *MultiAZ) reconcileTopologySpreadConstraints() {
+	if len(m.TopologySpreadConstraints) == 0 {
+		m.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{}, // this line ensures that the slice contains at least one element
+		}
+	}
+
+	for i := range m.TopologySpreadConstraints {
+		if m.TopologySpreadConstraints[i].MaxSkew == 0 {
+			m.TopologySpreadConstraints[i].MaxSkew = 1
+		}
+		if m.TopologySpreadConstraints[i].TopologyKey == "" {
+			m.TopologySpreadConstraints[i].TopologyKey = defaultAffinityTopologyKey
+		}
+		if m.TopologySpreadConstraints[i].WhenUnsatisfiable == "" {
+			m.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.DoNotSchedule
 		}
 	}
 }
