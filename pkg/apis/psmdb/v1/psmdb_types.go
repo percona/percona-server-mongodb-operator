@@ -284,12 +284,6 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
-const (
-	PMMUserKey     = "PMM_SERVER_USER"
-	PMMPasswordKey = "PMM_SERVER_PASSWORD"
-	PMMAPIKey      = "PMM_SERVER_API_KEY"
-)
-
 func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
 	if _, ok := secret.Data[PMMAPIKey]; !ok {
 		_, okl := secret.Data[PMMUserKey]
@@ -522,6 +516,10 @@ type ReplsetSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
+}
+
+func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
+	return fmt.Sprintf("%s-%s-%d", cr.Name, r.Name, idx)
 }
 
 func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
@@ -897,6 +895,38 @@ func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 const (
 	internalPrefix = "internal-"
 	userPostfix    = "-users"
+)
+
+const (
+	PMMUserKey     = "PMM_SERVER_USER"
+	PMMPasswordKey = "PMM_SERVER_PASSWORD"
+	PMMAPIKey      = "PMM_SERVER_API_KEY"
+)
+
+const (
+	EnvMongoDBDatabaseAdminUser      = "MONGODB_DATABASE_ADMIN_USER"
+	EnvMongoDBDatabaseAdminPassword  = "MONGODB_DATABASE_ADMIN_PASSWORD"
+	EnvMongoDBClusterAdminUser       = "MONGODB_CLUSTER_ADMIN_USER"
+	EnvMongoDBClusterAdminPassword   = "MONGODB_CLUSTER_ADMIN_PASSWORD"
+	EnvMongoDBUserAdminUser          = "MONGODB_USER_ADMIN_USER"
+	EnvMongoDBUserAdminPassword      = "MONGODB_USER_ADMIN_PASSWORD"
+	EnvMongoDBBackupUser             = "MONGODB_BACKUP_USER"
+	EnvMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
+	EnvMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
+	EnvMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
+	EnvPMMServerUser                 = PMMUserKey
+	EnvPMMServerPassword             = PMMPasswordKey
+	EnvPMMServerAPIKey               = PMMAPIKey
+)
+
+type UserRole string
+
+const (
+	RoleDatabaseAdmin  UserRole = "databaseAdmin"
+	RoleClusterAdmin   UserRole = "clusterAdmin"
+	RoleUserAdmin      UserRole = "userAdmin"
+	RoleClusterMonitor UserRole = "clusterMonitor"
+	RoleBackup         UserRole = "backup"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {

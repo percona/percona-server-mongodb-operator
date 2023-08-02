@@ -116,7 +116,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
 	if err != nil {
 		return fmt.Errorf("failed to get mongo client: %v", err)
 	}
