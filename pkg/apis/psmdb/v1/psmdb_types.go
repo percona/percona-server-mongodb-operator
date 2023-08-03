@@ -310,6 +310,7 @@ type MultiAZ struct {
 	Annotations         map[string]string        `json:"annotations,omitempty"`
 	Labels              map[string]string        `json:"labels,omitempty"`
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	TerminationGracePeriodSeconds *int64           `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName    *string                  `json:"runtimeClassName,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`

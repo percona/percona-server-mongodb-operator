@@ -145,6 +145,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				Affinity:           PodAffinity(cr, multiAZ.Affinity, customLabels),
 				NodeSelector:       multiAZ.NodeSelector,
 				Tolerations:        multiAZ.Tolerations,
+				TerminationGracePeriodSeconds: multiAZ.TerminationGracePeriodSeconds,
 				PriorityClassName:  multiAZ.PriorityClassName,
 				ServiceAccountName: multiAZ.ServiceAccountName,
 				RestartPolicy:      corev1.RestartPolicyAlways,
