@@ -60,16 +60,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource PerconaServerMongoDBRestore
-	err = c.Watch(&source.Kind{Type: &psmdbv1.PerconaServerMongoDBRestore{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), new(psmdbv1.PerconaServerMongoDBRestore)), new(handler.EnqueueRequestForObject))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBRestore
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &psmdbv1.PerconaServerMongoDBRestore{},
-	})
+	err = c.Watch(source.Kind(mgr.GetCache(), new(corev1.Pod)), handler.EnqueueRequestForOwner(
+		mgr.GetScheme(), mgr.GetRESTMapper(), new(psmdbv1.PerconaServerMongoDBRestore), handler.OnlyControllerOwner(),
+	))
 	if err != nil {
 		return err
 	}
@@ -199,8 +198,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 
 		return &psmdbv1.PerconaServerMongoDBBackup{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        cr.Name,
-				Namespace:   cr.Namespace,
+				Name:      cr.Name,
+				Namespace: cr.Namespace,
 			},
 			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
