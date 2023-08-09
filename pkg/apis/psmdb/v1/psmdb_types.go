@@ -302,16 +302,17 @@ func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
 }
 
 type MultiAZ struct {
-	Affinity                  *PodAffinity                      `json:"affinity,omitempty"`
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
-	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
-	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
-	PriorityClassName         string                            `json:"priorityClassName,omitempty"`
-	ServiceAccountName        string                            `json:"serviceAccountName,omitempty"`
-	Annotations               map[string]string                 `json:"annotations,omitempty"`
-	Labels                    map[string]string                 `json:"labels,omitempty"`
-	PodDisruptionBudget       *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
-	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
+	Affinity                      *PodAffinity                      `json:"affinity,omitempty"`
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	NodeSelector                  map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations                   []corev1.Toleration               `json:"tolerations,omitempty"`
+	PriorityClassName             string                            `json:"priorityClassName,omitempty"`
+	ServiceAccountName            string                            `json:"serviceAccountName,omitempty"`
+	Annotations                   map[string]string                 `json:"annotations,omitempty"`
+	Labels                        map[string]string                 `json:"labels,omitempty"`
+	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
+	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
+	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 

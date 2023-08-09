@@ -2851,6 +2851,9 @@ spec:
                         size:
                           format: int32
                           type: integer
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          type: integer
                         tolerations:
                           items:
                             properties:
@@ -5324,6 +5327,9 @@ spec:
                         size:
                           format: int32
                           type: integer
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          type: integer
                         tolerations:
                           items:
                             properties:
@@ -7247,6 +7253,9 @@ spec:
                               type: object
                           type: object
                       type: object
+                    terminationGracePeriodSeconds:
+                      format: int64
+                      type: integer
                     tolerations:
                       items:
                         properties:
@@ -9761,6 +9770,9 @@ spec:
                           size:
                             format: int32
                             type: integer
+                          terminationGracePeriodSeconds:
+                            format: int64
+                            type: integer
                           tolerations:
                             items:
                               properties:
@@ -12234,6 +12246,9 @@ spec:
                           size:
                             format: int32
                             type: integer
+                          terminationGracePeriodSeconds:
+                            format: int64
+                            type: integer
                           tolerations:
                             items:
                               properties:
@@ -14157,6 +14172,9 @@ spec:
                                 type: object
                             type: object
                         type: object
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        type: integer
                       tolerations:
                         items:
                           properties:
@@ -16600,6 +16618,9 @@ spec:
                         type: array
                       size:
                         format: int32
+                        type: integer
+                      terminationGracePeriodSeconds:
+                        format: int64
                         type: integer
                       tolerations:
                         items:
