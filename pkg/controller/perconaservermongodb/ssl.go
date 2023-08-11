@@ -2,18 +2,12 @@ package perconaservermongodb
 
 import (
 	"context"
-	"time"
 
-	cm "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
-	cmmeta "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -60,175 +54,46 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	issuerName := cr.Name + "-psmdb-issuer"
-	caIssuerName := cr.Name + "-psmdb-ca-issuer"
+	c := tls.NewCertManagerController(r.client, r.scheme)
 
-	err := createIssuer(ctx, r.client, cr, r.scheme, caIssuerName, "")
+	if cr.CompareVersion("1.15.0") >= 0 {
+		err := c.CreateCAIssuer(ctx, cr)
+		if err != nil && !k8serr.IsAlreadyExists(err) {
+			return errors.Wrap(err, "create certificate")
+		}
+
+		err = c.CreateCACertificate(ctx, cr)
+		if err != nil && !k8serr.IsAlreadyExists(err) {
+			return errors.Wrap(err, "create ca certificate")
+		}
+	}
+
+	err := c.CreateIssuer(ctx, cr)
 	if err != nil && !k8serr.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
 
-	caSecretName := cr.Name + "-ca-cert"
-
-	err = createCACertificate(ctx, r.client, cr, r.scheme, caIssuerName, caSecretName)
-	if err != nil && !k8serr.IsAlreadyExists(err) {
-		return errors.Wrap(err, "create ca certificate")
-	}
-
-	err = createIssuer(ctx, r.client, cr, r.scheme, issuerName, caSecretName)
-	if err != nil {
-		return errors.Wrap(err, "create issuer")
-	}
-
-	err = createCertificate(ctx, r.client, cr, r.scheme, cr.Name+"-ssl", issuerName, cr.Spec.Secrets.SSL)
+	err = c.CreateCertificate(ctx, cr, false)
 	if err != nil && !k8serr.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create certificate")
 	}
-	if cr.Spec.Secrets.SSL == cr.Spec.Secrets.SSLInternal {
-		return r.waitForCerts(ctx, cr, cr.Namespace, cr.Spec.Secrets.SSL)
+
+	if tls.CertificateSecretName(cr, false) == tls.CertificateSecretName(cr, true) {
+		return c.WaitForCerts(ctx, cr, tls.CertificateSecretName(cr, false))
 	}
 
-	err = createCertificate(ctx, r.client, cr, r.scheme, cr.Name+"-ssl-internal", issuerName, cr.Spec.Secrets.SSLInternal)
+	err = c.CreateCertificate(ctx, cr, true)
 	if err != nil && !k8serr.IsAlreadyExists(err) {
-		return errors.Wrap(err, "create internal certificate")
+		return errors.Wrap(err, "create certificate")
 	}
 
-	return r.waitForCerts(ctx, cr, cr.Namespace, cr.Spec.Secrets.SSL, cr.Spec.Secrets.SSLInternal)
-}
-
-func createIssuer(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, scheme *runtime.Scheme, issuerName, caCertSecret string) error {
-	issuer := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName,
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
-		},
-	}
-	if caCertSecret != "" {
-		issuer.Spec = cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				CA: &cm.CAIssuer{
-					SecretName: caCertSecret,
-				},
-			},
-		}
-	}
-
-	if err := controllerutil.SetControllerReference(cr, issuer, scheme); err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
-
-	return cl.Create(ctx, issuer)
-}
-
-func createCACertificate(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, scheme *runtime.Scheme, issuerName, secretName string) error {
-	cert := &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-ca-cert",
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.CertificateSpec{
-			SecretName: secretName,
-			CommonName: cr.Name + "-ca",
-			IsCA:       true,
-			IssuerRef: cmmeta.ObjectReference{
-				Name: issuerName,
-				Kind: cm.IssuerKind,
-			},
-			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
-			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
-		},
-	}
-
-	if err := controllerutil.SetControllerReference(cr, cert, scheme); err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
-	return cl.Create(ctx, cert)
-}
-
-func createCertificate(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, scheme *runtime.Scheme, certName, issuerName, secretName string) error {
-	certificateDNSNames := []string{"localhost"}
-	for _, replset := range cr.Spec.Replsets {
-		certificateDNSNames = append(certificateDNSNames, getCertificateSans(cr, replset)...)
-	}
-	certificateDNSNames = append(certificateDNSNames, getShardingSans(cr)...)
-
-	cert := &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      certName,
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.CertificateSpec{
-			Subject: &cm.X509Subject{
-				Organizations: []string{"PSMDB"},
-			},
-			CommonName: cr.Name,
-			SecretName: secretName,
-			DNSNames:   certificateDNSNames,
-			IsCA:       false,
-			Duration:   &cr.Spec.TLS.CertValidityDuration,
-			IssuerRef: cmmeta.ObjectReference{
-				Name: issuerName,
-				Kind: cm.IssuerKind,
-			},
-		},
-	}
-
-	if err := controllerutil.SetControllerReference(cr, cert, scheme); err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
-	return cl.Create(ctx, cert)
-}
-
-func (r *ReconcilePerconaServerMongoDB) waitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, namespace string, secretsList ...string) error {
-	ticker := time.NewTicker(1 * time.Second)
-	timeoutTimer := time.NewTimer(30 * time.Second)
-	defer timeoutTimer.Stop()
-	defer ticker.Stop()
-	for {
-		select {
-		case <-timeoutTimer.C:
-			return errors.Errorf("timeout: can't get tls certificates from certmanager, %s", secretsList)
-		case <-ticker.C:
-			sucessCount := 0
-			for _, secretName := range secretsList {
-				secret := &corev1.Secret{}
-				err := r.client.Get(ctx, types.NamespacedName{
-					Name:      secretName,
-					Namespace: namespace,
-				}, secret)
-				if err != nil && !k8serr.IsNotFound(err) {
-					return err
-				} else if err == nil {
-					sucessCount++
-					if len(secret.OwnerReferences) == 0 {
-						if err = controllerutil.SetControllerReference(cr, secret, r.scheme); err != nil {
-							return errors.Wrap(err, "set controller reference")
-						}
-						if err = r.client.Update(ctx, secret); err != nil {
-							return errors.Wrap(err, "failed to update secret")
-						}
-					}
-				}
-			}
-			if sucessCount == len(secretsList) {
-				return nil
-			}
-		}
-	}
+	return c.WaitForCerts(ctx, cr, tls.CertificateSecretName(cr, false), tls.CertificateSecretName(cr, true))
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	data := make(map[string][]byte)
-	certificateDNSNames := []string{"localhost"}
-	for _, replset := range cr.Spec.Replsets {
-		certificateDNSNames = append(certificateDNSNames, getCertificateSans(cr, replset)...)
-	}
-	certificateDNSNames = append(certificateDNSNames, getShardingSans(cr)...)
+	certificateDNSNames := tls.GetCertificateSans(cr)
+
 	caCert, tlsCert, key, err := tls.Issue(certificateDNSNames)
 	if err != nil {
 		return errors.Wrap(err, "create proxy certificate")
@@ -297,45 +162,4 @@ func (r *ReconcilePerconaServerMongoDB) createSSLSecret(ctx context.Context, sec
 	}
 
 	return nil
-}
-
-func getShardingSans(cr *api.PerconaServerMongoDB) []string {
-	sans := []string{
-		cr.Name + "-mongos",
-		cr.Name + "-mongos" + "." + cr.Namespace,
-		cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-		"*." + cr.Name + "-mongos",
-		"*." + cr.Name + "-mongos" + "." + cr.Namespace,
-		"*." + cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-		cr.Name + "-" + api.ConfigReplSetName,
-		cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace,
-		cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-		"*." + cr.Name + "-" + api.ConfigReplSetName,
-		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace,
-		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-		cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-		"*." + cr.Name + "-mongos" + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-		cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-	}
-	return sans
-}
-
-func getCertificateSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) []string {
-	sans := []string{
-		cr.Name + "-" + replset.Name,
-		cr.Name + "-" + replset.Name + "." + cr.Namespace,
-		cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-		"*." + cr.Name + "-" + replset.Name,
-		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace,
-		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
-		cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-		"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
-	}
-
-	if cr.CompareVersion("1.13.0") >= 0 {
-		sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)
-	}
-
-	return sans
 }
