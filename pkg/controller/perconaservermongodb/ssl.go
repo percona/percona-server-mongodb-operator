@@ -10,7 +10,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -57,56 +60,27 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	issuerKind := "Issuer"
-	issuerName := cr.Name + "-psmdb-ca"
-	certificateDNSNames := []string{"localhost"}
+	issuerName := cr.Name + "-psmdb-issuer"
+	caIssuerName := cr.Name + "-psmdb-ca-issuer"
 
-	for _, replset := range cr.Spec.Replsets {
-		certificateDNSNames = append(certificateDNSNames, getCertificateSans(cr, replset)...)
-	}
-	certificateDNSNames = append(certificateDNSNames, getShardingSans(cr)...)
-	owner, err := OwnerRef(cr, r.scheme)
-	if err != nil {
-		return err
-	}
-	ownerReferences := []metav1.OwnerReference{owner}
-	err = r.client.Create(ctx, &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            issuerName,
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerReferences,
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
-		},
-	})
+	err := createIssuer(ctx, r.client, cr, r.scheme, caIssuerName, "")
 	if err != nil && !k8serr.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
 
-	err = r.client.Create(ctx, &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            cr.Name + "-ssl",
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerReferences,
-		},
-		Spec: cm.CertificateSpec{
-			Subject: &cm.X509Subject{
-				Organizations: []string{"PSMDB"},
-			},
-			CommonName: cr.Name,
-			SecretName: cr.Spec.Secrets.SSL,
-			DNSNames:   certificateDNSNames,
-			IsCA:       true,
-			Duration:   &cr.Spec.TLS.CertValidityDuration,
-			IssuerRef: cmmeta.ObjectReference{
-				Name: issuerName,
-				Kind: issuerKind,
-			},
-		},
-	})
+	caSecretName := cr.Name + "-ca-cert"
+
+	err = createCACertificate(ctx, r.client, cr, r.scheme, caIssuerName, caSecretName)
+	if err != nil && !k8serr.IsAlreadyExists(err) {
+		return errors.Wrap(err, "create ca certificate")
+	}
+
+	err = createIssuer(ctx, r.client, cr, r.scheme, issuerName, caSecretName)
+	if err != nil {
+		return errors.Wrap(err, "create issuer")
+	}
+
+	err = createCertificate(ctx, r.client, cr, r.scheme, cr.Name+"-ssl", issuerName, cr.Spec.Secrets.SSL)
 	if err != nil && !k8serr.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create certificate")
 	}
@@ -114,32 +88,100 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		return r.waitForCerts(ctx, cr, cr.Namespace, cr.Spec.Secrets.SSL)
 	}
 
-	err = r.client.Create(ctx, &cm.Certificate{
+	err = createCertificate(ctx, r.client, cr, r.scheme, cr.Name+"-ssl-internal", issuerName, cr.Spec.Secrets.SSLInternal)
+	if err != nil && !k8serr.IsAlreadyExists(err) {
+		return errors.Wrap(err, "create internal certificate")
+	}
+
+	return r.waitForCerts(ctx, cr, cr.Namespace, cr.Spec.Secrets.SSL, cr.Spec.Secrets.SSLInternal)
+}
+
+func createIssuer(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, scheme *runtime.Scheme, issuerName, caCertSecret string) error {
+	issuer := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            cr.Name + "-ssl-internal",
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerReferences,
+			Name:      issuerName,
+			Namespace: cr.Namespace,
+		},
+		Spec: cm.IssuerSpec{
+			IssuerConfig: cm.IssuerConfig{
+				SelfSigned: &cm.SelfSignedIssuer{},
+			},
+		},
+	}
+	if caCertSecret != "" {
+		issuer.Spec = cm.IssuerSpec{
+			IssuerConfig: cm.IssuerConfig{
+				CA: &cm.CAIssuer{
+					SecretName: caCertSecret,
+				},
+			},
+		}
+	}
+
+	if err := controllerutil.SetControllerReference(cr, issuer, scheme); err != nil {
+		return errors.Wrap(err, "set controller reference")
+	}
+
+	return cl.Create(ctx, issuer)
+}
+
+func createCACertificate(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, scheme *runtime.Scheme, issuerName, secretName string) error {
+	cert := &cm.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-ca-cert",
+			Namespace: cr.Namespace,
+		},
+		Spec: cm.CertificateSpec{
+			SecretName: secretName,
+			CommonName: cr.Name + "-ca",
+			IsCA:       true,
+			IssuerRef: cmmeta.ObjectReference{
+				Name: issuerName,
+				Kind: cm.IssuerKind,
+			},
+			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
+			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cr, cert, scheme); err != nil {
+		return errors.Wrap(err, "set controller reference")
+	}
+	return cl.Create(ctx, cert)
+}
+
+func createCertificate(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, scheme *runtime.Scheme, certName, issuerName, secretName string) error {
+	certificateDNSNames := []string{"localhost"}
+	for _, replset := range cr.Spec.Replsets {
+		certificateDNSNames = append(certificateDNSNames, getCertificateSans(cr, replset)...)
+	}
+	certificateDNSNames = append(certificateDNSNames, getShardingSans(cr)...)
+
+	cert := &cm.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      certName,
+			Namespace: cr.Namespace,
 		},
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
 				Organizations: []string{"PSMDB"},
 			},
 			CommonName: cr.Name,
-			SecretName: cr.Spec.Secrets.SSLInternal,
+			SecretName: secretName,
 			DNSNames:   certificateDNSNames,
-			IsCA:       true,
+			IsCA:       false,
 			Duration:   &cr.Spec.TLS.CertValidityDuration,
 			IssuerRef: cmmeta.ObjectReference{
 				Name: issuerName,
-				Kind: issuerKind,
+				Kind: cm.IssuerKind,
 			},
 		},
-	})
-	if err != nil && !k8serr.IsAlreadyExists(err) {
-		return errors.Wrap(err, "create internal certificate")
 	}
 
-	return r.waitForCerts(ctx, cr, cr.Namespace, cr.Spec.Secrets.SSL, cr.Spec.Secrets.SSLInternal)
+	if err := controllerutil.SetControllerReference(cr, cert, scheme); err != nil {
+		return errors.Wrap(err, "set controller reference")
+	}
+	return cl.Create(ctx, cert)
 }
 
 func (r *ReconcilePerconaServerMongoDB) waitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, namespace string, secretsList ...string) error {
@@ -164,7 +206,7 @@ func (r *ReconcilePerconaServerMongoDB) waitForCerts(ctx context.Context, cr *ap
 				} else if err == nil {
 					sucessCount++
 					if len(secret.OwnerReferences) == 0 {
-						if err = setControllerReference(cr, secret, r.scheme); err != nil {
+						if err = controllerutil.SetControllerReference(cr, secret, r.scheme); err != nil {
 							return errors.Wrap(err, "set controller reference")
 						}
 						if err = r.client.Update(ctx, secret); err != nil {

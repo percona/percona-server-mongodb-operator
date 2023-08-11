@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cmctl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: cmctl
+  template:
+    metadata:
+      labels:
+        name: cmctl
+    spec:
+      serviceAccountName: percona-server-mongodb-operator
+      containers:
+        - name: cmctl
+          image: debian
+          imagePullPolicy: Always
+          command:
+          - /bin/bash
+          - -c
+          - |
+            apt-get update && apt-get install -y curl \
+            && curl -fsSL -o cmctl.tar.gz https://github.com/cert-manager/cert-manager/releases/latest/download/cmctl-linux-amd64.tar.gz \
+            && tar xzf cmctl.tar.gz \
+            && sleep 100500
+      restartPolicy: Always
