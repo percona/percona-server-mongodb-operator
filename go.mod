@@ -19,7 +19,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.4
-	go.mongodb.org/mongo-driver v1.11.4
+	go.mongodb.org/mongo-driver v1.12.1
 	go.uber.org/zap v1.25.0
 	golang.org/x/sync v0.3.0
 	google.golang.org/grpc v1.57.0
