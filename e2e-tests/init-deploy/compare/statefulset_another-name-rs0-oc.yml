@@ -174,7 +174,7 @@ spec:
       securityContext: {}
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 300
       volumes:
         - name: another-name-mongodb-keyfile
           secret:
