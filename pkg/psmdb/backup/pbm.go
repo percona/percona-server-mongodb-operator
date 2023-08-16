@@ -316,7 +316,7 @@ func NotJobLock(j Job) LockHeaderPredicate {
 		case TypeRestore:
 			jobCommand = pbm.CmdRestore
 		case TypePITRestore:
-			jobCommand = pbm.CmdPITRestore
+			jobCommand = pbm.CmdRestore
 		default:
 			return true
 		}
@@ -384,7 +384,7 @@ func (b *PBM) GetTimelinesPITR() ([]pbm.Timeline, error) {
 	}
 
 	for _, s := range shards {
-		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, primitive.Timestamp{T: uint32(now)}, nil)
+		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, primitive.Timestamp{T: uint32(now)})
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting timelines for %s", s.RS)
 		}

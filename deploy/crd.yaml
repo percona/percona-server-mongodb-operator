@@ -3253,6 +3253,19 @@ spec:
                                     format: int32
                                     type: integer
                                 type: object
+                              resizePolicy:
+                                items:
+                                  properties:
+                                    resourceName:
+                                      type: string
+                                    restartPolicy:
+                                      type: string
+                                  required:
+                                  - resourceName
+                                  - restartPolicy
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
                               resources:
                                 properties:
                                   claims:
@@ -3473,6 +3486,9 @@ spec:
                           type: array
                         size:
                           format: int32
+                          type: integer
+                        terminationGracePeriodSeconds:
+                          format: int64
                           type: integer
                         tolerations:
                           items:
@@ -5661,6 +5677,19 @@ spec:
                                     format: int32
                                     type: integer
                                 type: object
+                              resizePolicy:
+                                items:
+                                  properties:
+                                    resourceName:
+                                      type: string
+                                    restartPolicy:
+                                      type: string
+                                  required:
+                                  - resourceName
+                                  - restartPolicy
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
                               resources:
                                 properties:
                                   claims:
@@ -5881,6 +5910,9 @@ spec:
                           type: array
                         size:
                           format: int32
+                          type: integer
+                        terminationGracePeriodSeconds:
+                          format: int64
                           type: integer
                         tolerations:
                           items:
@@ -7473,6 +7505,19 @@ spec:
                                 format: int32
                                 type: integer
                             type: object
+                          resizePolicy:
+                            items:
+                              properties:
+                                resourceName:
+                                  type: string
+                                restartPolicy:
+                                  type: string
+                              required:
+                              - resourceName
+                              - restartPolicy
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
                           resources:
                             properties:
                               claims:
@@ -7740,6 +7785,9 @@ spec:
                               type: object
                           type: object
                       type: object
+                    terminationGracePeriodSeconds:
+                      format: int64
+                      type: integer
                     tolerations:
                       items:
                         properties:
@@ -9968,6 +10016,19 @@ spec:
                                       format: int32
                                       type: integer
                                   type: object
+                                resizePolicy:
+                                  items:
+                                    properties:
+                                      resourceName:
+                                        type: string
+                                      restartPolicy:
+                                        type: string
+                                    required:
+                                    - resourceName
+                                    - restartPolicy
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
                                 resources:
                                   properties:
                                     claims:
@@ -10188,6 +10249,9 @@ spec:
                             type: array
                           size:
                             format: int32
+                            type: integer
+                          terminationGracePeriodSeconds:
+                            format: int64
                             type: integer
                           tolerations:
                             items:
@@ -12376,6 +12440,19 @@ spec:
                                       format: int32
                                       type: integer
                                   type: object
+                                resizePolicy:
+                                  items:
+                                    properties:
+                                      resourceName:
+                                        type: string
+                                      restartPolicy:
+                                        type: string
+                                    required:
+                                    - resourceName
+                                    - restartPolicy
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
                                 resources:
                                   properties:
                                     claims:
@@ -12596,6 +12673,9 @@ spec:
                             type: array
                           size:
                             format: int32
+                            type: integer
+                          terminationGracePeriodSeconds:
+                            format: int64
                             type: integer
                           tolerations:
                             items:
@@ -14188,6 +14268,19 @@ spec:
                                   format: int32
                                   type: integer
                               type: object
+                            resizePolicy:
+                              items:
+                                properties:
+                                  resourceName:
+                                    type: string
+                                  restartPolicy:
+                                    type: string
+                                required:
+                                - resourceName
+                                - restartPolicy
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
                             resources:
                               properties:
                                 claims:
@@ -14455,6 +14548,9 @@ spec:
                                 type: object
                             type: object
                         type: object
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        type: integer
                       tolerations:
                         items:
                           properties:
@@ -16613,6 +16709,19 @@ spec:
                                   format: int32
                                   type: integer
                               type: object
+                            resizePolicy:
+                              items:
+                                properties:
+                                  resourceName:
+                                    type: string
+                                  restartPolicy:
+                                    type: string
+                                required:
+                                - resourceName
+                                - restartPolicy
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
                             resources:
                               properties:
                                 claims:
@@ -16833,6 +16942,9 @@ spec:
                         type: array
                       size:
                         format: int32
+                        type: integer
+                      terminationGracePeriodSeconds:
+                        format: int64
                         type: integer
                       tolerations:
                         items:

@@ -122,18 +122,19 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
-			Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
-			NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
-			Tolerations:       cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
-			PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
-			RestartPolicy:     corev1.RestartPolicyAlways,
-			ImagePullSecrets:  cr.Spec.ImagePullSecrets,
-			Containers:        containers,
-			InitContainers:    initContainers,
-			Volumes:           volumes(cr, customConf.Type),
-			SchedulerName:     cr.Spec.SchedulerName,
-			RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
+			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
+			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
+			NodeSelector:                  cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
+			Tolerations:                   cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
+			TerminationGracePeriodSeconds: cr.Spec.Sharding.Mongos.MultiAZ.TerminationGracePeriodSeconds,
+			PriorityClassName:             cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
+			RestartPolicy:                 corev1.RestartPolicyAlways,
+			ImagePullSecrets:              cr.Spec.ImagePullSecrets,
+			Containers:                    containers,
+			InitContainers:                initContainers,
+			Volumes:                       volumes(cr, customConf.Type),
+			SchedulerName:                 cr.Spec.SchedulerName,
+			RuntimeClassName:              cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 		},
 	}, nil
 }
@@ -438,8 +439,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
 			},
 		},
-		Selector:                 ls,
-		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges,
+		Selector: ls,
 	}
 
 	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
@@ -449,6 +449,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	case corev1.ServiceTypeLoadBalancer:
 		spec.Type = corev1.ServiceTypeLoadBalancer
 		spec.ExternalTrafficPolicy = "Cluster"
+		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
 	default:
 		spec.Type = corev1.ServiceTypeClusterIP
 	}
