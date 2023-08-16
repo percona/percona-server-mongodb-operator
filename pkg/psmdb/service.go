@@ -47,9 +47,8 @@ func Service(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Serv
 					TargetPort: intstr.FromInt(int(api.MongodPort(m))),
 				},
 			},
-			ClusterIP:                "None",
-			Selector:                 ls,
-			LoadBalancerSourceRanges: replset.Expose.LoadBalancerSourceRanges,
+			ClusterIP: "None",
+			Selector:  ls,
 		},
 	}
 
