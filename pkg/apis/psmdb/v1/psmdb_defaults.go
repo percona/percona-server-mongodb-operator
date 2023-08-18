@@ -808,12 +808,6 @@ func (m *MultiAZ) reconcileTopologySpreadConstraints(cr *PerconaServerMongoDB) {
 		return
 	}
 
-	if len(m.TopologySpreadConstraints) == 0 {
-		m.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
-			{}, // this line ensures that the slice contains at least one element
-		}
-	}
-
 	for i := range m.TopologySpreadConstraints {
 		if m.TopologySpreadConstraints[i].MaxSkew == 0 {
 			m.TopologySpreadConstraints[i].MaxSkew = 1
