@@ -162,18 +162,6 @@ spec:
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
-      topologySpreadConstraints:
-        - labelSelector:
-            matchLabels:
-              app.kubernetes.io/component: mongod
-              app.kubernetes.io/instance: version-service-recommended
-              app.kubernetes.io/managed-by: percona-server-mongodb-operator
-              app.kubernetes.io/name: percona-server-mongodb
-              app.kubernetes.io/part-of: percona-server-mongodb
-              app.kubernetes.io/replset: rs0
-          maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
       volumes:
         - name: version-service-recommended-mongodb-keyfile
           secret:
