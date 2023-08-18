@@ -97,6 +97,9 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
 
+desc 'check for passwords leak'
+check_passwords_leak
+
 desc 'delete custom RuntimeClass'
 kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 destroy $namespace

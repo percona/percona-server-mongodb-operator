@@ -91,6 +91,9 @@ if [[ -n ${OPENSHIFT} ]]; then
 	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
 fi
 
+desc 'check for passwords leak'
+check_passwords_leak
+
 helm uninstall monitoring
 destroy $namespace
 

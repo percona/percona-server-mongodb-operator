@@ -146,7 +146,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return rr, errors.Wrap(err, "get backup")
 	}
 
-	if bcp.Status.State != psmdbv1.BackupStateReady {
+	switch bcp.Status.State {
+	case psmdbv1.BackupStateError:
+		err = errors.New("backup is in error state")
+		return rr, nil
+	case psmdbv1.BackupStateReady:
+	default:
 		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
