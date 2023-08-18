@@ -59,7 +59,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 
 	replsets := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		replsets = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, replsets...)
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 
 	for _, rs := range replsets {
