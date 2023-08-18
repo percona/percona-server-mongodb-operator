@@ -94,17 +94,6 @@ type TLSSpec struct {
 	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
 }
 
-// EncryptionKeySecretName returns spec.Secrets.EncryptionKey.
-// If it's empty, spec.Mongod.Security.EncryptionKeySecret is returned.
-//
-// TODO: Remove after 1.14
-func (spec *PerconaServerMongoDBSpec) EncryptionKeySecretName() string {
-	if spec.Secrets != nil && spec.Secrets.EncryptionKey != "" {
-		return spec.Secrets.EncryptionKey
-	}
-	return ""
-}
-
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
 	switch name {
 	case "":

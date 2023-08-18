@@ -66,7 +66,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		} else {
 			volumes = append(volumes,
 				corev1.VolumeMount{
-					Name:      cr.Spec.EncryptionKeySecretName(),
+					Name:      cr.Spec.Secrets.EncryptionKey,
 					MountPath: api.MongodRESTencryptDir,
 					ReadOnly:  true,
 				},

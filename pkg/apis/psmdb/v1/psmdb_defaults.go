@@ -72,10 +72,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Secrets.Users = defaultUsersSecretName
 	}
 
-	if cr.Spec.EncryptionKeySecretName() == "" {
-		if cr.CompareVersion("1.12.0") >= 0 {
-			cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
-		}
+	if cr.Spec.Secrets.EncryptionKey == "" {
+		cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
 	}
 
 	if cr.Spec.Secrets.SSL == "" {
