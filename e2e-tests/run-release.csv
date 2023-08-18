@@ -32,6 +32,7 @@ service-per-pod
 serviceless-external-nodes
 smart-update
 storage
+tls-issue-cert-manager
 upgrade
 upgrade-consistency
 upgrade-sharded

@@ -17,6 +17,7 @@ pitr-sharded
 recover-no-primary
 rs-shard-migration
 scaling
+tls-issue-cert-manager
 upgrade
 upgrade-sharded
 users

@@ -6,7 +6,6 @@ test_dir=$(realpath $(dirname $0))
 . "${test_dir}/../functions"
 set_debug
 
-
 renew-certificate() {
 	certificate="$1"
 
