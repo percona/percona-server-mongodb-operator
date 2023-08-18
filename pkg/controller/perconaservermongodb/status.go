@@ -344,7 +344,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size == status.Ready:
+	case status.Size > 0 && status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 

@@ -866,27 +866,16 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	svcList, err := psmdb.GetMongosServices(ctx, r.client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to list mongos services")
-	}
-
 	var mongos client.Object
 	if cr.CompareVersion("1.12.0") >= 0 {
 		mongos = psmdb.MongosStatefulset(cr)
 	} else {
 		mongos = psmdb.MongosDeployment(cr)
 	}
-	err = r.client.Delete(ctx, mongos)
+
+	err := r.client.Delete(ctx, mongos)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete mongos statefulset")
-	}
-
-	for _, svc := range svcList.Items {
-		err = r.client.Delete(ctx, &svc)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "failed to delete mongos services")
-		}
 	}
 
 	return nil

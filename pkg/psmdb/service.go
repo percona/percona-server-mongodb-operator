@@ -318,7 +318,8 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 		return "", errors.Wrap(err, "failed to get mongos service")
 	}
 
-	if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+	mongos := cr.Spec.Sharding.Mongos
+	if mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		host, err := getIngressPoint(ctx, cl, nn)
 		if err != nil {
 			return "", errors.Wrap(err, "get ingress endpoint")
