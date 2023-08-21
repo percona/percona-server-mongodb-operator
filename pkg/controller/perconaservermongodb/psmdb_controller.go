@@ -127,7 +127,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource PerconaServerMongoDB
-	err = c.Watch(&source.Kind{Type: &api.PerconaServerMongoDB{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), new(api.PerconaServerMongoDB)), new(handler.EnqueueRequestForObject))
 	if err != nil {
 		return err
 	}
