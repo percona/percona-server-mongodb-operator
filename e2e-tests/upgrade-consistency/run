@@ -22,17 +22,6 @@ main() {
 	wait_for_running "${CLUSTER}-rs0" "3" "true"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1110"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1110"
-
-	desc 'test 1.12.0'
-	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.12.0"}
-    }'
-	desc 'check if Pod started'
-	wait_for_running "${CLUSTER}-rs0" "3" "true"
-
-	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1120"
 	compare_kubectl statefulset/${CLUSTER}-rs0 "-1120"
 
