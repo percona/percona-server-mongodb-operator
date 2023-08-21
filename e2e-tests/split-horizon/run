@@ -1,0 +1,101 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+
+configure_client_hostAliases() {
+    local hostAliasesJson='[]'
+
+    for svc in $(kubectl get svc | awk '{print $3 "|" $1}' | grep -E '^[0-9].*'); do 
+        hostname=$(echo ${svc} | awk -F '|' '{print $2}');
+        ip=$(echo ${svc} | awk -F '|' '{print $1}');
+        hostAlias="{\"ip\": \"${ip}\", \"hostnames\": [\"${hostname}.clouddemo.xyz\"]}"
+        hostAliasesJson=$(echo $hostAliasesJson | jq --argjson newAlias "$hostAlias" '. += [$newAlias]')
+    done
+
+    kubectl_bin patch deployment psmdb-client --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/hostAliases', 'value': $hostAliasesJson}]"
+
+    wait_pod $(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+}
+
+create_infra ${namespace}
+
+cluster="some-name"
+kubectl_bin apply \
+	-f ${conf_dir}/secrets_with_tls.yml \
+	-f ${conf_dir}/client_with_tls.yml
+
+apply_cluster ${test_dir}/conf/${cluster}.yml
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+configure_client_hostAliases
+
+desc "configuring horizons"
+apply_cluster ${test_dir}/conf/${cluster}-3horizons.yml
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+sleep 15
+
+set -o xtrace
+
+run_mongo "rs.conf().members.map(function(member) { return member.horizons })" \
+    "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+    mongodb "" "--quiet" > ${tmp_dir}/horizons-3.json
+diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
+
+isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -v certificateNames)
+if [ "${isMaster}" != "true" ]; then
+    echo "mongo client should've redirect the connection to primary"
+    exit 1
+fi
+
+# stepping down to ensure we haven't redirected to primary just because primary is pod-0
+run_mongo_tls "rs.stepDown()" \
+    "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+    mongodb "" "--quiet"
+
+sleep 10 # give some time for re-election
+
+isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -v certificateNames)
+if [ "${isMaster}" != "true" ]; then
+    echo "mongo client should've redirect the connection to primary"
+    exit 1
+fi
+
+apply_cluster ${test_dir}/conf/${cluster}-5horizons.yml
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+# scale up and down
+kubectl_bin patch psmdb ${cluster} \
+    --type='json' \
+    -p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
+wait_for_running "${cluster}-rs0" 5
+wait_cluster_consistency ${cluster}
+
+run_mongo "rs.conf().members.map(function(member) { return member.horizons })" \
+    "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+    mongodb "" "--quiet" > ${tmp_dir}/horizons-5.json
+diff $test_dir/compare/horizons-5.json $tmp_dir/horizons-5.json
+
+kubectl_bin patch psmdb ${cluster} \
+    --type='json' \
+    -p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+run_mongo "rs.conf().members.map(function(member) { return member.horizons })" \
+    "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+    mongodb "" "--quiet" > ${tmp_dir}/horizons.json
+diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
+
+apply_cluster ${test_dir}/conf/${cluster}.yml
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency ${cluster}
+
+destroy ${namespace}

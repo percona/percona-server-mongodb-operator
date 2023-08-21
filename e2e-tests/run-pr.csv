@@ -30,6 +30,7 @@ self-healing-chaos
 service-per-pod
 serviceless-external-nodes
 smart-update
+split-horizon
 storage
 upgrade
 upgrade-consistency
