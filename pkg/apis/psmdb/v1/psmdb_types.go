@@ -491,6 +491,8 @@ func (conf *MongoConfiguration) SetDefaults() error {
 	return nil
 }
 
+type HorizonsSpec map[string]map[string]string
+
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
@@ -509,6 +511,7 @@ type ReplsetSpec struct {
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
+	Horizons                 HorizonsSpec               `json:"splitHorizons,omitempty"`
 }
 
 func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {

@@ -167,6 +167,16 @@ spec:
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
+#    splitHorizons:
+#      my-cluster-name-rs0-0:
+#        external: rs0-0.mycluster.xyz
+#        external-2: rs0-0.mycluster2.xyz
+#      my-cluster-name-rs0-1:
+#        external: rs0-1.mycluster.xyz
+#        external-2: rs0-1.mycluster2.xyz
+#      my-cluster-name-rs0-2:
+#        external: rs0-2.mycluster.xyz
+#        external-2: rs0-2.mycluster2.xyz
     expose:
       enabled: false
       exposeType: ClusterIP
