@@ -180,6 +180,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}" "azure-blob"
 fi
 
+desc 'check for passwords leak'
+check_passwords_leak
+
 destroy $namespace
 
 desc 'test passed'
