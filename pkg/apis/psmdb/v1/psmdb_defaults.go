@@ -175,7 +175,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
 			}
 		}
-        if cr.CompareVersion("1.14.0") >= 0 {
+        if cr.CompareVersion("1.15.0") >= 0 {
             var fsgroup *int64
             if platform == version.PlatformKubernetes {
                 var tp int64 = 1001
