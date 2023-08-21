@@ -56,7 +56,7 @@ func caIssuerName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-psmdb-ca-issuer"
 }
 
-func caSecretName(cr *api.PerconaServerMongoDB) string {
+func CACertificateSecretName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-ca-cert"
 }
 
@@ -76,7 +76,7 @@ func (c *CertManagerController) CreateIssuer(ctx context.Context, cr *api.Percon
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
 				CA: &cm.CAIssuer{
-					SecretName: caSecretName(cr),
+					SecretName: CACertificateSecretName(cr),
 				},
 			},
 		},
@@ -142,11 +142,11 @@ func (c *CertManagerController) CreateCertificate(ctx context.Context, cr *api.P
 func (c *CertManagerController) CreateCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	cert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      caSecretName(cr),
+			Name:      CACertificateSecretName(cr),
 			Namespace: cr.Namespace,
 		},
 		Spec: cm.CertificateSpec{
-			SecretName: caSecretName(cr),
+			SecretName: CACertificateSecretName(cr),
 			CommonName: cr.Name + "-ca",
 			IsCA:       true,
 			IssuerRef: cmmeta.ObjectReference{

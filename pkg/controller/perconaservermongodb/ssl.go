@@ -66,6 +66,11 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		if err != nil && !k8serr.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create ca certificate")
 		}
+
+		err = c.WaitForCerts(ctx, cr, tls.CACertificateSecretName(cr))
+		if err != nil {
+			return errors.Wrap(err, "failed to wait for ca cert")
+		}
 	}
 
 	err := c.CreateIssuer(ctx, cr)
