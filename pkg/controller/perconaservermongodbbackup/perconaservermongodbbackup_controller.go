@@ -379,17 +379,20 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
 	e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
+	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
+	// as it's not possible to delete backup if it is a base for the PITR timeline
 	err = r.deletePITR(ctx, b, meta.LastWriteTS, e)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete PITR")
 	}
-	err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e) // problem here; check probeDelete function
+	err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete backup")
 	}
 	return nil
 }
 
+// deletePITR deletes PITR oplog chunks whose StartTS is less or equal to the `until` timestamp. Deletes all chunks if `until` is 0.
 func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b *Backup, until primitive.Timestamp, e *pbmLog.Event) error {
 	log := logf.FromContext(ctx)
 
