@@ -166,7 +166,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.New("mongos should be specified")
 		}
 
-		if cr.Spec.Pause {
+		if cr.Spec.Pause || cr.DeletionTimestamp != nil {
 			cr.Spec.Sharding.Mongos.Size = 0
 		} else {
 			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -55,13 +56,45 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
-	replsets := cr.Spec.Replsets
-	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	if cr.Spec.Sharding.Enabled {
+		sts := new(appsv1.StatefulSet)
+		err := r.client.Get(ctx, cr.MongosNamespacedName(), sts)
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "failed to get mongos statefulset")
+		}
+		if sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0 {
+			err = r.disableBalancer(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "failed to disable balancer")
+			}
+			cr.Spec.Sharding.Mongos.Size = 0
+		}
+
+		list, err := r.getMongosPods(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "get mongos pods")
+		}
+		if len(list.Items) != 0 {
+			return errWaitingTermination
+		}
 	}
 
-	for _, rs := range replsets {
+	replsetsDeleted := true
+	for _, rs := range cr.Spec.Replsets {
 		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
+			if err == errWaitingTermination {
+				replsetsDeleted = false
+				continue
+			}
+			return err
+		}
+	}
+	if !replsetsDeleted {
+		return errWaitingTermination
+	}
+
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		if err := r.deleteRSPods(ctx, cr, cr.Spec.Sharding.ConfigsvrReplSet); err != nil {
 			return err
 		}
 	}
