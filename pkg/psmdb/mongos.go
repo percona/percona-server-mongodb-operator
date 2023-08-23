@@ -241,7 +241,6 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 }
 
 func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool, cfgInstances []string) []string {
-	mdSpec := cr.Spec.Mongod
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
@@ -274,33 +273,12 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		args = append(args, "--clusterAuthMode=x509")
 	}
 
-	if cr.CompareVersion("1.12.0") < 0 && mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
-		args = append(args, "--redactClientLogData")
-	}
-
 	if msSpec.SetParameter != nil {
 		if msSpec.SetParameter.CursorTimeoutMillis > 0 {
 			args = append(args,
 				"--setParameter",
 				"cursorTimeoutMillis="+strconv.Itoa(msSpec.SetParameter.CursorTimeoutMillis),
 			)
-		}
-	}
-
-	if cr.CompareVersion("1.13.0") < 0 && msSpec.AuditLog != nil && msSpec.AuditLog.Destination == api.AuditLogDestinationFile {
-		if msSpec.AuditLog.Filter == "" {
-			msSpec.AuditLog.Filter = "{}"
-		}
-		args = append(args,
-			"--auditDestination=file",
-			"--auditFilter="+msSpec.AuditLog.Filter,
-			"--auditFormat="+string(msSpec.AuditLog.Format),
-		)
-		switch msSpec.AuditLog.Format {
-		case api.AuditLogFormatBSON:
-			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
-		default:
-			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
 		}
 	}
 
@@ -439,8 +417,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
 			},
 		},
-		Selector:                 ls,
-		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges,
+		Selector: ls,
 	}
 
 	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
@@ -450,6 +427,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	case corev1.ServiceTypeLoadBalancer:
 		spec.Type = corev1.ServiceTypeLoadBalancer
 		spec.ExternalTrafficPolicy = "Cluster"
+		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
 	default:
 		spec.Type = corev1.ServiceTypeClusterIP
 	}
