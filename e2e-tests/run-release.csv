@@ -22,6 +22,7 @@ one-pod
 operator-self-healing-chaos
 pitr
 pitr-sharded
+pitr-physical
 recover-no-primary
 rs-shard-migration
 scaling

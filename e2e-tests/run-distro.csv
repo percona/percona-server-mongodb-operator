@@ -14,6 +14,7 @@ non-voting
 one-pod
 pitr
 pitr-sharded
+pitr-physical
 recover-no-primary
 rs-shard-migration
 scaling
