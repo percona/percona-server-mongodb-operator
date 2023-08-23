@@ -428,26 +428,7 @@ pipeline {
                 }
                 stage('cluster4') {
                     steps {
-<<<<<<< HEAD
                         clusterRunner('cluster4')
-=======
-                        CreateCluster('cluster2')
-                        runTest('custom-replset-name', 'cluster2')
-                        runTest('one-pod', 'cluster2')
-                        runTest('ignore-labels-annotations', 'cluster2')
-                        runTest('monitoring-2-0', 'cluster2')
-                        runTest('arbiter', 'cluster2')
-                        runTest('service-per-pod', 'cluster2')
-                        runTest('liveness', 'cluster2')
-                        runTest('smart-update', 'cluster2')
-                        runTest('version-service', 'cluster2')
-                        runTest('users', 'cluster2')
-                        runTest('data-sharded', 'cluster2')
-                        runTest('non-voting', 'cluster2')
-                        runTest('demand-backup-eks-credentials', 'cluster2')
-                        runTest('data-at-rest-encryption', 'cluster2')
-                        ShutdownCluster('cluster2')
->>>>>>> e52ca30e (CUSTOM-149: Fix liveness probe if custom replset name for 1.14.0 (#1258))
                     }
                 }
                 stage('cluster5') {
