@@ -141,6 +141,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
+				HostAliases:                   replset.HostAliases,
 				SecurityContext:               podSecurityContext,
 				Affinity:                      PodAffinity(cr, multiAZ.Affinity, customLabels),
 				NodeSelector:                  multiAZ.NodeSelector,

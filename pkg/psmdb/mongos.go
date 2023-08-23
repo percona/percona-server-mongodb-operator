@@ -122,6 +122,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
+			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
 			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 			NodeSelector:                  cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
