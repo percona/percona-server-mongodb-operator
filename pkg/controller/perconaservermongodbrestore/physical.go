@@ -197,17 +197,27 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			}
 		}
 
-		var command []string
-		if cr.Spec.PITR != nil {
-			ts := cr.Spec.PITR.Date.Format("2006-01-02T15:04:05")
-			command = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", ts, "--out", "json"}
-		} else {
-			command = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
-		}
-
 		pod := corev1.Pod{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
 			return status, errors.Wrap(err, "get pod")
+		}
+
+		var command []string
+		if cr.Spec.PITR != nil {
+			var ts string
+			switch cr.Spec.PITR.Type {
+			case psmdbv1.PITRestoreTypeDate:
+				ts = cr.Spec.PITR.Date.Format("2006-01-02T15:04:05")
+			case psmdbv1.PITRestoreTypeLatest:
+				ts, err = r.getLatestChunkTS(ctx, &pod)
+				if err != nil {
+					return status, errors.Wrap(err, "get latest chunk timestamp")
+				}
+			}
+
+			command = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", ts, "--out", "json"}
+		} else {
+			command = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
 		}
 
 		err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
@@ -738,4 +748,36 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhy
 	}
 
 	return true, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Context, pod *corev1.Pod) (string, error) {
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	command := []string{"/opt/percona/pbm", "status", "--out", "json"}
+	if err := r.clientcmd.Exec(ctx, pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+		return "", errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+	}
+
+	var pbmStatus struct {
+		Backups struct {
+			Chunks struct {
+				Timelines []struct {
+					Range struct {
+						Start uint32 `json:"start"`
+						End   uint32 `json:"end"`
+					} `json:"range"`
+				} `json:"pitrChunks"`
+			} `json:"pitrChunks"`
+		} `json:"backups"`
+	}
+
+	if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
+		return "", errors.Wrap(err, "unmarshal PBM status output")
+	}
+
+	latest := pbmStatus.Backups.Chunks.Timelines[len(pbmStatus.Backups.Chunks.Timelines)-1].Range.End
+	ts := time.Unix(int64(latest), 0).UTC()
+
+	return ts.Format("2006-01-02T15:04:05"), nil
 }
