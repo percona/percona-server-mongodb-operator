@@ -822,6 +822,20 @@ func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }
 
+func (cr *PerconaServerMongoDB) CompareMongoDBVersion(version string) (int, error) {
+	mongoVer, err := v.NewVersion(cr.Status.MongoVersion)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse status.mongoVersion")
+	}
+
+	compare, err := v.NewVersion(version)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse version")
+	}
+
+	return mongoVer.Compare(compare), nil
+}
+
 const (
 	internalPrefix = "internal-"
 	userPostfix    = "-users"

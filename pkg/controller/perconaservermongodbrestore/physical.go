@@ -539,7 +539,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, c
 		return stdoutBuf, stderrBuf, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
 	}
 
-	cmd := []string{"mongosh", "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", eval}
+	comp, err := cluster.CompareMongoDBVersion("6.0")
+	if err != nil {
+		return stdoutBuf, stderrBuf, errors.Wrap(err, "compare mongo version")
+	}
+
+	mongoClient := "mongo"
+	if comp >= 0 {
+		mongoClient = "mongosh"
+	}
+
+	cmd := []string{mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", eval}
 
 	log.V(1).Info("Running cmd in pod", "eval", eval, "pod", pod.Name)
 	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
