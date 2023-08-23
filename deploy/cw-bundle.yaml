@@ -992,109 +992,6 @@ spec:
                 type: object
               initImage:
                 type: string
-              mongod:
-                properties:
-                  auditLog:
-                    properties:
-                      destination:
-                        type: string
-                      filter:
-                        type: string
-                      format:
-                        type: string
-                    type: object
-                  net:
-                    properties:
-                      hostPort:
-                        format: int32
-                        type: integer
-                      port:
-                        format: int32
-                        type: integer
-                    type: object
-                  operationProfiling:
-                    properties:
-                      mode:
-                        type: string
-                      rateLimit:
-                        type: integer
-                      slowOpThresholdMs:
-                        type: integer
-                    type: object
-                  replication:
-                    properties:
-                      oplogSizeMB:
-                        type: integer
-                    type: object
-                  security:
-                    properties:
-                      enableEncryption:
-                        type: boolean
-                      encryptionCipherMode:
-                        type: string
-                      encryptionKeySecret:
-                        type: string
-                      redactClientLogData:
-                        type: boolean
-                    type: object
-                  setParameter:
-                    properties:
-                      cursorTimeoutMillis:
-                        type: integer
-                      ttlMonitorSleepSecs:
-                        type: integer
-                      wiredTigerConcurrentReadTransactions:
-                        type: integer
-                      wiredTigerConcurrentWriteTransactions:
-                        type: integer
-                    type: object
-                  storage:
-                    properties:
-                      directoryPerDB:
-                        type: boolean
-                      engine:
-                        type: string
-                      inMemory:
-                        properties:
-                          engineConfig:
-                            properties:
-                              inMemorySizeRatio:
-                                type: number
-                            type: object
-                        type: object
-                      mmapv1:
-                        properties:
-                          nsSize:
-                            type: integer
-                          smallfiles:
-                            type: boolean
-                        type: object
-                      syncPeriodSecs:
-                        type: integer
-                      wiredTiger:
-                        properties:
-                          collectionConfig:
-                            properties:
-                              blockCompressor:
-                                type: string
-                            type: object
-                          engineConfig:
-                            properties:
-                              cacheSizeRatio:
-                                type: number
-                              directoryForIndexes:
-                                type: boolean
-                              journalCompressor:
-                                type: string
-                            type: object
-                          indexConfig:
-                            properties:
-                              prefixCompression:
-                                type: boolean
-                            type: object
-                        type: object
-                    type: object
-                type: object
               multiCluster:
                 properties:
                   DNSSuffix:
@@ -15062,15 +14959,6 @@ spec:
                       annotations:
                         additionalProperties:
                           type: string
-                        type: object
-                      auditLog:
-                        properties:
-                          destination:
-                            type: string
-                          filter:
-                            type: string
-                          format:
-                            type: string
                         type: object
                       configuration:
                         type: string

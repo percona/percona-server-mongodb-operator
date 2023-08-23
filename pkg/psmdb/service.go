@@ -43,8 +43,8 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 			Ports: []corev1.ServicePort{
 				{
 					Name:       mongodPortName,
-					Port:       api.MongodPort(cr),
-					TargetPort: intstr.FromInt(int(api.MongodPort(cr))),
+					Port:       api.DefaultMongodPort,
+					TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
 				},
 			},
 			ClusterIP: "None",
@@ -100,8 +100,8 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		Ports: []corev1.ServicePort{
 			{
 				Name:       mongodPortName,
-				Port:       api.MongodPort(cr),
-				TargetPort: intstr.FromInt(int(api.MongodPort(cr))),
+				Port:       api.DefaultMongodPort,
+				TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
 			},
 		},
 		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
@@ -347,13 +347,13 @@ func getExtAddr(ctx context.Context, cl client.Client, namespace string, pod cor
 // GetAddr returns replicaSet pod address in cluster
 func GetAddr(cr *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, cr.Name + "-" + replset, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-		":" + strconv.Itoa(int(api.MongodPort(cr)))
+		":" + strconv.Itoa(int(api.DefaultMongodPort))
 }
 
 // GetAddr returns replicaSet pod address in a service mesh
 func GetServiceMeshAddr(cr *api.PerconaServerMongoDB, pod, replset string) string {
 	return strings.Join([]string{pod, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-		":" + strconv.Itoa(int(api.MongodPort(cr)))
+		":" + strconv.Itoa(int(api.DefaultMongodPort))
 }
 
 // GetMCSAddr returns ReplicaSet pod address using MultiCluster FQDN

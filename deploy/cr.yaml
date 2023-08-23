@@ -477,10 +477,6 @@ spec:
 #        - "host1"
 #        - "host2"
 
-#  mongod:
-#    security:
-#      encryptionKeySecret: "my-cluster-name-mongodb-encryption-key"
-
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
