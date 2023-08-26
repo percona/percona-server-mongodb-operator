@@ -122,6 +122,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
+			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
 			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 			NodeSelector:                  cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
@@ -241,7 +242,6 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 }
 
 func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool, cfgInstances []string) []string {
-	mdSpec := cr.Spec.Mongod
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
@@ -274,33 +274,12 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		args = append(args, "--clusterAuthMode=x509")
 	}
 
-	if cr.CompareVersion("1.12.0") < 0 && mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
-		args = append(args, "--redactClientLogData")
-	}
-
 	if msSpec.SetParameter != nil {
 		if msSpec.SetParameter.CursorTimeoutMillis > 0 {
 			args = append(args,
 				"--setParameter",
 				"cursorTimeoutMillis="+strconv.Itoa(msSpec.SetParameter.CursorTimeoutMillis),
 			)
-		}
-	}
-
-	if cr.CompareVersion("1.13.0") < 0 && msSpec.AuditLog != nil && msSpec.AuditLog.Destination == api.AuditLogDestinationFile {
-		if msSpec.AuditLog.Filter == "" {
-			msSpec.AuditLog.Filter = "{}"
-		}
-		args = append(args,
-			"--auditDestination=file",
-			"--auditFilter="+msSpec.AuditLog.Filter,
-			"--auditFormat="+string(msSpec.AuditLog.Format),
-		)
-		switch msSpec.AuditLog.Format {
-		case api.AuditLogFormatBSON:
-			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
-		default:
-			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
 		}
 	}
 
