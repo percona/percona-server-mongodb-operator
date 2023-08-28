@@ -279,6 +279,30 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
+#    schedulerName: "default"
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+#      emptyDir: {}
+#      hostPath:
+#        path: /data
+#        type: Directory
+      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 3Gi
+#    hostAliases:
+#    - ip: "10.10.0.2"
+#      hostnames:
+#      - "host1"
+#      - "host2"
 
   sharding:
     enabled: true
@@ -374,6 +398,11 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
     mongos:
       size: 3
@@ -442,6 +471,11 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        serviceLabels:
 #          rack: rack-22
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
   backup:
     enabled: true

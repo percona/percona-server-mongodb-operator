@@ -3477,6 +3477,17 @@ spec:
                         - votes
                         type: object
                       type: array
+                    hostAliases:
+                      items:
+                        properties:
+                          hostnames:
+                            items:
+                              type: string
+                            type: array
+                          ip:
+                            type: string
+                        type: object
+                      type: array
                     labels:
                       additionalProperties:
                         type: string
@@ -10240,6 +10251,17 @@ spec:
                           - votes
                           type: object
                         type: array
+                      hostAliases:
+                        items:
+                          properties:
+                            hostnames:
+                              items:
+                                type: string
+                              type: array
+                            ip:
+                              type: string
+                          type: object
+                        type: array
                       labels:
                         additionalProperties:
                           type: string
@@ -15020,6 +15042,17 @@ spec:
                           servicePerPod:
                             type: boolean
                         type: object
+                      hostAliases:
+                        items:
+                          properties:
+                            hostnames:
+                              items:
+                                type: string
+                              type: array
+                            ip:
+                              type: string
+                          type: object
+                        type: array
                       hostPort:
                         format: int32
                         type: integer
