@@ -57,6 +57,8 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
 	if cr.Spec.Sharding.Enabled {
+		cr.Spec.Sharding.Mongos.Size = 0
+
 		sts := new(appsv1.StatefulSet)
 		err := r.client.Get(ctx, cr.MongosNamespacedName(), sts)
 		if client.IgnoreNotFound(err) != nil {
@@ -67,9 +69,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 			if err != nil {
 				return errors.Wrap(err, "failed to disable balancer")
 			}
-			cr.Spec.Sharding.Mongos.Size = 0
 		}
-
 		list, err := r.getMongosPods(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "get mongos pods")
@@ -125,17 +125,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		return errors.Wrap(err, "get rs statefulset")
 	}
 
-	if len(pods.Items) > int(*sts.Spec.Replicas) {
-		return errWaitingTermination
-	}
-	if *sts.Spec.Replicas > 1 {
-		rs.Size = 1
-		return errWaitingTermination
-	}
+	rs.Size = 1
 
-	// If there is one pod left, we should be sure that it's the primary
-	if *sts.Spec.Replicas == 1 {
+	switch *sts.Spec.Replicas {
+	case 0:
+		rs.Size = 0
 		if len(pods.Items) == 0 {
+			return nil
+		}
+		return errWaitingTermination
+	case 1:
+		// If there is one pod left, we should be sure that it's the primary
+		if len(pods.Items) != 1 {
 			return errWaitingTermination
 		}
 
@@ -150,12 +151,9 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		// If true, we should resize the replset to 0
 		rs.Size = 0
 		return errWaitingTermination
+	default:
+		return errWaitingTermination
 	}
-
-	if len(pods.Items) == 0 {
-		return nil
-	}
-	return errWaitingTermination
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePvcFinalizer(ctx context.Context, cr *api.PerconaServerMongoDB) error {

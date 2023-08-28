@@ -271,6 +271,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
+	if cr.Spec.Pause {
+		err = r.reconcilePause(ctx, cr)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	err = r.checkConfiguration(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -550,6 +557,18 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+	if err := r.deletePSMDBPods(ctx, cr); err != nil {
+		if err == errWaitingTermination {
+			log.Info("pausing cluster", "error", err.Error())
+			return nil
+		}
+		return errors.Wrap(err, "delete psmdb pods")
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *api.PerconaServerMongoDB) error {

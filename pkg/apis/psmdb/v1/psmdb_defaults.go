@@ -166,9 +166,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.New("mongos should be specified")
 		}
 
-		if cr.Spec.Pause || cr.DeletionTimestamp != nil {
-			cr.Spec.Sharding.Mongos.Size = 0
-		} else {
+		if !cr.Spec.Pause && cr.DeletionTimestamp == nil {
 			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
 				log.Info("Safe config set, updating mongos size",
 					"oldSize", cr.Spec.Sharding.Mongos.Size, "newSize", minSafeMongosSize)
@@ -462,9 +460,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.Pause {
 			if cr.Status.State == AppStateStopping {
-				log.Info("Pausing cluster", "replset", replset.Name, "oldSize", replset.Size, "newSize", 0)
+				log.Info("Pausing cluster", "replset", replset.Name)
 			}
-			replset.Size = 0
 			replset.Arbiter.Enabled = false
 			replset.NonVoting.Enabled = false
 		}
@@ -580,7 +577,7 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		rs.Arbiter.MultiAZ.reconcileOpts()
 	}
 
-	if !cr.Spec.UnsafeConf && cr.DeletionTimestamp == nil {
+	if !cr.Spec.UnsafeConf && (cr.DeletionTimestamp == nil && !cr.Spec.Pause) {
 		rs.setSafeDefaults(log)
 	}
 
