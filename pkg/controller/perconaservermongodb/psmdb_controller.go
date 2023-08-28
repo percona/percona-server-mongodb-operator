@@ -893,6 +893,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 		return nil
 	}
 
+	ss, err := psmdb.GetMongosServices(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to list mongos services")
+	}
+
+	for _, svc := range ss.Items {
+		err = r.client.Delete(ctx, &svc)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete mongos services")
+		}
+	}
+
 	return r.deleteMongos(ctx, cr)
 }
 
