@@ -457,19 +457,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
 		}
-
-		if cr.Spec.Pause {
-			if cr.Status.State == AppStateStopping {
-				log.Info("Pausing cluster", "replset", replset.Name)
-			}
-			replset.Arbiter.Enabled = false
-			replset.NonVoting.Enabled = false
-		}
-	}
-
-	// there is shouldn't be any backups while pause
-	if cr.Spec.Pause {
-		cr.Spec.Backup.Enabled = false
 	}
 
 	if cr.Spec.Backup.Enabled {

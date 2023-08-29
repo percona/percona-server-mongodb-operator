@@ -271,11 +271,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	if cr.Spec.Pause {
-		err = r.reconcilePause(ctx, cr)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	err = r.reconcilePause(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	err = r.checkConfiguration(ctx, cr)
@@ -560,7 +558,33 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Pause || cr.DeletionTimestamp != nil {
+		return nil
+	}
+
 	log := logf.FromContext(ctx)
+
+	backupRunning, err := r.isBackupRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "check if backup is running")
+	}
+	if backupRunning {
+		cr.Spec.Pause = false
+		if err := cr.CheckNSetDefaults(r.serverVersion.Platform, log); err != nil {
+			return errors.Wrap(err, "failed to set defaults")
+		}
+		log.Info("cluster will pause after all backups finished")
+		return nil
+	}
+
+	for _, rs := range cr.Spec.Replsets {
+		if cr.Status.State == api.AppStateStopping {
+			log.Info("Pausing cluster", "replset", rs.Name)
+		}
+		rs.Arbiter.Enabled = false
+		rs.NonVoting.Enabled = false
+	}
+
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
 		if err == errWaitingTermination {
 			log.Info("pausing cluster", "error", err.Error())
