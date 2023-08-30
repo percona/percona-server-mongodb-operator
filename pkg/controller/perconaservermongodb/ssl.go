@@ -59,7 +59,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 	if cr.CompareVersion("1.15.0") >= 0 {
 		err := c.CreateCAIssuer(ctx, cr)
 		if err != nil && !k8serr.IsAlreadyExists(err) {
-			return errors.Wrap(err, "create certificate")
+			return errors.Wrap(err, "create ca issuer")
 		}
 
 		err = c.CreateCACertificate(ctx, cr)
