@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -144,6 +145,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 			return errors.Wrap(err, "get mongos status")
 		}
 
+		log.Info(fmt.Sprintf("AAAAAAAaAA mongo status: %v\n", mongosStatus))
+
 		if cr.Status.Mongos == nil {
 			cr.Status.Mongos = &api.MongosStatus{}
 		}
@@ -204,8 +207,11 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
 		state = api.AppStateReady
+
+		log.Info("AAAAAAAAAAAAAAAAAA - state = api.AppStateReady")
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
 			state = cr.Status.Mongos.Status
+			log.Info(fmt.Sprintf("BBBBBBBBBBB - state: %s\n", state))
 		}
 	}
 
@@ -309,6 +315,8 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.MongosStatus, error) {
 	list, err := r.getMongosPods(ctx, cr)
 	if err != nil {
+
+		log.Println("AAAAAAAAAA getMongosPods error")
 		return api.MongosStatus{}, fmt.Errorf("get list: %v", err)
 	}
 
