@@ -123,6 +123,9 @@ spec:
             requests:
               cpu: 300m
               memory: 500M
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -295,7 +298,8 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        fsGroup: 1001
       terminationGracePeriodSeconds: 30
       volumes:
         - name: monitoring-mongodb-keyfile
