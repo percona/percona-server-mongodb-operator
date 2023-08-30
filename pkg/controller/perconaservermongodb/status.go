@@ -207,7 +207,6 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
 			state = cr.Status.Mongos.Status
-			log.Info(fmt.Sprintf("BBBBBBBBBBB - state: %s\n", state))
 		}
 	}
 
