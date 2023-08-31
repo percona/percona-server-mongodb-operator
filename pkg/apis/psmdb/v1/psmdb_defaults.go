@@ -71,41 +71,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Secrets.Users == "" {
 		cr.Spec.Secrets.Users = defaultUsersSecretName
 	}
-	if cr.Spec.Mongod == nil {
-		cr.Spec.Mongod = &MongodSpec{}
-	}
-	if cr.CompareVersion("1.12.0") < 0 {
-		if cr.Spec.Mongod.Net == nil {
-			cr.Spec.Mongod.Net = &MongodSpecNet{}
-		}
-		if cr.Spec.Mongod.Net.Port == 0 {
-			cr.Spec.Mongod.Net.Port = DefaultMongodPort
-		}
-		if cr.Spec.Mongod.Storage == nil {
-			cr.Spec.Mongod.Storage = &MongodSpecStorage{}
-		}
-		if cr.Spec.Mongod.Storage.Engine == "" {
-			cr.Spec.Mongod.Storage.Engine = defaultStorageEngine
-		}
-		if cr.Spec.Mongod.OperationProfiling == nil {
-			cr.Spec.Mongod.OperationProfiling = &MongodSpecOperationProfiling{
-				Mode: defaultOperationProfilingMode,
-			}
-		}
-		if cr.Spec.Mongod.Security == nil {
-			cr.Spec.Mongod.Security = &MongodSpecSecurity{}
-		}
-		if cr.Spec.Mongod.Security.EnableEncryption == nil {
-			is120 := cr.CompareVersion("1.2.0") >= 0
-			cr.Spec.Mongod.Security.EnableEncryption = &is120
-		}
-	}
 
-	if cr.Spec.EncryptionKeySecretName() == "" {
-		is1120 := cr.CompareVersion("1.12.0") >= 0
-		if is1120 || (!is1120 && *cr.Spec.Mongod.Security.EnableEncryption) {
-			cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
-		}
+	if cr.Spec.Secrets.EncryptionKey == "" {
+		cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
 	}
 
 	if cr.Spec.Secrets.SSL == "" {
@@ -173,7 +141,27 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
 			}
 		}
+		if cr.CompareVersion("1.15.0") >= 0 {
+			var fsgroup *int64
+			if platform == version.PlatformKubernetes {
+				var tp int64 = 1001
+				fsgroup = &tp
+			}
 
+			if cr.Spec.Sharding.Mongos.ContainerSecurityContext == nil {
+				tvar := true
+				cr.Spec.Sharding.Mongos.ContainerSecurityContext = &corev1.SecurityContext{
+					RunAsNonRoot: &tvar,
+					RunAsUser:    fsgroup,
+				}
+			}
+
+			if cr.Spec.Sharding.Mongos.PodSecurityContext == nil {
+				cr.Spec.Sharding.Mongos.PodSecurityContext = &corev1.PodSecurityContext{
+					FSGroup: fsgroup,
+				}
+			}
+		}
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
 
 		if cr.Spec.Sharding.Mongos.Port == 0 {
@@ -315,12 +303,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if replset.Storage == nil {
-			if cr.CompareVersion("1.12.0") >= 0 {
-				replset.Storage = new(MongodSpecStorage)
-				replset.Storage.Engine = defaultStorageEngine
-			} else {
-				replset.Storage = cr.Spec.Mongod.Storage
-			}
+			replset.Storage = new(MongodSpecStorage)
+			replset.Storage.Engine = defaultStorageEngine
 		}
 		if replset.Storage.Engine == "" {
 			replset.Storage.Engine = defaultStorageEngine
@@ -417,7 +401,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if replset.ReadinessProbe.TCPSocket == nil {
 			replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(MongodPort(cr))),
+				Port: intstr.FromInt(int(DefaultMongodPort)),
 			}
 		}
 
@@ -672,7 +656,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(MongodPort(cr))),
+					Port: intstr.FromInt(int(DefaultMongodPort)),
 				},
 			},
 		}
@@ -803,11 +787,4 @@ func (v *VolumeSpec) reconcileOpts() error {
 	}
 
 	return nil
-}
-
-func MongodPort(cr *PerconaServerMongoDB) int32 {
-	if cr.CompareVersion("1.12.0") >= 0 {
-		return DefaultMongodPort
-	}
-	return cr.Spec.Mongod.Net.Port
 }
