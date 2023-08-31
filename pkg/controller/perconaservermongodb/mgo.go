@@ -117,6 +117,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 		return api.AppStateInit, nil
 	}
+	defer func() {
+		if err := cli.Disconnect(ctx); err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
 
 	if cr.Spec.Unmanaged {
 		status, err := mongo.RSStatus(ctx, cli)
@@ -132,12 +137,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	if err != nil {
 		return api.AppStateInit, errors.Wrap(err, "create system users")
 	}
-
-	defer func() {
-		if err := cli.Disconnect(ctx); err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
 
 	// this can happen if cluster is initialized but status update failed
 	if !cr.Status.Replsets[replset.Name].Initialized {
