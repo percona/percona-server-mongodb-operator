@@ -123,6 +123,8 @@ spec:
             requests:
               cpu: 300m
               memory: 500M
+          securityContext:
+            runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:

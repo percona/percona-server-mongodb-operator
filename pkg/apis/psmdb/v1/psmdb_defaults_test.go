@@ -226,8 +226,9 @@ func TestSetSafeDefault(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: api.PerconaServerMongoDBSpec{
-			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
-			Sharding: api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
+			CRVersion: version.Version,
+			Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
+			Sharding:  api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
 		},
 	}
 
