@@ -11,7 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -101,7 +101,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 	if cr.CompareVersion("1.13.0") < 0 {
 		ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
-		tasksList := &batchv1beta1.CronJobList{}
+		tasksList := &batchv1.CronJobList{}
 		err := r.client.List(ctx,
 			tasksList,
 			&client.ListOptions{
