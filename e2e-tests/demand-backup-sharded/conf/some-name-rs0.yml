@@ -77,9 +77,7 @@ spec:
         replication:
           localPingThresholdMs: 15
       expose:
-        exposeType: ClusterIP
-        loadBalancerSourceRanges:
-        - 10.0.0.0/8
+        exposeType: LoadBalancer
       sidecars:
       - image: busybox
         command: ["/bin/sh"]
