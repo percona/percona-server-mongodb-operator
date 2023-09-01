@@ -144,6 +144,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				HostAliases:                   replset.HostAliases,
 				SecurityContext:               podSecurityContext,
 				Affinity:                      PodAffinity(cr, multiAZ.Affinity, customLabels),
+				TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, multiAZ.TopologySpreadConstraints, customLabels),
 				NodeSelector:                  multiAZ.NodeSelector,
 				Tolerations:                   multiAZ.Tolerations,
 				TerminationGracePeriodSeconds: multiAZ.TerminationGracePeriodSeconds,
@@ -226,6 +227,21 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 	}
 
 	return nil
+}
+
+func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.TopologySpreadConstraint, ls map[string]string) []corev1.TopologySpreadConstraint {
+	result := make([]corev1.TopologySpreadConstraint, 0, len(tscs))
+
+	for _, tsc := range tscs {
+		if tsc.LabelSelector == nil && tsc.MatchLabelKeys == nil {
+			tsc.LabelSelector = &metav1.LabelSelector{
+				MatchLabels: ls,
+			}
+		}
+
+		result = append(result, tsc)
+	}
+	return result
 }
 
 func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
