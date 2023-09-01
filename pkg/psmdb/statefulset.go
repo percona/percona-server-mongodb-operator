@@ -92,11 +92,11 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		} else {
 			volumes = append(volumes,
 				corev1.Volume{
-					Name: cr.Spec.EncryptionKeySecretName(),
+					Name: cr.Spec.Secrets.EncryptionKey,
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
 							DefaultMode: &secretFileMode,
-							SecretName:  cr.Spec.EncryptionKeySecretName(),
+							SecretName:  cr.Spec.Secrets.EncryptionKey,
 							Optional:    &fvar,
 						},
 					},
@@ -141,8 +141,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
+				HostAliases:                   replset.HostAliases,
 				SecurityContext:               podSecurityContext,
 				Affinity:                      PodAffinity(cr, multiAZ.Affinity, customLabels),
+				TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, multiAZ.TopologySpreadConstraints, customLabels),
 				NodeSelector:                  multiAZ.NodeSelector,
 				Tolerations:                   multiAZ.Tolerations,
 				TerminationGracePeriodSeconds: multiAZ.TerminationGracePeriodSeconds,
@@ -227,19 +229,28 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 	return nil
 }
 
-func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
-	if cr.CompareVersion("1.12.0") >= 0 {
-		enabled, err := replset.Configuration.IsEncryptionEnabled()
-		if err != nil {
-			return false, errors.Wrap(err, "failed to parse replset configuration")
-		}
-		if enabled == nil {
-			if cr.Spec.Mongod.Security != nil && cr.Spec.Mongod.Security.EnableEncryption != nil {
-				return *cr.Spec.Mongod.Security.EnableEncryption, nil
+func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.TopologySpreadConstraint, ls map[string]string) []corev1.TopologySpreadConstraint {
+	result := make([]corev1.TopologySpreadConstraint, 0, len(tscs))
+
+	for _, tsc := range tscs {
+		if tsc.LabelSelector == nil && tsc.MatchLabelKeys == nil {
+			tsc.LabelSelector = &metav1.LabelSelector{
+				MatchLabels: ls,
 			}
-			return true, nil // true by default
 		}
-		return *enabled, nil
+
+		result = append(result, tsc)
 	}
-	return *cr.Spec.Mongod.Security.EnableEncryption, nil
+	return result
+}
+
+func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+	enabled, err := replset.Configuration.IsEncryptionEnabled()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse replset configuration")
+	}
+	if enabled == nil {
+		return true, nil // true by default
+	}
+	return *enabled, nil
 }
