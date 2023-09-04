@@ -1371,6 +1371,11 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                  allocatedResourceStatuses:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                    x-kubernetes-map-type: granular
                                   allocatedResources:
                                     additionalProperties:
                                       anyOf:
@@ -1410,8 +1415,6 @@ spec:
                                       type: object
                                     type: array
                                   phase:
-                                    type: string
-                                  resizeStatus:
                                     type: string
                                 type: object
                             type: object
@@ -2558,6 +2561,8 @@ spec:
                                       x-kubernetes-int-or-string: true
                                     type: object
                                 type: object
+                              restartPolicy:
+                                type: string
                               securityContext:
                                 properties:
                                   allowPrivilegeEscalation:
@@ -3806,6 +3811,11 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                  allocatedResourceStatuses:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                    x-kubernetes-map-type: granular
                                   allocatedResources:
                                     additionalProperties:
                                       anyOf:
@@ -3845,8 +3855,6 @@ spec:
                                       type: object
                                     type: array
                                   phase:
-                                    type: string
-                                  resizeStatus:
                                     type: string
                                 type: object
                             type: object
@@ -4993,6 +5001,8 @@ spec:
                                       x-kubernetes-int-or-string: true
                                     type: object
                                 type: object
+                              restartPolicy:
+                                type: string
                               securityContext:
                                 properties:
                                   allowPrivilegeEscalation:
@@ -5634,6 +5644,11 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                              allocatedResourceStatuses:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                                x-kubernetes-map-type: granular
                               allocatedResources:
                                 additionalProperties:
                                   anyOf:
@@ -5673,8 +5688,6 @@ spec:
                                   type: object
                                 type: array
                               phase:
-                                type: string
-                              resizeStatus:
                                 type: string
                             type: object
                         type: object
@@ -6821,6 +6834,8 @@ spec:
                                   x-kubernetes-int-or-string: true
                                 type: object
                             type: object
+                          restartPolicy:
+                            type: string
                           securityContext:
                             properties:
                               allowPrivilegeEscalation:
@@ -8145,6 +8160,11 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                    allocatedResourceStatuses:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                      x-kubernetes-map-type: granular
                                     allocatedResources:
                                       additionalProperties:
                                         anyOf:
@@ -8184,8 +8204,6 @@ spec:
                                         type: object
                                       type: array
                                     phase:
-                                      type: string
-                                    resizeStatus:
                                       type: string
                                   type: object
                               type: object
@@ -9332,6 +9350,8 @@ spec:
                                         x-kubernetes-int-or-string: true
                                       type: object
                                   type: object
+                                restartPolicy:
+                                  type: string
                                 securityContext:
                                   properties:
                                     allowPrivilegeEscalation:
@@ -10580,6 +10600,11 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                    allocatedResourceStatuses:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                      x-kubernetes-map-type: granular
                                     allocatedResources:
                                       additionalProperties:
                                         anyOf:
@@ -10619,8 +10644,6 @@ spec:
                                         type: object
                                       type: array
                                     phase:
-                                      type: string
-                                    resizeStatus:
                                       type: string
                                   type: object
                               type: object
@@ -11767,6 +11790,8 @@ spec:
                                         x-kubernetes-int-or-string: true
                                       type: object
                                   type: object
+                                restartPolicy:
+                                  type: string
                                 securityContext:
                                   properties:
                                     allowPrivilegeEscalation:
@@ -12408,6 +12433,11 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                allocatedResourceStatuses:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                                  x-kubernetes-map-type: granular
                                 allocatedResources:
                                   additionalProperties:
                                     anyOf:
@@ -12447,8 +12477,6 @@ spec:
                                     type: object
                                   type: array
                                 phase:
-                                  type: string
-                                resizeStatus:
                                   type: string
                               type: object
                           type: object
@@ -13595,6 +13623,8 @@ spec:
                                     x-kubernetes-int-or-string: true
                                   type: object
                               type: object
+                            restartPolicy:
+                              type: string
                             securityContext:
                               properties:
                                 allowPrivilegeEscalation:
@@ -14851,6 +14881,11 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                allocatedResourceStatuses:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                                  x-kubernetes-map-type: granular
                                 allocatedResources:
                                   additionalProperties:
                                     anyOf:
@@ -14890,8 +14925,6 @@ spec:
                                     type: object
                                   type: array
                                 phase:
-                                  type: string
-                                resizeStatus:
                                   type: string
                               type: object
                           type: object
@@ -16038,6 +16071,8 @@ spec:
                                     x-kubernetes-int-or-string: true
                                   type: object
                               type: object
+                            restartPolicy:
+                              type: string
                             securityContext:
                               properties:
                                 allowPrivilegeEscalation:

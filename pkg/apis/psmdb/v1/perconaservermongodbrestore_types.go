@@ -37,6 +37,7 @@ const (
 type PerconaServerMongoDBRestoreStatus struct {
 	State          RestoreState `json:"state,omitempty"`
 	PBMname        string       `json:"pbmName,omitempty"`
+	PITRTarget     string       `json:"pitrTarget,omitempty"`
 	Error          string       `json:"error,omitempty"`
 	CompletedAt    *metav1.Time `json:"completed,omitempty"`
 	LastTransition *metav1.Time `json:"lastTransition,omitempty"`

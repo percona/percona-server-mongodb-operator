@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -28,25 +29,6 @@ import (
 )
 
 // reconcilePhysicalRestore performs a physical restore of a Percona Server for MongoDB from a backup.
-// The function:
-// 1. Fetches the associated MongoDB cluster.
-// 2. Ensures the cluster is managed.
-// 3. Verifies server and cluster versions.
-// 4. Checks the cluster for incompatible configurations, such as arbiter nodes.
-// 5. Handles restore configurations and preparations.
-// 6. Checks and waits for readiness of necessary resources such as StatefulSets and MongoDB replica sets.
-// 7. Initiates the physical restore using the Percona Backup Management (PBM) cli.
-// 8. Monitors the restore status and updates the PerconaServerMongoDBRestore resource's state accordingly.
-// 9. Upon successful restore, cleans up resources and ensures PBM configuration is resynchronized.
-//
-// Parameters:
-// - ctx: The context of the operation.
-// - cr: Represents the PerconaServerMongoDBRestore custom resource.
-// - bcp: Represents the PerconaServerMongoDBBackup custom resource.
-//
-// Returns:
-// - The status of the restore.
-// - An error if encountered during the reconcile process.
 func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	log := logf.FromContext(ctx)
 
@@ -71,7 +53,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
-	for _, rs := range cluster.Spec.Replsets {
+	replsets := cluster.Spec.Replsets
+	if cluster.Spec.Sharding.Enabled {
+		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	for _, rs := range replsets {
 		if rs.Arbiter.Enabled {
 			return status, errors.New("physical restores are not supported for deployments with arbiter nodes")
 		}
@@ -86,6 +73,27 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		}
 		if err := r.client.Delete(ctx, &pbmConf); err != nil && !k8serrors.IsNotFound(err) {
 			return status, errors.Wrapf(err, "delete secret pbm-config")
+		}
+
+		if cr.Spec.PITR != nil {
+			var ts string
+			switch cr.Spec.PITR.Type {
+			case psmdbv1.PITRestoreTypeDate:
+				ts = cr.Spec.PITR.Date.Format("2006-01-02T15:04:05")
+			case psmdbv1.PITRestoreTypeLatest:
+				pod := corev1.Pod{}
+				podName := replsets[0].PodName(cluster, 0)
+				if err := r.client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cluster.Namespace}, &pod); err != nil {
+					return status, errors.Wrapf(err, "get pod/%s", podName)
+				}
+
+				ts, err = r.getLatestChunkTS(ctx, &pod)
+				if err != nil {
+					return status, errors.Wrap(err, "get latest chunk timestamp")
+				}
+			}
+
+			status.PITRTarget = ts
 		}
 
 		status.State = psmdbv1.RestoreStateWaiting
@@ -128,107 +136,93 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
 	if cr.Status.State == psmdbv1.RestoreStateWaiting {
-		for _, rs := range replsets {
-			pod := corev1.Pod{}
-			if err := r.client.Get(ctx, types.NamespacedName{Name: rs.PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
-				return status, errors.Wrap(err, "get pod")
-			}
-
-			log.V(1).Info("Checking PBM operations for replset", "replset", rs.Name, "pod", rs.PodName(cluster, 0))
-
-			command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
-			log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
-			if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-				return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-			}
-
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-
-			timeout := time.NewTimer(900 * time.Second)
-			defer timeout.Stop()
-
-		outer:
-			for {
-				select {
-				case <-timeout.C:
-					return status, errors.Errorf("timeout while waiting PBM operation to finish")
-				case <-ticker.C:
-					err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-						stdoutBuf.Reset()
-						stderrBuf.Reset()
-
-						command = []string{"/opt/percona/pbm", "status", "--out", "json"}
-						if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-							return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-						}
-
-						log.V(1).Info("PBM status", "status", stdoutBuf.String())
-
-						return nil
-					})
-					if err != nil {
-						return status, err
-					}
-
-					var pbmStatus struct {
-						Running struct {
-							Type string `json:"type,omitempty"`
-							OpId string `json:"opID,omitempty"`
-						} `json:"running"`
-					}
-
-					if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
-						return status, errors.Wrap(err, "unmarshal PBM status output")
-					}
-
-					if len(pbmStatus.Running.OpId) == 0 {
-						break outer
-					}
-
-					log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
-				}
-			}
-		}
+		rs := replsets[0]
 
 		pod := corev1.Pod{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: rs.PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
 			return status, errors.Wrap(err, "get pod")
 		}
 
-		var command []string
-		if cr.Spec.PITR != nil {
-			var ts string
-			switch cr.Spec.PITR.Type {
-			case psmdbv1.PITRestoreTypeDate:
-				ts = cr.Spec.PITR.Date.Format("2006-01-02T15:04:05")
-			case psmdbv1.PITRestoreTypeLatest:
-				ts, err = r.getLatestChunkTS(ctx, &pod)
-				if err != nil {
-					return status, errors.Wrap(err, "get latest chunk timestamp")
-				}
-			}
+		log.V(1).Info("Checking PBM operations for replset", "replset", rs.Name, "pod", rs.PodName(cluster, 0))
 
-			command = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", ts, "--out", "json"}
-		} else {
-			command = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+		command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
+		log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
+		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
-		err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		timeout := time.NewTimer(900 * time.Second)
+		defer timeout.Stop()
+
+	outer:
+		for {
+			select {
+			case <-timeout.C:
+				return status, errors.Errorf("timeout while waiting PBM operation to finish")
+			case <-ticker.C:
+				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
+					stdoutBuf.Reset()
+					stderrBuf.Reset()
+
+					command = []string{"/opt/percona/pbm", "status", "--out", "json"}
+					if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+						return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+					}
+
+					log.V(1).Info("PBM status", "status", stdoutBuf.String())
+
+					return nil
+				})
+				if err != nil {
+					return status, err
+				}
+
+				var pbmStatus struct {
+					Running struct {
+						Type string `json:"type,omitempty"`
+						OpId string `json:"opID,omitempty"`
+					} `json:"running"`
+				}
+
+				if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
+					return status, errors.Wrap(err, "unmarshal PBM status output")
+				}
+
+				if len(pbmStatus.Running.OpId) == 0 {
+					break outer
+				}
+
+				log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
+			}
+		}
+
+		var restoreCommand []string
+		if cr.Spec.PITR != nil {
+			restoreCommand = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", cr.Status.PITRTarget, "--out", "json"}
+		} else {
+			restoreCommand = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+		}
+
+		backoff := wait.Backoff{
+			Steps:    5,
+			Duration: 500 * time.Millisecond,
+			Factor:   5.0,
+			Jitter:   0.1,
+		}
+
+		err = retry.OnError(backoff, func(err error) bool {
 			return strings.Contains(err.Error(), "another operation")
 		}, func() error {
-			log.Info("Starting restore", "command", command, "pod", pod.Name)
+			log.Info("Starting restore", "command", restoreCommand, "pod", pod.Name)
 
 			stdoutBuf.Reset()
 			stderrBuf.Reset()
 
-			err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
+			err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreCommand, nil, stdoutBuf, stderrBuf, false)
 			if err != nil {
 				log.Error(nil, "Restore failed to start", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
 				return errors.Wrapf(err, "start restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
@@ -637,6 +631,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 		if strings.TrimSuffix(stdoutBuf.String(), "\n") != "true" {
 			return false, nil
 		}
+
+		log.Info("Replset is ready for physical restore", "replset", rs.Name, "primary", pod.Name)
 	}
 
 	return true, nil
@@ -754,8 +750,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Cont
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	command := []string{"/opt/percona/pbm", "status", "--out", "json"}
-	if err := r.clientcmd.Exec(ctx, pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+	container := "mongod"
+	pbmBinary := "/opt/percona/pbm"
+	for _, c := range pod.Spec.Containers {
+		if c.Name == "backup-agent" {
+			container = c.Name
+			pbmBinary = "pbm"
+		}
+	}
+
+	command := []string{pbmBinary, "status", "--out", "json"}
+	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
 		return "", errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 	}
 

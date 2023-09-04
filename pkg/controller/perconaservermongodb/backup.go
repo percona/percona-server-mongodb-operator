@@ -329,6 +329,11 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		return nil
 	}
 
+	_, resyncNeeded := cr.Annotations[api.AnnotationResyncPBM]
+	if !resyncNeeded {
+		return nil
+	}
+
 	// pitr is disabled right before restore so it must not be re-enabled during restore
 	isRestoring, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
