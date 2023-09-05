@@ -621,7 +621,7 @@ compare_kubectl() {
 	local new_result="${tmp_dir}/${resource//\//_}.yml"
 
 	if [ -n "$OPENSHIFT" -a -f ${expected_result//.yml/-oc.yml} ]; then
-	  desc "OPENSHIFT"
+		desc "OPENSHIFT"
 		expected_result=${expected_result//.yml/-oc.yml}
 		if [ "$OPENSHIFT" = 4 -a -f ${expected_result//-oc.yml/-4-oc.yml} ]; then
 			expected_result=${expected_result//-oc.yml/-4-oc.yml}
