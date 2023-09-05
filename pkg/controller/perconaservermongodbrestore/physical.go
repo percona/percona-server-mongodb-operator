@@ -75,18 +75,22 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "delete secret pbm-config")
 		}
 
+		pod := corev1.Pod{}
+		podName := replsets[0].PodName(cluster, 0)
+		if err := r.client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cluster.Namespace}, &pod); err != nil {
+			return status, errors.Wrapf(err, "get pod/%s", podName)
+		}
+
+		if err := r.disablePITR(ctx, &pod); err != nil {
+			return status, err
+		}
+
 		if cr.Spec.PITR != nil {
 			var ts string
 			switch cr.Spec.PITR.Type {
 			case psmdbv1.PITRestoreTypeDate:
 				ts = cr.Spec.PITR.Date.Format("2006-01-02T15:04:05")
 			case psmdbv1.PITRestoreTypeLatest:
-				pod := corev1.Pod{}
-				podName := replsets[0].PodName(cluster, 0)
-				if err := r.client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cluster.Namespace}, &pod); err != nil {
-					return status, errors.Wrapf(err, "get pod/%s", podName)
-				}
-
 				ts, err = r.getLatestChunkTS(ctx, &pod)
 				if err != nil {
 					return status, errors.Wrap(err, "get latest chunk timestamp")
@@ -785,4 +789,25 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Cont
 	ts := time.Unix(int64(latest), 0).UTC()
 
 	return ts.Format("2006-01-02T15:04:05"), nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) disablePITR(ctx context.Context, pod *corev1.Pod) error {
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	container := "mongod"
+	pbmBinary := "/opt/percona/pbm"
+	for _, c := range pod.Spec.Containers {
+		if c.Name == "backup-agent" {
+			container = c.Name
+			pbmBinary = "pbm"
+		}
+	}
+
+	command := []string{pbmBinary, "config", "--set", "pitr.enabled=false"}
+	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
+		return errors.Wrapf(err, "disable PiTR stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+	}
+
+	return nil
 }

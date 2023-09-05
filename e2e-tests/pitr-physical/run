@@ -54,8 +54,12 @@ check_recovery() {
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
+	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm status
+
 	desc 'waiting for chunks to be uploaded'
-	sleep 120
+	sleep 150
+
+	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm status
 
 	desc "check restore by $restore_type"
 	cat $test_dir/conf/restore.yml \
@@ -115,8 +119,8 @@ main() {
 
 	# PBM doesn't start PiTR routine if there's no logical backup in storage
 	backup_name_minio="backup-minio"
-	run_backup $backup_name_minio 0 logical
 
+	run_backup $backup_name_minio 0 logical
 	run_backup $backup_name_minio 1 physical
 
 	write_document "-2nd"
@@ -126,9 +130,10 @@ main() {
 
 	check_recovery $backup_name_minio-1 date "$time_now" "-2nd" "$cluster"
 
-	run_backup $backup_name_minio 2 physical
+	run_backup $backup_name_minio 2 logical
+	run_backup $backup_name_minio 3 physical
 
-	check_recovery $backup_name_minio-2 latest "" "-3rd" "$cluster"
+	check_recovery $backup_name_minio-3 latest "" "-3rd" "$cluster"
 
 	desc 'test passed'
 }

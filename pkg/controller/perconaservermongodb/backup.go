@@ -330,7 +330,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 	}
 
 	_, resyncNeeded := cr.Annotations[api.AnnotationResyncPBM]
-	if !resyncNeeded {
+	if resyncNeeded {
 		return nil
 	}
 
