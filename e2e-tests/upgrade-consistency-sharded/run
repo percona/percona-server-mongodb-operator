@@ -19,10 +19,10 @@ main() {
 	apply_cluster "$test_dir/conf/${CLUSTER}.yml"
 
 	desc 'check if Pod started'
-  wait_for_running ${CLUSTER}-rs0 3
-  wait_for_running ${CLUSTER}-cfg 3
-  wait_for_running ${CLUSTER}-mongos 3
-  wait_cluster_consistency ${CLUSTER}
+	wait_for_running ${CLUSTER}-rs0 3
+	wait_for_running ${CLUSTER}-cfg 3
+	wait_for_running ${CLUSTER}-mongos 3
+	wait_cluster_consistency ${CLUSTER}
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1130"
