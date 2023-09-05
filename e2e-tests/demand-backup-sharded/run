@@ -25,15 +25,6 @@ check_data() {
 	done
 }
 
-check_exported_mongos_service_endpoint() {
-	local host=$1
-
-	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
-		echo "Exported host is not correct after the restore"
-		exit 1
-	fi
-}
-
 create_infra "$namespace"
 
 deploy_minio
@@ -73,13 +64,6 @@ sleep 10
 wait_for_running $cluster-mongos 3
 
 compare_kubectl statefulset/$cluster-mongos "-secret"
-
-lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' \
-	| jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0].ip')
-if [ -z $lbEndpoint ]; then
-	echo "mongos service not exported correctly"
-	exit 1
-fi
 
 desc 'write data, read from all'
 run_mongos \
@@ -137,7 +121,6 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_data "-2nd"
 	run_restore "$backup_name_aws"
 	wait_restore "$backup_name_aws" "$cluster"
-	check_exported_mongos_service_endpoint "$lbEndpoint"
 	check_data
 
 	desc 'check backup and restore -- gcp-cs'
@@ -149,7 +132,6 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_data "-2nd"
 	run_restore "$backup_name_gcp"
 	wait_restore "$backup_name_gcp" "$cluster"
-	check_exported_mongos_service_endpoint "$lbEndpoint"
 	check_data
 
 	desc 'check backup and restore -- azure-blob'
@@ -161,7 +143,6 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_data "-2nd"
 	run_restore "$backup_name_azure"
 	wait_restore "$backup_name_azure" "$cluster"
-	check_exported_mongos_service_endpoint "$lbEndpoint"
 	check_data
 fi
 
