@@ -48,6 +48,15 @@ run_recovery_check() {
 	set -o xtrace
 }
 
+check_exported_mongos_service_endpoint() {
+	local host=$1
+
+	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
+		echo "Exported host is not correct after the restore"
+		exit 1
+	fi
+}
+
 create_infra "${namespace}"
 
 deploy_minio
@@ -67,6 +76,13 @@ wait_for_running ${cluster}-rs0 3
 wait_for_running ${cluster}-cfg 3
 wait_for_running ${cluster}-mongos 3
 wait_cluster_consistency ${cluster}
+
+lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' \
+	| jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0].ip')
+if [ -z $lbEndpoint ]; then
+	echo "mongos service not exported correctly"
+	exit 1
+fi
 
 run_mongos \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
@@ -102,18 +118,21 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	echo 'check backup and restore -- aws-s3'
 	run_restore ${backup_name_aws} "_restore_sharded"
 	run_recovery_check ${backup_name_aws} "_restore_sharded"
+	check_exported_mongos_service_endpoint "$lbEndpoint"
 
 	echo "drop collection"
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
 	echo 'check backup and restore -- gcp-cs'
 	run_restore ${backup_name_gcp} "_restore_sharded"
 	run_recovery_check ${backup_name_gcp} "_restore_sharded"
+	check_exported_mongos_service_endpoint "$lbEndpoint"
 
 	echo "drop collection"
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
 	echo 'check backup and restore -- azure-blob'
 	run_restore ${backup_name_azure} "_restore_sharded"
 	run_recovery_check ${backup_name_azure} "_restore_sharded"
+	check_exported_mongos_service_endpoint "$lbEndpoint"
 fi
 
 echo "drop collection"

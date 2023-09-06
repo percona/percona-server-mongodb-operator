@@ -131,7 +131,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	insert_data "100501"
 	check_data "-2nd"
 	run_restore "$backup_name_gcp"
-	wait_restore "$backup_name_aws" "$cluster"
+	wait_restore "$backup_name_gcp" "$cluster"
 	check_data
 
 	desc 'check backup and restore -- azure-blob'
@@ -142,7 +142,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	insert_data "100501"
 	check_data "-2nd"
 	run_restore "$backup_name_azure"
-	wait_restore "$backup_name_aws" "$cluster"
+	wait_restore "$backup_name_azure" "$cluster"
 	check_data
 fi
 
@@ -155,7 +155,7 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 insert_data "100501"
 check_data "-2nd"
 run_restore "$backup_name_minio"
-wait_restore "$backup_name_aws" "$cluster"
+wait_restore "$backup_name_minio" "$cluster"
 check_data
 
 desc 'delete backup and check if it is removed from bucket -- minio'
