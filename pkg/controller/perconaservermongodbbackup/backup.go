@@ -114,7 +114,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 	}
 
 	if meta == nil || meta.Name == "" || errors.Is(err, pbm.ErrNotFound) {
-		logf.FromContext(ctx).Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
+		logf.FromContext(ctx).Info("Waiting for backup metadata", "pbmName", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
 

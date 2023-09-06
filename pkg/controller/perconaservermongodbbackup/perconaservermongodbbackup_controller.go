@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/percona/percona-backup-mongodb/pbm"
+	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
@@ -51,7 +51,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("perconaservermongodbbackup-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("psmdbbackup-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -326,53 +326,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 		for _, f := range cr.GetFinalizers() {
 			switch f {
 			case "delete-backup":
-				if len(cr.Status.PBMname) == 0 {
-					continue
-				}
-				metaNotFound := false
-				if b.pbm != nil {
-					_, err := b.pbm.C.GetBackupMeta(cr.Status.PBMname)
-					if err != nil {
-						if !errors.Is(err, pbm.ErrNotFound) {
-							return errors.Wrap(err, "get backup meta")
-						}
-						metaNotFound = true
-					}
-				}
-				if b.pbm == nil || metaNotFound {
-					dummyPBM := new(pbm.PBM) // We need this only for the DeleteBackupFiles method, which doesn't use method receiver at all
-					stg, err := r.getPBMStorage(ctx, cr)
-					if err != nil {
-						return errors.Wrap(err, "get storage")
-					}
-					if err := dummyPBM.DeleteBackupFiles(getPBMBackupMeta(cr), stg); err != nil {
-						log.Error(err, "failed to run finalizer with dummy pbm", "finalizer", f)
-						finalizers = append(finalizers, f)
-					}
-					continue
-				}
-
-				if cluster == nil {
-					return errors.Errorf("PerconaServerMongoDB %s is not found", cr.Spec.GetClusterName())
-				}
-
-				var storage psmdbv1.BackupStorageSpec
-				switch {
-				case cr.Status.S3 != nil:
-					storage.Type = psmdbv1.BackupStorageS3
-					storage.S3 = *cr.Status.S3
-				case cr.Status.Azure != nil:
-					storage.Type = psmdbv1.BackupStorageAzure
-					storage.Azure = *cr.Status.Azure
-				}
-
-				err := b.pbm.SetConfig(ctx, r.client, cluster, storage)
-				if err != nil {
-					return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
-				}
-				e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
-				err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
-				if err != nil {
+				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
 				}
@@ -384,6 +338,108 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 	err = r.client.Update(ctx, cr)
 
 	return err
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
+	if len(cr.Status.PBMname) == 0 {
+		return nil
+	}
+
+	var meta *pbm.BackupMeta
+	var err error
+
+	if b.pbm != nil {
+		meta, err = b.pbm.C.GetBackupMeta(cr.Status.PBMname)
+		if err != nil {
+			if !errors.Is(err, pbm.ErrNotFound) {
+				return errors.Wrap(err, "get backup meta")
+			}
+			meta = nil
+		}
+	}
+	if b.pbm == nil || meta == nil {
+		dummyPBM := new(pbm.PBM) // We need this only for the DeleteBackupFiles method, which doesn't use method receiver at all
+		stg, err := r.getPBMStorage(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "get storage")
+		}
+		if err := dummyPBM.DeleteBackupFiles(getPBMBackupMeta(cr), stg); err != nil {
+			return errors.Wrap(err, "failed to delete backup files with dummy PBM")
+		}
+		return nil
+	}
+
+	if cluster == nil {
+		return errors.Errorf("PerconaServerMongoDB %s is not found", cr.Spec.GetClusterName())
+	}
+
+	var storage psmdbv1.BackupStorageSpec
+	switch {
+	case cr.Status.S3 != nil:
+		storage.Type = psmdbv1.BackupStorageS3
+		storage.S3 = *cr.Status.S3
+	case cr.Status.Azure != nil:
+		storage.Type = psmdbv1.BackupStorageAzure
+		storage.Azure = *cr.Status.Azure
+	}
+
+	err = b.pbm.SetConfig(ctx, r.client, cluster, storage)
+	if err != nil {
+		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+	}
+	e := b.pbm.C.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
+	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
+	// as it's not possible to delete backup if it is a base for the PITR timeline
+	err = r.deletePITR(ctx, b, meta.LastWriteTS, e)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete PITR")
+	}
+	err = b.pbm.C.DeleteBackup(cr.Status.PBMname, e)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete backup")
+	}
+	return nil
+}
+
+// deletePITR deletes PITR oplog chunks whose StartTS is less or equal to the `until` timestamp. Deletes all chunks if `until` is 0.
+func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b *Backup, until primitive.Timestamp, e *pbmLog.Event) error {
+	log := logf.FromContext(ctx)
+
+	stg, err := b.pbm.C.GetStorage(e)
+	if err != nil {
+		return errors.Wrap(err, "get storage")
+	}
+
+	chunks, err := b.pbm.C.PITRGetChunksSlice("", primitive.Timestamp{}, until)
+	if err != nil {
+		return errors.Wrap(err, "get pitr chunks")
+	}
+	if len(chunks) == 0 {
+		log.Info("nothing to delete")
+	}
+
+	for _, chnk := range chunks {
+		err = stg.Delete(chnk.FName)
+		if err != nil && err != storage.ErrNotExist {
+			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
+		}
+
+		_, err = b.pbm.C.Conn.Database(pbm.DB).Collection(pbm.PITRChunksCollection).DeleteOne(
+			ctx,
+			bson.D{
+				{Key: "rs", Value: chnk.RS},
+				{Key: "start_ts", Value: chnk.StartTS},
+				{Key: "end_ts", Value: chnk.EndTS},
+			},
+		)
+
+		if err != nil {
+			return errors.Wrap(err, "delete pitr chunk metadata")
+		}
+
+		log.Info("deleted " + chnk.FName)
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {

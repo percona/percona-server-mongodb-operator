@@ -54,7 +54,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("perconaservermongodbrestore-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("psmdbrestore-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
