@@ -45,7 +45,7 @@ func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) Job {
 
 // HasActiveJobs returns true if there are running backups or restores
 // in given cluster and namespace
-func HasActiveJobs(ctx context.Context, cl client.Client, cluster *api.PerconaServerMongoDB, current Job, allowLock ...LockHeaderPredicate) (bool, error) {
+func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client, cluster *api.PerconaServerMongoDB, current Job, allowLock ...LockHeaderPredicate) (bool, error) {
 	l := log.FromContext(ctx)
 
 	bcps := &api.PerconaServerMongoDBBackupList{}
@@ -94,7 +94,7 @@ func HasActiveJobs(ctx context.Context, cl client.Client, cluster *api.PerconaSe
 		}
 	}
 
-	pbm, err := NewPBM(ctx, cl, cluster)
+	pbm, err := newPBMFunc(ctx, cl, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "getting PBM object")
 	}
