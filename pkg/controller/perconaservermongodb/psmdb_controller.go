@@ -39,7 +39,6 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -84,6 +83,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
 		lockers:       newLockStore(),
+		newPBM:        backup.NewPBM,
 
 		initImage: initImage,
 
@@ -167,10 +167,13 @@ type ReconcilePerconaServerMongoDB struct {
 	client client.Client
 	scheme *runtime.Scheme
 
-	crons         CronRegistry
-	clientcmd     *clientcmd.Client
-	serverVersion *version.ServerVersion
-	reconcileIn   time.Duration
+	crons               CronRegistry
+	clientcmd           *clientcmd.Client
+	serverVersion       *version.ServerVersion
+	reconcileIn         time.Duration
+	mongoClientProvider MongoClientProvider
+
+	newPBM backup.NewPBMFunc
 
 	initImage string
 
@@ -676,7 +679,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		}
 	}()
 
-	list, err := mongo.ListDBs(ctx, client)
+	list, err := client.ListDBs(ctx)
 	if err != nil {
 		log.Error(err, "failed to list databases", "rs", rsName)
 		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)
