@@ -770,42 +770,6 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) error {
-	host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
-	if err != nil {
-		return errors.Wrapf(err, "get mongo hostname for pod/%s", pod.Name)
-	}
-
-	cli, err := r.standaloneClientWithRole(ctx, cr, roleClusterAdmin, host)
-	if err != nil {
-		return errors.Wrap(err, "get standalone client")
-	}
-
-	cnf, err := cli.ReadConfig(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get mongo config")
-	}
-
-	for i := 0; i < len(cnf.Members); i++ {
-		tags := []mongo.ConfigMember(cnf.Members)[i].Tags
-		podName, ok := tags["podName"]
-		if !ok {
-			continue
-		}
-
-		[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
-	}
-
-	cnf.Version++
-	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
-
-	if err := cli.WriteConfig(ctx, cnf); err != nil {
-		return errors.Wrap(err, "write mongo config")
-	}
-
-	return nil
-}
-
 func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
 	sts := appsv1.StatefulSet{}
 	stsName := cr.Name + "-" + replset.Name
