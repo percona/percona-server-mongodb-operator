@@ -148,6 +148,11 @@ main() {
 
 	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${cluster/-rs0/}"
 
+	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
+	sleep 20
+
+	kubectl_bin delete psmdb-backup --all
+
 	destroy $namespace
 
 	desc 'test passed'

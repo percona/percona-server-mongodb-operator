@@ -73,7 +73,6 @@ type PerconaServerMongoDBSpec struct {
 	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
 	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
-	Mongod                       *MongodSpec                          `json:"mongod,omitempty"`
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
 	Backup                       BackupSpec                           `json:"backup,omitempty"`
@@ -93,20 +92,6 @@ type PerconaServerMongoDBSpec struct {
 
 type TLSSpec struct {
 	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
-}
-
-// EncryptionKeySecretName returns spec.Secrets.EncryptionKey.
-// If it's empty, spec.Mongod.Security.EncryptionKeySecret is returned.
-//
-// TODO: Remove after 1.14
-func (spec *PerconaServerMongoDBSpec) EncryptionKeySecretName() string {
-	if spec.Secrets != nil && spec.Secrets.EncryptionKey != "" {
-		return spec.Secrets.EncryptionKey
-	}
-	if spec.Mongod != nil && spec.Mongod.Security != nil {
-		return spec.Mongod.Security.EncryptionKeySecret
-	}
-	return ""
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
@@ -302,16 +287,17 @@ func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
 }
 
 type MultiAZ struct {
-	Affinity                      *PodAffinity             `json:"affinity,omitempty"`
-	NodeSelector                  map[string]string        `json:"nodeSelector,omitempty"`
-	Tolerations                   []corev1.Toleration      `json:"tolerations,omitempty"`
-	PriorityClassName             string                   `json:"priorityClassName,omitempty"`
-	ServiceAccountName            string                   `json:"serviceAccountName,omitempty"`
-	Annotations                   map[string]string        `json:"annotations,omitempty"`
-	Labels                        map[string]string        `json:"labels,omitempty"`
-	PodDisruptionBudget           *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
-	TerminationGracePeriodSeconds *int64                   `json:"terminationGracePeriodSeconds,omitempty"`
-	RuntimeClassName              *string                  `json:"runtimeClassName,omitempty"`
+	Affinity                      *PodAffinity                      `json:"affinity,omitempty"`
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	NodeSelector                  map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations                   []corev1.Toleration               `json:"tolerations,omitempty"`
+	PriorityClassName             string                            `json:"priorityClassName,omitempty"`
+	ServiceAccountName            string                            `json:"serviceAccountName,omitempty"`
+	Annotations                   map[string]string                 `json:"annotations,omitempty"`
+	Labels                        map[string]string                 `json:"labels,omitempty"`
+	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
+	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
+	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -522,6 +508,7 @@ type ReplsetSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
+	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
 func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
@@ -537,7 +524,7 @@ func (r *ReplsetSpec) PodFQDN(cr *PerconaServerMongoDB, podName string) string {
 }
 
 func (r *ReplsetSpec) PodFQDNWithPort(cr *PerconaServerMongoDB, podName string) string {
-	return fmt.Sprintf("%s:%d", r.PodFQDN(cr, podName), MongodPort(cr))
+	return fmt.Sprintf("%s:%d", r.PodFQDN(cr, podName), DefaultMongodPort)
 }
 
 type LivenessProbeExtended struct {
@@ -594,7 +581,6 @@ type MongosSpec struct {
 	Port                     int32                      `json:"port,omitempty"`
 	HostPort                 int32                      `json:"hostPort,omitempty"`
 	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
-	AuditLog                 *MongoSpecAuditLog         `json:"auditLog,omitempty"`
 	Expose                   MongosExpose               `json:"expose,omitempty"`
 	Size                     int32                      `json:"size,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
@@ -602,48 +588,7 @@ type MongosSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
-}
-
-type MongodSpec struct {
-	Net                *MongodSpecNet                `json:"net,omitempty"`
-	AuditLog           *MongoSpecAuditLog            `json:"auditLog,omitempty"`
-	OperationProfiling *MongodSpecOperationProfiling `json:"operationProfiling,omitempty"`
-	Replication        *MongodSpecReplication        `json:"replication,omitempty"`
-	Security           *MongodSpecSecurity           `json:"security,omitempty"`
-	SetParameter       *MongodSpecSetParameter       `json:"setParameter,omitempty"`
-	Storage            *MongodSpecStorage            `json:"storage,omitempty"`
-}
-
-type MongodSpecNet struct {
-	Port     int32 `json:"port,omitempty"`
-	HostPort int32 `json:"hostPort,omitempty"`
-}
-
-type MongodSpecReplication struct {
-	OplogSizeMB int `json:"oplogSizeMB,omitempty"`
-}
-
-// MongodChiperMode is a cipher mode used by Data-at-Rest Encryption
-type MongodChiperMode string
-
-const (
-	MongodChiperModeUnset MongodChiperMode = ""
-	MongodChiperModeCBC   MongodChiperMode = "AES256-CBC"
-	MongodChiperModeGCM   MongodChiperMode = "AES256-GCM"
-)
-
-type MongodSpecSecurity struct {
-	RedactClientLogData  bool             `json:"redactClientLogData,omitempty"`
-	EnableEncryption     *bool            `json:"enableEncryption,omitempty"`
-	EncryptionKeySecret  string           `json:"encryptionKeySecret,omitempty"`
-	EncryptionCipherMode MongodChiperMode `json:"encryptionCipherMode,omitempty"`
-}
-
-type MongodSpecSetParameter struct {
-	TTLMonitorSleepSecs                   int `json:"ttlMonitorSleepSecs,omitempty"`
-	WiredTigerConcurrentReadTransactions  int `json:"wiredTigerConcurrentReadTransactions,omitempty"`
-	WiredTigerConcurrentWriteTransactions int `json:"wiredTigerConcurrentWriteTransactions,omitempty"`
-	CursorTimeoutMillis                   int `json:"cursorTimeoutMillis,omitempty"`
+	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
 type MongosSpecSetParameter struct {
@@ -719,24 +664,12 @@ var (
 	AuditLogFormatJSON AuditLogFormat = "JSON"
 )
 
-type MongoSpecAuditLog struct {
-	Destination AuditLogDestination `json:"destination,omitempty"`
-	Format      AuditLogFormat      `json:"format,omitempty"`
-	Filter      string              `json:"filter,omitempty"`
-}
-
 type OperationProfilingMode string
 
 const (
 	OperationProfilingModeAll    OperationProfilingMode = "all"
 	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
 )
-
-type MongodSpecOperationProfiling struct {
-	Mode              OperationProfilingMode `json:"mode,omitempty"`
-	SlowOpThresholdMs int                    `json:"slowOpThresholdMs,omitempty"`
-	RateLimit         int                    `json:"rateLimit,omitempty"`
-}
 
 type BackupTaskSpec struct {
 	Name             string                   `json:"name"`
