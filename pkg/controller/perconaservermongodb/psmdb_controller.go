@@ -39,7 +39,6 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -84,6 +83,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
 		lockers:       newLockStore(),
+		newPBM:        backup.NewPBM,
 
 		initImage: initImage,
 
@@ -167,10 +167,13 @@ type ReconcilePerconaServerMongoDB struct {
 	client client.Client
 	scheme *runtime.Scheme
 
-	crons         CronRegistry
-	clientcmd     *clientcmd.Client
-	serverVersion *version.ServerVersion
-	reconcileIn   time.Duration
+	crons               CronRegistry
+	clientcmd           *clientcmd.Client
+	serverVersion       *version.ServerVersion
+	reconcileIn         time.Duration
+	mongoClientProvider MongoClientProvider
+
+	newPBM backup.NewPBMFunc
 
 	initImage string
 
@@ -676,7 +679,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		}
 	}()
 
-	list, err := mongo.ListDBs(ctx, client)
+	list, err := client.ListDBs(ctx)
 	if err != nil {
 		log.Error(err, "failed to list databases", "rs", rsName)
 		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)
@@ -864,27 +867,16 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	svcList, err := psmdb.GetMongosServices(ctx, r.client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to list mongos services")
-	}
-
 	var mongos client.Object
 	if cr.CompareVersion("1.12.0") >= 0 {
 		mongos = psmdb.MongosStatefulset(cr)
 	} else {
 		mongos = psmdb.MongosDeployment(cr)
 	}
-	err = r.client.Delete(ctx, mongos)
+
+	err := r.client.Delete(ctx, mongos)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete mongos statefulset")
-	}
-
-	for _, svc := range svcList.Items {
-		err = r.client.Delete(ctx, &svc)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "failed to delete mongos services")
-		}
 	}
 
 	return nil
@@ -902,6 +894,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 
 	if !upToDate {
 		return nil
+	}
+
+	ss, err := psmdb.GetMongosServices(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to list mongos services")
+	}
+
+	for _, svc := range ss.Items {
+		err = r.client.Delete(ctx, &svc)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete mongos services")
+		}
 	}
 
 	return r.deleteMongos(ctx, cr)
