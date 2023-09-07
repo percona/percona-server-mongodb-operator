@@ -17,7 +17,7 @@ import (
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || (s.Balancer.Enabled != nil && !*s.Balancer.Enabled) {
+	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || (s.Balancer.Enabled != nil && !*s.Balancer.Enabled) || cr.DeletionTimestamp != nil || cr.Spec.Pause {
 		return nil
 	}
 
