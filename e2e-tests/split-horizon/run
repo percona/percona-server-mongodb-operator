@@ -9,12 +9,12 @@ test_dir=$(realpath $(dirname $0))
 configure_client_hostAliases() {
 	local hostAliasesJson='[]'
 
-    for svc in $(kubectl get svc | awk '{print $3 "|" $1}' | grep -E '^[0-9].*'); do 
-        hostname=$(echo ${svc} | awk -F '|' '{print $2}');
-        ip=$(echo ${svc} | awk -F '|' '{print $1}');
-        hostAlias="{\"ip\": \"${ip}\", \"hostnames\": [\"${hostname}.clouddemo.xyz\"]}"
-        hostAliasesJson=$(echo $hostAliasesJson | jq --argjson newAlias "$hostAlias" '. += [$newAlias]')
-    done
+	for svc in $(kubectl get svc | awk '{print $3 "|" $1}' | grep -E '^[0-9].*'); do
+		hostname=$(echo ${svc} | awk -F '|' '{print $2}')
+		ip=$(echo ${svc} | awk -F '|' '{print $1}')
+		hostAlias="{\"ip\": \"${ip}\", \"hostnames\": [\"${hostname}.clouddemo.xyz\"]}"
+		hostAliasesJson=$(echo $hostAliasesJson | jq --argjson newAlias "$hostAlias" '. += [$newAlias]')
+	done
 
     kubectl_bin patch deployment psmdb-client --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/hostAliases', 'value': $hostAliasesJson}]"
 
