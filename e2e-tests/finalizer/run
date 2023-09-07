@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+
+create_infra "$namespace"
+cluster="some-name"
+
+apply_cluster "$test_dir/conf/$cluster.yml"
+desc 'check if all 3 Pods started'
+wait_for_running "$cluster-rs0" 3
+
+kubectl_bin delete psmdb $cluster
+
+desc "Wait for delete cluster $cluster"
+wait_for_delete psmdb/$cluster
+
+desc "Wait for delete PVCs"
+wait_for_delete pvc/mongod-data-$cluster-cfg-0
+wait_for_delete pvc/mongod-data-$cluster-cfg-1
+wait_for_delete pvc/mongod-data-$cluster-cfg-2
+wait_for_delete pvc/mongod-data-$cluster-rs0-0
+wait_for_delete pvc/mongod-data-$cluster-rs0-1
+wait_for_delete pvc/mongod-data-$cluster-rs0-2
+
+desc "Test passed"
+destroy "$namespace"
