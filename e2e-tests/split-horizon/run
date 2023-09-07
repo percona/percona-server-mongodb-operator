@@ -79,8 +79,8 @@ wait_for_running "${cluster}-rs0" 5
 wait_cluster_consistency ${cluster}
 
 run_mongo "rs.conf().members.map(function(member) { return member.horizons })" \
-    "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-    mongodb "" "--quiet" > ${tmp_dir}/horizons-5.json
+	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+	mongodb "" "--quiet" >${tmp_dir}/horizons-5.json
 diff $test_dir/compare/horizons-5.json $tmp_dir/horizons-5.json
 
 kubectl_bin patch psmdb ${cluster} \
