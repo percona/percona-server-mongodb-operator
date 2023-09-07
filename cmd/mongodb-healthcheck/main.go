@@ -17,8 +17,10 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -36,6 +38,9 @@ var (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
 	app := tool.New("Performs health and readiness checks for MongoDB", GitCommit, GitBranch)
 
 	k8sCmd := app.Command("k8s", "Performs liveness check for MongoDB on Kubernetes")
@@ -77,14 +82,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := db.Dial(cnf)
+	client, err := db.Dial(ctx, cnf)
 	if err != nil {
 		log.Error(err, "connection error")
 		os.Exit(1)
 	}
 
 	defer func() {
-		if err := client.Disconnect(context.TODO()); err != nil {
+		if err := client.Disconnect(ctx); err != nil {
 			log.Error(err, "failed to disconnect")
 			os.Exit(1)
 		}
@@ -99,7 +104,7 @@ func main() {
 		case "mongod":
 			memberState, err := healthcheck.HealthCheckMongodLiveness(client, int64(*startupDelaySeconds))
 			if err != nil {
-				client.Disconnect(context.TODO()) // nolint:golint,errcheck
+				client.Disconnect(ctx) // nolint:golint,errcheck
 				log.Error(err, "Member failed Kubernetes liveness check")
 				os.Exit(1)
 			}
@@ -108,7 +113,7 @@ func main() {
 		case "mongos":
 			err := healthcheck.HealthCheckMongosLiveness(client)
 			if err != nil {
-				client.Disconnect(context.TODO()) // nolint:golint,errcheck
+				client.Disconnect(ctx) // nolint:golint,errcheck
 				log.Error(err, "Member failed Kubernetes liveness check")
 				os.Exit(1)
 			}
@@ -120,14 +125,14 @@ func main() {
 		switch *component {
 
 		case "mongod":
-			client.Disconnect(context.TODO()) // nolint:golint,errcheck
+			client.Disconnect(ctx) // nolint:golint,errcheck
 			log.Error(err, "readiness check for mongod is not implemented")
 			os.Exit(1)
 
 		case "mongos":
-			err := healthcheck.MongosReadinessCheck(client)
+			err := healthcheck.MongosReadinessCheck(ctx, client)
 			if err != nil {
-				client.Disconnect(context.TODO()) // nolint:golint,errcheck
+				client.Disconnect(ctx) // nolint:golint,errcheck
 				log.Error(err, "Member failed Kubernetes readiness check")
 				os.Exit(1)
 			}

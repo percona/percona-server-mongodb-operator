@@ -2,6 +2,7 @@ arbiter
 default-cr
 demand-backup
 demand-backup-physical
+finalizer
 limits
 liveness
 mongod-major-upgrade
@@ -14,5 +15,6 @@ security-context
 self-healing-chaos
 smart-update
 upgrade-consistency
+upgrade-consistency-sharded
 users
 version-service

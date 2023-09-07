@@ -11,6 +11,7 @@ demand-backup-sharded
 expose-sharded
 ignore-labels-annotations
 init-deploy
+finalizer
 limits
 liveness
 mongod-major-upgrade
@@ -35,6 +36,7 @@ split-horizon
 storage
 upgrade
 upgrade-consistency
+upgrade-consistency-sharded
 upgrade-sharded
 users
 version-service
