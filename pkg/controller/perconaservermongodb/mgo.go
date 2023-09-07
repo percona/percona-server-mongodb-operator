@@ -165,7 +165,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		cr.Status.Mongos != nil &&
 		cr.Status.Mongos.Status == api.AppStateReady &&
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
-		len(mongosPods) > 0 {
+		len(mongosPods) > 0 && cr.Spec.Sharding.Mongos.Size > 0 {
 
 		mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 		if err != nil {
