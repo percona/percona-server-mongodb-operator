@@ -18,7 +18,7 @@ configure_client_hostAliases() {
 
     kubectl_bin patch deployment psmdb-client --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/hostAliases', 'value': $hostAliasesJson}]"
 
-    wait_pod $(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	wait_pod $(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 }
 
 create_infra ${namespace}
