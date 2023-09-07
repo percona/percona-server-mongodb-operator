@@ -7,7 +7,7 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
 configure_client_hostAliases() {
-    local hostAliasesJson='[]'
+	local hostAliasesJson='[]'
 
     for svc in $(kubectl get svc | awk '{print $3 "|" $1}' | grep -E '^[0-9].*'); do 
         hostname=$(echo ${svc} | awk -F '|' '{print $2}');
