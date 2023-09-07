@@ -63,3 +63,7 @@ func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context,
 func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, role UserRole) (mongo.Client, error) {
 	return r.MongoClientProvider().Mongos(ctx, cr, role)
 }
+
+func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, role UserRole, host string) (mongo.Client, error) {
+	return r.MongoClientProvider().Standalone(ctx, cr, role, host)
+}
