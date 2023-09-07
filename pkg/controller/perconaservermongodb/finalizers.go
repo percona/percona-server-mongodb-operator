@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -55,42 +56,104 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
-	done := true
-	for _, rs := range cr.Spec.Replsets {
-		sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				continue
-			}
-			return errors.Wrap(err, "get rs statefulset")
-		}
+	if cr.Spec.Sharding.Enabled {
+		cr.Spec.Sharding.Mongos.Size = 0
 
-		pods := &corev1.PodList{}
-		err = r.client.List(ctx,
-			pods,
-			&client.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(sts.Spec.Selector.MatchLabels),
-			},
-		)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				continue
-			}
-			return errors.Wrap(err, "get rs statefulset")
+		sts := new(appsv1.StatefulSet)
+		err := r.client.Get(ctx, cr.MongosNamespacedName(), sts)
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "failed to get mongos statefulset")
 		}
-		if len(pods.Items) > int(*sts.Spec.Replicas) {
+		if sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0 {
+			err = r.disableBalancer(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "failed to disable balancer")
+			}
+		}
+		list, err := r.getMongosPods(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "get mongos pods")
+		}
+		if len(list.Items) != 0 {
 			return errWaitingTermination
 		}
-		if *sts.Spec.Replicas != 1 {
-			rs.Size = 1
-			done = false
+	}
+
+	replsetsDeleted := true
+	for _, rs := range cr.Spec.Replsets {
+		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
+			if err == errWaitingTermination {
+				replsetsDeleted = false
+				continue
+			}
+			return err
 		}
 	}
-	if !done {
+	if !replsetsDeleted {
 		return errWaitingTermination
 	}
+
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		if err := r.deleteRSPods(ctx, cr, cr.Spec.Sharding.ConfigsvrReplSet); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
+	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return errors.Wrap(err, "get rs statefulset")
+	}
+
+	pods := &corev1.PodList{}
+	err = r.client.List(ctx,
+		pods,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(sts.Spec.Selector.MatchLabels),
+		},
+	)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return errors.Wrap(err, "get rs statefulset")
+	}
+
+	rs.Size = 1
+
+	switch *sts.Spec.Replicas {
+	case 0:
+		rs.Size = 0
+		if len(pods.Items) == 0 {
+			return nil
+		}
+		return errWaitingTermination
+	case 1:
+		// If there is one pod left, we should be sure that it's the primary
+		if len(pods.Items) != 1 {
+			return errWaitingTermination
+		}
+
+		isPrimary, err := r.isPodPrimary(ctx, cr, pods.Items[0], rs)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
+		}
+		if !isPrimary {
+			return errWaitingTermination
+		}
+
+		// If true, we should resize the replset to 0
+		rs.Size = 0
+		return errWaitingTermination
+	default:
+		return errWaitingTermination
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePvcFinalizer(ctx context.Context, cr *api.PerconaServerMongoDB) error {

@@ -204,6 +204,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
 		state = api.AppStateReady
+
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
 			state = cr.Status.Mongos.Status
 		}
@@ -307,15 +308,26 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.MongosStatus, error) {
+	status := api.MongosStatus{
+		Status: api.AppStateInit,
+	}
+
+	sts := psmdb.MongosStatefulset(cr)
+	err := r.client.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, sts)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return status, nil
+	}
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return api.MongosStatus{}, errors.Wrapf(err, "get statefulset %s", sts.Name)
+	}
+
 	list, err := r.getMongosPods(ctx, cr)
 	if err != nil {
+
 		return api.MongosStatus{}, fmt.Errorf("get list: %v", err)
 	}
 
-	status := api.MongosStatus{
-		Size:   len(list.Items),
-		Status: api.AppStateInit,
-	}
+	status.Size = len(list.Items)
 
 	for _, pod := range list.Items {
 		for _, cntr := range pod.Status.ContainerStatuses {
@@ -344,7 +356,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size == status.Ready:
+	case status.Size > 0 && status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 
