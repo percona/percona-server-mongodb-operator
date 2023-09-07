@@ -90,8 +90,8 @@ wait_for_running "${cluster}-rs0" 3
 wait_cluster_consistency ${cluster}
 
 run_mongo "rs.conf().members.map(function(member) { return member.horizons })" \
-    "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-    mongodb "" "--quiet" > ${tmp_dir}/horizons.json
+	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+	mongodb "" "--quiet" >${tmp_dir}/horizons.json
 diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
 
 apply_cluster ${test_dir}/conf/${cluster}.yml
