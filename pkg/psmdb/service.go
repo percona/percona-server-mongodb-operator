@@ -145,7 +145,7 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		host, err := getIngressPoint(ctx, pod, cl)
+		host, err := getIngressPoint(ctx, cl, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace})
 		if err != nil {
 			return nil, errors.Wrap(err, "get ingress endpoint")
 		}
@@ -171,7 +171,7 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 
 var ErrNoIngressPoints = errors.New("ingress points not found")
 
-func getIngressPoint(ctx context.Context, pod corev1.Pod, cl client.Client) (string, error) {
+func getIngressPoint(ctx context.Context, cl client.Client, serviceNN types.NamespacedName) (string, error) {
 	var retries uint64 = 0
 
 	var ip string
@@ -188,7 +188,7 @@ func getIngressPoint(ctx context.Context, pod corev1.Pod, cl client.Client) (str
 		}
 
 		svc := &corev1.Service{}
-		err := cl.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, svc)
+		err := cl.Get(ctx, serviceNN, svc)
 		if err != nil {
 			return "", errors.Wrap(err, "failed to fetch service")
 		}
@@ -302,12 +302,14 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		svcName = pod.Name
 	}
+
+	nn := types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      svcName,
+	}
+
 	svc := new(corev1.Service)
-	err := cl.Get(ctx,
-		types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      svcName,
-		}, svc)
+	err := cl.Get(ctx, nn, svc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return "", nil
@@ -316,18 +318,16 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 		return "", errors.Wrap(err, "failed to get mongos service")
 	}
 
-	var host string
-	if mongos := cr.Spec.Sharding.Mongos; mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
-		for _, i := range svc.Status.LoadBalancer.Ingress {
-			host = i.IP
-			if len(i.Hostname) > 0 {
-				host = i.Hostname
-			}
+	mongos := cr.Spec.Sharding.Mongos
+	if mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		host, err := getIngressPoint(ctx, cl, nn)
+		if err != nil {
+			return "", errors.Wrap(err, "get ingress endpoint")
 		}
-	} else {
-		host = svc.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix
+		return host, nil
 	}
-	return host, nil
+
+	return svc.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
 }
 
 func getExtAddr(ctx context.Context, cl client.Client, namespace string, pod corev1.Pod) (string, error) {
