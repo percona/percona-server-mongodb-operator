@@ -84,8 +84,8 @@ run_mongo "rs.conf().members.map(function(member) { return member.horizons })" \
 diff $test_dir/compare/horizons-5.json $tmp_dir/horizons-5.json
 
 kubectl_bin patch psmdb ${cluster} \
-    --type='json' \
-    -p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
 wait_for_running "${cluster}-rs0" 3
 wait_cluster_consistency ${cluster}
 
