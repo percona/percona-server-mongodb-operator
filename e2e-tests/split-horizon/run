@@ -73,8 +73,8 @@ wait_cluster_consistency ${cluster}
 
 # scale up and down
 kubectl_bin patch psmdb ${cluster} \
-    --type='json' \
-    -p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
 wait_for_running "${cluster}-rs0" 5
 wait_cluster_consistency ${cluster}
 
