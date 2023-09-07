@@ -847,7 +847,7 @@ deploy_cert_manager() {
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl_bin apply -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
 	kubectl_bin -n cert-manager wait pod -l app.kubernetes.io/instance=cert-manager --for=condition=ready
-	sleep 60
+	sleep 80
 }
 
 delete_crd() {
