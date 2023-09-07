@@ -24,7 +24,7 @@ func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.MongosNamespacedName().Name,
 			Namespace: cr.MongosNamespacedName().Namespace,
-			Labels:    mongosLabels(cr),
+			Labels:    MongosLabels(cr),
 		},
 	}
 }
@@ -59,7 +59,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	return appsv1.StatefulSetSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: mongosLabels(cr),
+			MatchLabels: MongosLabels(cr),
 		},
 		Template:       template,
 		UpdateStrategy: updateStrategy,
@@ -71,7 +71,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTempl
 	return appsv1.DeploymentSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: mongosLabels(cr),
+			MatchLabels: MongosLabels(cr),
 		},
 		Template: template,
 		Strategy: appsv1.DeploymentStrategy{
@@ -84,7 +84,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTempl
 }
 
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
-	ls := mongosLabels(cr)
+	ls := MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
 		for k, v := range cr.Spec.Sharding.Mongos.Labels {
@@ -125,6 +125,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
 			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
+			TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, cr.Spec.Sharding.Mongos.MultiAZ.TopologySpreadConstraints, ls),
 			NodeSelector:                  cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
 			Tolerations:                   cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
 			TerminationGracePeriodSeconds: cr.Spec.Sharding.Mongos.MultiAZ.TerminationGracePeriodSeconds,
@@ -389,7 +390,7 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 		},
 	}
 	if cr.CompareVersion("1.12.0") >= 0 {
-		svc.Labels = mongosLabels(cr)
+		svc.Labels = MongosLabels(cr)
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {
@@ -405,7 +406,7 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 }
 
 func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.ServiceSpec {
-	ls := mongosLabels(cr)
+	ls := MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		ls["statefulset.kubernetes.io/pod-name"] = podName

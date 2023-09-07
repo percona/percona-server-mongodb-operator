@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,7 +17,7 @@ import (
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Unmanaged {
+	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Unmanaged || cr.DeletionTimestamp != nil || cr.Spec.Pause {
 		return nil
 	}
 
@@ -87,13 +86,13 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		}
 	}()
 
-	run, err := mongo.IsBalancerRunning(ctx, mongosSession)
+	run, err := mongosSession.IsBalancerRunning(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to check if balancer running")
 	}
 
 	if !run {
-		err := mongo.StartBalancer(ctx, mongosSession)
+		err := mongosSession.StartBalancer(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to start balancer")
 		}
@@ -133,13 +132,13 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		}
 	}()
 
-	run, err := mongo.IsBalancerRunning(ctx, mongosSession)
+	run, err := mongosSession.IsBalancerRunning(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to check if balancer running")
 	}
 
 	if run {
-		err := mongo.StopBalancer(ctx, mongosSession)
+		err := mongosSession.StopBalancer(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to stop balancer")
 		}

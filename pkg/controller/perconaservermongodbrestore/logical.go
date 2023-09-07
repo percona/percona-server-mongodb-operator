@@ -42,7 +42,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
-	cjobs, err := backup.HasActiveJobs(ctx, r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
+	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
@@ -112,13 +112,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, err
 	}
 
-	meta, err := pbmc.C.GetRestoreMeta(cr.Status.PBMname)
+	meta, err := pbmc.GetRestoreMeta(cr.Status.PBMname)
 	if err != nil && !errors.Is(err, pbm.ErrNotFound) {
 		return status, errors.Wrap(err, "get pbm metadata")
 	}
 
 	if meta == nil || meta.Name == "" {
-		log.Info("Waiting for restore metadata", "PBM name", cr.Status.PBMname, "restore", cr.Name, "backup", cr.Spec.BackupName)
+		log.Info("Waiting for restore metadata", "pbmName", cr.Status.PBMname, "restore", cr.Name, "backup", cr.Spec.BackupName)
 		return status, nil
 	}
 
@@ -144,12 +144,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	return status, nil
 }
 
-func reEnablePITR(pbm *backup.PBM, backup psmdbv1.BackupSpec) (err error) {
+func reEnablePITR(pbm backup.PBM, backup psmdbv1.BackupSpec) (err error) {
 	if !backup.IsEnabledPITR() {
 		return
 	}
 
-	err = pbm.C.SetConfigVar("pitr.enabled", "true")
+	err = pbm.SetConfigVar("pitr.enabled", "true")
 	if err != nil {
 		return
 	}
@@ -157,9 +157,9 @@ func reEnablePITR(pbm *backup.PBM, backup psmdbv1.BackupSpec) (err error) {
 	return
 }
 
-func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
-	e := pbmc.C.Logger().NewEvent(string(pbm.CmdResync), "", "", primitive.Timestamp{})
-	err := pbmc.C.ResyncStorage(e)
+func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
+	e := pbmc.Logger().NewEvent(string(pbm.CmdResync), "", "", primitive.Timestamp{})
+	err := pbmc.ResyncStorage(e)
 	if err != nil {
 		return "", errors.Wrap(err, "set resync backup list from the store")
 	}
@@ -207,7 +207,7 @@ func runRestore(ctx context.Context, backup string, pbmc *backup.PBM, pitr *psmd
 		}
 	}
 
-	if err = pbmc.C.SendCmd(cmd); err != nil {
+	if err = pbmc.SendCmd(cmd); err != nil {
 		return "", errors.Wrap(err, "send restore cmd")
 	}
 

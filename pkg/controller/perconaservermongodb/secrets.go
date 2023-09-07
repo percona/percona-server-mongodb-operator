@@ -10,25 +10,26 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
 
-func (r *ReconcilePerconaServerMongoDB) getUserSecret(ctx context.Context, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
+func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
 	secrets := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, &secrets)
+	err := cl.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, &secrets)
 	return secrets, errors.Wrap(err, "get user secrets")
 }
 
-func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (psmdb.Credentials, error) {
-	return r.getCredentials(ctx, cr, api.UserSecretName(cr), role)
+func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, role api.UserRole) (psmdb.Credentials, error) {
+	return getCredentials(ctx, cl, cr, api.UserSecretName(cr), role)
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCredentials(ctx context.Context, cr *api.PerconaServerMongoDB, name string, role api.UserRole) (psmdb.Credentials, error) {
+func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string, role api.UserRole) (psmdb.Credentials, error) {
 	creds := psmdb.Credentials{}
-	usersSecret, err := r.getUserSecret(ctx, cr, name)
+	usersSecret, err := getUserSecret(ctx, cl, cr, name)
 	if err != nil {
 		return creds, errors.Wrap(err, "failed to get user secret")
 	}

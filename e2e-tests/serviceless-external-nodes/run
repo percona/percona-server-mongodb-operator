@@ -8,11 +8,8 @@ set -o xtrace
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 
-if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-else
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-fi
+FULL_VER=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
+MONGO_VER=${FULL_VER:0:3}
 unset OPERATOR_NS
 
 desc "Create main cluster"
@@ -59,8 +56,8 @@ cat "${test_dir}/compare/rs.txt" \
 
 diff $tmp_dir/rs-expected.txt "$tmp_dir/rs.txt"
 
-destroy "$namespace" "true"
-
+kubectl_bin -n ${replica_namespace} delete psmdb/${cluster}
 destroy $replica_namespace "true"
+destroy $namespace "true"
 
 desc "test passed"

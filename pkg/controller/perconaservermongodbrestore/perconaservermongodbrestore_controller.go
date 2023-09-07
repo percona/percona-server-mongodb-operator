@@ -24,6 +24,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -45,16 +46,17 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		clientcmd: cli,
+		client:     mgr.GetClient(),
+		scheme:     mgr.GetScheme(),
+		clientcmd:  cli,
+		newPBMFunc: backup.NewPBM,
 	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("perconaservermongodbrestore-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("psmdbrestore-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -85,6 +87,8 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+
+	newPBMFunc backup.NewPBMFunc
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read

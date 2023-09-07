@@ -11,7 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -101,7 +101,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 	if cr.CompareVersion("1.13.0") < 0 {
 		ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
-		tasksList := &batchv1beta1.CronJobList{}
+		tasksList := &batchv1.CronJobList{}
 		err := r.client.List(ctx,
 			tasksList,
 			&client.ListOptions{
@@ -362,7 +362,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		}
 	}
 
-	val, err := pbm.C.GetConfigVar("pitr.enabled")
+	val, err := pbm.GetConfigVar("pitr.enabled")
 	if err != nil {
 		if !errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.Wrap(err, "get pitr.enabled")
@@ -379,7 +379,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 	if enabled != cr.Spec.Backup.PITR.Enabled {
 		val := strconv.FormatBool(cr.Spec.Backup.PITR.Enabled)
 		log.Info("Setting pitr.enabled in PBM config", "enabled", val)
-		if err := pbm.C.SetConfigVar("pitr.enabled", val); err != nil {
+		if err := pbm.SetConfigVar("pitr.enabled", val); err != nil {
 			return errors.Wrap(err, "update pitr.enabled")
 		}
 	}
@@ -388,7 +388,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		return nil
 	}
 
-	val, err = pbm.C.GetConfigVar("pitr.oplogSpanMin")
+	val, err = pbm.GetConfigVar("pitr.oplogSpanMin")
 	if err != nil {
 		if !errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.Wrap(err, "get pitr.oplogSpanMin")
@@ -404,12 +404,12 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin.Float64() {
 		val := cr.Spec.Backup.PITR.OplogSpanMin.String()
-		if err := pbm.C.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
+		if err := pbm.SetConfigVar("pitr.oplogSpanMin", val); err != nil {
 			return errors.Wrap(err, "update pitr.oplogSpanMin")
 		}
 	}
 
-	val, err = pbm.C.GetConfigVar("pitr.compression")
+	val, err = pbm.GetConfigVar("pitr.compression")
 	var compression = ""
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -426,23 +426,23 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if compression != string(cr.Spec.Backup.PITR.CompressionType) {
 		if string(cr.Spec.Backup.PITR.CompressionType) == "" {
-			if err := pbm.C.DeleteConfigVar("pitr.compression"); err != nil {
+			if err := pbm.DeleteConfigVar("pitr.compression"); err != nil {
 				return errors.Wrap(err, "delete pitr.compression")
 			}
-		} else if err := pbm.C.SetConfigVar("pitr.compression", string(cr.Spec.Backup.PITR.CompressionType)); err != nil {
+		} else if err := pbm.SetConfigVar("pitr.compression", string(cr.Spec.Backup.PITR.CompressionType)); err != nil {
 			return errors.Wrap(err, "update pitr.compression")
 		}
 
 		// PBM needs to disabling and enabling PITR to change compression type
-		if err := pbm.C.SetConfigVar("pitr.enabled", "false"); err != nil {
+		if err := pbm.SetConfigVar("pitr.enabled", "false"); err != nil {
 			return errors.Wrap(err, "disable pitr")
 		}
-		if err := pbm.C.SetConfigVar("pitr.enabled", "true"); err != nil {
+		if err := pbm.SetConfigVar("pitr.enabled", "true"); err != nil {
 			return errors.Wrap(err, "enable pitr")
 		}
 	}
 
-	val, err = pbm.C.GetConfigVar("pitr.compressionLevel")
+	val, err = pbm.GetConfigVar("pitr.compressionLevel")
 	var compressionLevel *int = nil
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -460,18 +460,18 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if !reflect.DeepEqual(compressionLevel, cr.Spec.Backup.PITR.CompressionLevel) {
 		if cr.Spec.Backup.PITR.CompressionLevel == nil {
-			if err := pbm.C.DeleteConfigVar("pitr.compressionLevel"); err != nil {
+			if err := pbm.DeleteConfigVar("pitr.compressionLevel"); err != nil {
 				return errors.Wrap(err, "delete pitr.compressionLevel")
 			}
-		} else if err := pbm.C.SetConfigVar("pitr.compressionLevel", strconv.FormatInt(int64(*cr.Spec.Backup.PITR.CompressionLevel), 10)); err != nil {
+		} else if err := pbm.SetConfigVar("pitr.compressionLevel", strconv.FormatInt(int64(*cr.Spec.Backup.PITR.CompressionLevel), 10)); err != nil {
 			return errors.Wrap(err, "update pitr.compressionLevel")
 		}
 
 		// PBM needs to disabling and enabling PITR to change compression level
-		if err := pbm.C.SetConfigVar("pitr.enabled", "false"); err != nil {
+		if err := pbm.SetConfigVar("pitr.enabled", "false"); err != nil {
 			return errors.Wrap(err, "disable pitr")
 		}
-		if err := pbm.C.SetConfigVar("pitr.enabled", "true"); err != nil {
+		if err := pbm.SetConfigVar("pitr.enabled", "true"); err != nil {
 			return errors.Wrap(err, "enable pitr")
 		}
 	}
