@@ -21,7 +21,7 @@ const (
 )
 
 type Backup struct {
-	pbm  *backup.PBM
+	pbm  backup.PBM
 	spec api.BackupSpec
 }
 
@@ -59,7 +59,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		compLevel = &l
 	}
 
-	err = b.pbm.C.SendCmd(pbm.Cmd{
+	err = b.pbm.SendCmd(pbm.Cmd{
 		Cmd: pbm.CmdBackup,
 		Backup: &pbm.BackupCmd{
 			Name:             name,
@@ -108,7 +108,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
-	meta, err := b.pbm.C.GetBackupMeta(cr.Status.PBMname)
+	meta, err := b.pbm.GetBackupMeta(cr.Status.PBMname)
 	if err != nil && !errors.Is(err, pbm.ErrNotFound) {
 		return status, errors.Wrap(err, "get pbm backup meta")
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"sort"
 
-	mgo "go.mongodb.org/mongo-driver/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,13 +24,13 @@ func clusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	}
 }
 
-func rsLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
+func RSLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
 	lbls := clusterLabels(cr)
 	lbls["app.kubernetes.io/replset"] = rsName
 	return lbls
 }
 
-func mongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
+func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	lbls := clusterLabels(cr)
 	lbls["app.kubernetes.io/component"] = "mongos"
 	return lbls
@@ -43,7 +42,7 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 		&pods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(rsLabels(cr, rsName)),
+			LabelSelector: labels.SelectorFromSet(RSLabels(cr, rsName)),
 		},
 	)
 	if err != nil {
@@ -103,8 +102,8 @@ func filterPodsByComponent(list corev1.PodList, component string) []corev1.Pod {
 	return pods
 }
 
-func GetPrimaryPod(ctx context.Context, client *mgo.Client) (string, error) {
-	status, err := mongo.RSStatus(ctx, client)
+func GetPrimaryPod(ctx context.Context, mgoClient mongo.Client) (string, error) {
+	status, err := mgoClient.RSStatus(ctx)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get rs status")
 	}
@@ -118,7 +117,7 @@ func GetMongosPods(ctx context.Context, cl client.Client, cr *api.PerconaServerM
 		&pods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongosLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(MongosLabels(cr)),
 		},
 	)
 
@@ -131,7 +130,7 @@ func GetMongosServices(ctx context.Context, cl client.Client, cr *api.PerconaSer
 		list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongosLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(MongosLabels(cr)),
 		},
 	)
 	if err != nil {
