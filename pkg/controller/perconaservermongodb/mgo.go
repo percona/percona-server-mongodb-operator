@@ -380,7 +380,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Updating horizons", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "update horizons: write mongo config")
 		}
