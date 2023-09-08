@@ -132,6 +132,11 @@ type Sharding struct {
 	Enabled          bool         `json:"enabled"`
 	ConfigsvrReplSet *ReplsetSpec `json:"configsvrReplSet,omitempty"`
 	Mongos           *MongosSpec  `json:"mongos,omitempty"`
+	Balancer         BalancerSpec `json:"balancer,omitempty"`
+}
+
+type BalancerSpec struct {
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 type UpgradeOptions struct {

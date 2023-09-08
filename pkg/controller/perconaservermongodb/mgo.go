@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	mgo "go.mongodb.org/mongo-driver/mongo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -117,9 +116,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 		return api.AppStateInit, nil
 	}
+	defer func() {
+		if err := cli.Disconnect(ctx); err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
 
 	if cr.Spec.Unmanaged {
-		status, err := mongo.RSStatus(ctx, cli)
+		status, err := cli.RSStatus(ctx)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "failed to get rs status")
 		}
@@ -132,12 +136,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	if err != nil {
 		return api.AppStateInit, errors.Wrap(err, "create system users")
 	}
-
-	defer func() {
-		if err := cli.Disconnect(ctx); err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
 
 	// this can happen if cluster is initialized but status update failed
 	if !cr.Status.Replsets[replset.Name].Initialized {
@@ -167,7 +165,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		cr.Status.Mongos != nil &&
 		cr.Status.Mongos.Status == api.AppStateReady &&
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
-		len(mongosPods) > 0 {
+		len(mongosPods) > 0 && cr.Spec.Sharding.Mongos.Size > 0 {
 
 		mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
 		if err != nil {
@@ -181,7 +179,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			}
 		}()
 
-		err = mongo.SetDefaultRWConcern(ctx, mongosSession, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+		err = mongosSession.SetDefaultRWConcern(ctx, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
 		// SetDefaultRWConcern introduced in MongoDB 4.4
 		if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 			return api.AppStateError, errors.Wrap(err, "set default RW concern")
@@ -200,7 +198,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 		if !in {
 			log.Info("adding rs to shard", "rs", rsName)
-
 			err := r.handleRsAddToShard(ctx, cr, replset, pods.Items[0], mongosPods[0])
 			if err != nil {
 				return api.AppStateError, errors.Wrap(err, "add shard")
@@ -217,7 +214,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if replset.Arbiter.Enabled && !cr.Spec.Sharding.Enabled {
-		err := mongo.SetDefaultRWConcern(ctx, cli, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+		err := cli.SetDefaultRWConcern(ctx, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
 		// SetDefaultRWConcern introduced in MongoDB 4.4
 		if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 			return api.AppStateError, errors.Wrap(err, "set default RW concern")
@@ -236,7 +233,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	return api.AppStateInit, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli *mgo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (int, error) {
+func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (int, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
 	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
@@ -246,7 +243,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		return 0, errors.Wrap(err, "get rs pods")
 	}
 
-	cnf, err := mongo.ReadConfig(ctx, cli)
+	cnf, err := cli.ReadConfig(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "get mongo config")
 	}
@@ -322,7 +319,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Fixing member tags", "replset", rs.Name)
 
-		if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
+		if err := cli.WriteConfig(ctx, cnf); err != nil {
 			return 0, errors.Wrap(err, "fix tags: write mongo config")
 		}
 	}
@@ -332,7 +329,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Fixing member hosts", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "fix hosts: write mongo config")
 		}
@@ -343,7 +340,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Removing old nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "delete: write mongo config")
 		}
@@ -354,7 +351,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Adding new nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "add new: write mongo config")
 		}
@@ -365,7 +362,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Updating external nodes", "replset", rs.Name)
 
-		err = mongo.WriteConfig(ctx, cli, cnf)
+		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "update external nodes: write mongo config")
 		}
@@ -378,13 +375,13 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Configuring member votes and priorities", "replset", rs.Name)
 
-		err := mongo.WriteConfig(ctx, cli, cnf)
+		err := cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "set votes: write mongo config")
 		}
 	}
 
-	rsStatus, err := mongo.RSStatus(ctx, cli)
+	rsStatus, err := cli.RSStatus(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "unable to get replset members")
 	}
@@ -420,8 +417,8 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	return membersLive, nil
 }
 
-func inShard(ctx context.Context, client *mgo.Client, rsName string) (bool, error) {
-	shardList, err := mongo.ListShard(ctx, client)
+func inShard(ctx context.Context, client mongo.Client, rsName string) (bool, error) {
+	shardList, err := client.ListShard(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "unable to get shard list")
 	}
@@ -466,7 +463,7 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, c
 	}()
 
 	for {
-		resp, err := mongo.RemoveShard(ctx, cli, rsName)
+		resp, err := cli.RemoveShard(ctx, rsName)
 		if err != nil {
 			return errors.Wrap(err, "remove shard")
 		}
@@ -514,7 +511,8 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 	if err == nil {
 		rsName = name
 	}
-	err = mongo.AddShard(ctx, cli, rsName, host)
+
+	err = cli.AddShard(ctx, rsName, host)
 	if err != nil {
 		return errors.Wrap(err, "failed to add shard")
 	}
@@ -589,7 +587,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		time.Sleep(time.Second * 5)
 
-		userAdmin, err := r.getInternalCredentials(ctx, cr, roleUserAdmin)
+		userAdmin, err := getInternalCredentials(ctx, r.client, cr, roleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
@@ -684,17 +682,17 @@ func comparePrivileges(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
 	return true
 }
 
-func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Context, cli *mgo.Client, role string, privileges []mongo.RolePrivilege) error {
-	roleInfo, err := mongo.GetRole(ctx, cli, role)
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Context, cli mongo.Client, role string, privileges []mongo.RolePrivilege) error {
+	roleInfo, err := cli.GetRole(ctx, role)
 	if err != nil {
 		return errors.Wrap(err, "mongo get role")
 	}
 	if roleInfo == nil {
-		err = mongo.CreateRole(ctx, cli, role, privileges, []interface{}{})
+		err = cli.CreateRole(ctx, role, privileges, []interface{}{})
 		return errors.Wrapf(err, "create role %s", role)
 	}
 	if !comparePrivileges(privileges, roleInfo.Privileges) {
-		err = mongo.UpdateRole(ctx, cli, role, privileges, []interface{}{})
+		err = cli.UpdateRole(ctx, role, privileges, []interface{}{})
 		return errors.Wrapf(err, "update role")
 	}
 	return nil
@@ -764,65 +762,29 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	}
 
 	for _, role := range users {
-		creds, err := r.getInternalCredentials(ctx, cr, role)
+		creds, err := getInternalCredentials(ctx, r.client, cr, role)
 		if err != nil {
 			log.Error(err, "failed to get credentials", "role", role)
 			continue
 		}
-		user, err := mongo.GetUserInfo(ctx, cli, creds.Username)
+		user, err := cli.GetUserInfo(ctx, creds.Username)
 		if err != nil {
 			return errors.Wrap(err, "get user info")
 		}
 		if user == nil {
-			err = mongo.CreateUser(ctx, cli, creds.Username, creds.Password, getRoles(cr, role)...)
+			err = cli.CreateUser(ctx, creds.Username, creds.Password, getRoles(cr, role)...)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create user %s", role)
 			}
 			continue
 		}
 		if !compareRoles(user.Roles, getRoles(cr, role)) {
-			err = mongo.UpdateUserRoles(ctx, cli, creds.Username, getRoles(cr, role))
+			err = cli.UpdateUserRoles(ctx, creds.Username, getRoles(cr, role))
 			if err != nil {
 				return errors.Wrapf(err, "failed to create user %s", role)
 			}
 		}
 	}
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) recoverReplsetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod corev1.Pod) error {
-	host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
-	if err != nil {
-		return errors.Wrapf(err, "get mongo hostname for pod/%s", pod.Name)
-	}
-
-	cli, err := r.standaloneClientWithRole(ctx, cr, roleClusterAdmin, host)
-	if err != nil {
-		return errors.Wrap(err, "get standalone client")
-	}
-
-	cnf, err := mongo.ReadConfig(ctx, cli)
-	if err != nil {
-		return errors.Wrap(err, "get mongo config")
-	}
-
-	for i := 0; i < len(cnf.Members); i++ {
-		tags := []mongo.ConfigMember(cnf.Members)[i].Tags
-		podName, ok := tags["podName"]
-		if !ok {
-			continue
-		}
-
-		[]mongo.ConfigMember(cnf.Members)[i].Host = replset.PodFQDNWithPort(cr, podName)
-	}
-
-	cnf.Version++
-	logf.FromContext(ctx).Info("Writing replicaset config", "config", cnf)
-
-	if err := mongo.WriteConfig(ctx, cli, cnf); err != nil {
-		return errors.Wrap(err, "write mongo config")
-	}
-
 	return nil
 }
 
