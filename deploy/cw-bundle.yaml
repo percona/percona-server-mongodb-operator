@@ -992,109 +992,6 @@ spec:
                 type: object
               initImage:
                 type: string
-              mongod:
-                properties:
-                  auditLog:
-                    properties:
-                      destination:
-                        type: string
-                      filter:
-                        type: string
-                      format:
-                        type: string
-                    type: object
-                  net:
-                    properties:
-                      hostPort:
-                        format: int32
-                        type: integer
-                      port:
-                        format: int32
-                        type: integer
-                    type: object
-                  operationProfiling:
-                    properties:
-                      mode:
-                        type: string
-                      rateLimit:
-                        type: integer
-                      slowOpThresholdMs:
-                        type: integer
-                    type: object
-                  replication:
-                    properties:
-                      oplogSizeMB:
-                        type: integer
-                    type: object
-                  security:
-                    properties:
-                      enableEncryption:
-                        type: boolean
-                      encryptionCipherMode:
-                        type: string
-                      encryptionKeySecret:
-                        type: string
-                      redactClientLogData:
-                        type: boolean
-                    type: object
-                  setParameter:
-                    properties:
-                      cursorTimeoutMillis:
-                        type: integer
-                      ttlMonitorSleepSecs:
-                        type: integer
-                      wiredTigerConcurrentReadTransactions:
-                        type: integer
-                      wiredTigerConcurrentWriteTransactions:
-                        type: integer
-                    type: object
-                  storage:
-                    properties:
-                      directoryPerDB:
-                        type: boolean
-                      engine:
-                        type: string
-                      inMemory:
-                        properties:
-                          engineConfig:
-                            properties:
-                              inMemorySizeRatio:
-                                type: number
-                            type: object
-                        type: object
-                      mmapv1:
-                        properties:
-                          nsSize:
-                            type: integer
-                          smallfiles:
-                            type: boolean
-                        type: object
-                      syncPeriodSecs:
-                        type: integer
-                      wiredTiger:
-                        properties:
-                          collectionConfig:
-                            properties:
-                              blockCompressor:
-                                type: string
-                            type: object
-                          engineConfig:
-                            properties:
-                              cacheSizeRatio:
-                                type: number
-                              directoryForIndexes:
-                                type: boolean
-                              journalCompressor:
-                                type: string
-                            type: object
-                          indexConfig:
-                            properties:
-                              prefixCompression:
-                                type: boolean
-                            type: object
-                        type: object
-                    type: object
-                type: object
               multiCluster:
                 properties:
                   DNSSuffix:
@@ -2077,6 +1974,11 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                  allocatedResourceStatuses:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                    x-kubernetes-map-type: granular
                                   allocatedResources:
                                     additionalProperties:
                                       anyOf:
@@ -2116,8 +2018,6 @@ spec:
                                       type: object
                                     type: array
                                   phase:
-                                    type: string
-                                  resizeStatus:
                                     type: string
                                 type: object
                             type: object
@@ -3220,6 +3120,19 @@ spec:
                                     format: int32
                                     type: integer
                                 type: object
+                              resizePolicy:
+                                items:
+                                  properties:
+                                    resourceName:
+                                      type: string
+                                    restartPolicy:
+                                      type: string
+                                  required:
+                                  - resourceName
+                                  - restartPolicy
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
                               resources:
                                 properties:
                                   claims:
@@ -3251,6 +3164,8 @@ spec:
                                       x-kubernetes-int-or-string: true
                                     type: object
                                 type: object
+                              restartPolicy:
+                                type: string
                               securityContext:
                                 properties:
                                   allowPrivilegeEscalation:
@@ -3441,6 +3356,9 @@ spec:
                         size:
                           format: int32
                           type: integer
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          type: integer
                         tolerations:
                           items:
                             properties:
@@ -3455,6 +3373,58 @@ spec:
                                 type: integer
                               value:
                                 type: string
+                            type: object
+                          type: array
+                        topologySpreadConstraints:
+                          items:
+                            properties:
+                              labelSelector:
+                                properties:
+                                  matchExpressions:
+                                    items:
+                                      properties:
+                                        key:
+                                          type: string
+                                        operator:
+                                          type: string
+                                        values:
+                                          items:
+                                            type: string
+                                          type: array
+                                      required:
+                                      - key
+                                      - operator
+                                      type: object
+                                    type: array
+                                  matchLabels:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              matchLabelKeys:
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                              maxSkew:
+                                format: int32
+                                type: integer
+                              minDomains:
+                                format: int32
+                                type: integer
+                              nodeAffinityPolicy:
+                                type: string
+                              nodeTaintsPolicy:
+                                type: string
+                              topologyKey:
+                                type: string
+                              whenUnsatisfiable:
+                                type: string
+                            required:
+                            - maxSkew
+                            - topologyKey
+                            - whenUnsatisfiable
                             type: object
                           type: array
                       required:
@@ -3562,6 +3532,17 @@ spec:
                         - host
                         - priority
                         - votes
+                        type: object
+                      type: array
+                    hostAliases:
+                      items:
+                        properties:
+                          hostnames:
+                            items:
+                              type: string
+                            type: array
+                          ip:
+                            type: string
                         type: object
                       type: array
                     labels:
@@ -4485,6 +4466,11 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                  allocatedResourceStatuses:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                    x-kubernetes-map-type: granular
                                   allocatedResources:
                                     additionalProperties:
                                       anyOf:
@@ -4524,8 +4510,6 @@ spec:
                                       type: object
                                     type: array
                                   phase:
-                                    type: string
-                                  resizeStatus:
                                     type: string
                                 type: object
                             type: object
@@ -5628,6 +5612,19 @@ spec:
                                     format: int32
                                     type: integer
                                 type: object
+                              resizePolicy:
+                                items:
+                                  properties:
+                                    resourceName:
+                                      type: string
+                                    restartPolicy:
+                                      type: string
+                                  required:
+                                  - resourceName
+                                  - restartPolicy
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
                               resources:
                                 properties:
                                   claims:
@@ -5659,6 +5656,8 @@ spec:
                                       x-kubernetes-int-or-string: true
                                     type: object
                                 type: object
+                              restartPolicy:
+                                type: string
                               securityContext:
                                 properties:
                                   allowPrivilegeEscalation:
@@ -5849,6 +5848,9 @@ spec:
                         size:
                           format: int32
                           type: integer
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          type: integer
                         tolerations:
                           items:
                             properties:
@@ -5863,6 +5865,58 @@ spec:
                                 type: integer
                               value:
                                 type: string
+                            type: object
+                          type: array
+                        topologySpreadConstraints:
+                          items:
+                            properties:
+                              labelSelector:
+                                properties:
+                                  matchExpressions:
+                                    items:
+                                      properties:
+                                        key:
+                                          type: string
+                                        operator:
+                                          type: string
+                                        values:
+                                          items:
+                                            type: string
+                                          type: array
+                                      required:
+                                      - key
+                                      - operator
+                                      type: object
+                                    type: array
+                                  matchLabels:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              matchLabelKeys:
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                              maxSkew:
+                                format: int32
+                                type: integer
+                              minDomains:
+                                format: int32
+                                type: integer
+                              nodeAffinityPolicy:
+                                type: string
+                              nodeTaintsPolicy:
+                                type: string
+                              topologyKey:
+                                type: string
+                              whenUnsatisfiable:
+                                type: string
+                            required:
+                            - maxSkew
+                            - topologyKey
+                            - whenUnsatisfiable
                             type: object
                           type: array
                         volumeSpec:
@@ -6297,6 +6351,11 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                              allocatedResourceStatuses:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                                x-kubernetes-map-type: granular
                               allocatedResources:
                                 additionalProperties:
                                   anyOf:
@@ -6336,8 +6395,6 @@ spec:
                                   type: object
                                 type: array
                               phase:
-                                type: string
-                              resizeStatus:
                                 type: string
                             type: object
                         type: object
@@ -7440,6 +7497,19 @@ spec:
                                 format: int32
                                 type: integer
                             type: object
+                          resizePolicy:
+                            items:
+                              properties:
+                                resourceName:
+                                  type: string
+                                restartPolicy:
+                                  type: string
+                              required:
+                              - resourceName
+                              - restartPolicy
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
                           resources:
                             properties:
                               claims:
@@ -7471,6 +7541,8 @@ spec:
                                   x-kubernetes-int-or-string: true
                                 type: object
                             type: object
+                          restartPolicy:
+                            type: string
                           securityContext:
                             properties:
                               allowPrivilegeEscalation:
@@ -7707,6 +7779,9 @@ spec:
                               type: object
                           type: object
                       type: object
+                    terminationGracePeriodSeconds:
+                      format: int64
+                      type: integer
                     tolerations:
                       items:
                         properties:
@@ -7721,6 +7796,58 @@ spec:
                             type: integer
                           value:
                             type: string
+                        type: object
+                      type: array
+                    topologySpreadConstraints:
+                      items:
+                        properties:
+                          labelSelector:
+                            properties:
+                              matchExpressions:
+                                items:
+                                  properties:
+                                    key:
+                                      type: string
+                                    operator:
+                                      type: string
+                                    values:
+                                      items:
+                                        type: string
+                                      type: array
+                                  required:
+                                  - key
+                                  - operator
+                                  type: object
+                                type: array
+                              matchLabels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          matchLabelKeys:
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          maxSkew:
+                            format: int32
+                            type: integer
+                          minDomains:
+                            format: int32
+                            type: integer
+                          nodeAffinityPolicy:
+                            type: string
+                          nodeTaintsPolicy:
+                            type: string
+                          topologyKey:
+                            type: string
+                          whenUnsatisfiable:
+                            type: string
+                        required:
+                        - maxSkew
+                        - topologyKey
+                        - whenUnsatisfiable
                         type: object
                       type: array
                     volumeSpec:
@@ -7870,6 +7997,11 @@ spec:
                 type: object
               sharding:
                 properties:
+                  balancer:
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   configsvrReplSet:
                     properties:
                       affinity:
@@ -8792,6 +8924,11 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                    allocatedResourceStatuses:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                      x-kubernetes-map-type: granular
                                     allocatedResources:
                                       additionalProperties:
                                         anyOf:
@@ -8831,8 +8968,6 @@ spec:
                                         type: object
                                       type: array
                                     phase:
-                                      type: string
-                                    resizeStatus:
                                       type: string
                                   type: object
                               type: object
@@ -9935,6 +10070,19 @@ spec:
                                       format: int32
                                       type: integer
                                   type: object
+                                resizePolicy:
+                                  items:
+                                    properties:
+                                      resourceName:
+                                        type: string
+                                      restartPolicy:
+                                        type: string
+                                    required:
+                                    - resourceName
+                                    - restartPolicy
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
                                 resources:
                                   properties:
                                     claims:
@@ -9966,6 +10114,8 @@ spec:
                                         x-kubernetes-int-or-string: true
                                       type: object
                                   type: object
+                                restartPolicy:
+                                  type: string
                                 securityContext:
                                   properties:
                                     allowPrivilegeEscalation:
@@ -10156,6 +10306,9 @@ spec:
                           size:
                             format: int32
                             type: integer
+                          terminationGracePeriodSeconds:
+                            format: int64
+                            type: integer
                           tolerations:
                             items:
                               properties:
@@ -10170,6 +10323,58 @@ spec:
                                   type: integer
                                 value:
                                   type: string
+                              type: object
+                            type: array
+                          topologySpreadConstraints:
+                            items:
+                              properties:
+                                labelSelector:
+                                  properties:
+                                    matchExpressions:
+                                      items:
+                                        properties:
+                                          key:
+                                            type: string
+                                          operator:
+                                            type: string
+                                          values:
+                                            items:
+                                              type: string
+                                            type: array
+                                        required:
+                                        - key
+                                        - operator
+                                        type: object
+                                      type: array
+                                    matchLabels:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                matchLabelKeys:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                maxSkew:
+                                  format: int32
+                                  type: integer
+                                minDomains:
+                                  format: int32
+                                  type: integer
+                                nodeAffinityPolicy:
+                                  type: string
+                                nodeTaintsPolicy:
+                                  type: string
+                                topologyKey:
+                                  type: string
+                                whenUnsatisfiable:
+                                  type: string
+                              required:
+                              - maxSkew
+                              - topologyKey
+                              - whenUnsatisfiable
                               type: object
                             type: array
                         required:
@@ -10277,6 +10482,17 @@ spec:
                           - host
                           - priority
                           - votes
+                          type: object
+                        type: array
+                      hostAliases:
+                        items:
+                          properties:
+                            hostnames:
+                              items:
+                                type: string
+                              type: array
+                            ip:
+                              type: string
                           type: object
                         type: array
                       labels:
@@ -11200,6 +11416,11 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                    allocatedResourceStatuses:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                      x-kubernetes-map-type: granular
                                     allocatedResources:
                                       additionalProperties:
                                         anyOf:
@@ -11239,8 +11460,6 @@ spec:
                                         type: object
                                       type: array
                                     phase:
-                                      type: string
-                                    resizeStatus:
                                       type: string
                                   type: object
                               type: object
@@ -12343,6 +12562,19 @@ spec:
                                       format: int32
                                       type: integer
                                   type: object
+                                resizePolicy:
+                                  items:
+                                    properties:
+                                      resourceName:
+                                        type: string
+                                      restartPolicy:
+                                        type: string
+                                    required:
+                                    - resourceName
+                                    - restartPolicy
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
                                 resources:
                                   properties:
                                     claims:
@@ -12374,6 +12606,8 @@ spec:
                                         x-kubernetes-int-or-string: true
                                       type: object
                                   type: object
+                                restartPolicy:
+                                  type: string
                                 securityContext:
                                   properties:
                                     allowPrivilegeEscalation:
@@ -12564,6 +12798,9 @@ spec:
                           size:
                             format: int32
                             type: integer
+                          terminationGracePeriodSeconds:
+                            format: int64
+                            type: integer
                           tolerations:
                             items:
                               properties:
@@ -12578,6 +12815,58 @@ spec:
                                   type: integer
                                 value:
                                   type: string
+                              type: object
+                            type: array
+                          topologySpreadConstraints:
+                            items:
+                              properties:
+                                labelSelector:
+                                  properties:
+                                    matchExpressions:
+                                      items:
+                                        properties:
+                                          key:
+                                            type: string
+                                          operator:
+                                            type: string
+                                          values:
+                                            items:
+                                              type: string
+                                            type: array
+                                        required:
+                                        - key
+                                        - operator
+                                        type: object
+                                      type: array
+                                    matchLabels:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                matchLabelKeys:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                maxSkew:
+                                  format: int32
+                                  type: integer
+                                minDomains:
+                                  format: int32
+                                  type: integer
+                                nodeAffinityPolicy:
+                                  type: string
+                                nodeTaintsPolicy:
+                                  type: string
+                                topologyKey:
+                                  type: string
+                                whenUnsatisfiable:
+                                  type: string
+                              required:
+                              - maxSkew
+                              - topologyKey
+                              - whenUnsatisfiable
                               type: object
                             type: array
                           volumeSpec:
@@ -13012,6 +13301,11 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                allocatedResourceStatuses:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                                  x-kubernetes-map-type: granular
                                 allocatedResources:
                                   additionalProperties:
                                     anyOf:
@@ -13051,8 +13345,6 @@ spec:
                                     type: object
                                   type: array
                                 phase:
-                                  type: string
-                                resizeStatus:
                                   type: string
                               type: object
                           type: object
@@ -14155,6 +14447,19 @@ spec:
                                   format: int32
                                   type: integer
                               type: object
+                            resizePolicy:
+                              items:
+                                properties:
+                                  resourceName:
+                                    type: string
+                                  restartPolicy:
+                                    type: string
+                                required:
+                                - resourceName
+                                - restartPolicy
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
                             resources:
                               properties:
                                 claims:
@@ -14186,6 +14491,8 @@ spec:
                                     x-kubernetes-int-or-string: true
                                   type: object
                               type: object
+                            restartPolicy:
+                              type: string
                             securityContext:
                               properties:
                                 allowPrivilegeEscalation:
@@ -14422,6 +14729,9 @@ spec:
                                 type: object
                             type: object
                         type: object
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        type: integer
                       tolerations:
                         items:
                           properties:
@@ -14436,6 +14746,58 @@ spec:
                               type: integer
                             value:
                               type: string
+                          type: object
+                        type: array
+                      topologySpreadConstraints:
+                        items:
+                          properties:
+                            labelSelector:
+                              properties:
+                                matchExpressions:
+                                  items:
+                                    properties:
+                                      key:
+                                        type: string
+                                      operator:
+                                        type: string
+                                      values:
+                                        items:
+                                          type: string
+                                        type: array
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            matchLabelKeys:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            maxSkew:
+                              format: int32
+                              type: integer
+                            minDomains:
+                              format: int32
+                              type: integer
+                            nodeAffinityPolicy:
+                              type: string
+                            nodeTaintsPolicy:
+                              type: string
+                            topologyKey:
+                              type: string
+                            whenUnsatisfiable:
+                              type: string
+                          required:
+                          - maxSkew
+                          - topologyKey
+                          - whenUnsatisfiable
                           type: object
                         type: array
                       volumeSpec:
@@ -14945,15 +15307,6 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
-                      auditLog:
-                        properties:
-                          destination:
-                            type: string
-                          filter:
-                            type: string
-                          format:
-                            type: string
-                        type: object
                       configuration:
                         type: string
                       containerSecurityContext:
@@ -15036,6 +15389,17 @@ spec:
                           servicePerPod:
                             type: boolean
                         type: object
+                      hostAliases:
+                        items:
+                          properties:
+                            hostnames:
+                              items:
+                                type: string
+                              type: array
+                            ip:
+                              type: string
+                          type: object
+                        type: array
                       hostPort:
                         format: int32
                         type: integer
@@ -15437,6 +15801,11 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                allocatedResourceStatuses:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                                  x-kubernetes-map-type: granular
                                 allocatedResources:
                                   additionalProperties:
                                     anyOf:
@@ -15476,8 +15845,6 @@ spec:
                                     type: object
                                   type: array
                                 phase:
-                                  type: string
-                                resizeStatus:
                                   type: string
                               type: object
                           type: object
@@ -16580,6 +16947,19 @@ spec:
                                   format: int32
                                   type: integer
                               type: object
+                            resizePolicy:
+                              items:
+                                properties:
+                                  resourceName:
+                                    type: string
+                                  restartPolicy:
+                                    type: string
+                                required:
+                                - resourceName
+                                - restartPolicy
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
                             resources:
                               properties:
                                 claims:
@@ -16611,6 +16991,8 @@ spec:
                                     x-kubernetes-int-or-string: true
                                   type: object
                               type: object
+                            restartPolicy:
+                              type: string
                             securityContext:
                               properties:
                                 allowPrivilegeEscalation:
@@ -16801,6 +17183,9 @@ spec:
                       size:
                         format: int32
                         type: integer
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        type: integer
                       tolerations:
                         items:
                           properties:
@@ -16815,6 +17200,58 @@ spec:
                               type: integer
                             value:
                               type: string
+                          type: object
+                        type: array
+                      topologySpreadConstraints:
+                        items:
+                          properties:
+                            labelSelector:
+                              properties:
+                                matchExpressions:
+                                  items:
+                                    properties:
+                                      key:
+                                        type: string
+                                      operator:
+                                        type: string
+                                      values:
+                                        items:
+                                          type: string
+                                        type: array
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            matchLabelKeys:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            maxSkew:
+                              format: int32
+                              type: integer
+                            minDomains:
+                              format: int32
+                              type: integer
+                            nodeAffinityPolicy:
+                              type: string
+                            nodeTaintsPolicy:
+                              type: string
+                            topologyKey:
+                              type: string
+                            whenUnsatisfiable:
+                              type: string
+                          required:
+                          - maxSkew
+                          - topologyKey
+                          - whenUnsatisfiable
                           type: object
                         type: array
                     type: object
@@ -17146,7 +17583,5 @@ spec:
               value: percona-server-mongodb-operator
             - name: RESYNC_PERIOD
               value: 5s
-            - name: LOG_VERBOSE
-              value: "false"
             - name: DISABLE_TELEMETRY
               value: "false"

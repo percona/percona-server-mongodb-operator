@@ -621,6 +621,7 @@ compare_kubectl() {
 	local new_result="${tmp_dir}/${resource//\//_}.yml"
 
 	if [ -n "$OPENSHIFT" -a -f ${expected_result//.yml/-oc.yml} ]; then
+		desc "OPENSHIFT"
 		expected_result=${expected_result//.yml/-oc.yml}
 		if [ "$OPENSHIFT" = 4 -a -f ${expected_result//-oc.yml/-4-oc.yml} ]; then
 			expected_result=${expected_result//-oc.yml/-4-oc.yml}
@@ -674,7 +675,6 @@ compare_kubectl() {
 			yq -i eval 'del(.metadata.generation)' ${new_result}
 		fi
 	fi
-
 	diff -u "$expected_result" "$new_result"
 }
 
@@ -1256,4 +1256,46 @@ function generate_vs_json() {
 		| jq '.versions[0].matrix.operator += {"'${OPERATOR_VERSION}'": {"image_path":"'${IMAGE}'","status":"recommended"}}')
 
 	echo ${version_service_source} | jq '.' >${target_path}
+}
+
+check_passwords_leak() {
+	secrets=$(kubectl_bin get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (contains("_PASSWORD"))) | .value')
+	echo secrets=$secrets
+
+	passwords="$(for i in $secrets; do base64 -d <<< $i; echo; done) $secrets"
+	echo passwords=$passwords
+
+	pods=$(kubectl_bin get pods -o name | awk -F "/" '{print $2}')
+	echo pods=$pods
+
+	TEMP_DIR=$(mktemp -d)
+
+	collect_logs() {
+		NS=$1
+		for p in $pods; do
+			containers=$(kubectl_bin -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
+			for c in $containers; do
+				# temporary, because of: https://jira.percona.com/browse/PMM-8357
+				if [[ ${c} =~ "pmm" ]]; then
+					continue
+				fi
+				kubectl_bin -n "$NS" logs $p -c $c > ${TEMP_DIR}/logs_output-$p-$c.txt
+				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
+				for pass in $passwords; do
+					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					if [[ $count != 0 ]]; then
+						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
+						false
+					fi
+				done
+			done
+			echo
+		done
+	}
+
+	collect_logs $namespace
+	if [ -n "$OPERATOR_NS" ]; then
+		pods=$(kubectl_bin -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
+		collect_logs $OPERATOR_NS
+	fi
 }

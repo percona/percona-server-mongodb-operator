@@ -46,9 +46,16 @@ spec:
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
   replsets:
-
   - name: rs0
     size: 3
+#    terminationGracePeriodSeconds: 300
+#    topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server-mongodb
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -279,12 +286,45 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
+#    schedulerName: "default"
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+#      emptyDir: {}
+#      hostPath:
+#        path: /data
+#        type: Directory
+      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 3Gi
+#    hostAliases:
+#    - ip: "10.10.0.2"
+#      hostnames:
+#      - "host1"
+#      - "host2"
 
   sharding:
     enabled: true
-
+#    balancer:
+#      enabled: true
     configsvrReplSet:
       size: 3
+#      terminationGracePeriodSeconds: 300
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server-mongodb
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #      externalNodes:
 #      - host: 34.124.76.93
 #      - host: 34.124.76.94
@@ -373,9 +413,22 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
     mongos:
       size: 3
+#      terminationGracePeriodSeconds: 300
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server-mongodb
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        systemLog:
@@ -440,10 +493,11 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        serviceLabels:
 #          rack: rack-22
-
-#  mongod:
-#    security:
-#      encryptionKeySecret: "my-cluster-name-mongodb-encryption-key"
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
   backup:
     enabled: true

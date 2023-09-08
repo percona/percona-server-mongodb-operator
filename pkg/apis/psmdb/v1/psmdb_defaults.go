@@ -71,41 +71,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Secrets.Users == "" {
 		cr.Spec.Secrets.Users = defaultUsersSecretName
 	}
-	if cr.Spec.Mongod == nil {
-		cr.Spec.Mongod = &MongodSpec{}
-	}
-	if cr.CompareVersion("1.12.0") < 0 {
-		if cr.Spec.Mongod.Net == nil {
-			cr.Spec.Mongod.Net = &MongodSpecNet{}
-		}
-		if cr.Spec.Mongod.Net.Port == 0 {
-			cr.Spec.Mongod.Net.Port = DefaultMongodPort
-		}
-		if cr.Spec.Mongod.Storage == nil {
-			cr.Spec.Mongod.Storage = &MongodSpecStorage{}
-		}
-		if cr.Spec.Mongod.Storage.Engine == "" {
-			cr.Spec.Mongod.Storage.Engine = defaultStorageEngine
-		}
-		if cr.Spec.Mongod.OperationProfiling == nil {
-			cr.Spec.Mongod.OperationProfiling = &MongodSpecOperationProfiling{
-				Mode: defaultOperationProfilingMode,
-			}
-		}
-		if cr.Spec.Mongod.Security == nil {
-			cr.Spec.Mongod.Security = &MongodSpecSecurity{}
-		}
-		if cr.Spec.Mongod.Security.EnableEncryption == nil {
-			is120 := cr.CompareVersion("1.2.0") >= 0
-			cr.Spec.Mongod.Security.EnableEncryption = &is120
-		}
-	}
 
-	if cr.Spec.EncryptionKeySecretName() == "" {
-		is1120 := cr.CompareVersion("1.12.0") >= 0
-		if is1120 || (!is1120 && *cr.Spec.Mongod.Security.EnableEncryption) {
-			cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
-		}
+	if cr.Spec.Secrets.EncryptionKey == "" {
+		cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
 	}
 
 	if cr.Spec.Secrets.SSL == "" {
@@ -166,16 +134,34 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.New("mongos should be specified")
 		}
 
-		if cr.Spec.Pause {
-			cr.Spec.Sharding.Mongos.Size = 0
-		} else {
+		if !cr.Spec.Pause && cr.DeletionTimestamp == nil {
 			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
 				log.Info("Safe config set, updating mongos size",
 					"oldSize", cr.Spec.Sharding.Mongos.Size, "newSize", minSafeMongosSize)
 				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
 			}
 		}
+		if cr.CompareVersion("1.15.0") >= 0 {
+			var fsgroup *int64
+			if platform == version.PlatformKubernetes {
+				var tp int64 = 1001
+				fsgroup = &tp
+			}
 
+			if cr.Spec.Sharding.Mongos.ContainerSecurityContext == nil {
+				tvar := true
+				cr.Spec.Sharding.Mongos.ContainerSecurityContext = &corev1.SecurityContext{
+					RunAsNonRoot: &tvar,
+					RunAsUser:    fsgroup,
+				}
+			}
+
+			if cr.Spec.Sharding.Mongos.PodSecurityContext == nil {
+				cr.Spec.Sharding.Mongos.PodSecurityContext = &corev1.PodSecurityContext{
+					FSGroup: fsgroup,
+				}
+			}
+		}
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
 
 		if cr.Spec.Sharding.Mongos.Port == 0 {
@@ -285,7 +271,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = 3
 		}
 
-		cr.Spec.Sharding.Mongos.reconcileOpts()
+		cr.Spec.Sharding.Mongos.reconcileOpts(cr)
 
 		if err := cr.Spec.Sharding.Mongos.Configuration.SetDefaults(); err != nil {
 			return errors.Wrap(err, "failed to set configuration defaults")
@@ -317,12 +303,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		if replset.Storage == nil {
-			if cr.CompareVersion("1.12.0") >= 0 {
-				replset.Storage = new(MongodSpecStorage)
-				replset.Storage.Engine = defaultStorageEngine
-			} else {
-				replset.Storage = cr.Spec.Mongod.Storage
-			}
+			replset.Storage = new(MongodSpecStorage)
+			replset.Storage.Engine = defaultStorageEngine
 		}
 		if replset.Storage.Engine == "" {
 			replset.Storage.Engine = defaultStorageEngine
@@ -419,7 +401,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if replset.ReadinessProbe.TCPSocket == nil {
 			replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(MongodPort(cr))),
+				Port: intstr.FromInt(int(DefaultMongodPort)),
 			}
 		}
 
@@ -459,20 +441,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
 		}
-
-		if cr.Spec.Pause {
-			if cr.Status.State == AppStateStopping {
-				log.Info("Pausing cluster", "replset", replset.Name, "oldSize", replset.Size, "newSize", 0)
-			}
-			replset.Size = 0
-			replset.Arbiter.Enabled = false
-			replset.NonVoting.Enabled = false
-		}
-	}
-
-	// there is shouldn't be any backups while pause
-	if cr.Spec.Pause {
-		cr.Spec.Backup.Enabled = false
 	}
 
 	if cr.Spec.Backup.Enabled {
@@ -574,13 +542,13 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
 
-	rs.MultiAZ.reconcileOpts()
+	rs.MultiAZ.reconcileOpts(cr)
 
 	if rs.Arbiter.Enabled {
-		rs.Arbiter.MultiAZ.reconcileOpts()
+		rs.Arbiter.MultiAZ.reconcileOpts(cr)
 	}
 
-	if !cr.Spec.UnsafeConf && cr.DeletionTimestamp == nil {
+	if !cr.Spec.UnsafeConf && (cr.DeletionTimestamp == nil && !cr.Spec.Pause) {
 		rs.setSafeDefaults(log)
 	}
 
@@ -688,7 +656,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(MongodPort(cr))),
+					Port: intstr.FromInt(int(DefaultMongodPort)),
 				},
 			},
 		}
@@ -710,7 +678,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ServiceAccountName = WorkloadSA
 	}
 
-	nv.MultiAZ.reconcileOpts()
+	nv.MultiAZ.reconcileOpts(cr)
 
 	if nv.ContainerSecurityContext == nil {
 		nv.ContainerSecurityContext = rs.ContainerSecurityContext
@@ -757,8 +725,9 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 	}
 }
 
-func (m *MultiAZ) reconcileOpts() {
+func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
 	m.reconcileAffinityOpts()
+	m.reconcileTopologySpreadConstraints(cr)
 
 	if m.PodDisruptionBudget == nil {
 		defaultMaxUnavailable := intstr.FromInt(1)
@@ -802,6 +771,24 @@ func (m *MultiAZ) reconcileAffinityOpts() {
 	}
 }
 
+func (m *MultiAZ) reconcileTopologySpreadConstraints(cr *PerconaServerMongoDB) {
+	if cr.CompareVersion("1.15.0") < 0 {
+		return
+	}
+
+	for i := range m.TopologySpreadConstraints {
+		if m.TopologySpreadConstraints[i].MaxSkew == 0 {
+			m.TopologySpreadConstraints[i].MaxSkew = 1
+		}
+		if m.TopologySpreadConstraints[i].TopologyKey == "" {
+			m.TopologySpreadConstraints[i].TopologyKey = defaultAffinityTopologyKey
+		}
+		if m.TopologySpreadConstraints[i].WhenUnsatisfiable == "" {
+			m.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.DoNotSchedule
+		}
+	}
+}
+
 func (v *VolumeSpec) reconcileOpts() error {
 	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
 		v.PersistentVolumeClaim.PersistentVolumeClaimSpec = &corev1.PersistentVolumeClaimSpec{}
@@ -819,11 +806,4 @@ func (v *VolumeSpec) reconcileOpts() error {
 	}
 
 	return nil
-}
-
-func MongodPort(cr *PerconaServerMongoDB) int32 {
-	if cr.CompareVersion("1.12.0") >= 0 {
-		return DefaultMongodPort
-	}
-	return cr.Spec.Mongod.Net.Port
 }

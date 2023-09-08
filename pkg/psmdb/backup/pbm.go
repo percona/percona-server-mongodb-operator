@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
+	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
@@ -33,10 +34,34 @@ const (
 	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 )
 
-type PBM struct {
-	C         *pbm.PBM
+type pbmC struct {
+	*pbm.PBM
 	k8c       client.Client
 	namespace string
+}
+
+type PBM interface {
+	Conn() *mongo.Client
+
+	GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.OplogChunk, error)
+	GetLatestTimelinePITR() (pbm.Timeline, error)
+	PITRGetChunksSlice(rs string, from, to primitive.Timestamp) ([]pbm.OplogChunk, error)
+
+	Logger() *pbmLog.Logger
+	GetStorage(l *pbmLog.Event) (storage.Storage, error)
+	ResyncStorage(l *pbmLog.Event) error
+	SendCmd(cmd pbm.Cmd) error
+	Close(ctx context.Context) error
+	HasLocks(predicates ...LockHeaderPredicate) (bool, error)
+
+	GetRestoreMeta(name string) (*pbm.RestoreMeta, error)
+	GetBackupMeta(name string) (*pbm.BackupMeta, error)
+	DeleteBackup(name string, l *pbmLog.Event) error
+
+	SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error
+	SetConfigVar(key, val string) error
+	GetConfigVar(key string) (any, error)
+	DeleteConfigVar(key string) error
 }
 
 func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string) (string, error) {
@@ -97,9 +122,11 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	return murl, nil
 }
 
+type NewPBMFunc func(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (PBM, error)
+
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
-func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (*PBM, error) {
+func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (PBM, error) {
 	rs := cluster.Spec.Replsets[0]
 
 	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name, false)
@@ -128,8 +155,8 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 
 	pbmc.InitLogger("", "")
 
-	return &PBM{
-		C:         pbmc,
+	return &pbmC{
+		PBM:       pbmc,
 		k8c:       c,
 		namespace: cluster.Namespace,
 	}, nil
@@ -254,26 +281,29 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	return conf, nil
 }
 
+func (b *pbmC) Conn() *mongo.Client {
+	return b.PBM.Conn
+}
+
 // SetConfig sets the pbm config with storage defined in the cluster CR
 // by given storageName
-func (b *PBM) SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+func (b *pbmC) SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
 	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
 	}
 
-	if err := b.C.SetConfig(conf); err != nil {
+	if err := b.PBM.SetConfig(conf); err != nil {
 		return errors.Wrap(err, "write config")
 	}
 
 	time.Sleep(11 * time.Second) // give time to init new storage
-
 	return nil
 }
 
 // Close close the PBM connection
-func (b *PBM) Close(ctx context.Context) error {
-	return b.C.Conn.Disconnect(ctx)
+func (b *pbmC) Close(ctx context.Context) error {
+	return b.PBM.Conn.Disconnect(ctx)
 }
 
 func getSecret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
@@ -307,7 +337,7 @@ func NotJobLock(j Job) LockHeaderPredicate {
 		case TypeRestore:
 			jobCommand = pbm.CmdRestore
 		case TypePITRestore:
-			jobCommand = pbm.CmdPITRestore
+			jobCommand = pbm.CmdRestore
 		default:
 			return true
 		}
@@ -316,8 +346,8 @@ func NotJobLock(j Job) LockHeaderPredicate {
 	}
 }
 
-func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
-	locks, err := b.C.GetLocks(&pbm.LockHeader{})
+func (b *pbmC) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
+	locks, err := b.PBM.GetLocks(&pbm.LockHeader{})
 	if err != nil {
 		return false, errors.Wrap(err, "getting lock data")
 	}
@@ -342,13 +372,13 @@ func (b *PBM) HasLocks(predicates ...LockHeaderPredicate) (bool, error) {
 
 var errNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
 
-func (b *PBM) GetLastPITRChunk() (*pbm.OplogChunk, error) {
-	nodeInfo, err := b.C.GetNodeInfo()
+func (b *pbmC) GetLastPITRChunk() (*pbm.OplogChunk, error) {
+	nodeInfo, err := b.PBM.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}
 
-	c, err := b.C.PITRLastChunkMeta(nodeInfo.SetName)
+	c, err := b.PBM.PITRLastChunkMeta(nodeInfo.SetName)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errNoOplogsForPITR
@@ -363,19 +393,19 @@ func (b *PBM) GetLastPITRChunk() (*pbm.OplogChunk, error) {
 	return c, nil
 }
 
-func (b *PBM) GetTimelinesPITR() ([]pbm.Timeline, error) {
+func (b *pbmC) GetTimelinesPITR() ([]pbm.Timeline, error) {
 	var (
 		now       = time.Now().UTC().Unix()
 		timelines [][]pbm.Timeline
 	)
 
-	shards, err := b.C.ClusterMembers()
+	shards, err := b.PBM.ClusterMembers()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting cluster members")
 	}
 
 	for _, s := range shards {
-		rsTimelines, err := b.C.PITRGetValidTimelines(s.RS, primitive.Timestamp{T: uint32(now)}, nil)
+		rsTimelines, err := b.PBM.PITRGetValidTimelines(s.RS, primitive.Timestamp{T: uint32(now)})
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting timelines for %s", s.RS)
 		}
@@ -386,7 +416,7 @@ func (b *PBM) GetTimelinesPITR() ([]pbm.Timeline, error) {
 	return pbm.MergeTimelines(timelines...), nil
 }
 
-func (b *PBM) GetLatestTimelinePITR() (pbm.Timeline, error) {
+func (b *pbmC) GetLatestTimelinePITR() (pbm.Timeline, error) {
 	timelines, err := b.GetTimelinesPITR()
 	if err != nil {
 		return pbm.Timeline{}, err
@@ -401,8 +431,8 @@ func (b *PBM) GetLatestTimelinePITR() (pbm.Timeline, error) {
 
 // PITRGetChunkContains returns a pitr slice chunk that belongs to the
 // given replica set and contains the given timestamp
-func (p *PBM) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.Timestamp) (*pbm.OplogChunk, error) {
-	res := p.C.Conn.Database(pbm.DB).Collection(pbm.PITRChunksCollection).FindOne(
+func (p *pbmC) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.Timestamp) (*pbm.OplogChunk, error) {
+	res := p.PBM.Conn.Database(pbm.DB).Collection(pbm.PITRChunksCollection).FindOne(
 		ctx,
 		bson.D{
 			{"rs", rs},
@@ -419,8 +449,8 @@ func (p *PBM) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.
 	return chnk, errors.Wrap(err, "decode")
 }
 
-func (b *PBM) GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.OplogChunk, error) {
-	nodeInfo, err := b.C.GetNodeInfo()
+func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.OplogChunk, error) {
+	nodeInfo, err := b.PBM.GetNodeInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}

@@ -24,6 +24,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -45,31 +46,31 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		clientcmd: cli,
+		client:     mgr.GetClient(),
+		scheme:     mgr.GetScheme(),
+		clientcmd:  cli,
+		newPBMFunc: backup.NewPBM,
 	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("perconaservermongodbrestore-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("psmdbrestore-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to primary resource PerconaServerMongoDBRestore
-	err = c.Watch(&source.Kind{Type: &psmdbv1.PerconaServerMongoDBRestore{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), new(psmdbv1.PerconaServerMongoDBRestore)), new(handler.EnqueueRequestForObject))
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBRestore
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &psmdbv1.PerconaServerMongoDBRestore{},
-	})
+	err = c.Watch(source.Kind(mgr.GetCache(), new(corev1.Pod)), handler.EnqueueRequestForOwner(
+		mgr.GetScheme(), mgr.GetRESTMapper(), new(psmdbv1.PerconaServerMongoDBRestore), handler.OnlyControllerOwner(),
+	))
 	if err != nil {
 		return err
 	}
@@ -86,6 +87,8 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+
+	newPBMFunc backup.NewPBMFunc
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
@@ -147,7 +150,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return rr, errors.Wrap(err, "get backup")
 	}
 
-	if bcp.Status.State != psmdbv1.BackupStateReady {
+	switch bcp.Status.State {
+	case psmdbv1.BackupStateError:
+		err = errors.New("backup is in error state")
+		return rr, nil
+	case psmdbv1.BackupStateReady:
+	default:
 		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
@@ -199,8 +207,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 
 		return &psmdbv1.PerconaServerMongoDBBackup{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        cr.Name,
-				Namespace:   cr.Namespace,
+				Name:      cr.Name,
+				Namespace: cr.Namespace,
 			},
 			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 				ClusterName: cr.Spec.ClusterName,

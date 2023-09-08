@@ -17,12 +17,19 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+
+	uzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/percona/percona-server-mongodb-operator/healthcheck"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
 	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/tool"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -31,7 +38,10 @@ var (
 )
 
 func main() {
-	app, _ := tool.New("Performs health and readiness checks for MongoDB", GitCommit, GitBranch)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
+	app := tool.New("Performs health and readiness checks for MongoDB", GitCommit, GitBranch)
 
 	k8sCmd := app.Command("k8s", "Performs liveness check for MongoDB on Kubernetes")
 	livenessCmd := k8sCmd.Command("liveness", "Run a liveness check of MongoDB").Default()
@@ -39,9 +49,16 @@ func main() {
 	startupDelaySeconds := livenessCmd.Flag("startupDelaySeconds", "").Default("7200").Uint64()
 	component := k8sCmd.Flag("component", "").Default("mongod").String()
 
+	opts := zap.Options{
+		Encoder: getLogEncoder(),
+		Level:   getLogLevel(),
+	}
+	log := zap.New(zap.UseFlagOptions(&opts))
+
 	restoreInProgress, err := fileExists("/opt/percona/restore-in-progress")
 	if err != nil {
-		log.Fatalf("check if restore in progress: %v", err)
+		log.Error(err, "check if restore in progress")
+		os.Exit(1)
 	}
 
 	if restoreInProgress {
@@ -53,65 +70,70 @@ func main() {
 		pkg.EnvMongoDBClusterMonitorUser,
 		pkg.EnvMongoDBClusterMonitorPassword,
 	)
+
 	if err != nil {
-		log.Fatalf("new cfg: %s", err)
+		log.Error(err, "new cfg")
+		os.Exit(1)
 	}
 
 	command, err := app.Parse(os.Args[1:])
 	if err != nil {
-		log.Fatalf("Cannot parse command line: %s", err)
+		log.Error(err, "Cannot parse command line")
+		os.Exit(1)
 	}
 
-	client, err := db.Dial(cnf)
+	client, err := db.Dial(ctx, cnf)
 	if err != nil {
-		log.Fatalf("connection error: %v", err)
+		log.Error(err, "connection error")
+		os.Exit(1)
 	}
 
 	defer func() {
-		if err := client.Disconnect(context.TODO()); err != nil {
-			log.Fatalf("failed to disconnect: %v", err)
+		if err := client.Disconnect(ctx); err != nil {
+			log.Error(err, "failed to disconnect")
+			os.Exit(1)
 		}
 	}()
 
 	switch command {
 
 	case "k8s liveness":
-		log.Infof("Running Kubernetes liveness check for %s", *component)
+		log.Info("Running Kubernetes liveness check for", "component", component)
 		switch *component {
 
 		case "mongod":
 			memberState, err := healthcheck.HealthCheckMongodLiveness(client, int64(*startupDelaySeconds))
 			if err != nil {
-				client.Disconnect(context.TODO()) // nolint:golint,errcheck
-				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
+				client.Disconnect(ctx) // nolint:golint,errcheck
+				log.Error(err, "Member failed Kubernetes liveness check")
 				os.Exit(1)
 			}
-			log.Infof("Member passed Kubernetes liveness check with replication state: %d", *memberState)
+			log.Info("Member passed Kubernetes liveness check with replication state", "state", memberState)
 
 		case "mongos":
 			err := healthcheck.HealthCheckMongosLiveness(client)
 			if err != nil {
-				client.Disconnect(context.TODO()) // nolint:golint,errcheck
-				log.Errorf("Member failed Kubernetes liveness check: %s", err.Error())
+				client.Disconnect(ctx) // nolint:golint,errcheck
+				log.Error(err, "Member failed Kubernetes liveness check")
 				os.Exit(1)
 			}
-			log.Infof("Member passed Kubernetes liveness check")
+			log.Info("Member passed Kubernetes liveness check")
 		}
 
 	case "k8s readiness":
-		log.Infof("Running Kubernetes readiness check for %s", *component)
+		log.Info("Running Kubernetes readiness check for component", "component", component)
 		switch *component {
 
 		case "mongod":
-			client.Disconnect(context.TODO()) // nolint:golint,errcheck
-			log.Error("readiness check for mongod is not implemented")
+			client.Disconnect(ctx) // nolint:golint,errcheck
+			log.Error(err, "readiness check for mongod is not implemented")
 			os.Exit(1)
 
 		case "mongos":
-			err := healthcheck.MongosReadinessCheck(client)
+			err := healthcheck.MongosReadinessCheck(ctx, client)
 			if err != nil {
-				client.Disconnect(context.TODO()) // nolint:golint,errcheck
-				log.Errorf("Member failed Kubernetes readiness check: %s", err.Error())
+				client.Disconnect(ctx) // nolint:golint,errcheck
+				log.Error(err, "Member failed Kubernetes readiness check")
 				os.Exit(1)
 			}
 		}
@@ -127,4 +149,41 @@ func fileExists(name string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func getLogEncoder() zapcore.Encoder {
+	consoleEnc := zapcore.NewConsoleEncoder(uzap.NewDevelopmentEncoderConfig())
+
+	s, found := os.LookupEnv("LOG_STRUCTURED")
+	if !found {
+		return consoleEnc
+	}
+
+	useJson, err := strconv.ParseBool(s)
+	if err != nil {
+		return consoleEnc
+	}
+	if !useJson {
+		return consoleEnc
+	}
+
+	return zapcore.NewJSONEncoder(uzap.NewProductionEncoderConfig())
+}
+
+func getLogLevel() zapcore.LevelEnabler {
+	l, found := os.LookupEnv("LOG_LEVEL")
+	if !found {
+		return zapcore.InfoLevel
+	}
+
+	switch strings.ToUpper(l) {
+	case "DEBUG":
+		return zapcore.DebugLevel
+	case "INFO":
+		return zapcore.InfoLevel
+	case "ERROR":
+		return zapcore.ErrorLevel
+	default:
+		return zapcore.InfoLevel
+	}
 }

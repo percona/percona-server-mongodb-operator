@@ -1,4 +1,5 @@
 arbiter
+balancer
 cross-site-sharded
 data-at-rest-encryption
 data-sharded
@@ -11,6 +12,7 @@ demand-backup-sharded
 expose-sharded
 ignore-labels-annotations
 init-deploy
+finalizer
 limits
 liveness
 mongod-major-upgrade
@@ -34,6 +36,7 @@ smart-update
 storage
 upgrade
 upgrade-consistency
+upgrade-consistency-sharded
 upgrade-sharded
 users
 version-service

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -15,11 +14,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batchv1beta1.CronJob, error) {
+func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batchv1.CronJob, error) {
 	backupSpec := cr.Spec.Backup
 	containerArgs, err := newBackupCronJobContainerArgs(cr, task)
 	if err != nil {
-		return batchv1beta1.CronJob{}, errors.Wrap(err, "cannot generate container arguments")
+		return batchv1.CronJob{}, errors.Wrap(err, "cannot generate container arguments")
 	}
 
 	backupPod := corev1.PodSpec{
@@ -50,9 +49,9 @@ func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batc
 		RuntimeClassName: backupSpec.RuntimeClassName,
 	}
 
-	return batchv1beta1.CronJob{
+	return batchv1.CronJob{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1beta1",
+			APIVersion: "batch/v1",
 			Kind:       "CronJob",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -61,10 +60,10 @@ func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batc
 			Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
 			Annotations: backupSpec.Annotations,
 		},
-		Spec: batchv1beta1.CronJobSpec{
+		Spec: batchv1.CronJobSpec{
 			Schedule:          task.Schedule,
-			ConcurrencyPolicy: batchv1beta1.ForbidConcurrent,
-			JobTemplate: batchv1beta1.JobTemplateSpec{
+			ConcurrencyPolicy: batchv1.ForbidConcurrent,
+			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
 					Annotations: backupSpec.Annotations,

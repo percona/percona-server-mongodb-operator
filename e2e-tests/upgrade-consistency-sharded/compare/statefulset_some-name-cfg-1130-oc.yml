@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 2
+  generation: 1
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -49,7 +49,6 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --sslMode=preferSSL
             - --clusterAuthMode=x509
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
@@ -111,7 +110,6 @@ spec:
               memory: 100M
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -152,10 +150,11 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 30
@@ -165,6 +164,8 @@ spec:
             defaultMode: 288
             optional: false
             secretName: some-name-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
         - configMap:
             defaultMode: 420
             name: some-name-rs0-mongod
