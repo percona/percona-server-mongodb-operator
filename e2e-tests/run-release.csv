@@ -1,4 +1,5 @@
 arbiter
+balancer
 cross-site-sharded
 data-at-rest-encryption
 data-sharded
