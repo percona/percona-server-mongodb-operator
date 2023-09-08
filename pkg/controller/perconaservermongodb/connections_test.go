@@ -381,29 +381,30 @@ type fakeMongoClientProvider struct {
 	connectionCount *int
 }
 
-func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role UserRole) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
-func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role UserRole) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
-func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role UserRole, host string) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
-	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
+	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient, host: host}, nil
 }
 
 type fakeMongoClient struct {
 	pods            []client.Object
 	cr              *api.PerconaServerMongoDB
 	connectionCount *int
+	host            string
 	mongo.Client
 }
 
@@ -418,7 +419,7 @@ func (c *fakeMongoClient) GetFCV(ctx context.Context) (string, error) {
 
 func (c *fakeMongoClient) GetRole(ctx context.Context, role string) (*mongo.Role, error) {
 	return &mongo.Role{
-		Role: string(roleClusterAdmin),
+		Role: string(api.RoleClusterAdmin),
 	}, nil
 }
 
@@ -514,5 +515,18 @@ func (c *fakeMongoClient) ListShard(ctx context.Context) (mongo.ShardList, error
 		OKResponse: mongo.OKResponse{
 			OK: 1,
 		},
+	}, nil
+}
+
+func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, error) {
+	isMaster := false
+	if err := c.cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+		return nil, err
+	}
+	if c.host == psmdb.GetAddr(c.cr, c.pods[0].GetName(), c.cr.Spec.Replsets[0].Name) {
+		isMaster = true
+	}
+	return &mongo.IsMasterResp{
+		IsMaster: isMaster,
 	}, nil
 }

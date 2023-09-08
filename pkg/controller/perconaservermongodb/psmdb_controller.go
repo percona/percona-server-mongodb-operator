@@ -514,6 +514,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
 
+	if err := r.disableBalancerIfNeeded(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to disable balancer")
+	}
+
 	if err := r.upgradeFCVIfNeeded(ctx, cr, *repls[0], cr.Status.MongoVersion); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
@@ -710,7 +714,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		"config": {},
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
