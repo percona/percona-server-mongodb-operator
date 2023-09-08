@@ -1,0 +1,63 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+check_balancer() {
+	local expected=$1 # should be "full" (running balancer) or "off" (disabled balancer)
+
+	local balancer_running
+	balancer_running=$(run_mongos 'db.adminCommand({balancerStatus: 1}).mode' "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
+		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|bye")
+
+	if [[ $balancer_running != "$expected" ]]; then
+		echo "Unexpected output from \"db.adminCommand({balancerStatus: 1}).mode\": $balancer_running"
+		echo "Expected $expected"
+		exit 1
+	fi
+}
+
+main() {
+	create_infra "$namespace"
+
+	desc 'create first PSMDB cluster'
+	cluster="some-name"
+	kubectl_bin apply \
+		-f "$conf_dir/secrets.yml" \
+		-f "$conf_dir/client.yml"
+
+	if version_gt "1.19" && [ $EKS -ne 1 ]; then
+		$sed 's/docker/runc/g' "$conf_dir/container-rc.yaml" | kubectl_bin apply -f -
+	elif version_gt "1.24" && [ $EKS -eq 1 ]; then
+		$sed 's/docker/runc/g' "$conf_dir/container-rc.yaml" | kubectl_bin apply -f -
+	else
+		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
+	fi
+
+	apply_cluster "$test_dir/conf/$cluster-rs0.yml"
+
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+	sleep 20
+	check_balancer "full"
+
+	desc 'disabling balancer'
+	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"balancer":{"enabled":false}}}}'
+	sleep 20
+	check_balancer "off"
+
+	desc 'enabling balancer'
+	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"balancer":{"enabled":true}}}}'
+	sleep 20
+	check_balancer "full"
+
+	destroy "$namespace"
+}
+
+main
