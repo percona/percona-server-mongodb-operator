@@ -514,6 +514,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
 
+	if err := r.disableBalancerIfNeeded(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to disable balancer")
+	}
+
 	if err := r.upgradeFCVIfNeeded(ctx, cr, *repls[0], cr.Status.MongoVersion); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
