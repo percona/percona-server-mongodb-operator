@@ -7400,6 +7400,11 @@ spec:
                 type: object
               sharding:
                 properties:
+                  balancer:
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   configsvrReplSet:
                     properties:
                       affinity:

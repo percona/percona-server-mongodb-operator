@@ -323,7 +323,8 @@ spec:
 
   sharding:
     enabled: true
-
+#    balancer:
+#      enabled: true
     configsvrReplSet:
       size: 3
 #      terminationGracePeriodSeconds: 300

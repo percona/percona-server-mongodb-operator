@@ -1,4 +1,5 @@
 arbiter
+balancer
 default-cr
 demand-backup
 demand-backup-physical

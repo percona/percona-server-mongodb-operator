@@ -17,7 +17,7 @@ import (
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Unmanaged || cr.DeletionTimestamp != nil || cr.Spec.Pause {
+	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || (s.Balancer.Enabled != nil && !*s.Balancer.Enabled) || cr.DeletionTimestamp != nil || cr.Spec.Pause {
 		return nil
 	}
 
@@ -103,10 +103,17 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || s.Balancer.Enabled == nil || *s.Balancer.Enabled {
+		return nil
+	}
+	return r.disableBalancer(ctx, cr)
+}
+
 func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if !cr.Spec.Sharding.Enabled || cr.Spec.Unmanaged {
+	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged {
 		return nil
 	}
 
