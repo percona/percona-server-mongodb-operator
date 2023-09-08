@@ -100,7 +100,6 @@ rules:
   resources:
   - issuers
   - certificates
-  - certificates/status
   verbs:
   - get
   - list

@@ -48,14 +48,23 @@ check_secret_data_key() {
 	fi
 }
 
+deploy_cmctl() {
+	local service_account="cmctl"
+
+	$sed -e "s/percona-server-mongodb-operator/$service_account/g" "${src_dir}/deploy/rbac.yaml" \
+		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
+		| kubectl_bin apply -f -
+	kubectl_bin apply -f "$conf_dir/cmctl.yml"
+}
+
 main() {
-	deploy_cert_manager
 	create_infra "$namespace"
+	deploy_cert_manager
 
 	desc 'create secrets and start client'
 	kubectl_bin apply -f "$conf_dir/secrets.yml"
 	kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
-	kubectl_bin apply -f "$conf_dir/cmctl.yml"
+	deploy_cmctl
 
 	cluster="some-name"
 	desc "create first PSMDB cluster $cluster"

@@ -12,7 +12,7 @@ spec:
       labels:
         name: cmctl
     spec:
-      serviceAccountName: percona-server-mongodb-operator
+      serviceAccountName: cmctl
       containers:
         - name: cmctl
           image: debian
