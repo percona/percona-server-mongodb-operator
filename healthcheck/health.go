@@ -23,7 +23,6 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	mgo "go.mongodb.org/mongo-driver/mongo"
 )
 
 // OkMemberStates is a slice of acceptable replication member states
@@ -58,8 +57,8 @@ func isStateOk(memberState *mongo.MemberState, okMemberStates []mongo.MemberStat
 }
 
 // HealthCheck checks the replication member state of the local MongoDB member
-func HealthCheck(client *mgo.Client, okMemberStates []mongo.MemberState) (State, *mongo.MemberState, error) {
-	rsStatus, err := mongo.RSStatus(context.TODO(), client)
+func HealthCheck(client mongo.Client, okMemberStates []mongo.MemberState) (State, *mongo.MemberState, error) {
+	rsStatus, err := client.RSStatus(context.TODO())
 	if err != nil {
 		return StateFailed, nil, errors.Wrap(err, "get replica set status")
 	}
@@ -75,8 +74,8 @@ func HealthCheck(client *mgo.Client, okMemberStates []mongo.MemberState) (State,
 	return StateFailed, state, errors.Errorf("member has unhealthy replication state: %d", state)
 }
 
-func HealthCheckMongosLiveness(client *mgo.Client) error {
-	isMasterResp, err := mongo.IsMaster(context.TODO(), client)
+func HealthCheckMongosLiveness(client mongo.Client) error {
+	isMasterResp, err := client.IsMaster(context.TODO())
 	if err != nil {
 		return errors.Wrap(err, "get isMaster response")
 	}
@@ -88,13 +87,13 @@ func HealthCheckMongosLiveness(client *mgo.Client) error {
 	return nil
 }
 
-func HealthCheckMongodLiveness(client *mgo.Client, startupDelaySeconds int64) (*mongo.MemberState, error) {
-	isMasterResp, err := mongo.IsMaster(context.TODO(), client)
+func HealthCheckMongodLiveness(client mongo.Client, startupDelaySeconds int64) (*mongo.MemberState, error) {
+	isMasterResp, err := client.IsMaster(context.TODO())
 	if err != nil {
 		return nil, errors.Wrap(err, "get isMaster response")
 	}
 
-	buildInfo, err := mongo.RSBuildInfo(context.TODO(), client)
+	buildInfo, err := client.RSBuildInfo(context.TODO())
 	if err != nil {
 		return nil, errors.Wrap(err, "get buildInfo response")
 	}

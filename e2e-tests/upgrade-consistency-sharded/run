@@ -1,0 +1,72 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+CLUSTER='some-name'
+
+main() {
+	create_infra $namespace
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "${conf_dir}/client.yml" \
+		-f "${conf_dir}/secrets.yml"
+
+	desc "create first PSMDB cluster 1.13.0 $CLUSTER"
+	apply_cluster "$test_dir/conf/${CLUSTER}.yml"
+
+	desc 'check if Pod started'
+	wait_for_running ${CLUSTER}-rs0 3
+	wait_for_running ${CLUSTER}-cfg 3
+	wait_for_running ${CLUSTER}-mongos 3
+	wait_cluster_consistency ${CLUSTER}
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1130"
+	compare_kubectl service/${CLUSTER}-cfg "-1130"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1130"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1130"
+
+	desc 'test 1.14.0'
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.14.0"}
+    }'
+	# Wait for at least one reconciliation
+	sleep 10
+	desc 'check if Pod started'
+	wait_for_running "${CLUSTER}-cfg" 3
+	wait_for_running "${CLUSTER}-rs0" 3
+	wait_for_running "${CLUSTER}-mongos" 3
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1140"
+	compare_kubectl service/${CLUSTER}-cfg "-1140"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1140"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1140"
+
+	desc 'test 1.15.0'
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.15.0"}
+    }'
+	# Wait for at least one reconciliation
+	sleep 10
+	desc 'check if Pod started'
+	wait_for_running "${CLUSTER}-cfg" 3
+	wait_for_running "${CLUSTER}-rs0" 3
+	wait_for_running "${CLUSTER}-mongos" 3
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1150"
+	compare_kubectl service/${CLUSTER}-cfg "-1150"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1150"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1150"
+
+	destroy $namespace
+
+	desc 'test passed'
+}
+
+main
