@@ -12,7 +12,7 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) getFCV(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
-	c, err := r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], roleClusterAdmin)
+	c, err := r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], api.RoleClusterAdmin)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get connection")
 	}
@@ -40,9 +40,9 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(ctx context.Context, cr *api.Perc
 	var connErr error
 
 	if cr.Spec.Sharding.Enabled {
-		cli, connErr = r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
+		cli, connErr = r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	} else {
-		cli, connErr = r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], roleClusterAdmin)
+		cli, connErr = r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], api.RoleClusterAdmin)
 	}
 
 	if connErr != nil {

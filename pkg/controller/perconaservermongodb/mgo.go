@@ -84,7 +84,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
+	cli, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
 	if err != nil {
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
@@ -167,7 +167,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 && cr.Spec.Sharding.Mongos.Size > 0 {
 
-		mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
+		mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 		if err != nil {
 			return api.AppStateError, errors.Wrap(err, "failed to get mongos connection")
 		}
@@ -444,7 +444,7 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, c
 		return nil
 	}
 
-	cli, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
+	cli, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Errorf("failed to get mongos connection: %v", err)
 	}
@@ -488,7 +488,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
 
-	cli, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
+	cli, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos client")
 	}
@@ -528,7 +528,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		}
 		var errb, outb bytes.Buffer
 
-		err = r.clientcmd.Exec(&pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
+		err = r.clientcmd.Exec(ctx, &pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
 		}
@@ -562,14 +562,14 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		errb.Reset()
 		outb.Reset()
-		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
 		time.Sleep(time.Second * 5)
 
-		userAdmin, err := getInternalCredentials(ctx, r.client, cr, roleUserAdmin)
+		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "failed to get userAdmin credentials")
 		}
@@ -577,7 +577,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		cmd[2] = fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
 		errb.Reset()
 		outb.Reset()
-		err = r.clientcmd.Exec(&pod, "mongod", cmd, nil, &outb, &errb, false)
+		err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
@@ -590,29 +590,29 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 	return errNoRunningMongodContainers
 }
 
-func getRoles(cr *api.PerconaServerMongoDB, role UserRole) []map[string]interface{} {
+func getRoles(cr *api.PerconaServerMongoDB, role api.UserRole) []map[string]interface{} {
 	roles := make([]map[string]interface{}, 0)
 	switch role {
-	case roleDatabaseAdmin:
+	case api.RoleDatabaseAdmin:
 		return []map[string]interface{}{
 			{"role": "readWriteAnyDatabase", "db": "admin"},
 			{"role": "readAnyDatabase", "db": "admin"},
 			{"role": "restore", "db": "admin"},
 			{"role": "backup", "db": "admin"},
 			{"role": "dbAdminAnyDatabase", "db": "admin"},
-			{"role": string(roleClusterMonitor), "db": "admin"},
+			{"role": string(api.RoleClusterMonitor), "db": "admin"},
 		}
-	case roleClusterMonitor:
+	case api.RoleClusterMonitor:
 		if cr.CompareVersion("1.12.0") >= 0 {
 			roles = []map[string]interface{}{
 				{"db": "admin", "role": "explainRole"},
 				{"db": "local", "role": "read"},
 			}
 		}
-	case roleBackup:
+	case api.RoleBackup:
 		roles = []map[string]interface{}{
 			{"db": "admin", "role": "readWrite"},
-			{"db": "admin", "role": string(roleClusterMonitor)},
+			{"db": "admin", "role": string(api.RoleClusterMonitor)},
 			{"db": "admin", "role": "restore"},
 			{"db": "admin", "role": "pbmAnyAction"},
 		}
@@ -696,7 +696,7 @@ func compareRoles(x []map[string]interface{}, y []map[string]interface{}) bool {
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	log := logf.FromContext(ctx)
 
-	cli, err := r.mongoClientWithRole(ctx, cr, *replset, roleUserAdmin)
+	cli, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleUserAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
 	}
@@ -738,9 +738,9 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	users := []UserRole{roleClusterAdmin, roleClusterMonitor, roleBackup}
+	users := []api.UserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
 	if cr.CompareVersion("1.13.0") >= 0 {
-		users = append(users, roleDatabaseAdmin)
+		users = append(users, api.RoleDatabaseAdmin)
 	}
 
 	for _, role := range users {
