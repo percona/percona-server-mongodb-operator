@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	logiii "log"
 	"os"
 	"reflect"
 	"strconv"
@@ -321,14 +320,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	logiii.Printf("---------------------")
-	for _, s := range removed {
-		logiii.Printf("AAAAA sts for removal: %s", s.Name)
-	}
-	logiii.Printf("---------------------")
-
 	for _, sts := range removed {
 		rsName := sts.Labels["app.kubernetes.io/replset"]
+
+		log.Info("Deleting STS component from replst", "sts", sts.Name, "rs", rsName)
 
 		err = r.checkIfPossibleToRemove(ctx, cr, rsName)
 		if err != nil {
@@ -336,14 +331,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 
 		if sts.Labels["app.kubernetes.io/component"] == "mongod" {
-			logiii.Printf("BBBB removing sts from shard: %s", sts.Name)
-			err = r.removeRSFromShard(ctx, cr, rsName)
+			log.Info("Removing RS from shard", "rs", rsName)
 			if err != nil {
 				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
 			}
 		}
 
-		logiii.Printf("BBBB deleting STS: %s", sts.Name)
 		err = r.client.Delete(ctx, &sts)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
@@ -699,9 +692,7 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		appliedRSNames[rs.Name] = struct{}{}
 	}
 
-	logiii.Printf("AAAAA: appliedRSNames: %v", appliedRSNames)
-
-	// extractRSName trims CR name and component around RS name
+	// extractRSName trims CR name and component leaving only RS name
 	// E.g. extracts 'rs1' from `my-cluster-name-rs1` or `my-cluster-name-rs1-arbiter`
 	extractRSName := func(stsName, component string) string {
 		_, cut, _ := strings.Cut(stsName, cr.Name)
@@ -719,15 +710,12 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 			component = "nv"
 		}
 		rsName := extractRSName(sts.Name, component)
-		logiii.Printf("AAAAA extracted rsname: %s", rsName)
 
 		if _, ok := appliedRSNames[rsName]; ok {
-			logiii.Printf("AAAAA this is applied rsName, not removing: %s", rsName)
 			continue
 		}
 
 		removed = append(removed, sts)
-		logiii.Printf("AAAAA removed STS: %s", sts.Name)
 	}
 
 	return removed, nil
