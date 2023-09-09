@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
+	logiii "log"
 	"os"
 	"reflect"
 	"strconv"
@@ -320,6 +320,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	logiii.Printf("---------------------")
+	for _, s := range removed {
+		logiii.Printf("AAAAA sts for removal: %s", s.Name)
+	}
+	logiii.Printf("---------------------")
 
 	for _, v := range removed {
 		rsName := v.Labels["app.kubernetes.io/replset"]
@@ -689,7 +695,7 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		appliedRSNames[rs.Name] = struct{}{}
 	}
 
-	log.Printf("AAAAA: appliedRSNames: %v", appliedRSNames)
+	logiii.Printf("AAAAA: appliedRSNames: %v", appliedRSNames)
 
 	// extractRSName trims CR name and component around RS name
 	// E.g. extracts 'rs1' from `my-cluster-name-rs1` or `my-cluster-name-rs1-arbiter`
@@ -707,13 +713,14 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		}
 
 		rsName := extractRSName(sts.Name, component)
+		logiii.Printf("AAAAA extracted rsname: %s", rsName)
 
 		if _, ok := appliedRSNames[rsName]; ok {
-			log.Printf("AAAAA this is applied rsName, not removing: %s", rsName)
+			logiii.Printf("AAAAA this is applied rsName, not removing: %s", rsName)
 		}
 
 		removed = append(removed, sts)
-		log.Printf("AAAAA removed STS: %s", sts.Name)
+		logiii.Printf("AAAAA removed STS: %s", sts.Name)
 	}
 
 	return removed, nil
