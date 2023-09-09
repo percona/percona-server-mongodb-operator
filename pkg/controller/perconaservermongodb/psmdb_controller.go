@@ -335,9 +335,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
 
-		err = r.removeRSFromShard(ctx, cr, rsName)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
+		if v.Labels["app.kubernetes.io/replset"] == "mongod" {
+			err = r.removeRSFromShard(ctx, cr, rsName)
+			if err != nil {
+				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
+			}
 		}
 
 		err = r.client.Delete(ctx, &v)
@@ -707,16 +709,19 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 
 	for _, sts := range stsList.Items {
 		component := sts.Labels["app.kubernetes.io/component"]
-
 		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
 		}
 
+		if component == "nonVoting" {
+			component = "nv"
+		}
 		rsName := extractRSName(sts.Name, component)
 		logiii.Printf("AAAAA extracted rsname: %s", rsName)
 
 		if _, ok := appliedRSNames[rsName]; ok {
 			logiii.Printf("AAAAA this is applied rsName, not removing: %s", rsName)
+			continue
 		}
 
 		removed = append(removed, sts)
