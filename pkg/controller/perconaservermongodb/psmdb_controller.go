@@ -327,22 +327,24 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 	logiii.Printf("---------------------")
 
-	for _, v := range removed {
-		rsName := v.Labels["app.kubernetes.io/replset"]
+	for _, sts := range removed {
+		rsName := sts.Labels["app.kubernetes.io/replset"]
 
 		err = r.checkIfPossibleToRemove(ctx, cr, rsName)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
 
-		if v.Labels["app.kubernetes.io/replset"] == "mongod" {
+		if sts.Labels["app.kubernetes.io/component"] == "mongod" {
+			logiii.Printf("BBBB removing sts from shard: %s", sts.Name)
 			err = r.removeRSFromShard(ctx, cr, rsName)
 			if err != nil {
 				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
 			}
 		}
 
-		err = r.client.Delete(ctx, &v)
+		logiii.Printf("BBBB deleting STS: %s", sts.Name)
+		err = r.client.Delete(ctx, &sts)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
 		}
