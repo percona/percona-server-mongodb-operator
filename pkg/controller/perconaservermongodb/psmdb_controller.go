@@ -316,7 +316,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	removed, err := r.getRemovedSfs(ctx, cr)
+	removed, err := r.getSTSforRemoval(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -668,11 +668,11 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *a
 	return isDownscale, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
 	removed := make([]appsv1.StatefulSet, 0)
 
-	sfsList := appsv1.StatefulSetList{}
-	if err := r.client.List(ctx, &sfsList,
+	stsList := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &stsList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -685,29 +685,35 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *a
 
 	appliedRSNames := make(map[string]struct{}, len(cr.Spec.Replsets))
 
+	for _, rs := range cr.Spec.Replsets {
+		appliedRSNames[rs.Name] = struct{}{}
+	}
+
 	log.Printf("AAAAA: appliedRSNames: %v", appliedRSNames)
 
-	for _, v := range cr.Spec.Replsets {
-		appliedRSNames[cr.Name+"-"+v.Name] = struct{}{}
+	// extractRSName trims CR name and component around RS name
+	// E.g. extracts 'rs1' from `my-cluster-name-rs1` or `my-cluster-name-rs1-arbiter`
+	extractRSName := func(stsName, component string) string {
+		_, cut, _ := strings.Cut(stsName, cr.Name)
+		trim := strings.Trim(cut, component)
+		return strings.Trim(trim, "-")
 	}
 
-	for _, v := range sfsList.Items {
-		if v.Name == cr.Name+"-"+api.ConfigReplSetName {
+	for _, sts := range stsList.Items {
+		component := sts.Labels["app.kubernetes.io/component"]
+
+		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
 		}
 
-		component := v.Labels["app.kubernetes.io/component"]
-		if component == "arbiter" || component == "nonVoting" || component == "mongos" {
-			continue
+		rsName := extractRSName(sts.Name, component)
+
+		if _, ok := appliedRSNames[rsName]; ok {
+			log.Printf("AAAAA this is applied rsName, not removing: %s", rsName)
 		}
 
-		if _, ok := appliedRSNames[v.Name]; !ok {
-			removed = append(removed, v)
-		}
-	}
-
-	for _, r := range removed {
-		log.Printf("AAAAA removed STS: %s", r.Name)
+		removed = append(removed, sts)
+		log.Printf("AAAAA removed STS: %s", sts.Name)
 	}
 
 	return removed, nil
