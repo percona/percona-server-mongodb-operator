@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -683,6 +684,9 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *a
 	}
 
 	appliedRSNames := make(map[string]struct{}, len(cr.Spec.Replsets))
+
+	log.Printf("AAAAA: appliedRSNames: %v", appliedRSNames)
+
 	for _, v := range cr.Spec.Replsets {
 		appliedRSNames[cr.Name+"-"+v.Name] = struct{}{}
 	}
@@ -700,6 +704,10 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *a
 		if _, ok := appliedRSNames[v.Name]; !ok {
 			removed = append(removed, v)
 		}
+	}
+
+	for _, r := range removed {
+		log.Printf("AAAAA removed STS: %s", r.Name)
 	}
 
 	return removed, nil
