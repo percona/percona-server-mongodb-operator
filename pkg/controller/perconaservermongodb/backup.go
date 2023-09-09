@@ -329,6 +329,11 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		return nil
 	}
 
+	_, resyncNeeded := cr.Annotations[api.AnnotationResyncPBM]
+	if resyncNeeded {
+		return nil
+	}
+
 	// pitr is disabled right before restore so it must not be re-enabled during restore
 	isRestoring, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
@@ -516,7 +521,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 	command := []string{"pbm", "config", "--force-resync"}
 	log.Info("Starting PBM resync", "command", command)
 
-	err = r.clientcmd.Exec(pod, "backup-agent", command, nil, &stdoutBuffer, &stderrBuffer, false)
+	err = r.clientcmd.Exec(ctx, pod, "backup-agent", command, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		return errors.Wrapf(err, "start PBM resync: run %v", command)
 	}
