@@ -6,96 +6,179 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-else
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-fi
+check_arbiter_sts_deletion () {
+	local cluster="$1"
 
-deploy_cert_manager
-create_infra "$namespace"
+	local new_rs=rs1
 
-desc 'create secrets and start client'
-kubectl_bin apply -f "$conf_dir/secrets.yml"
-kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
+	kubectl_bin get psmdb
 
-cluster="some-name"
-desc "create first PSMDB cluster $cluster"
-apply_cluster "$test_dir/conf/$cluster.yml"
+	echo "AAA cluster: $cluster, new RS name: $new_rs"
 
-desc 'check if all Pods started'
-wait_for_running $cluster-cfg 3
-wait_for_running $cluster-rs0 3
-wait_for_running $cluster-rs1 3
-wait_for_running $cluster-rs2 3
-wait_for_running $cluster-mongos 3
+	# Add new RS with arbiter
+	kubectl_bin patch psmdb $cluster --type=json -p="[{'op': 'add', 'path': '/spec/replsets/-', 'value': 
+		{
+			"name": "rs1",
+			"size": 2,
+			"affinity": {
+				"antiAffinityTopologyKey": "none"
+				},
+			"arbiter": {
+				"enabled": true,
+				"size": 1
+			},
+			"volumeSpec": {
+				"persistentVolumeClaim": {
+					"resources": {
+					"requests": {
+						"storage": "1Gi"
+					}
+					}
+				}
+			}
+		}
+	}]"
 
-desc 'create user'
-run_mongos \
-	'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
-	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 2
+	# wait for cluster readiness
+	desc 'wait for convergence'
+	wait_for_running $cluster-$new_rs 2 "false"
+	wait_for_running $cluster-$new_rs-arbiter 1
+	# sleep 120
 
-desc 'set chunk size to 32 MB'
-run_mongos \
-	"use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
-	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 2
-
-desc 'write data'
-run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-
-desc 'shard collection'
-run_mongos \
-	'sh.enableSharding("app")' \
-	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 2
-
-run_mongos \
-	'sh.shardCollection("app.city", { _id: 1 } )' \
-	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 120
-
-desc 'check chunks'
-chunks_param1="ns"
-chunks_param2='"app.city"'
-
-if [[ ${MONGO_VER} == "6.0" || ${MONGO_VER} == "5.0" ]]; then
-	chunks_param1="uuid"
-	chunks_param2=$(run_mongos \
-		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
-		"user:pass@$cluster-mongos.$namespace" \
-		'' \
-		'' \
-		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
-		| grep "switched to db app" -A 1 | grep -v "switched to db app")
-fi
-
-shards=0
-for i in "rs0" "rs1" "rs2"; do
-	out=$(run_mongos \
-		"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
-		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
-		| grep "switched to db config" -A 1 | grep -v "switched to db config")
-
-	desc "$i has $out chunks"
-
-	if [[ $out -ne 0 ]]; then
-		((shards = shards + 1))
+	stsCount=$(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${new_rs} -ojson | jq '.items | length')
+	if [ stsCount != 2 ]; then
+		echo "Additional replset ${new_rs} not properly created, expected sts count of 2 but got ${stsCount}. Exiting..."
+		exit 1
 	fi
-done
 
-if [[ $shards -lt 3 ]]; then
-	echo "data is only on some of the shards, maybe sharding is not working"
-	exit 1
-fi
+	# remove added RS
+	rs_idx=$(kubectl_bin get psmdb ${cluster} -ojson  | jq '.spec.replsets | map(.name == "${new_rs}") | index(true)')
+	kubectl_bin patch psmdb ${cluster} --type=json -p="[{'op': 'remove', 'path': '/spec/replsets/$rs_idx'}]"
+	sleep 60
 
-destroy "$namespace"
+	# check if mongod and arbiter sts are removed
+	stsCount=$(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${new_rs} -ojson | jq '.items | length')
+	if [ stsCount != 0 ]; then
+		echo "Additional replset rs1 not properly removed, expected sts count of 0 but got ${stsCount}. Exiting..."
+		exit 1
+	fi	
+}
 
-desc 'test passed'
+check_rs_proper_component_deletion() {
+	local cluster="$1"
+	local rs_name="$2"
+
+	echo "AAAAAAAA cluster: $cluster, rs name: $rs_name"
+
+	rs_idx=$(kubectl_bin get psmdb ${cluster} -ojson | jq --arg RS $rs_name '.spec.replsets | map(.name == $RS) | index(true)')
+	kubectl_bin patch psmdb ${cluster} --type=json -p="[{'op': 'remove', 'path': '/spec/replsets/$rs_idx'}]"
+	wait_cluster_consistency $cluster
+
+	# check if mongod and arbiter sts are removed
+	sts_count=$(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${rs_name} -ojson | jq '.items | length')
+	if [ sts_count != 0 ]; then
+		echo "Replset $rs_name not properly removed, expected sts count of 0 but got ${stsCount}. Exiting..."
+		exit 1
+	fi	
+}
+
+main() {
+	if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+		MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+	else
+		MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+	fi
+
+	deploy_cert_manager
+	create_infra "$namespace"
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "$conf_dir/secrets.yml"
+	kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
+
+	cluster="some-name"
+	desc "create first PSMDB cluster $cluster"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-cfg 3
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-rs1 3
+	wait_for_running $cluster-rs2 3
+	wait_for_running $cluster-mongos 3
+
+	desc 'create user'
+	run_mongos \
+		'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 2
+
+	desc 'set chunk size to 32 MB'
+	run_mongos \
+		"use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 2
+
+	desc 'write data'
+	run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+
+	desc 'shard collection'
+	run_mongos \
+		'sh.enableSharding("app")' \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 2
+
+	run_mongos \
+		'sh.shardCollection("app.city", { _id: 1 } )' \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 120
+
+	desc 'check chunks'
+	chunks_param1="ns"
+	chunks_param2='"app.city"'
+
+	if [[ ${MONGO_VER} == "6.0" || ${MONGO_VER} == "5.0" ]]; then
+		chunks_param1="uuid"
+		chunks_param2=$(run_mongos \
+			"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
+			"user:pass@$cluster-mongos.$namespace" \
+			'' \
+			'' \
+			"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
+			| grep "switched to db app" -A 1 | grep -v "switched to db app")
+	fi
+
+	shards=0
+	for i in "rs0" "rs1" "rs2"; do
+		out=$(run_mongos \
+			"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
+			"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+			"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
+			| grep "switched to db config" -A 1 | grep -v "switched to db config")
+
+		desc "$i has $out chunks"
+
+		if [[ $out -ne 0 ]]; then
+			((shards = shards + 1))
+		fi
+	done
+
+	if [[ $shards -lt 3 ]]; then
+		echo "data is only on some of the shards, maybe sharding is not working"
+		exit 1
+	fi
+
+	desc 'check if rs and all its related stateful sets are properly removed'
+	check_rs_proper_component_deletion $cluster rs1
+
+	destroy "$namespace"
+
+	desc 'test passed'
+}
+
+main
