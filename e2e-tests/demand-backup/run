@@ -98,12 +98,12 @@ sleep 5
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
 	run_recovery_check "$backup_name_aws" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
 	run_recovery_check "$backup_name_gcp" "$cluster"
 
 	desc 'check backup and restore -- azure-blob'
@@ -140,8 +140,8 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	check_backup_deletion "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}" "aws-s3"
-	check_backup_deletion "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}" "gcp-cs"
+	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
+	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp}" "gcp-cs"
 	check_backup_deletion "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}" "azure-blob"
 fi
 
@@ -175,8 +175,8 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	check_backup_deletion "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}" "aws-s3"
-	check_backup_deletion "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}" "gcp-cs"
+	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
+	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp}" "gcp-cs"
 	check_backup_deletion "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}" "azure-blob"
 fi
 

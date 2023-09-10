@@ -107,7 +107,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
@@ -120,7 +120,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"

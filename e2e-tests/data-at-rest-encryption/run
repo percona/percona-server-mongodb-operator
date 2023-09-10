@@ -70,7 +70,7 @@ compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
 	run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster-mongos.$namespace"
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
 	run_restore "$backup_name_gcp"
