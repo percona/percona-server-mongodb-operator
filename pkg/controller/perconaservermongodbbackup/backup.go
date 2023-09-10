@@ -91,7 +91,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	case api.BackupStorageS3:
 		status.S3 = &stg.S3
 		if stg.S3.Prefix != "" {
-			status.Destination = stg.S3.Prefix + "/"
+			status.Destination = stg.S3.Bucket + "/" + stg.S3.Prefix + "/"
 		}
 	case api.BackupStorageAzure:
 		status.Azure = &stg.Azure
