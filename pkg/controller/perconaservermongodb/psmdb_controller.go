@@ -714,7 +714,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		"config": {},
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}

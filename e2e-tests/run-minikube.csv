@@ -16,6 +16,7 @@ scheduled-backup
 security-context
 self-healing-chaos
 smart-update
+tls-issue-cert-manager
 upgrade-consistency
 upgrade-consistency-sharded
 users
