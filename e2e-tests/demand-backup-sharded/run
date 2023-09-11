@@ -136,9 +136,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
-	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs1/myApp1.test.gz" | gunzip >/dev/null
-	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs2/myApp2.test.gz" | gunzip >/dev/null
+	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs1/myApp1.test.gz" | gunzip >/dev/null
+	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs2/myApp2.test.gz" | gunzip >/dev/null
 	insert_data "100501"
 	check_data "-2nd"
 	run_restore "$backup_name_azure"
@@ -173,7 +173,7 @@ fi
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
 	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp}" "gcp-cs"
-	check_backup_deletion "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}" "azure-blob"
+	check_backup_deletion "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}" "azure-blob"
 fi
 
 desc 'check for passwords leak'

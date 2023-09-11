@@ -96,7 +96,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	case api.BackupStorageAzure:
 		status.Azure = &stg.Azure
 		if stg.Azure.Prefix != "" {
-			status.Destination = stg.Azure.Prefix + "/"
+			status.Destination = stg.Azure.Container + "/" + stg.Azure.Prefix + "/"
 		}
 	}
 	status.Destination += status.PBMname
