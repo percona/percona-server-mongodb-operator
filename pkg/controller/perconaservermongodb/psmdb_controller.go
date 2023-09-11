@@ -332,6 +332,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 		if sts.Labels["app.kubernetes.io/component"] == "mongod" {
 			log.Info("Removing RS from shard", "rs", rsName)
+			err = r.removeRSFromShard(ctx, cr, rsName)
 			if err != nil {
 				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
 			}
