@@ -920,7 +920,7 @@ get_backup_dest() {
 	local backup_name=$1
 
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
-		| sed -e 's/.json$//'
+		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||"
 }
 
 get_service_endpoint() {
