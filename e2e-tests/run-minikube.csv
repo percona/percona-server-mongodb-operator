@@ -1,5 +1,6 @@
 arbiter
 balancer
+custom-replset-name
 default-cr
 demand-backup
 demand-backup-physical
