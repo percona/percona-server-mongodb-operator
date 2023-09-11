@@ -1,5 +1,6 @@
 arbiter
 balancer
+custom-replset-name
 data-at-rest-encryption
 data-sharded
 default-cr

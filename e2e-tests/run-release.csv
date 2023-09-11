@@ -1,5 +1,6 @@
 arbiter
 balancer
+custom-replset-name
 cross-site-sharded
 data-at-rest-encryption
 data-sharded
