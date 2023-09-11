@@ -23,6 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
@@ -88,19 +90,25 @@ func main() {
 	}
 
 	options := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme: scheme,
+		Metrics: metricsServer.Options{
+			BindAddress: metricsAddr,
+		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "08db0feb.percona.com",
-		Namespace:              namespace,
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE
 	if len(namespace) > 0 {
-		options.Namespace = ""
-		options.NewCache = cache.MultiNamespacedCacheBuilder(append(strings.Split(namespace, ","), operatorNamespace))
+		namespaces := make(map[string]cache.Config)
+		for _, ns := range append(strings.Split(namespace, ","), operatorNamespace) {
+			namespaces[ns] = cache.Config{}
+		}
+		options.Cache.DefaultNamespaces = namespaces
 	}
 
 	mgr, err := ctrl.NewManager(config, options)
