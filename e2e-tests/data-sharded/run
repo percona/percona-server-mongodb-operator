@@ -19,7 +19,7 @@ check_rs_proper_component_deletion() {
 	if [ sts_count != 0 ]; then
 		echo "Replset $rs_name not properly removed, expected sts count of 0 but got ${stsCount}. Exiting..."
 		exit 1
-	fi	
+	fi
 }
 
 main() {
