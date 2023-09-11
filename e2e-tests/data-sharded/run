@@ -6,69 +6,9 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-check_arbiter_sts_deletion () {
-	local cluster="$1"
-
-	local new_rs=rs1
-
-	kubectl_bin get psmdb
-
-	echo "AAA cluster: $cluster, new RS name: $new_rs"
-
-	# Add new RS with arbiter
-	kubectl_bin patch psmdb $cluster --type=json -p="[{'op': 'add', 'path': '/spec/replsets/-', 'value': 
-		{
-			"name": "rs1",
-			"size": 2,
-			"affinity": {
-				"antiAffinityTopologyKey": "none"
-				},
-			"arbiter": {
-				"enabled": true,
-				"size": 1
-			},
-			"volumeSpec": {
-				"persistentVolumeClaim": {
-					"resources": {
-					"requests": {
-						"storage": "1Gi"
-					}
-					}
-				}
-			}
-		}
-	}]"
-
-	# wait for cluster readiness
-	desc 'wait for convergence'
-	wait_for_running $cluster-$new_rs 2 "false"
-	wait_for_running $cluster-$new_rs-arbiter 1
-	# sleep 120
-
-	stsCount=$(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${new_rs} -ojson | jq '.items | length')
-	if [ stsCount != 2 ]; then
-		echo "Additional replset ${new_rs} not properly created, expected sts count of 2 but got ${stsCount}. Exiting..."
-		exit 1
-	fi
-
-	# remove added RS
-	rs_idx=$(kubectl_bin get psmdb ${cluster} -ojson  | jq '.spec.replsets | map(.name == "${new_rs}") | index(true)')
-	kubectl_bin patch psmdb ${cluster} --type=json -p="[{'op': 'remove', 'path': '/spec/replsets/$rs_idx'}]"
-	sleep 60
-
-	# check if mongod and arbiter sts are removed
-	stsCount=$(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${new_rs} -ojson | jq '.items | length')
-	if [ stsCount != 0 ]; then
-		echo "Additional replset rs1 not properly removed, expected sts count of 0 but got ${stsCount}. Exiting..."
-		exit 1
-	fi	
-}
-
 check_rs_proper_component_deletion() {
 	local cluster="$1"
 	local rs_name="$2"
-
-	echo "AAAAAAAA cluster: $cluster, rs name: $rs_name"
 
 	rs_idx=$(kubectl_bin get psmdb ${cluster} -ojson | jq --arg RS $rs_name '.spec.replsets | map(.name == $RS) | index(true)')
 	kubectl_bin patch psmdb ${cluster} --type=json -p="[{'op': 'remove', 'path': '/spec/replsets/$rs_idx'}]"
