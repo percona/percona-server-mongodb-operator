@@ -1577,8 +1577,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		}
 
 		if cr.Spec.Backup.Enabled {
-			agentC := backup.AgentContainer(cr, replset.Name)
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
+			rsName := replset.Name
+			if name, err := replset.CustomReplsetName(); err == nil {
+				rsName = name
+			}
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, rsName))
 		}
 
 		pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongodParams)
