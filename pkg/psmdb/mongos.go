@@ -239,6 +239,11 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		container.Command = []string{BinMountPath + "/ps-entry.sh"}
 	}
 
+	if cr.CompareVersion("1.15.0") >= 0 {
+		container.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+		container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+	}
+
 	return container, nil
 }
 
@@ -246,9 +251,15 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
+	cfgRsName := cfgRs.Name
+	name, err := cfgRs.CustomReplsetName()
+	if err == nil {
+		cfgRsName = name
+	}
+
 	// sort config instances to prevent unnecessary updates
 	sort.Strings(cfgInstances)
-	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstances, ","))
+	configDB := fmt.Sprintf("%s/%s", cfgRsName, strings.Join(cfgInstances, ","))
 	args := []string{
 		"mongos",
 		"--bind_ip_all",

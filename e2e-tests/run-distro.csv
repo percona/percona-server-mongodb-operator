@@ -1,5 +1,6 @@
 arbiter
 balancer
+custom-replset-name
 data-at-rest-encryption
 data-sharded
 default-cr
@@ -19,6 +20,7 @@ pitr-physical
 recover-no-primary
 rs-shard-migration
 scaling
+tls-issue-cert-manager
 upgrade
 upgrade-sharded
 users
