@@ -80,6 +80,12 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			MountPath: "/etc/users-secret",
 		})
 	}
+
+	rsName := replset.Name
+	if name, err := replset.CustomReplsetName(); err == nil {
+		rsName = name
+	}
+
 	container := corev1.Container{
 		Name:            name,
 		Image:           cr.Spec.Image,
@@ -107,7 +113,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			},
 			{
 				Name:  "MONGODB_REPLSET",
-				Value: replset.Name,
+				Value: rsName,
 			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
@@ -150,8 +156,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 }
 
 // containerArgs returns the args to pass to the mSpec container
-func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements,
-	useConfigFile bool) []string {
+func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements, useConfigFile bool) []string {
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
 		"--bind_ip_all",
@@ -162,6 +167,11 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
 		"--sslAllowInvalidCertificates",
+	}
+
+	name, err := replset.CustomReplsetName()
+	if err == nil {
+		args[4] = "--replSet=" + name
 	}
 
 	if cr.Spec.UnsafeConf {

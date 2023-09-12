@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  generation: 1
+  name: some-name-psmdb-ca-issuer
+  ownerReferences:
+    - blockOwnerDeletion: true
+      controller: true
+      kind: PerconaServerMongoDB
+      name: some-name
+spec:
+  selfSigned: {}
