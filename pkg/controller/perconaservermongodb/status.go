@@ -372,8 +372,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		return strings.Join(addrs, ","), nil
 	}
 
-	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled &&
-		rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled && rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 		list := corev1.PodList{}
 		err := r.client.List(ctx,
 			&list,
@@ -391,7 +390,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		if err != nil {
 			return "", errors.Wrap(err, "list psmdb pods")
 		}
-		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
+		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, api.DNSModeExternal, rs.Name, rs.Expose.Enabled, list.Items)
 		if err != nil {
 			switch errors.Cause(err) {
 			case psmdb.ErrNoIngressPoints, psmdb.ErrServiceNotExists:
