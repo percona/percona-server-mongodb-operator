@@ -1,5 +1,6 @@
 arbiter
 balancer
+custom-replset-name
 cross-site-sharded
 data-at-rest-encryption
 data-sharded
@@ -35,6 +36,7 @@ serviceless-external-nodes
 smart-update
 split-horizon
 storage
+tls-issue-cert-manager
 upgrade
 upgrade-consistency
 upgrade-consistency-sharded

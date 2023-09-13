@@ -145,23 +145,6 @@
       {
         "resource": {
           "db": "local",
-          "collection": "system.healthlog"
-        },
-        "actions": [
-          "changeStream",
-          "collStats",
-          "dbHash",
-          "dbStats",
-          "find",
-          "killCursors",
-          "listCollections",
-          "listIndexes",
-          "planCacheRead"
-        ]
-      },
-      {
-        "resource": {
-          "db": "local",
           "collection": "system.js"
         },
         "actions": [
@@ -244,14 +227,6 @@
           "trafficRecord",
           "unlock",
           "useUUID"
-        ]
-      },
-      {
-        "resource": {
-          "anyResource": true
-        },
-        "actions": [
-          "dbCheck"
         ]
       }
     ]

@@ -27,8 +27,14 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
+	rsName := rs.Name
+	name, err := rs.CustomReplsetName()
+	if err == nil {
+		rsName = name
+	}
+
 	conf := &mongo.Config{
-		ReplSetName: rs.Name,
+		ReplSetName: rsName,
 		Hosts:       rsAddrs,
 		Username:    c.Username,
 		Password:    c.Password,
