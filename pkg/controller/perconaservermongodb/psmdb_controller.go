@@ -693,14 +693,6 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		appliedRSNames[rs.Name] = struct{}{}
 	}
 
-	// extractRSName trims CR name and component leaving only RS name
-	// E.g. extracts 'rs1' from `my-cluster-name-rs1` or `my-cluster-name-rs1-arbiter`
-	extractRSName := func(stsName, component string) string {
-		_, cut, _ := strings.Cut(stsName, cr.Name)
-		trim := strings.Trim(cut, component)
-		return strings.Trim(trim, "-")
-	}
-
 	for _, sts := range stsList.Items {
 		component := sts.Labels["app.kubernetes.io/component"]
 		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
@@ -710,7 +702,7 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		if component == "nonVoting" {
 			component = "nv"
 		}
-		rsName := extractRSName(sts.Name, component)
+		rsName := sts.Labels["app.kubernetes.io/replset"]
 
 		if _, ok := appliedRSNames[rsName]; ok {
 			continue
