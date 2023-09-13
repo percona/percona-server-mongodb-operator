@@ -124,7 +124,7 @@ main() {
 		"use app\n db.dropDatabase()" \
 		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
 		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls")
-	if ! echo $res  | grep -q '"ok" : 1'; then
+	if ! echo $res | grep -q '"ok" : 1'; then
 		echo "app database not dropped. Exiting.."
 		exit 1
 	fi
