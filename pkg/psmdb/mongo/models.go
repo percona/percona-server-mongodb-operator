@@ -31,7 +31,7 @@ type ConfigMember struct {
 	SlaveDelay         *int64            `bson:"slaveDelay,omitempty" json:"slaveDelay,omitempty"`
 	SecondaryDelaySecs *int64            `bson:"secondaryDelaySecs,omitempty" json:"secondaryDelaySecs,omitempty"`
 	Votes              int               `bson:"votes" json:"votes"`
-	Horizons           map[string]string `bson:"horizons" json:"horizons"`
+	Horizons           map[string]string `bson:"horizons,omitempty" json:"horizons,omitempty"`
 }
 
 type ConfigMembers []ConfigMember
