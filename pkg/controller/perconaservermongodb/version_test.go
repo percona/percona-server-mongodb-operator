@@ -377,8 +377,8 @@ func TestVersionMeta(t *testing.T) {
 					Image:     "percona/percona-server-mongodb:5.0.11-10",
 					Replsets: []*api.ReplsetSpec{
 						{
-							Name: "rs0",
-							Size: 3,
+							Name:       "rs0",
+							Size:       3,
 							VolumeSpec: fakeVolumeSpec(t),
 							MultiAZ: api.MultiAZ{
 								Sidecars: []corev1.Container{
