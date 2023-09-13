@@ -129,7 +129,6 @@ main() {
 		exit 1
 	fi
 
-
 	desc 'check if rs1 and all its related stateful sets are properly removed'
 	check_rs_proper_component_deletion $cluster rs1
 
