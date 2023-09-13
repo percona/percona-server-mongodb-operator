@@ -124,6 +124,8 @@ spec:
                         type: string
                       enabled:
                         type: boolean
+                      oplogOnly:
+                        type: boolean
                       oplogSpanMin:
                         type: number
                     type: object
