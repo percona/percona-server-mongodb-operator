@@ -49,6 +49,13 @@ spec:
   - name: rs0
     size: 3
 #    terminationGracePeriodSeconds: 300
+#    topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server-mongodb
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -306,10 +313,18 @@ spec:
 
   sharding:
     enabled: true
-
+#    balancer:
+#      enabled: true
     configsvrReplSet:
       size: 3
 #      terminationGracePeriodSeconds: 300
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server-mongodb
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #      externalNodes:
 #      - host: 34.124.76.93
 #      - host: 34.124.76.94
@@ -407,6 +422,13 @@ spec:
     mongos:
       size: 3
 #      terminationGracePeriodSeconds: 300
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server-mongodb
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        systemLog:

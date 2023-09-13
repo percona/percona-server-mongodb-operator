@@ -134,9 +134,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.New("mongos should be specified")
 		}
 
-		if cr.Spec.Pause {
-			cr.Spec.Sharding.Mongos.Size = 0
-		} else {
+		if !cr.Spec.Pause && cr.DeletionTimestamp == nil {
 			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
 				log.Info("Safe config set, updating mongos size",
 					"oldSize", cr.Spec.Sharding.Mongos.Size, "newSize", minSafeMongosSize)
@@ -273,7 +271,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = 3
 		}
 
-		cr.Spec.Sharding.Mongos.reconcileOpts()
+		cr.Spec.Sharding.Mongos.reconcileOpts(cr)
 
 		if err := cr.Spec.Sharding.Mongos.Configuration.SetDefaults(); err != nil {
 			return errors.Wrap(err, "failed to set configuration defaults")
@@ -443,20 +441,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
 		}
-
-		if cr.Spec.Pause {
-			if cr.Status.State == AppStateStopping {
-				log.Info("Pausing cluster", "replset", replset.Name, "oldSize", replset.Size, "newSize", 0)
-			}
-			replset.Size = 0
-			replset.Arbiter.Enabled = false
-			replset.NonVoting.Enabled = false
-		}
-	}
-
-	// there is shouldn't be any backups while pause
-	if cr.Spec.Pause {
-		cr.Spec.Backup.Enabled = false
 	}
 
 	if cr.Spec.Backup.Enabled {
@@ -558,13 +542,13 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
 
-	rs.MultiAZ.reconcileOpts()
+	rs.MultiAZ.reconcileOpts(cr)
 
 	if rs.Arbiter.Enabled {
-		rs.Arbiter.MultiAZ.reconcileOpts()
+		rs.Arbiter.MultiAZ.reconcileOpts(cr)
 	}
 
-	if !cr.Spec.UnsafeConf && cr.DeletionTimestamp == nil {
+	if !cr.Spec.UnsafeConf && (cr.DeletionTimestamp == nil && !cr.Spec.Pause) {
 		rs.setSafeDefaults(log)
 	}
 
@@ -694,7 +678,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ServiceAccountName = WorkloadSA
 	}
 
-	nv.MultiAZ.reconcileOpts()
+	nv.MultiAZ.reconcileOpts(cr)
 
 	if nv.ContainerSecurityContext == nil {
 		nv.ContainerSecurityContext = rs.ContainerSecurityContext
@@ -741,8 +725,9 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 	}
 }
 
-func (m *MultiAZ) reconcileOpts() {
+func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
 	m.reconcileAffinityOpts()
+	m.reconcileTopologySpreadConstraints(cr)
 
 	if m.PodDisruptionBudget == nil {
 		defaultMaxUnavailable := intstr.FromInt(1)
@@ -782,6 +767,24 @@ func (m *MultiAZ) reconcileAffinityOpts() {
 	case m.Affinity != nil && m.Affinity.TopologyKey != nil:
 		if _, ok := affinityValidTopologyKeys[*m.Affinity.TopologyKey]; !ok {
 			m.Affinity.TopologyKey = &defaultAffinityTopologyKey
+		}
+	}
+}
+
+func (m *MultiAZ) reconcileTopologySpreadConstraints(cr *PerconaServerMongoDB) {
+	if cr.CompareVersion("1.15.0") < 0 {
+		return
+	}
+
+	for i := range m.TopologySpreadConstraints {
+		if m.TopologySpreadConstraints[i].MaxSkew == 0 {
+			m.TopologySpreadConstraints[i].MaxSkew = 1
+		}
+		if m.TopologySpreadConstraints[i].TopologyKey == "" {
+			m.TopologySpreadConstraints[i].TopologyKey = defaultAffinityTopologyKey
+		}
+		if m.TopologySpreadConstraints[i].WhenUnsatisfiable == "" {
+			m.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.DoNotSchedule
 		}
 	}
 }

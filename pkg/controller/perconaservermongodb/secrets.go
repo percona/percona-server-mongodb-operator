@@ -10,71 +10,46 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
 
-const (
-	envMongoDBDatabaseAdminUser      = "MONGODB_DATABASE_ADMIN_USER"
-	envMongoDBDatabaseAdminPassword  = "MONGODB_DATABASE_ADMIN_PASSWORD"
-	envMongoDBClusterAdminUser       = "MONGODB_CLUSTER_ADMIN_USER"
-	envMongoDBClusterAdminPassword   = "MONGODB_CLUSTER_ADMIN_PASSWORD"
-	envMongoDBUserAdminUser          = "MONGODB_USER_ADMIN_USER"
-	envMongoDBUserAdminPassword      = "MONGODB_USER_ADMIN_PASSWORD"
-	envMongoDBBackupUser             = "MONGODB_BACKUP_USER"
-	envMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
-	envMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
-	envMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	envPMMServerUser                 = api.PMMUserKey
-	envPMMServerPassword             = api.PMMPasswordKey
-	envPMMServerAPIKey               = api.PMMAPIKey
-)
-
-type UserRole string
-
-const (
-	roleDatabaseAdmin  UserRole = "databaseAdmin"
-	roleClusterAdmin   UserRole = "clusterAdmin"
-	roleUserAdmin      UserRole = "userAdmin"
-	roleClusterMonitor UserRole = "clusterMonitor"
-	roleBackup         UserRole = "backup"
-)
-
-func (r *ReconcilePerconaServerMongoDB) getUserSecret(ctx context.Context, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
+func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
 	secrets := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, &secrets)
+	err := cl.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, &secrets)
 	return secrets, errors.Wrap(err, "get user secrets")
 }
 
-func (r *ReconcilePerconaServerMongoDB) getInternalCredentials(ctx context.Context, cr *api.PerconaServerMongoDB, role UserRole) (psmdb.Credentials, error) {
-	return r.getCredentials(ctx, cr, api.UserSecretName(cr), role)
+func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, role api.UserRole) (psmdb.Credentials, error) {
+	return getCredentials(ctx, cl, cr, api.UserSecretName(cr), role)
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCredentials(ctx context.Context, cr *api.PerconaServerMongoDB, name string, role UserRole) (psmdb.Credentials, error) {
+func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string, role api.UserRole) (psmdb.Credentials, error) {
 	creds := psmdb.Credentials{}
-	usersSecret, err := r.getUserSecret(ctx, cr, name)
+	usersSecret, err := getUserSecret(ctx, cl, cr, name)
 	if err != nil {
 		return creds, errors.Wrap(err, "failed to get user secret")
 	}
 
 	switch role {
-	case roleDatabaseAdmin:
-		creds.Username = string(usersSecret.Data[envMongoDBDatabaseAdminUser])
-		creds.Password = string(usersSecret.Data[envMongoDBDatabaseAdminPassword])
-	case roleClusterAdmin:
-		creds.Username = string(usersSecret.Data[envMongoDBClusterAdminUser])
-		creds.Password = string(usersSecret.Data[envMongoDBClusterAdminPassword])
-	case roleUserAdmin:
-		creds.Username = string(usersSecret.Data[envMongoDBUserAdminUser])
-		creds.Password = string(usersSecret.Data[envMongoDBUserAdminPassword])
-	case roleClusterMonitor:
-		creds.Username = string(usersSecret.Data[envMongoDBClusterMonitorUser])
-		creds.Password = string(usersSecret.Data[envMongoDBClusterMonitorPassword])
-	case roleBackup:
-		creds.Username = string(usersSecret.Data[envMongoDBBackupUser])
-		creds.Password = string(usersSecret.Data[envMongoDBBackupPassword])
+	case api.RoleDatabaseAdmin:
+		creds.Username = string(usersSecret.Data[api.EnvMongoDBDatabaseAdminUser])
+		creds.Password = string(usersSecret.Data[api.EnvMongoDBDatabaseAdminPassword])
+	case api.RoleClusterAdmin:
+		creds.Username = string(usersSecret.Data[api.EnvMongoDBClusterAdminUser])
+		creds.Password = string(usersSecret.Data[api.EnvMongoDBClusterAdminPassword])
+	case api.RoleUserAdmin:
+		creds.Username = string(usersSecret.Data[api.EnvMongoDBUserAdminUser])
+		creds.Password = string(usersSecret.Data[api.EnvMongoDBUserAdminPassword])
+	case api.RoleClusterMonitor:
+		creds.Username = string(usersSecret.Data[api.EnvMongoDBClusterMonitorUser])
+		creds.Password = string(usersSecret.Data[api.EnvMongoDBClusterMonitorPassword])
+	case api.RoleBackup:
+		creds.Username = string(usersSecret.Data[api.EnvMongoDBBackupUser])
+		creds.Password = string(usersSecret.Data[api.EnvMongoDBBackupPassword])
 	default:
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}
@@ -101,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 			return errors.Wrap(err, "failed to fill secret data")
 		}
 		if cr.CompareVersion("1.2.0") < 0 {
-			for _, v := range []string{envMongoDBClusterMonitorUser, envMongoDBClusterMonitorPassword} {
+			for _, v := range []string{api.EnvMongoDBClusterMonitorUser, api.EnvMongoDBClusterMonitorPassword} {
 				escaped, ok := secretObj.Data[v+"_ESCAPED"]
 				if !ok || url.QueryEscape(string(secretObj.Data[v])) != string(escaped) {
 					secretObj.Data[v+"_ESCAPED"] = []byte(url.QueryEscape(string(secretObj.Data[v])))
@@ -145,20 +120,20 @@ func fillSecretData(cr *api.PerconaServerMongoDB, data map[string][]byte) (bool,
 		data = make(map[string][]byte)
 	}
 	userMap := map[string]string{
-		envMongoDBBackupUser:         string(roleBackup),
-		envMongoDBClusterAdminUser:   string(roleClusterAdmin),
-		envMongoDBClusterMonitorUser: string(roleClusterMonitor),
-		envMongoDBUserAdminUser:      string(roleUserAdmin),
+		api.EnvMongoDBBackupUser:         string(api.RoleBackup),
+		api.EnvMongoDBClusterAdminUser:   string(api.RoleClusterAdmin),
+		api.EnvMongoDBClusterMonitorUser: string(api.RoleClusterMonitor),
+		api.EnvMongoDBUserAdminUser:      string(api.RoleUserAdmin),
 	}
 	passKeys := []string{
-		envMongoDBClusterAdminPassword,
-		envMongoDBUserAdminPassword,
-		envMongoDBBackupPassword,
-		envMongoDBClusterMonitorPassword,
+		api.EnvMongoDBClusterAdminPassword,
+		api.EnvMongoDBUserAdminPassword,
+		api.EnvMongoDBBackupPassword,
+		api.EnvMongoDBClusterMonitorPassword,
 	}
 	if cr.CompareVersion("1.13.0") >= 0 {
-		userMap[envMongoDBDatabaseAdminUser] = string(roleDatabaseAdmin)
-		passKeys = append(passKeys, envMongoDBDatabaseAdminPassword)
+		userMap[api.EnvMongoDBDatabaseAdminUser] = string(api.RoleDatabaseAdmin)
+		passKeys = append(passKeys, api.EnvMongoDBDatabaseAdminPassword)
 	}
 
 	changes := false

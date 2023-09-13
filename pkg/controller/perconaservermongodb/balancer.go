@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,7 +17,7 @@ import (
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Unmanaged {
+	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || (s.Balancer.Enabled != nil && !*s.Balancer.Enabled) || cr.DeletionTimestamp != nil || cr.Spec.Pause {
 		return nil
 	}
 
@@ -75,7 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		}
 	}
 
-	mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
+	mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}
@@ -87,13 +86,13 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		}
 	}()
 
-	run, err := mongo.IsBalancerRunning(ctx, mongosSession)
+	run, err := mongosSession.IsBalancerRunning(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to check if balancer running")
 	}
 
 	if !run {
-		err := mongo.StartBalancer(ctx, mongosSession)
+		err := mongosSession.StartBalancer(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to start balancer")
 		}
@@ -104,10 +103,17 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || s.Balancer.Enabled == nil || *s.Balancer.Enabled {
+		return nil
+	}
+	return r.disableBalancer(ctx, cr)
+}
+
 func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if !cr.Spec.Sharding.Enabled || cr.Spec.Unmanaged {
+	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged {
 		return nil
 	}
 
@@ -121,7 +127,7 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
-	mongosSession, err := r.mongosClientWithRole(ctx, cr, roleClusterAdmin)
+	mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}
@@ -133,13 +139,13 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		}
 	}()
 
-	run, err := mongo.IsBalancerRunning(ctx, mongosSession)
+	run, err := mongosSession.IsBalancerRunning(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to check if balancer running")
 	}
 
 	if run {
-		err := mongo.StopBalancer(ctx, mongosSession)
+		err := mongosSession.StopBalancer(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to stop balancer")
 		}

@@ -19,9 +19,7 @@ import (
 
 	"github.com/percona/percona-backup-mongodb/pbm"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
@@ -71,7 +69,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 			return
 		}
 
-		if localCr.Status.State != v1.AppStateReady {
+		if localCr.Status.State != api.AppStateReady {
 			log.Info("cluster is not ready")
 			return
 		}
@@ -150,7 +148,7 @@ func MajorMinor(ver *v.Version) string {
 }
 
 func majorUpgradeRequested(cr *api.PerconaServerMongoDB, fcv string) (UpgradeRequest, error) {
-	if len(cr.Spec.UpgradeOptions.Apply) == 0 || v1.OneOfUpgradeStrategy(string(cr.Spec.UpgradeOptions.Apply)) {
+	if len(cr.Spec.UpgradeOptions.Apply) == 0 || api.OneOfUpgradeStrategy(string(cr.Spec.UpgradeOptions.Apply)) {
 		return UpgradeRequest{false, "", ""}, nil
 	}
 
@@ -336,7 +334,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return nil
 	}
 
-	if cr.Status.State != v1.AppStateReady && cr.Status.MongoVersion != "" {
+	if cr.Status.State != api.AppStateReady && cr.Status.MongoVersion != "" {
 		return errors.New("cluster is not ready")
 	}
 
@@ -430,7 +428,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 		return nil
 	}
 
-	session, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
+	session, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
@@ -442,7 +440,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 		}
 	}()
 
-	info, err := mongo.RSBuildInfo(ctx, session)
+	info, err := session.RSBuildInfo(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get build info")
 	}

@@ -1,0 +1,121 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. "${test_dir}/../functions"
+set_debug
+
+renew-certificate() {
+	certificate="$1"
+
+	desc "renew $certificate"
+
+	local pod_name
+	pod_name=$(kubectl_bin get pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
+
+	local revision
+	revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
+
+	kubectl_bin exec "$pod_name" -- ./cmctl renew "$certificate"
+
+	# wait for new revision
+	for i in {1..10}; do
+		local new_revision
+		new_revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
+		if [ "$((revision + 1))" == "$new_revision" ]; then
+			break
+		fi
+		sleep 1
+	done
+}
+
+check_tls_secret() {
+	local secret_name=$1
+	check_secret_data_key "$secret_name" 'ca.crt'
+	check_secret_data_key "$secret_name" 'tls.crt'
+	check_secret_data_key "$secret_name" 'tls.key'
+}
+
+check_secret_data_key() {
+	local secret_name=$1
+	local data_key=$2
+	local secret_data
+
+	secret_data=$(kubectl_bin get "secrets/${secret_name}" -o json | jq ".data[\"${data_key}\"]")
+	if [ -z "$secret_data" ]; then
+		exit 1
+	fi
+}
+
+deploy_cmctl() {
+	local service_account="cmctl"
+
+	$sed -e "s/percona-server-mongodb-operator/$service_account/g" "${src_dir}/deploy/rbac.yaml" \
+		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
+		| kubectl_bin apply -f -
+	kubectl_bin apply -f "$conf_dir/cmctl.yml"
+}
+
+main() {
+	create_infra "$namespace"
+	deploy_cert_manager
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "$conf_dir/secrets.yml"
+	kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
+	deploy_cmctl
+
+	cluster="some-name"
+	desc "create first PSMDB cluster $cluster"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'check if certificates issued with certmanager'
+	check_tls_secret "$cluster-ssl"
+
+	desc 'check if CA issuer created'
+	compare_kubectl issuer/$cluster-psmdb-ca-issuer
+
+	desc 'check if issuer created'
+	compare_kubectl issuer/$cluster-psmdb-issuer
+
+	desc 'check if certificate issued'
+	compare_kubectl certificate/$cluster-ssl
+
+	desc 'check if internal certificate issued'
+	compare_kubectl certificate/$cluster-ssl-internal
+
+	renew-certificate "some-name-ssl"
+	sleep 10
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	renew-certificate "some-name-ssl-internal"
+	sleep 10
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'check if CA issuer created'
+	compare_kubectl issuer/$cluster-psmdb-ca-issuer
+
+	desc 'check if issuer created'
+	compare_kubectl issuer/$cluster-psmdb-issuer
+
+	desc 'check if certificate issued'
+	compare_kubectl certificate/$cluster-ssl
+
+	desc 'check if internal certificate issued'
+	compare_kubectl certificate/$cluster-ssl-internal
+
+	destroy "$namespace"
+	desc 'test passed'
+}
+
+main
