@@ -58,12 +58,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
 	}
 
-	for _, rs := range replsets {
-		if rs.Arbiter.Enabled {
-			return status, errors.New("physical restores are not supported for deployments with arbiter nodes")
-		}
-	}
-
 	if cr.Status.State == psmdbv1.RestoreStateNew {
 		pbmConf := corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -340,6 +334,40 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			if err := r.client.Delete(ctx, &sts); err != nil {
 				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
 			}
+
+			if rs.NonVoting.Enabled {
+				stsName := cluster.Name + "-" + rs.Name + "-nv"
+
+				log.Info("Deleting statefulset", "statefulset", stsName)
+
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				if err := r.client.Delete(ctx, &sts); err != nil {
+					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+				}
+			}
+
+			if rs.Arbiter.Enabled {
+				stsName := cluster.Name + "-" + rs.Name + "-arbiter"
+
+				log.Info("Deleting statefulset", "statefulset", stsName)
+
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				if err := r.client.Delete(ctx, &sts); err != nil {
+					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+				}
+			}
 		}
 
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -498,6 +526,52 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 		})
 		if err != nil {
 			return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+		}
+
+		if rs.NonVoting.Enabled {
+			stsName := cluster.Name + "-" + rs.Name + "-nv"
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
+		}
+
+		if rs.Arbiter.Enabled {
+			stsName := cluster.Name + "-" + rs.Name + "-arbiter"
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				err := r.client.Get(ctx, nn, &sts)
+				if err != nil {
+					return err
+				}
+
+				orig := sts.DeepCopy()
+				zero := int32(0)
+
+				sts.Spec.Replicas = &zero
+				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
 		}
 	}
 
