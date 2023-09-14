@@ -122,7 +122,7 @@ func TestConnectionEndpoint(t *testing.T) {
 				cr.Spec.Replsets[0].Expose.Enabled = true
 				cr.Spec.Replsets[0].Expose.ExposeType = corev1.ServiceTypeClusterIP
 			}),
-			expected: "some-ip:0,some-ip:0,some-ip:0",
+			expected: "psmdb-mock-rs0-0.psmdb-mock-rs0.psmdb.svc.cluster.local:27017,psmdb-mock-rs0-1.psmdb-mock-rs0.psmdb.svc.cluster.local:27017,psmdb-mock-rs0-2.psmdb-mock-rs0.psmdb.svc.cluster.local:27017",
 		},
 		{
 			name: "load balancer expose without pods",
