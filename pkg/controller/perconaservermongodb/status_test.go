@@ -108,15 +108,21 @@ func TestConnectionEndpoint(t *testing.T) {
 	tests := []struct {
 		name        string
 		cr          *api.PerconaServerMongoDB
-		objects     []client.Object
 		expected    string
 		withoutPods bool
 	}{
 		{
 			name:     "test connection endpoint",
 			cr:       cr.DeepCopy(),
-			objects:  []client.Object{},
 			expected: "psmdb-mock-rs0.psmdb.svc.cluster.local",
+		},
+		{
+			name: "cluster-ip expose",
+			cr: updateResource(cr.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Expose.Enabled = true
+				cr.Spec.Replsets[0].Expose.ExposeType = corev1.ServiceTypeClusterIP
+			}),
+			expected: "some-ip:0,some-ip:0,some-ip:0",
 		},
 		{
 			name: "load balancer expose without pods",
@@ -125,7 +131,6 @@ func TestConnectionEndpoint(t *testing.T) {
 				cr.Spec.Replsets[0].Expose.ExposeType = corev1.ServiceTypeLoadBalancer
 			}),
 			withoutPods: true,
-			objects:     []client.Object{},
 			expected:    "",
 		},
 		{
@@ -134,7 +139,6 @@ func TestConnectionEndpoint(t *testing.T) {
 				cr.Spec.Replsets[0].Expose.Enabled = true
 				cr.Spec.Replsets[0].Expose.ExposeType = corev1.ServiceTypeLoadBalancer
 			}),
-			objects:  []client.Object{},
 			expected: "some-ip:0,some-ip:0,some-ip:0",
 		},
 		{
@@ -145,7 +149,6 @@ func TestConnectionEndpoint(t *testing.T) {
 				cr.Spec.MultiCluster.Enabled = true
 				cr.Spec.MultiCluster.DNSSuffix = "some-dns-suffix"
 			}),
-			objects:  []client.Object{},
 			expected: "psmdb-mock-rs0-0.psmdb.some-dns-suffix:27017,psmdb-mock-rs0-1.psmdb.some-dns-suffix:27017,psmdb-mock-rs0-2.psmdb.some-dns-suffix:27017",
 		},
 		{
@@ -234,8 +237,7 @@ func TestConnectionEndpoint(t *testing.T) {
 			if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
 				t.Fatal(err)
 			}
-			obj := tt.objects
-			obj = append(obj, cr)
+			obj := []client.Object{cr}
 
 			if !tt.withoutPods {
 				pods := fakePodsForRS(cr, cr.Spec.Replsets[0])
@@ -284,22 +286,29 @@ func TestConnectionEndpoint(t *testing.T) {
 }
 
 func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname string) *corev1.Service {
+	ingress := []corev1.LoadBalancerIngress{
+		{
+			IP:       ip,
+			Hostname: hostname,
+		},
+	}
+	clusterIP := ""
+	if svcType == corev1.ServiceTypeClusterIP {
+		clusterIP = ip
+		ingress = nil
+	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: svcType,
+			Type:      svcType,
+			ClusterIP: clusterIP,
 		},
 		Status: corev1.ServiceStatus{
 			LoadBalancer: corev1.LoadBalancerStatus{
-				Ingress: []corev1.LoadBalancerIngress{
-					{
-						IP:       ip,
-						Hostname: hostname,
-					},
-				},
+				Ingress: ingress,
 			},
 		},
 	}

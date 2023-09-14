@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -369,10 +370,11 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		if err != nil {
 			return "", errors.Wrap(err, "get mongos addresses")
 		}
+		sort.Strings(addrs)
 		return strings.Join(addrs, ","), nil
 	}
 
-	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled && rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled && (rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer || rs.Expose.ExposeType == corev1.ServiceTypeClusterIP) {
 		list := corev1.PodList{}
 		err := r.client.List(ctx,
 			&list,
@@ -398,6 +400,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 			}
 			return "", errors.Wrap(err, "get replset addresses")
 		}
+		sort.Strings(addrs)
 		return strings.Join(addrs, ","), nil
 	}
 
