@@ -16,24 +16,31 @@ package healthcheck
 
 import (
 	"context"
+	"net"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
 )
 
 // ReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
-func ReadinessCheck(ctx context.Context, client mongo.Client) (State, error) {
-	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		return StateFailed, errors.Wrap(err, "ping")
+func MongodReadinessCheck(ctx context.Context, addr string) error {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return errors.Wrap(err, "dial")
 	}
-
-	return StateOk, nil
+	return conn.Close()
 }
 
-func MongosReadinessCheck(ctx context.Context, client mongo.Client) error {
+func MongosReadinessCheck(ctx context.Context, cnf *db.Config) error {
+	client, err := db.Dial(ctx, cnf)
+	if err != nil {
+		return errors.Wrap(err, "connection error")
+	}
+	defer client.Disconnect(ctx)
+
 	ss := ServerStatus{}
 	cur := client.Database("admin").RunCommand(ctx, bson.D{
 		{Key: "listDatabases", Value: 1},

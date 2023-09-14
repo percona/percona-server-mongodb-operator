@@ -19,10 +19,12 @@ import (
 	"encoding/json"
 
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 // OkMemberStates is a slice of acceptable replication member states
@@ -74,8 +76,14 @@ func HealthCheck(client mongo.Client, okMemberStates []mongo.MemberState) (State
 	return StateFailed, state, errors.Errorf("member has unhealthy replication state: %d", state)
 }
 
-func HealthCheckMongosLiveness(client mongo.Client) error {
-	isMasterResp, err := client.IsMaster(context.TODO())
+func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) error {
+	client, err := db.Dial(ctx, cnf)
+	if err != nil {
+		return errors.Wrap(err, "connection error")
+	}
+	defer client.Disconnect(ctx)
+
+	isMasterResp, err := client.IsMaster(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get isMaster response")
 	}
@@ -87,7 +95,13 @@ func HealthCheckMongosLiveness(client mongo.Client) error {
 	return nil
 }
 
-func HealthCheckMongodLiveness(client mongo.Client, startupDelaySeconds int64) (*mongo.MemberState, error) {
+func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelaySeconds int64) (*mongo.MemberState, error) {
+	client, err := db.Dial(ctx, cnf)
+	if err != nil {
+		return nil, errors.Wrap(err, "connection error")
+	}
+	defer client.Disconnect(ctx)
+
 	isMasterResp, err := client.IsMaster(context.TODO())
 	if err != nil {
 		return nil, errors.Wrap(err, "get isMaster response")

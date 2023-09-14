@@ -399,9 +399,20 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ReadinessProbe = &corev1.Probe{}
 		}
 
-		if replset.ReadinessProbe.TCPSocket == nil {
-			replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(DefaultMongodPort)),
+		if replset.ReadinessProbe.TCPSocket == nil && replset.ReadinessProbe.Exec == nil {
+			replset.ReadinessProbe.Exec = &corev1.ExecAction{
+				Command: []string{
+					"/opt/percona/mongodb-healthcheck",
+					"k8s", "readiness",
+					"--component", "mongod",
+				},
+			}
+
+			if cr.CompareVersion("1.15.0") < 0 {
+				replset.ReadinessProbe.Exec = nil
+				replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(DefaultMongodPort)),
+				}
 			}
 		}
 
