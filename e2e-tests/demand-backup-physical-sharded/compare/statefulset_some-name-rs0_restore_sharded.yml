@@ -124,8 +124,6 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
-            tcpSocket:
-              port: 27017
             timeoutSeconds: 2
           resources:
             limits:
