@@ -34,12 +34,16 @@ func MongodReadinessCheck(ctx context.Context, addr string) error {
 	return conn.Close()
 }
 
-func MongosReadinessCheck(ctx context.Context, cnf *db.Config) error {
+func MongosReadinessCheck(ctx context.Context, cnf *db.Config) (err error) {
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
 		return errors.Wrap(err, "connection error")
 	}
-	defer client.Disconnect(ctx)
+	defer func() {
+		if derr := client.Disconnect(ctx); derr != nil && err == nil {
+			err = errors.Wrap(derr, "failed to disconnect")
+		}
+	}()
 
 	ss := ServerStatus{}
 	cur := client.Database("admin").RunCommand(ctx, bson.D{

@@ -76,12 +76,16 @@ func HealthCheck(client mongo.Client, okMemberStates []mongo.MemberState) (State
 	return StateFailed, state, errors.Errorf("member has unhealthy replication state: %d", state)
 }
 
-func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) error {
+func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
 		return errors.Wrap(err, "connection error")
 	}
-	defer client.Disconnect(ctx)
+	defer func() {
+		if derr := client.Disconnect(ctx); derr != nil && err == nil {
+			err = errors.Wrap(derr, "failed to disconnect")
+		}
+	}()
 
 	isMasterResp, err := client.IsMaster(ctx)
 	if err != nil {
@@ -95,19 +99,23 @@ func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) error {
 	return nil
 }
 
-func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelaySeconds int64) (*mongo.MemberState, error) {
+func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelaySeconds int64) (_ *mongo.MemberState, err error) {
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
 		return nil, errors.Wrap(err, "connection error")
 	}
-	defer client.Disconnect(ctx)
+	defer func() {
+		if derr := client.Disconnect(ctx); derr != nil && err == nil {
+			err = errors.Wrap(derr, "failed to disconnect")
+		}
+	}()
 
-	isMasterResp, err := client.IsMaster(context.TODO())
+	isMasterResp, err := client.IsMaster(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get isMaster response")
 	}
 
-	buildInfo, err := client.RSBuildInfo(context.TODO())
+	buildInfo, err := client.RSBuildInfo(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get buildInfo response")
 	}
@@ -119,7 +127,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 		replSetStatusCommand = append(replSetStatusCommand, primitive.E{Key: "initialSync", Value: 1})
 	}
 
-	res := client.Database("admin").RunCommand(context.TODO(), replSetStatusCommand)
+	res := client.Database("admin").RunCommand(ctx, replSetStatusCommand)
 	if res.Err() != nil {
 		// if we come this far, it means db connection was successful
 		// standalone mongod nodes in an unmanaged cluster doesn't need
@@ -154,7 +162,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 
 	oplogRs := OplogRs{}
 	if !isMasterResp.IsArbiter {
-		res := client.Database("local").RunCommand(context.TODO(), bson.D{
+		res := client.Database("local").RunCommand(ctx, bson.D{
 			{Key: "collStats", Value: "oplog.rs"},
 			{Key: "scale", Value: 1024 * 1024 * 1024}, // scale size to gigabytes
 		})
@@ -169,7 +177,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 		}
 	}
 
-	var storageSize int64 = 0
+	var storageSize int64
 	if oplogRs.StorageSize > 0 {
 		storageSize = oplogRs.StorageSize
 	}
