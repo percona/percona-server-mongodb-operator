@@ -11,7 +11,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,21 +33,6 @@ func TestConnectionLeaks(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
 	ctx := context.Background()
 
-	q, err := resource.ParseQuantity("1Gi")
-	if err != nil {
-		t.Fatal(err)
-	}
-	volumeSpec := &api.VolumeSpec{
-		PersistentVolumeClaim: api.PVCSpec{
-			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
-				Resources: corev1.ResourceRequirements{
-					Requests: map[corev1.ResourceName]resource.Quantity{
-						corev1.ResourceStorage: q,
-					},
-				},
-			},
-		},
-	}
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "psmdb-mock",
@@ -65,7 +49,7 @@ func TestConnectionLeaks(t *testing.T) {
 				{
 					Name:       "rs0",
 					Size:       3,
-					VolumeSpec: volumeSpec,
+					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},
 			UpdateStrategy: api.SmartUpdateStatefulSetStrategyType,
@@ -103,7 +87,7 @@ func TestConnectionLeaks(t *testing.T) {
 				cr.Spec.Sharding.Enabled = true
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
 					Size:       3,
-					VolumeSpec: volumeSpec,
+					VolumeSpec: fakeVolumeSpec(t),
 				}
 				cr.Spec.Sharding.Mongos = &api.MongosSpec{
 					Size: 3,
@@ -118,7 +102,7 @@ func TestConnectionLeaks(t *testing.T) {
 				cr.Spec.Sharding.Enabled = true
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
 					Size:       3,
-					VolumeSpec: volumeSpec,
+					VolumeSpec: fakeVolumeSpec(t),
 				}
 				cr.Spec.Sharding.Mongos = &api.MongosSpec{
 					Size: 3,

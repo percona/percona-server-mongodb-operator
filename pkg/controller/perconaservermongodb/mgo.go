@@ -255,7 +255,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			break
 		}
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
 		if err != nil {
 			return 0, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -513,7 +513,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 		return errors.New("mongos pod is not ready")
 	}
 
-	host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, rspod)
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset.Name, replset.Expose.Enabled, rspod)
 	if err != nil {
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
@@ -564,7 +564,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}

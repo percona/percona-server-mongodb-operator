@@ -212,11 +212,11 @@ func getIngressPoint(ctx context.Context, cl client.Client, serviceNN types.Name
 }
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
-func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pods []corev1.Pod) ([]string, error) {
+func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rsName string, rsExposed bool, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
-		host, err := MongoHost(ctx, cl, cr, rsName, rsExposed, pod)
+		host, err := MongoHost(ctx, cl, cr, dnsMode, rsName, rsExposed, pod)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
 		}
@@ -253,8 +253,8 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 }
 
 // MongoHost returns the mongo host for given pod
-func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
-	switch cr.Spec.ClusterServiceDNSMode {
+func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
+	switch dnsMode {
 	case api.DNSModeServiceMesh:
 		return GetServiceMeshAddr(cr, pod.Name, cr.Namespace), nil
 	case api.DNSModeInternal:
