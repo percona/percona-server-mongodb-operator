@@ -268,6 +268,19 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			Votes:        mongo.DefaultVotes,
 		}
 
+		if len(rs.Horizons) > 0 {
+			horizons := make(map[string]string)
+			for h, domain := range rs.Horizons[pod.Name] {
+				d := domain
+				if !strings.HasSuffix(d, ":27017") {
+					d = d + ":27017"
+				}
+				horizons[h] = d
+			}
+
+			member.Horizons = horizons
+		}
+
 		switch pod.Labels["app.kubernetes.io/component"] {
 		case "arbiter":
 			member.ArbiterOnly = true
@@ -365,6 +378,17 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "update external nodes: write mongo config")
+		}
+	}
+
+	if cnf.Members.HorizonsChanged(members) {
+		cnf.Version++
+
+		log.Info("Updating horizons", "replset", rs.Name)
+
+		err = cli.WriteConfig(ctx, cnf)
+		if err != nil {
+			return 0, errors.Wrap(err, "update horizons: write mongo config")
 		}
 	}
 
