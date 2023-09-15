@@ -32,7 +32,7 @@ run_recovery_check() {
 	wait_restore "${backup_name}" "${cluster}" "requested" "0"
 	echo
 
-	# compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
+	compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
 
 	# we don't wait for cluster readiness here because the annotation gets removed then
 	wait_restore "${backup_name}" "${cluster}" "ready" "0"
