@@ -94,17 +94,12 @@ spec:
               name: mongodb
               protocol: TCP
           readinessProbe:
-            exec:
-              command:
-                - /opt/percona/mongodb-healthcheck
-                - k8s
-                - readiness
-                - --component
-                - mongod
             failureThreshold: 10
             initialDelaySeconds: 12
             periodSeconds: 5
             successThreshold: 3
+            tcpSocket:
+              port: 27017
             timeoutSeconds: 4
           resources:
             limits:
