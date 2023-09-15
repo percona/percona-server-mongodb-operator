@@ -7130,6 +7130,12 @@ spec:
                     size:
                       format: int32
                       type: integer
+                    splitHorizons:
+                      additionalProperties:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      type: object
                     storage:
                       properties:
                         directoryPerDB:
@@ -14080,6 +14086,12 @@ spec:
                       size:
                         format: int32
                         type: integer
+                      splitHorizons:
+                        additionalProperties:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        type: object
                       storage:
                         properties:
                           directoryPerDB:
