@@ -731,7 +731,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			[]mongo.RolePrivilege{{
 				Resource: map[string]interface{}{
 					"db":         "",
-					"collection": "system.profile",
+					"collection": "",
 				},
 				Actions: []string{
 					"listIndexes",
