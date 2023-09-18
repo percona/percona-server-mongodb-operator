@@ -249,7 +249,7 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 				SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SseCustomerAlgorithm,
 				SseCustomerKey:       stg.S3.ServerSideEncryption.SseCustomerKey,
 			}
-		}		
+		}
 
 		if len(stg.S3.CredentialsSecret) != 0 {
 			s3secret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.S3.CredentialsSecret)
