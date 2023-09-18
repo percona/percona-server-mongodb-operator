@@ -35,20 +35,39 @@ until kubectl_bin exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; d
 	fi
 done
 
+cluster="monitoring"
+
 desc 'create secrets and start client'
 kubectl_bin apply \
 	-f $conf_dir/secrets.yml \
-	-f $conf_dir/client.yml \
 	-f $test_dir/conf/secrets.yml
+
+yq ".spec.template.spec.volumes[0].secret.secretName=\"$cluster-ssl\"" \
+	"$conf_dir/client_with_tls.yml" | kubectl_bin apply -f -
 sleep 90
 
-cluster="monitoring"
 desc "create first PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 wait_for_running $cluster-rs0 3
 
 desc 'check if pmm-client container is not enabled'
 compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
+sleep 10
+
+run_mongos \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "" "" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+run_mongos \
+	'sh.enableSharding("myApp")' \
+	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "" "" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+insert_data_mongos "100500" "myApp" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+insert_data_mongos "100600" "myApp" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+insert_data_mongos "100700" "myApp" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
 
 desc 'add PMM_SERVER_API_KEY for secret some-users'
 API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
@@ -89,6 +108,11 @@ get_qan20_values $MONGOS_POD_NAME admin:admin
 
 if [[ -n ${OPENSHIFT} ]]; then
 	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
+fi
+
+if [[ $(kubectl_bin logs monitoring-rs0-0 pmm-client | grep -c 'cannot auto discover databases and collections') != 0 ]]; then
+	echo "error: cannot auto discover databases and collections"
+	exit 1
 fi
 
 desc 'check for passwords leak'

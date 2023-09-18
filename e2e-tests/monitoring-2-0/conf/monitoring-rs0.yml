@@ -69,6 +69,6 @@ spec:
     image: -pmm
     serverHost: monitoring-service
     mongosParams: "--environment=dev-mongos"
-    mongodParams: "--environment=dev-mongod"
+    mongodParams: "--enable-all-collectors --environment=dev-mongod"
   secrets:
     users: some-users
