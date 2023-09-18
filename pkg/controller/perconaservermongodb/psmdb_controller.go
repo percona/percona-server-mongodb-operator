@@ -407,7 +407,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			"app.kubernetes.io/component":  "mongod",
 		}
 
-		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name, false)
+		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
@@ -699,9 +699,6 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 			continue
 		}
 
-		if component == "nonVoting" {
-			component = "nv"
-		}
 		rsName := sts.Labels["app.kubernetes.io/replset"]
 
 		if _, ok := appliedRSNames[rsName]; ok {
@@ -1175,7 +1172,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName, false)
+	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
 	if err != nil {
 		return errors.Wrap(err, "get configsvr pods")
 	}

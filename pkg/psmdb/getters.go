@@ -36,7 +36,7 @@ func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return lbls
 }
 
-func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string, includeOutdated bool) (corev1.PodList, error) {
+func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	rsPods := corev1.PodList{}
 
 	stsList := appsv1.StatefulSetList{} // All statefulsets related to replset `rsName`
