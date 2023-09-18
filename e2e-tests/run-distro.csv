@@ -1,4 +1,6 @@
 arbiter
+balancer
+custom-replset-name
 data-at-rest-encryption
 data-sharded
 default-cr
@@ -14,9 +16,12 @@ non-voting
 one-pod
 pitr
 pitr-sharded
+pitr-physical
 recover-no-primary
 rs-shard-migration
 scaling
+split-horizon
+tls-issue-cert-manager
 upgrade
 upgrade-sharded
 users

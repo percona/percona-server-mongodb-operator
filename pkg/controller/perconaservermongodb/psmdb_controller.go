@@ -39,7 +39,6 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -84,6 +83,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
 		lockers:       newLockStore(),
+		newPBM:        backup.NewPBM,
 
 		initImage: initImage,
 
@@ -167,10 +167,13 @@ type ReconcilePerconaServerMongoDB struct {
 	client client.Client
 	scheme *runtime.Scheme
 
-	crons         CronRegistry
-	clientcmd     *clientcmd.Client
-	serverVersion *version.ServerVersion
-	reconcileIn   time.Duration
+	crons               CronRegistry
+	clientcmd           *clientcmd.Client
+	serverVersion       *version.ServerVersion
+	reconcileIn         time.Duration
+	mongoClientProvider MongoClientProvider
+
+	newPBM backup.NewPBMFunc
 
 	initImage string
 
@@ -269,6 +272,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		if rec || err != nil {
 			return rr, err
 		}
+	}
+
+	err = r.reconcilePause(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	err = r.checkConfiguration(ctx, cr)
@@ -506,6 +514,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "failed to start balancer")
 	}
 
+	if err := r.disableBalancerIfNeeded(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to disable balancer")
+	}
+
 	if err := r.upgradeFCVIfNeeded(ctx, cr, *repls[0], cr.Status.MongoVersion); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
@@ -548,6 +560,44 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Pause || cr.DeletionTimestamp != nil {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	backupRunning, err := r.isBackupRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "check if backup is running")
+	}
+	if backupRunning {
+		cr.Spec.Pause = false
+		if err := cr.CheckNSetDefaults(r.serverVersion.Platform, log); err != nil {
+			return errors.Wrap(err, "failed to set defaults")
+		}
+		log.Info("cluster will pause after all backups finished")
+		return nil
+	}
+
+	for _, rs := range cr.Spec.Replsets {
+		if cr.Status.State == api.AppStateStopping {
+			log.Info("Pausing cluster", "replset", rs.Name)
+		}
+		rs.Arbiter.Enabled = false
+		rs.NonVoting.Enabled = false
+	}
+
+	if err := r.deletePSMDBPods(ctx, cr); err != nil {
+		if err == errWaitingTermination {
+			log.Info("pausing cluster", "error", err.Error())
+			return nil
+		}
+		return errors.Wrap(err, "delete psmdb pods")
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -664,7 +714,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		"config": {},
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -676,7 +726,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		}
 	}()
 
-	list, err := mongo.ListDBs(ctx, client)
+	list, err := client.ListDBs(ctx)
 	if err != nil {
 		log.Error(err, "failed to list databases", "rs", rsName)
 		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)
@@ -864,27 +914,16 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	svcList, err := psmdb.GetMongosServices(ctx, r.client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to list mongos services")
-	}
-
 	var mongos client.Object
 	if cr.CompareVersion("1.12.0") >= 0 {
 		mongos = psmdb.MongosStatefulset(cr)
 	} else {
 		mongos = psmdb.MongosDeployment(cr)
 	}
-	err = r.client.Delete(ctx, mongos)
+
+	err := r.client.Delete(ctx, mongos)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete mongos statefulset")
-	}
-
-	for _, svc := range svcList.Items {
-		err = r.client.Delete(ctx, &svc)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "failed to delete mongos services")
-		}
 	}
 
 	return nil
@@ -902,6 +941,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 
 	if !upToDate {
 		return nil
+	}
+
+	ss, err := psmdb.GetMongosServices(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to list mongos services")
+	}
+
+	for _, svc := range ss.Items {
+		err = r.client.Delete(ctx, &svc)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete mongos services")
+		}
 	}
 
 	return r.deleteMongos(ctx, cr)
@@ -1127,7 +1178,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
-		host, err := psmdb.MongoHost(ctx, r.client, cr, api.ConfigReplSetName, false, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, api.ConfigReplSetName, false, pod)
 		if err != nil {
 			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}
@@ -1509,8 +1560,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		}
 
 		if cr.Spec.Backup.Enabled {
-			agentC := backup.AgentContainer(cr, replset.Name)
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
+			rsName := replset.Name
+			if name, err := replset.CustomReplsetName(); err == nil {
+				rsName = name
+			}
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, rsName))
 		}
 
 		pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongodParams)

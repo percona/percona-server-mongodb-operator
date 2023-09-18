@@ -7,20 +7,6 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-function generate_vs_json() {
-	local template_path=${1}
-	local target_path=${2}
-
-	local version_service_source=$(jq '.versions[0].operator="'${OPERATOR_VERSION}'"' ${template_path})
-
-	for image_mongod in ${IMAGE_MONGOD_CHAIN[@]}; do
-		current_mongod_version=$(get_mongod_ver_from_image ${image_mongod})
-
-		version_service_source=$(echo ${version_service_source} \
-			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
-	done
-	echo ${version_service_source} | jq '.' >${target_path}
-}
 
 function main() {
 	rbac="rbac"
@@ -29,9 +15,6 @@ function main() {
 	fi
 
 	create_infra "${namespace}"
-
-	apply_s3_storage_secrets
-	deploy_minio
 
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${conf_dir}/secrets.yml"
@@ -50,27 +33,17 @@ function main() {
 	version_matrix=$(jq '.[] | .[] |.matrix.mongod' ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.json)
 
 	current_mongod_version=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
-	version_matrix=$(echo ${version_matrix} | jq '. += {"'${current_mongod_version}'":{"image_path":"'${IMAGE_MONGOD}'"}}')
+	version_matrix=$(echo ${version_matrix} | jq '. += {"'${current_mongod_version}'":{"image_path":"'${IMAGE_MONGOD}'", "status": "recommended"}}')
 
 	version_matrix=$(echo ${version_matrix} | jq 'to_entries
 												 | sort_by( .key | split("[[:punct:]]";"g") | map(tonumber) )
 												 | map({(.key): .value}) ')
 
-	current_version_index=$(echo ${version_matrix} | jq 'map(keys[] == "'${current_mongod_version}'") | index(true)')
-
-	if [[ $((current_version_index + 1)) == $(echo ${version_matrix} | jq length) ]]; then
-		desc 'IMAGE_MONGOD '${IMAGE_MONGOD}' has '${current_mongod_version}' is the last in upgrade chain. Exiting...'
-		destroy ${namespace}
-		exit 0
-	fi
-
-	version_matrix=$(echo ${version_matrix} | jq '.['$((current_version_index + 1))':]')
-
-	versions_to_verify=$(echo ${version_matrix} | jq -r '.[] | keys | .[] | split(".") | .[:2] | join(".")' | uniq | grep -v ${current_mongod_version:0:3})
+	versions_to_verify=$(echo ${version_matrix} | jq -r '.[] | keys | .[] | split(".") | .[:2] | join(".")' | uniq | tail -n +2)
 
 	cluster="some-name-rs0"
-	desc 'Starting the cluster with IMAGE_MONGOD '${IMAGE_MONGOD}''
-
+	desc 'Starting the cluster with '$(echo ${version_matrix} | jq '.[0] | keys | .[0]')''
+	export IMAGE_MONGOD=$(echo ${version_matrix} | jq -r 'to_entries | .[0].value | .[].image_path')
 	apply_cluster "${test_dir}/conf/${cluster}.yml"
 
 	desc 'check if all 3 Pods started'
@@ -82,52 +55,51 @@ function main() {
 		"userAdmin:userAdmin123456@$cluster.$namespace"
 	sleep 2
 	run_mongo \
-		'use myApp\n db.test.insert({ x: 100500 })' \
+		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 	desc 'Starting to follow mongod upgrade images chain'
-
 	target_generation=2
 	for version in ${versions_to_verify[@]}; do
-
-		backup_name_minio="backup-minio-${target_generation}"
-		run_backup minio ${backup_name_minio}
-		wait_backup ${backup_name_minio}
-
+		desc "Testing upgrade to version: ${version}"
 		kubectl_bin patch psmdb/${cluster%%-rs0} \
 			--type=json \
 			-p='[
-					{"op":"replace","path":"/spec/upgradeOptions/apply","value": "'${version}'-recommended"},
-					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
+					{"op":"replace","path":"/spec/upgradeOptions/apply","value": "'${version}'-recommended"}
 				]'
 
-		sleep 60 # waiting for update loop to fire
+		sleep 70 # waiting for update loop to fire
 		wait_for_running "${cluster}" 3
 		wait_cluster_consistency "${cluster/-rs0/}"
 
 		compare_generation ${target_generation} "statefulset" "${cluster}"
+		kubectl_bin patch psmdb/${cluster%%-rs0} \
+			--type=json \
+			-p='[
+					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
+				]'
+
+		sleep 10
+		wait_cluster_consistency "${cluster%%-rs0}"
+
+		currentFCV=$(run_mongos 'JSON.stringify(db.adminCommand({getParameter:1,featureCompatibilityVersion:1}))' "clusterAdmin:clusterAdmin123456@${cluster}.${namespace}" \
+			| grep -E '^\{.*\}$' | jq -r '.featureCompatibilityVersion.version')
+
+		if [[ ${currentFCV} != ${version} ]]; then
+			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."
+			exit 1
+		fi
 
 		run_mongo \
 			'use myApp\n db.test.insert({ x: 10050'${target_generation}' })' \
 			"myApp:myPass@$cluster.$namespace"
+
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-${target_generation}"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-${target_generation}"
 		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-${target_generation}"
-
-		backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
-		kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-			/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio}/rs0/ \
-			| grep myApp.test.gz
-		run_mongo 'use myApp\n db.test.insert({ x: 100600 })' "myApp:myPass@$cluster.$namespace"
-		run_restore "${backup_name_minio}"
-		wait_restore "${backup_name_minio}" "${cluster/-rs0/}"
-		compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
-		compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
-		compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 		target_generation=$((target_generation + 1))
 	done

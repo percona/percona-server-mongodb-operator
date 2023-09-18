@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -45,9 +47,10 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		clientcmd: cli,
+		client:     mgr.GetClient(),
+		scheme:     mgr.GetScheme(),
+		clientcmd:  cli,
+		newPBMFunc: backup.NewPBM,
 	}, nil
 }
 
@@ -85,6 +88,8 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+
+	newPBMFunc backup.NewPBMFunc
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
@@ -232,7 +237,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) error {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	var backoff = wait.Backoff{
+		Steps:    5,
+		Duration: 500 * time.Millisecond,
+		Factor:   5.0,
+		Jitter:   0.1,
+	}
+
+	err := retry.OnError(backoff, func(error) bool { return true }, func() error {
 		c := &psmdbv1.PerconaServerMongoDBRestore{}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
@@ -242,7 +254,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context,
 
 		c.Status = cr.Status
 
-		return r.client.Status().Update(ctx, c)
+		err = r.client.Status().Update(ctx, c)
+		if err != nil {
+			return err
+		}
+
+		// ensure status is updated
+		c = &psmdbv1.PerconaServerMongoDBRestore{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		if err != nil {
+			return err
+		}
+
+		if c.Status.State != cr.Status.State {
+			return errors.New("status not updated")
+		}
+
+		return nil
 	})
 
 	if k8serrors.IsNotFound(err) {

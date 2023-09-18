@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -19,7 +18,6 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
@@ -98,7 +96,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
@@ -116,24 +114,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
-	if err != nil {
-		return fmt.Errorf("failed to get mongo client: %v", err)
-	}
-
-	defer func() {
-		err := client.Disconnect(ctx)
-		if err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
-
-	primary, err := psmdb.GetPrimaryPod(ctx, client)
-	if err != nil {
-		return fmt.Errorf("get primary pod: %v", err)
-	}
-	log.Info("Got primary pod", "name", primary)
-
 	waitLimit := int(replset.LivenessProbe.InitialDelaySeconds)
 
 	sort.Slice(list.Items, func(i, j int) bool {
@@ -142,19 +122,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
-		if replset.Expose.Enabled {
-			host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
-			if err != nil {
-				return errors.Wrapf(err, "get mongo host for pod %s", pod.Name)
-			}
-
-			if host == primary {
-				primaryPod = pod
-				continue
-			}
+		isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
 		}
-
-		if strings.HasPrefix(primary, fmt.Sprintf("%s.%s.%s", pod.Name, sfs.Name, sfs.Namespace)) {
+		if isPrimary {
 			primaryPod = pod
 			continue
 		}
@@ -181,7 +153,19 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
-		err = mongo.StepDown(ctx, client, forceStepDown)
+		client, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
+		if err != nil {
+			return fmt.Errorf("failed to get mongo client: %v", err)
+		}
+
+		defer func() {
+			err := client.Disconnect(ctx)
+			if err != nil {
+				log.Error(err, "failed to close connection")
+			}
+		}()
+
+		err = client.StepDown(ctx, forceStepDown)
 		if err != nil {
 			return errors.Wrap(err, "failed to do step down")
 		}
@@ -195,6 +179,32 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod, rs *api.ReplsetSpec) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get mongo host")
+	}
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, api.RoleClusterAdmin, host)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to create standalone client")
+	}
+	defer func() {
+		err := mgoClient.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	isMaster, err := mgoClient.IsMaster(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "is master")
+	}
+
+	return isMaster.IsMaster, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
@@ -229,7 +239,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}

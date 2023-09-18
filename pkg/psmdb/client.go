@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	mgo "go.mongodb.org/mongo-driver/mongo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -17,19 +16,25 @@ type Credentials struct {
 	Password string
 }
 
-func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (*mgo.Client, error) {
+func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (mongo.Client, error) {
 	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name, false)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
-	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, rs.Name, false, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
+	rsName := rs.Name
+	name, err := rs.CustomReplsetName()
+	if err == nil {
+		rsName = name
+	}
+
 	conf := &mongo.Config{
-		ReplSetName: rs.Name,
+		ReplSetName: rsName,
 		Hosts:       rsAddrs,
 		Username:    c.Username,
 		Password:    c.Password,
@@ -47,7 +52,7 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	return mongo.Dial(conf)
 }
 
-func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (*mgo.Client, error) {
+func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
 	hosts, err := GetMongosAddrs(ctx, k8sclient, cr)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongos addrs")
@@ -70,7 +75,7 @@ func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaS
 	return mongo.Dial(&conf)
 }
 
-func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string) (*mgo.Client, error) {
+func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string) (mongo.Client, error) {
 	conf := mongo.Config{
 		Hosts:    []string{host},
 		Username: c.Username,

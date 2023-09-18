@@ -3,7 +3,7 @@
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
 API="psmdb.percona.com/v1"
-OPERATOR_VERSION="1.15.0"
+OPERATOR_VERSION="$(yq eval '.spec.crVersion' $(realpath $test_dir/../../deploy/cr.yaml))"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod5.0"}
@@ -16,7 +16,7 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_SERVER_REPO=${IMAGE_PMM_SERVER_REPO:-"perconalab/pmm-server"}
 IMAGE_PMM_SERVER_TAG=${IMAGE_PMM_SERVER_TAG:-"dev-latest"}
-CERT_MANAGER_VER="1.8.0"
+CERT_MANAGER_VER="1.12.3"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -621,6 +621,7 @@ compare_kubectl() {
 	local new_result="${tmp_dir}/${resource//\//_}.yml"
 
 	if [ -n "$OPENSHIFT" -a -f ${expected_result//.yml/-oc.yml} ]; then
+		desc "OPENSHIFT"
 		expected_result=${expected_result//.yml/-oc.yml}
 		if [ "$OPENSHIFT" = 4 -a -f ${expected_result//-oc.yml/-4-oc.yml} ]; then
 			expected_result=${expected_result//-oc.yml/-4-oc.yml}
@@ -666,7 +667,9 @@ compare_kubectl() {
 			del(.spec.ipFamilyPolicy) |
 			(.. | select(. == "extensions/v1beta1")) = "apps/v1" |
 			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
-
+	
+	yq -i eval 'del(.spec.persistentVolumeClaimRetentionPolicy)' ${new_result}
+	
 	if version_gt "1.22"; then
 		yq -i eval 'del(.spec.internalTrafficPolicy)' ${new_result}
 		yq -i eval 'del(.spec.allocateLoadBalancerNodePorts)' ${new_result}
@@ -674,7 +677,6 @@ compare_kubectl() {
 			yq -i eval 'del(.metadata.generation)' ${new_result}
 		fi
 	fi
-
 	diff -u "$expected_result" "$new_result"
 }
 
@@ -688,6 +690,19 @@ run_mongo() {
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+
+}
+
+run_mongo_tls() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb+srv}
+	local suffix=${4:-.svc.cluster.local}
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 
 }
 
@@ -845,8 +860,9 @@ deploy_cert_manager() {
 
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-	kubectl_bin apply -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
-	sleep 30
+	kubectl_bin apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
+	kubectl_bin -n cert-manager wait pod -l app.kubernetes.io/instance=cert-manager --for=condition=ready
+	sleep 120
 }
 
 delete_crd() {
@@ -891,7 +907,7 @@ destroy() {
 
 	delete_crd
 
-	kubectl_bin delete -f "https://github.com/jetstack/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" 2>/dev/null || :
+	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" 2>/dev/null || :
 	if [ -n "$OPENSHIFT" ]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &
 		if [ -n "$OPERATOR_NS" ]; then
@@ -1203,19 +1219,59 @@ check_crd_for_deletion() {
 function get_mongod_ver_from_image() {
 	local image=${1}
 
-	local pod_name=${RANDOM}
-	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
-	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
-
-	local version_info=$(kubectl_bin -n default exec ${pod_name} -- mongod --version)
-	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
-	version_info=$(echo ${version_info} | head -n2 | $sed -r 's/^.*db version v(([0-9]+\.){2}[0-9]+-[0-9]+).*$/\1/g')
+	version_info=$(run_simple_cli_inside_image ${image} 'mongod --version' | $sed -r 's/^.*db version v(([0-9]+\.){2}[0-9]+-[0-9]+).*$/\1/g')
 
 	if [[ ! ${version_info} =~ ^([0-9]+\.){2}[0-9]+-[0-9]+$ ]]; then
 		printf "No mongod version obtained from %s. Exiting" ${image}
 		exit 1
 	fi
 	echo ${version_info}
+}
+
+function get_pbm_version() {
+	local image=${1}
+
+	local version_info=$(run_simple_cli_inside_image ${image} 'pbm-agent version' | $sed -r 's/^Version:\ (([0-9]+\.){2}[0-9]+)\ .*/\1/g')
+
+	if [[ ! ${version_info} =~ ^([0-9]+\.){2}[0-9]+$ ]]; then
+		printf "No pbm version obtained from %s. Exiting" ${image}
+		exit 1
+	fi
+	echo ${version_info}
+}
+
+function run_simple_cli_inside_image() {
+	local image=${1}
+	local cli=${2}
+
+	local pod_name=${RANDOM}
+	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
+	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
+	local output=$(kubectl_bin -n default exec ${pod_name} -- ${cli})
+	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
+	echo ${output}
+}
+
+function generate_vs_json() {
+	local template_path=${1}
+	local target_path=${2}
+
+	local version_service_source=$(jq '.versions[0].operator="'${OPERATOR_VERSION}'"' ${template_path})
+
+	for image_mongod in ${IMAGE_MONGOD_CHAIN[@]}; do
+		current_mongod_version=$(get_mongod_ver_from_image ${image_mongod})
+
+		version_service_source=$(echo ${version_service_source} \
+			| jq '.versions[0].matrix.mongod += {"'${current_mongod_version}'": {"image_path":"'${image_mongod}'","status":"recommended"}}')
+	done
+
+	version_service_source=$(echo ${version_service_source} \
+		| jq '.versions[0].matrix.backup += {"'$(get_pbm_version ${IMAGE_BACKUP})'": {"image_path":"'${IMAGE_BACKUP}'","status":"recommended"}}')
+
+	version_service_source=$(echo ${version_service_source} \
+		| jq '.versions[0].matrix.operator += {"'${OPERATOR_VERSION}'": {"image_path":"'${IMAGE}'","status":"recommended"}}')
+
+	echo ${version_service_source} | jq '.' >${target_path}
 }
 
 check_passwords_leak() {
