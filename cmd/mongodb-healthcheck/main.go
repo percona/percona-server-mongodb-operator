@@ -65,6 +65,15 @@ func main() {
 		os.Exit(0)
 	}
 
+	sleepForever, err := fileExists("/data/db/sleep-forever")
+	if err != nil {
+		log.Error(err, "check if sleep-forever file exists")
+		os.Exit(1)
+	}
+	if sleepForever {
+		os.Exit(0)
+	}
+
 	cnf, err := db.NewConfig(
 		app,
 		pkg.EnvMongoDBClusterMonitorUser,
@@ -82,38 +91,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := db.Dial(ctx, cnf)
-	if err != nil {
-		log.Error(err, "connection error")
-		os.Exit(1)
-	}
-
-	defer func() {
-		if err := client.Disconnect(ctx); err != nil {
-			log.Error(err, "failed to disconnect")
-			os.Exit(1)
-		}
-	}()
-
 	switch command {
-
 	case "k8s liveness":
 		log.Info("Running Kubernetes liveness check for", "component", component)
 		switch *component {
 
 		case "mongod":
-			memberState, err := healthcheck.HealthCheckMongodLiveness(client, int64(*startupDelaySeconds))
+			memberState, err := healthcheck.HealthCheckMongodLiveness(ctx, cnf, int64(*startupDelaySeconds))
 			if err != nil {
-				client.Disconnect(ctx) // nolint:golint,errcheck
 				log.Error(err, "Member failed Kubernetes liveness check")
 				os.Exit(1)
 			}
 			log.Info("Member passed Kubernetes liveness check with replication state", "state", memberState)
 
 		case "mongos":
-			err := healthcheck.HealthCheckMongosLiveness(client)
+			err := healthcheck.HealthCheckMongosLiveness(ctx, cnf)
 			if err != nil {
-				client.Disconnect(ctx) // nolint:golint,errcheck
 				log.Error(err, "Member failed Kubernetes liveness check")
 				os.Exit(1)
 			}
@@ -125,14 +118,14 @@ func main() {
 		switch *component {
 
 		case "mongod":
-			client.Disconnect(ctx) // nolint:golint,errcheck
-			log.Error(err, "readiness check for mongod is not implemented")
-			os.Exit(1)
-
-		case "mongos":
-			err := healthcheck.MongosReadinessCheck(ctx, client)
+			err := healthcheck.MongodReadinessCheck(ctx, cnf.Hosts[0])
 			if err != nil {
-				client.Disconnect(ctx) // nolint:golint,errcheck
+				log.Error(err, "Member failed Kubernetes readiness check")
+				os.Exit(1)
+			}
+		case "mongos":
+			err := healthcheck.MongosReadinessCheck(ctx, cnf)
+			if err != nil {
 				log.Error(err, "Member failed Kubernetes readiness check")
 				os.Exit(1)
 			}
