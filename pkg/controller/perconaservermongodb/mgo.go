@@ -728,20 +728,33 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 
 	if cr.CompareVersion("1.12.0") >= 0 {
 		err = r.createOrUpdateSystemRoles(ctx, cli, "explainRole",
-			[]mongo.RolePrivilege{{
-				Resource: map[string]interface{}{
-					"db":         "",
-					"collection": "",
+			[]mongo.RolePrivilege{
+				{
+					Resource: map[string]interface{}{
+						"db":         "",
+						"collection": "",
+					},
+					Actions: []string{
+						"listIndexes",
+						"listCollections",
+						"dbStats",
+						"dbHash",
+						"collStats",
+						"find",
+					},
 				},
-				Actions: []string{
-					"listIndexes",
-					"listCollections",
-					"dbStats",
-					"dbHash",
-					"collStats",
-					"find",
+				{
+					Resource: map[string]interface{}{
+						"db":         "",
+						"collection": "system.profile",
+					},
+					Actions: []string{
+						"indexStats",
+						"dbStats",
+						"collStats",
+					},
 				},
-			}})
+			})
 		if err != nil {
 			return errors.Wrap(err, "create or update system role")
 		}
