@@ -714,7 +714,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		"config": {},
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, roleClusterAdmin)
+	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -1178,7 +1178,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
-		host, err := psmdb.MongoHost(ctx, r.client, cr, api.ConfigReplSetName, false, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, api.ConfigReplSetName, false, pod)
 		if err != nil {
 			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}
@@ -1560,8 +1560,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		}
 
 		if cr.Spec.Backup.Enabled {
-			agentC := backup.AgentContainer(cr, replset.Name)
-			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, agentC)
+			rsName := replset.Name
+			if name, err := replset.CustomReplsetName(); err == nil {
+				rsName = name
+			}
+			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, rsName))
 		}
 
 		pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongodParams)

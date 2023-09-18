@@ -153,7 +153,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
-		client, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
+		client, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
 		if err != nil {
 			return fmt.Errorf("failed to get mongo client: %v", err)
 		}
@@ -184,11 +184,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod, rs *api.ReplsetSpec) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	host, err := psmdb.MongoHost(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, pod)
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get mongo host")
 	}
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, roleClusterAdmin, host)
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, api.RoleClusterAdmin, host)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create standalone client")
 	}

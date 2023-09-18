@@ -6,13 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -274,12 +273,6 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
-const (
-	PMMUserKey     = "PMM_SERVER_USER"
-	PMMPasswordKey = "PMM_SERVER_PASSWORD"
-	PMMAPIKey      = "PMM_SERVER_API_KEY"
-)
-
 func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
 	if _, ok := secret.Data[PMMAPIKey]; !ok {
 		_, okl := secret.Data[PMMUserKey]
@@ -496,6 +489,8 @@ func (conf *MongoConfiguration) SetDefaults() error {
 	return nil
 }
 
+type HorizonsSpec map[string]map[string]string
+
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
@@ -514,6 +509,11 @@ type ReplsetSpec struct {
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
+	Horizons                 HorizonsSpec               `json:"splitHorizons,omitempty"`
+}
+
+func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
+	return fmt.Sprintf("%s-%s-%d", cr.Name, r.Name, idx)
 }
 
 func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
@@ -530,6 +530,25 @@ func (r *ReplsetSpec) PodFQDN(cr *PerconaServerMongoDB, podName string) string {
 
 func (r *ReplsetSpec) PodFQDNWithPort(cr *PerconaServerMongoDB, podName string) string {
 	return fmt.Sprintf("%s:%d", r.PodFQDN(cr, podName), DefaultMongodPort)
+}
+
+func (r ReplsetSpec) CustomReplsetName() (string, error) {
+	var cfg struct {
+		Replication struct {
+			ReplSetName string `yaml:"replSetName,omitempty"`
+		} `yaml:"replication,omitempty"`
+	}
+
+	err := yaml.Unmarshal([]byte(r.Configuration), &cfg)
+	if err != nil {
+		return cfg.Replication.ReplSetName, errors.Wrap(err, "unmarshal configuration")
+	}
+
+	if len(cfg.Replication.ReplSetName) == 0 {
+		return cfg.Replication.ReplSetName, errors.New("replSetName is not configured")
+	}
+
+	return cfg.Replication.ReplSetName, nil
 }
 
 type LivenessProbeExtended struct {
@@ -728,6 +747,7 @@ type BackupStorageSpec struct {
 type PITRSpec struct {
 	Enabled          bool                     `json:"enabled,omitempty"`
 	OplogSpanMin     numstr.NumberString      `json:"oplogSpanMin,omitempty"`
+	OplogOnly        bool                     `json:"oplogOnly,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
@@ -832,9 +852,55 @@ func (cr *PerconaServerMongoDB) CompareVersion(version string) int {
 	return cr.Version().Compare(v.Must(v.NewVersion(version)))
 }
 
+func (cr *PerconaServerMongoDB) CompareMongoDBVersion(version string) (int, error) {
+	mongoVer, err := v.NewVersion(cr.Status.MongoVersion)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse status.mongoVersion")
+	}
+
+	compare, err := v.NewVersion(version)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse version")
+	}
+
+	return mongoVer.Compare(compare), nil
+}
+
 const (
 	internalPrefix = "internal-"
 	userPostfix    = "-users"
+)
+
+const (
+	PMMUserKey     = "PMM_SERVER_USER"
+	PMMPasswordKey = "PMM_SERVER_PASSWORD"
+	PMMAPIKey      = "PMM_SERVER_API_KEY"
+)
+
+const (
+	EnvMongoDBDatabaseAdminUser      = "MONGODB_DATABASE_ADMIN_USER"
+	EnvMongoDBDatabaseAdminPassword  = "MONGODB_DATABASE_ADMIN_PASSWORD"
+	EnvMongoDBClusterAdminUser       = "MONGODB_CLUSTER_ADMIN_USER"
+	EnvMongoDBClusterAdminPassword   = "MONGODB_CLUSTER_ADMIN_PASSWORD"
+	EnvMongoDBUserAdminUser          = "MONGODB_USER_ADMIN_USER"
+	EnvMongoDBUserAdminPassword      = "MONGODB_USER_ADMIN_PASSWORD"
+	EnvMongoDBBackupUser             = "MONGODB_BACKUP_USER"
+	EnvMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
+	EnvMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
+	EnvMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
+	EnvPMMServerUser                 = PMMUserKey
+	EnvPMMServerPassword             = PMMPasswordKey
+	EnvPMMServerAPIKey               = PMMAPIKey
+)
+
+type UserRole string
+
+const (
+	RoleDatabaseAdmin  UserRole = "databaseAdmin"
+	RoleClusterAdmin   UserRole = "clusterAdmin"
+	RoleUserAdmin      UserRole = "userAdmin"
+	RoleClusterMonitor UserRole = "clusterMonitor"
+	RoleBackup         UserRole = "backup"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {

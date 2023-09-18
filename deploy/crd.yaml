@@ -274,6 +274,8 @@ spec:
                 type: string
               pbmName:
                 type: string
+              pitrTarget:
+                type: string
               state:
                 type: string
             type: object
@@ -726,6 +728,8 @@ spec:
                       compressionType:
                         type: string
                       enabled:
+                        type: boolean
+                      oplogOnly:
                         type: boolean
                       oplogSpanMin:
                         type: number
@@ -7733,6 +7737,12 @@ spec:
                     size:
                       format: int32
                       type: integer
+                    splitHorizons:
+                      additionalProperties:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      type: object
                     storage:
                       properties:
                         directoryPerDB:
@@ -14683,6 +14693,12 @@ spec:
                       size:
                         format: int32
                         type: integer
+                      splitHorizons:
+                        additionalProperties:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        type: object
                       storage:
                         properties:
                           directoryPerDB:

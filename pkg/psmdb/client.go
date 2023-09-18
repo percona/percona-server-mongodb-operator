@@ -22,13 +22,19 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
-	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, rs.Name, false, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
 
+	rsName := rs.Name
+	name, err := rs.CustomReplsetName()
+	if err == nil {
+		rsName = name
+	}
+
 	conf := &mongo.Config{
-		ReplSetName: rs.Name,
+		ReplSetName: rsName,
 		Hosts:       rsAddrs,
 		Username:    c.Username,
 		Password:    c.Password,

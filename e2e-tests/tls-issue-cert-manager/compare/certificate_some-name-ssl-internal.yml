@@ -1,0 +1,47 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  generation: 1
+  name: some-name-ssl-internal
+  ownerReferences:
+    - blockOwnerDeletion: true
+      controller: true
+      kind: PerconaServerMongoDB
+      name: some-name
+spec:
+  commonName: some-name
+  dnsNames:
+    - localhost
+    - some-name-rs0
+    - some-name-rs0.NAME_SPACE
+    - some-name-rs0.NAME_SPACE.svc.cluster.local
+    - '*.some-name-rs0'
+    - '*.some-name-rs0.NAME_SPACE'
+    - '*.some-name-rs0.NAME_SPACE.svc.cluster.local'
+    - some-name-rs0.NAME_SPACE.svc.clusterset.local
+    - '*.some-name-rs0.NAME_SPACE.svc.clusterset.local'
+    - '*.NAME_SPACE.svc.clusterset.local'
+    - some-name-mongos
+    - some-name-mongos.NAME_SPACE
+    - some-name-mongos.NAME_SPACE.svc.cluster.local
+    - '*.some-name-mongos'
+    - '*.some-name-mongos.NAME_SPACE'
+    - '*.some-name-mongos.NAME_SPACE.svc.cluster.local'
+    - some-name-cfg
+    - some-name-cfg.NAME_SPACE
+    - some-name-cfg.NAME_SPACE.svc.cluster.local
+    - '*.some-name-cfg'
+    - '*.some-name-cfg.NAME_SPACE'
+    - '*.some-name-cfg.NAME_SPACE.svc.cluster.local'
+    - some-name-mongos.NAME_SPACE.svc.clusterset.local
+    - '*.some-name-mongos.NAME_SPACE.svc.clusterset.local'
+    - some-name-cfg.NAME_SPACE.svc.clusterset.local
+    - '*.some-name-cfg.NAME_SPACE.svc.clusterset.local'
+  duration: 2160h0m0s
+  issuerRef:
+    kind: Issuer
+    name: some-name-psmdb-issuer
+  secretName: some-name-ssl-internal
+  subject:
+    organizations:
+      - PSMDB

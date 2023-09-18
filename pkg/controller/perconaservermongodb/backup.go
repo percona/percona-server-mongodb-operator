@@ -329,6 +329,11 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		return nil
 	}
 
+	_, resyncNeeded := cr.Annotations[api.AnnotationResyncPBM]
+	if resyncNeeded {
+		return nil
+	}
+
 	// pitr is disabled right before restore so it must not be re-enabled during restore
 	isRestoring, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
@@ -345,7 +350,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 	}
 	defer pbm.Close(ctx)
 
-	if cr.Spec.Backup.PITR.Enabled {
+	if cr.Spec.Backup.PITR.Enabled && !cr.Spec.Backup.PITR.OplogOnly {
 		hasFullBackup, err := r.hasFullBackup(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "check full backup")
@@ -361,6 +366,19 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 	if err != nil {
 		if !errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.Wrap(err, "get pitr.enabled")
+		}
+
+		// if PiTR is enabled we know there is only one storage
+		var storage api.BackupStorageSpec
+		for name, stg := range cr.Spec.Backup.Storages {
+			storage = stg
+			log.Info("Configuring PBM with storage", "storage", name)
+			break
+		}
+
+		err = pbm.SetConfig(ctx, r.client, cr, storage)
+		if err != nil {
+			return errors.Wrap(err, "set PBM config")
 		}
 
 		return nil
@@ -381,6 +399,32 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if !cr.Spec.Backup.PITR.Enabled {
 		return nil
+	}
+
+	val, err = pbm.GetConfigVar("pitr.oplogOnly")
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil
+		}
+
+		if errors.Is(err, bsoncore.ErrElementNotFound) {
+			val = false
+		} else {
+			return errors.Wrap(err, "get pitr.oplogOnly")
+		}
+	}
+
+	oplogOnly, ok := val.(bool)
+	if !ok {
+		return errors.Wrap(err, "unexpected value of pitr.oplogOnly")
+	}
+
+	if oplogOnly != cr.Spec.Backup.PITR.OplogOnly {
+		enabled := strconv.FormatBool(cr.Spec.Backup.PITR.OplogOnly)
+		log.Info("Setting pitr.oplogOnly in PBM config", "value", enabled)
+		if err := pbm.SetConfigVar("pitr.oplogOnly", enabled); err != nil {
+			return errors.Wrap(err, "update pitr.oplogOnly")
+		}
 	}
 
 	val, err = pbm.GetConfigVar("pitr.oplogSpanMin")
@@ -516,7 +560,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 	command := []string{"pbm", "config", "--force-resync"}
 	log.Info("Starting PBM resync", "command", command)
 
-	err = r.clientcmd.Exec(pod, "backup-agent", command, nil, &stdoutBuffer, &stderrBuffer, false)
+	err = r.clientcmd.Exec(ctx, pod, "backup-agent", command, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		return errors.Wrapf(err, "start PBM resync: run %v", command)
 	}
