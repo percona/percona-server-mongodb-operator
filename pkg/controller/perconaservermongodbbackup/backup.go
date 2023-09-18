@@ -98,7 +98,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 			status.Destination = stg.S3.Bucket + "/" + stg.S3.Prefix
 		}
 		if !strings.HasPrefix(stg.S3.Bucket, "s3://") {
-			status.Destination = "s3://" + cr.Status.Destination
+			status.Destination = "s3://" + status.Destination
 		}
 	case api.BackupStorageAzure:
 		status.Azure = &stg.Azure
@@ -109,7 +109,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 			status.Destination = stg.Azure.Container + "/" + stg.Azure.Prefix
 		}
 		if !strings.HasPrefix(stg.Azure.Container, "azure://") {
-			status.Destination = "azure://" + cr.Status.Destination
+			status.Destination = "azure://" + status.Destination
 		}
 	}
 	status.Destination += "/" + status.PBMname
