@@ -112,23 +112,28 @@ spec:
                     type: string
                   insecureSkipTLSVerify:
                     type: boolean
-                  serverSideEncryption:
-                    properties:
-                      sseAlgorithm:
-                        type: string
-                      kmsKeyID:
-                        type: string
-                      sseCustomerAlgorithm:
-                        type: string
-                      sseCustomerKey:
-                        type: string
-                    type: object
                   maxUploadParts:
                     type: integer
                   prefix:
                     type: string
                   region:
                     type: string
+                  serverSideEncryption:
+                    properties:
+                      kmsKeyID:
+                        type: string
+                      sseAlgorithm:
+                        type: string
+                      sseCustomerAlgorithm:
+                        type: string
+                      sseCustomerKey:
+                        type: string
+                    required:
+                    - kmsKeyID
+                    - sseAlgorithm
+                    - sseCustomerAlgorithm
+                    - sseCustomerKey
+                    type: object
                   storageClass:
                     type: string
                   uploadPartSize:
@@ -236,23 +241,28 @@ spec:
                         type: string
                       insecureSkipTLSVerify:
                         type: boolean
-                      serverSideEncryption:
-                        properties:
-                          sseAlgorithm:
-                            type: string
-                          kmsKeyID:
-                            type: string
-                          sseCustomerAlgorithm:
-                            type: string
-                          sseCustomerKey:
-                            type: string
-                        type: object  
                       maxUploadParts:
                         type: integer
                       prefix:
                         type: string
                       region:
                         type: string
+                      serverSideEncryption:
+                        properties:
+                          kmsKeyID:
+                            type: string
+                          sseAlgorithm:
+                            type: string
+                          sseCustomerAlgorithm:
+                            type: string
+                          sseCustomerKey:
+                            type: string
+                        required:
+                        - kmsKeyID
+                        - sseAlgorithm
+                        - sseCustomerAlgorithm
+                        - sseCustomerKey
+                        type: object
                       storageClass:
                         type: string
                       uploadPartSize:
@@ -879,23 +889,28 @@ spec:
                               type: string
                             insecureSkipTLSVerify:
                               type: boolean
-                            serverSideEncryption:
-                              properties:
-                                sseAlgorithm:
-                                  type: string
-                                kmsKeyID:
-                                  type: string
-                                sseCustomerAlgorithm:
-                                  type: string
-                                sseCustomerKey:
-                                  type: string
-                              type: object  
                             maxUploadParts:
                               type: integer
                             prefix:
                               type: string
                             region:
                               type: string
+                            serverSideEncryption:
+                              properties:
+                                kmsKeyID:
+                                  type: string
+                                sseAlgorithm:
+                                  type: string
+                                sseCustomerAlgorithm:
+                                  type: string
+                                sseCustomerKey:
+                                  type: string
+                              required:
+                              - kmsKeyID
+                              - sseAlgorithm
+                              - sseCustomerAlgorithm
+                              - sseCustomerKey
+                              type: object
                             storageClass:
                               type: string
                             uploadPartSize:
