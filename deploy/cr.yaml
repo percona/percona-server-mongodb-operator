@@ -551,6 +551,7 @@ spec:
 #          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false
+      oplogOnly: false
 #      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6
