@@ -144,9 +144,21 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 
 		log.V(1).Info("Checking PBM operations for replset", "replset", rs.Name, "pod", rs.PodName(cluster, 0))
 
-		command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
-		log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
-		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+			stdoutBuf.Reset()
+			stderrBuf.Reset()
+
+			command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
+			log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
+
+			err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
+			if err != nil {
+				log.Error(err, "failed to set PBM configuration")
+			}
+
+			return err
+		})
+		if err != nil {
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
@@ -166,9 +178,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 					stdoutBuf.Reset()
 					stderrBuf.Reset()
 
-					command = []string{"/opt/percona/pbm", "status", "--out", "json"}
-					if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-						return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+					command := []string{"/opt/percona/pbm", "status", "--out", "json"}
+					err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
+					if err != nil {
+						log.Error(err, "failed to get PBM status")
+						return err
 					}
 
 					log.V(1).Info("PBM status", "status", stdoutBuf.String())
@@ -176,7 +190,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 					return nil
 				})
 				if err != nil {
-					return status, err
+					return status, errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 				}
 
 				var pbmStatus struct {
@@ -370,7 +384,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			}
 		}
 
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			c := &psmdbv1.PerconaServerMongoDB{}
 			err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, c)
 			if err != nil {
@@ -521,7 +535,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 		log.Info("Preparing statefulset for physical restore", "name", stsName)
 
-		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
 		})
 		if err != nil {
@@ -534,7 +548,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
-			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
 			})
 			if err != nil {
@@ -548,7 +562,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
-			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				sts := appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      stsName,
