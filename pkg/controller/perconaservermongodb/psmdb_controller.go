@@ -1187,7 +1187,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
-		host, err := psmdb.MongoHost(ctx, r.client, cr, api.ConfigReplSetName, false, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, api.ConfigReplSetName, false, pod)
 		if err != nil {
 			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}
