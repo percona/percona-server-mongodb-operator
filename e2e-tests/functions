@@ -327,7 +327,7 @@ wait_restore() {
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
-		if [[ $retry -ge 720 || ${current_state} == 'error' ]]; then
+		if [[ $retry -ge 780 || ${current_state} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
