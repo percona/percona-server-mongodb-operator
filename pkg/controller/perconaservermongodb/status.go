@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -369,11 +370,11 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		if err != nil {
 			return "", errors.Wrap(err, "get mongos addresses")
 		}
+		sort.Strings(addrs)
 		return strings.Join(addrs, ","), nil
 	}
 
-	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled &&
-		rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled && (rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer || rs.Expose.ExposeType == corev1.ServiceTypeClusterIP) {
 		list := corev1.PodList{}
 		err := r.client.List(ctx,
 			&list,
@@ -391,7 +392,11 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		if err != nil {
 			return "", errors.Wrap(err, "list psmdb pods")
 		}
-		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, list.Items)
+		dnsMode := api.DNSModeInternal
+		if rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
+			dnsMode = api.DNSModeExternal
+		}
+		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, dnsMode, rs.Name, rs.Expose.Enabled, list.Items)
 		if err != nil {
 			switch errors.Cause(err) {
 			case psmdb.ErrNoIngressPoints, psmdb.ErrServiceNotExists:
@@ -399,6 +404,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 			}
 			return "", errors.Wrap(err, "get replset addresses")
 		}
+		sort.Strings(addrs)
 		return strings.Join(addrs, ","), nil
 	}
 
