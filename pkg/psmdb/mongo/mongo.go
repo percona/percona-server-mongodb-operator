@@ -672,6 +672,30 @@ func (m *ConfigMembers) FixTags(compareWith ConfigMembers) (changes bool) {
 	return changes
 }
 
+func (m *ConfigMembers) HorizonsChanged(compareWith ConfigMembers) bool {
+	cm := make(map[string]struct {
+		horizons map[string]string
+	}, len(compareWith))
+
+	for _, member := range compareWith {
+		cm[member.Host] = struct{ horizons map[string]string }{horizons: member.Horizons}
+	}
+
+	changed := false
+
+	for i := 0; i < len(*m); i++ {
+		member := []ConfigMember(*m)[i]
+		if mem, ok := cm[member.Host]; ok {
+			if !reflect.DeepEqual(mem.horizons, member.Horizons) {
+				[]ConfigMember(*m)[i].Horizons = mem.horizons
+				changed = true
+			}
+		}
+	}
+
+	return changed
+}
+
 // ExternalNodesChanged checks if votes or priority fields changed for external nodes
 func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 	cm := make(map[string]struct {

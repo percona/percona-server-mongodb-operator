@@ -489,6 +489,8 @@ func (conf *MongoConfiguration) SetDefaults() error {
 	return nil
 }
 
+type HorizonsSpec map[string]map[string]string
+
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
@@ -507,6 +509,7 @@ type ReplsetSpec struct {
 	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
+	Horizons                 HorizonsSpec               `json:"splitHorizons,omitempty"`
 }
 
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
@@ -744,6 +747,7 @@ type BackupStorageSpec struct {
 type PITRSpec struct {
 	Enabled          bool                     `json:"enabled,omitempty"`
 	OplogSpanMin     numstr.NumberString      `json:"oplogSpanMin,omitempty"`
+	OplogOnly        bool                     `json:"oplogOnly,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
