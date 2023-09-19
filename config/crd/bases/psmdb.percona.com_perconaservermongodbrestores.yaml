@@ -69,6 +69,8 @@ spec:
                     type: string
                   pbmName:
                     type: string
+                  pbmPod:
+                    type: string
                   replsetNames:
                     items:
                       type: string
