@@ -3,6 +3,7 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -101,6 +102,13 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	}
 	status.Destination += status.PBMname
 
+	node, err := b.pbm.Node()
+	if err != nil {
+		log.Printf("AAAAAAAAAAAAAAAA error getting Node: %s", err.Error())
+	}
+
+	log.Printf("AAAAAAAAAAAAAAAA node: %s", node)
+
 	return status, nil
 }
 
@@ -150,6 +158,13 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 		Time: time.Unix(meta.LastTransitionTS, 0),
 	}
 	status.Type = cr.Spec.Type
+
+	node, err := b.pbm.Node()
+	if err != nil {
+		log.Printf("AAAAAAAAAAAAAAAA error getting Node: %s", err.Error())
+	}
+
+	log.Printf("AAAAAAAAAAAAAAAA node: %s", node)
 
 	return status, nil
 }
