@@ -13,6 +13,11 @@ spec:
 #    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/BACKUP-DESTINATION
 #    s3:
 #      credentialsSecret: my-cluster-name-backup-s3
+#      serverSideEncryption:
+#        kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
+#        sseAlgorithm: AES256
+#        sseCustomerAlgorithm: AES256
+#        sseCustomerKey: Y3VzdG9tZXIta2V5
 #      region: us-west-2
 #      bucket: S3-BACKUP-BUCKET-NAME-HERE
 #      endpointUrl: https://s3.us-west-2.amazonaws.com/
