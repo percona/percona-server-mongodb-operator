@@ -679,7 +679,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore
 	for _, rs := range replsets {
 		log.Info("Preparing replset for physical restore", "replset", rs.Name)
 
-		podList, err := psmdb.GetRSPods(ctx, r.client, cluster, rs.Name, false)
+		podList, err := psmdb.GetRSPods(ctx, r.client, cluster, rs.Name)
 		if err != nil {
 			return errors.Wrapf(err, "get pods of replset %s", rs.Name)
 		}

@@ -2,8 +2,8 @@ package psmdb
 
 import (
 	"context"
-	"sort"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,70 +36,41 @@ func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return lbls
 }
 
-func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string, includeOutdated bool) (corev1.PodList, error) {
-	pods := corev1.PodList{}
-	err := k8sclient.List(ctx,
-		&pods,
+func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
+	rsPods := corev1.PodList{}
+
+	stsList := appsv1.StatefulSetList{} // All statefulsets related to replset `rsName`
+	if err := k8sclient.List(ctx, &stsList,
 		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(RSLabels(cr, rsName)),
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/instance": cr.Name,
+				"app.kubernetes.io/replset":  rsName,
+			}),
 		},
-	)
-	if err != nil {
-		return pods, errors.Wrap(err, "failed to list pods")
+	); err != nil {
+		return rsPods, errors.Wrapf(err, "failed to get statefulset list related to replset %s", rsName)
 	}
 
-	if includeOutdated {
-		return pods, nil
-	}
-
-	sort.Slice(pods.Items, func(i, j int) bool {
-		return pods.Items[i].Name < pods.Items[j].Name
-	})
-
-	rs := cr.Spec.Replset(rsName)
-	if rs == nil {
-		return pods, errors.Errorf("replset %s is not found", rsName)
-	}
-
-	var rsPods []corev1.Pod
-	if rs.ClusterRole == api.ClusterRoleConfigSvr {
-		rsPods = filterPodsByComponent(pods, api.ConfigReplSetName)
-	} else {
-		rsPods = filterPodsByComponent(pods, "mongod")
-	}
-
-	arbiterPods := filterPodsByComponent(pods, "arbiter")
-	nvPods := filterPodsByComponent(pods, "nonVoting")
-
-	if len(rsPods) >= int(rs.Size) {
-		rsPods = rsPods[:rs.Size]
-	}
-	if len(arbiterPods) >= int(rs.Arbiter.Size) {
-		arbiterPods = arbiterPods[:rs.Arbiter.Size]
-	}
-	if len(nvPods) >= int(rs.NonVoting.Size) {
-		nvPods = nvPods[:rs.NonVoting.Size]
-	}
-	pods.Items = rsPods
-	pods.Items = append(pods.Items, arbiterPods...)
-	pods.Items = append(pods.Items, nvPods...)
-
-	return pods, nil
-}
-
-func filterPodsByComponent(list corev1.PodList, component string) []corev1.Pod {
-	var pods []corev1.Pod
-	for _, pod := range list.Items {
-		v, ok := pod.Labels["app.kubernetes.io/component"]
-		if !ok {
-			continue
+	for _, sts := range stsList.Items {
+		lbls := RSLabels(cr, rsName)
+		lbls["app.kubernetes.io/component"] = sts.Labels["app.kubernetes.io/component"]
+		compPods := corev1.PodList{}
+		err := k8sclient.List(ctx,
+			&compPods,
+			&client.ListOptions{
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(lbls),
+			},
+		)
+		if err != nil {
+			return rsPods, errors.Wrap(err, "failed to list pods")
 		}
-		if v == component {
-			pods = append(pods, pod)
-		}
+
+		rsPods.Items = append(rsPods.Items, compPods.Items...)
 	}
-	return pods
+
+	return rsPods, nil
 }
 
 func GetPrimaryPod(ctx context.Context, mgoClient mongo.Client) (string, error) {

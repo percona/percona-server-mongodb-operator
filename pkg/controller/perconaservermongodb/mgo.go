@@ -50,7 +50,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateReady, nil
 	}
 
-	pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name, false)
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
 	if err != nil {
 		return api.AppStateInit, errors.Wrap(err, "failed to get replset pods")
 	}
@@ -238,7 +238,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	// Primary with a Secondary and an Arbiter (PSA)
 	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
 
-	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name, false)
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
 		return 0, errors.Wrap(err, "get rs pods")
 	}
