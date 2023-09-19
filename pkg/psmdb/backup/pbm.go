@@ -480,5 +480,5 @@ func (p *pbmC) Node() (string, error) {
 		return "", err
 	}
 
-	return lock.Node, nil
+	return strings.Split(lock.Node, ".")[0], nil
 }
