@@ -38,6 +38,7 @@ type pbmC struct {
 	*pbm.PBM
 	k8c       client.Client
 	namespace string
+	rsName    string
 }
 
 type PBM interface {
@@ -62,6 +63,8 @@ type PBM interface {
 	SetConfigVar(key, val string) error
 	GetConfigVar(key string) (any, error)
 	DeleteConfigVar(key string) error
+
+	Node() (string, error)
 }
 
 func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string) (string, error) {
@@ -159,6 +162,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		PBM:       pbmc,
 		k8c:       c,
 		namespace: cluster.Namespace,
+		rsName:    rs.Name,
 	}, nil
 }
 
@@ -468,4 +472,13 @@ func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.Opl
 	}
 
 	return c, nil
+}
+
+func (p *pbmC) Node() (string, error) {
+	lock, err := p.GetLockData(&pbm.LockHeader{Replset: p.rsName})
+	if err != nil {
+		return "", err
+	}
+
+	return lock.Node, nil
 }
