@@ -257,7 +257,7 @@ run_restore_backupsource() {
 	if [ -z "$storageName" ]; then
 		cat $test_dir/conf/restore-backupsource.yml \
 			| $sed -e "s/name:/name: restore-$backupName/" \
-			| $sed -e "s/BACKUP-NAME/$backupDest/" \
+			| $sed -e "s|BACKUP-NAME|$backupDest|" \
 			| $sed -e "/storageName/d" \
 			| kubectl_bin apply -f -
 
@@ -266,7 +266,7 @@ run_restore_backupsource() {
 
 	cat $test_dir/conf/restore-backupsource.yml \
 		| $sed -e "s/name:/name: restore-$backupName/" \
-		| $sed -e "s/BACKUP-NAME/$backupDest/" \
+		| $sed -e "s|BACKUP-NAME|$backupDest|" \
 		| $sed -e "s/storageName:/storageName: $storageName/" \
 		| kubectl_bin apply -f -
 }
