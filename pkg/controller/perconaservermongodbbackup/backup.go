@@ -161,10 +161,10 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 
 	node, err := b.pbm.Node()
 	if err != nil {
-		log.Printf("AAAAAAAAAAAAAAAA error getting Node: %s", err.Error())
+		log.Printf("BBBBBBBBBBBBBBBBB error getting Node: %s", err.Error())
 	}
 
-	log.Printf("AAAAAAAAAAAAAAAA node: %s", node)
+	log.Printf("BBBBBBBBBBBBBBBBB node: %s", node)
 
 	return status, nil
 }
