@@ -315,25 +315,30 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	removed, err := r.getRemovedSfs(ctx, cr)
+	removed, err := r.getSTSforRemoval(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	for _, v := range removed {
-		rsName := v.Labels["app.kubernetes.io/replset"]
+	for _, sts := range removed {
+		rsName := sts.Labels["app.kubernetes.io/replset"]
+
+		log.Info("Deleting STS component from replst", "sts", sts.Name, "rs", rsName)
 
 		err = r.checkIfPossibleToRemove(ctx, cr, rsName)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
 
-		err = r.removeRSFromShard(ctx, cr, rsName)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
+		if sts.Labels["app.kubernetes.io/component"] == "mongod" {
+			log.Info("Removing RS from shard", "rs", rsName)
+			err = r.removeRSFromShard(ctx, cr, rsName)
+			if err != nil {
+				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
+			}
 		}
 
-		err = r.client.Delete(ctx, &v)
+		err = r.client.Delete(ctx, &sts)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
 		}
@@ -402,7 +407,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			"app.kubernetes.io/component":  "mongod",
 		}
 
-		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name, false)
+		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
 		if err != nil {
 			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
 			return reconcile.Result{}, err
@@ -667,11 +672,11 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *a
 	return isDownscale, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
 	removed := make([]appsv1.StatefulSet, 0)
 
-	sfsList := appsv1.StatefulSetList{}
-	if err := r.client.List(ctx, &sfsList,
+	stsList := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &stsList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -683,23 +688,24 @@ func (r *ReconcilePerconaServerMongoDB) getRemovedSfs(ctx context.Context, cr *a
 	}
 
 	appliedRSNames := make(map[string]struct{}, len(cr.Spec.Replsets))
-	for _, v := range cr.Spec.Replsets {
-		appliedRSNames[cr.Name+"-"+v.Name] = struct{}{}
+
+	for _, rs := range cr.Spec.Replsets {
+		appliedRSNames[rs.Name] = struct{}{}
 	}
 
-	for _, v := range sfsList.Items {
-		if v.Name == cr.Name+"-"+api.ConfigReplSetName {
+	for _, sts := range stsList.Items {
+		component := sts.Labels["app.kubernetes.io/component"]
+		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
 		}
 
-		component := v.Labels["app.kubernetes.io/component"]
-		if component == "arbiter" || component == "nonVoting" || component == "mongos" {
+		rsName := sts.Labels["app.kubernetes.io/replset"]
+
+		if _, ok := appliedRSNames[rsName]; ok {
 			continue
 		}
 
-		if _, ok := appliedRSNames[v.Name]; !ok {
-			removed = append(removed, v)
-		}
+		removed = append(removed, sts)
 	}
 
 	return removed, nil
@@ -1166,7 +1172,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName, false)
+	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
 	if err != nil {
 		return errors.Wrap(err, "get configsvr pods")
 	}

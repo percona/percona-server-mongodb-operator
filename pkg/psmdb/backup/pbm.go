@@ -129,7 +129,7 @@ type NewPBMFunc func(ctx context.Context, c client.Client, cluster *api.PerconaS
 func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (PBM, error) {
 	rs := cluster.Spec.Replsets[0]
 
-	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name, false)
+	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
