@@ -46,15 +46,15 @@ fi
 file_env() {
 	local var="$1"
 	local fileVar="${var}_FILE"
-	local def="${2:-}"
-	if [ "${!var:-}" ] && [ "${!fileVar:-}" ]; then
+	local def="${2-}"
+	if [ "${!var-}" ] && [ "${!fileVar-}" ]; then
 		echo >&2 "error: both $var and $fileVar are set (but are exclusive)"
 		exit 1
 	fi
 	local val="$def"
-	if [ "${!var:-}" ]; then
+	if [ "${!var-}" ]; then
 		val="${!var}"
-	elif [ "${!fileVar:-}" ]; then
+	elif [ "${!fileVar-}" ]; then
 		val="$(<"${!fileVar}")"
 	fi
 	export "$var"="$val"
@@ -245,7 +245,20 @@ _dbPath() {
 	echo "$dbPath"
 }
 
+is_manual_recovery() {
+	recovery_file='/data/db/sleep-forever'
+	if [ -f "${recovery_file}" ]; then
+		echo "The $recovery_file file is detected, node is going to infinity loop"
+		echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+		while [ -f "${recovery_file}" ]; do
+			sleep 1
+		done
+	fi
+}
+
 if [ "$originalArgOne" = 'mongod' ]; then
+	is_manual_recovery
+
 	file_env 'MONGO_INITDB_ROOT_USERNAME'
 	file_env 'MONGO_INITDB_ROOT_PASSWORD'
 	# pre-check a few factors to see if it's even worth bothering with initdb

@@ -402,9 +402,20 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ReadinessProbe = &corev1.Probe{}
 		}
 
-		if replset.ReadinessProbe.TCPSocket == nil {
-			replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(DefaultMongodPort)),
+		if replset.ReadinessProbe.TCPSocket == nil && replset.ReadinessProbe.Exec == nil {
+			replset.ReadinessProbe.Exec = &corev1.ExecAction{
+				Command: []string{
+					"/opt/percona/mongodb-healthcheck",
+					"k8s", "readiness",
+					"--component", "mongod",
+				},
+			}
+
+			if cr.CompareVersion("1.15.0") < 0 {
+				replset.ReadinessProbe.Exec = nil
+				replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(DefaultMongodPort)),
+				}
 			}
 		}
 
@@ -656,12 +667,23 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	}
 
 	if nv.ReadinessProbe == nil {
-		nv.ReadinessProbe = &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(DefaultMongodPort)),
-				},
+		nv.ReadinessProbe = &corev1.Probe{}
+	}
+
+	if nv.ReadinessProbe.TCPSocket == nil && nv.ReadinessProbe.Exec == nil {
+		nv.ReadinessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/opt/percona/mongodb-healthcheck",
+				"k8s", "readiness",
+				"--component", "mongod",
 			},
+		}
+
+		if cr.CompareVersion("1.15.0") < 0 {
+			nv.ReadinessProbe.Exec = nil
+			nv.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
+				Port: intstr.FromInt(int(DefaultMongodPort)),
+			}
 		}
 	}
 	if nv.ReadinessProbe.InitialDelaySeconds < 1 {
