@@ -474,6 +474,7 @@ func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.Opl
 	return c, nil
 }
 
+// Node returns replset node chosen to run the backup
 func (p *pbmC) Node() (string, error) {
 	lock, err := p.GetLockData(&pbm.LockHeader{Replset: p.rsName})
 	if err != nil {

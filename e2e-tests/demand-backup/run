@@ -79,38 +79,38 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 desc 'run backups'
-# if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-# 	run_backup aws-s3
-# 	run_backup gcp-cs
-# 	run_backup azure-blob
-# fi
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	run_backup aws-s3
+	run_backup gcp-cs
+	run_backup azure-blob
+fi
 run_backup "minio"
 
-# if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-# 	wait_backup "$backup_name_aws"
-# 	wait_backup "$backup_name_gcp"
-# 	wait_backup "$backup_name_azure"
-# fi
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	wait_backup "$backup_name_aws"
+	wait_backup "$backup_name_gcp"
+	wait_backup "$backup_name_azure"
+fi
 wait_backup "$backup_name_minio"
 
 sleep 5
 
-# if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-# 	desc 'check backup and restore -- aws-s3'
-# 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-# 	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
-# 	run_recovery_check "$backup_name_aws" "$cluster"
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	desc 'check backup and restore -- aws-s3'
+	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
+	run_recovery_check "$backup_name_aws" "$cluster"
 
-# 	desc 'check backup and restore -- gcp-cs'
-# 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-# 	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
-# 	run_recovery_check "$backup_name_gcp" "$cluster"
+	desc 'check backup and restore -- gcp-cs'
+	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
+	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	run_recovery_check "$backup_name_gcp" "$cluster"
 
-# 	desc 'check backup and restore -- azure-blob'
-# 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-# 	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
-# 	run_recovery_check "$backup_name_azure" "$cluster"
-# fi
+	desc 'check backup and restore -- azure-blob'
+	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
+	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
+	run_recovery_check "$backup_name_azure" "$cluster"
+fi
 
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
