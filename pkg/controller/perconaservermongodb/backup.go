@@ -368,17 +368,19 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 			return errors.Wrap(err, "get pitr.enabled")
 		}
 
-		// if PiTR is enabled we know there is only one storage
-		var storage api.BackupStorageSpec
-		for name, stg := range cr.Spec.Backup.Storages {
-			storage = stg
-			log.Info("Configuring PBM with storage", "storage", name)
-			break
-		}
+		if len(cr.Spec.Backup.Storages) == 1 {
+			// if PiTR is enabled user can configure only one storage
+			var storage api.BackupStorageSpec
+			for name, stg := range cr.Spec.Backup.Storages {
+				storage = stg
+				log.Info("Configuring PBM with storage", "storage", name)
+				break
+			}
 
-		err = pbm.SetConfig(ctx, r.client, cr, storage)
-		if err != nil {
-			return errors.Wrap(err, "set PBM config")
+			err = pbm.SetConfig(ctx, r.client, cr, storage)
+			if err != nil {
+				return errors.Wrap(err, "set PBM config")
+			}
 		}
 
 		return nil
