@@ -273,6 +273,15 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			return nil, errors.Wrap(err, "getting s3 credentials secret name")
 		}
 
+		if len(cr.Status.S3.ServerSideEncryption.SseAlgorithm) != 0 || len(cr.Status.S3.ServerSideEncryption.SseCustomerAlgorithm) != 0 {
+			s3Conf.ServerSideEncryption = &s3.AWSsse{
+				SseAlgorithm:         cr.Status.S3.ServerSideEncryption.SseAlgorithm,
+				KmsKeyID:             cr.Status.S3.ServerSideEncryption.KmsKeyID,
+				SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SseCustomerAlgorithm,
+				SseCustomerKey:       cr.Status.S3.ServerSideEncryption.SseCustomerKey,
+			}
+		}
+
 		s3Conf.Credentials = s3.Credentials{
 			AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
 			SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),

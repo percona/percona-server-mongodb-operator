@@ -242,6 +242,15 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			},
 		}
 
+		if len(stg.S3.ServerSideEncryption.SseAlgorithm) != 0 || len(stg.S3.ServerSideEncryption.SseCustomerAlgorithm) != 0 {
+			conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
+				SseAlgorithm:         stg.S3.ServerSideEncryption.SseAlgorithm,
+				KmsKeyID:             stg.S3.ServerSideEncryption.KmsKeyID,
+				SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SseCustomerAlgorithm,
+				SseCustomerKey:       stg.S3.ServerSideEncryption.SseCustomerKey,
+			}
+		}
+
 		if len(stg.S3.CredentialsSecret) != 0 {
 			s3secret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.S3.CredentialsSecret)
 			if err != nil {

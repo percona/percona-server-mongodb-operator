@@ -10,6 +10,7 @@ import (
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -713,15 +714,16 @@ func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
 }
 
 type BackupStorageS3Spec struct {
-	Bucket                string `json:"bucket"`
-	Prefix                string `json:"prefix,omitempty"`
-	Region                string `json:"region,omitempty"`
-	EndpointURL           string `json:"endpointUrl,omitempty"`
-	CredentialsSecret     string `json:"credentialsSecret,omitempty"`
-	UploadPartSize        int    `json:"uploadPartSize,omitempty"`
-	MaxUploadParts        int    `json:"maxUploadParts,omitempty"`
-	StorageClass          string `json:"storageClass,omitempty"`
-	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify,omitempty"`
+	Bucket                string    `json:"bucket"`
+	Prefix                string    `json:"prefix,omitempty"`
+	Region                string    `json:"region,omitempty"`
+	EndpointURL           string    `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string    `json:"credentialsSecret,omitempty"`
+	ServerSideEncryption  s3.AWSsse `json:"serverSideEncryption,omitempty"`
+	UploadPartSize        int       `json:"uploadPartSize,omitempty"`
+	MaxUploadParts        int       `json:"maxUploadParts,omitempty"`
+	StorageClass          string    `json:"storageClass,omitempty"`
+	InsecureSkipTLSVerify bool      `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 type BackupStorageAzureSpec struct {
