@@ -129,7 +129,7 @@ type NewPBMFunc func(ctx context.Context, c client.Client, cluster *api.PerconaS
 func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (PBM, error) {
 	rs := cluster.Spec.Replsets[0]
 
-	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name, false)
+	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
@@ -138,7 +138,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
 	}
 
-	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, rs.Name, false, pods.Items)
+	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs.Name, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addrs")
 	}
@@ -240,6 +240,15 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 				StorageClass:          stg.S3.StorageClass,
 				InsecureSkipTLSVerify: stg.S3.InsecureSkipTLSVerify,
 			},
+		}
+
+		if len(stg.S3.ServerSideEncryption.SseAlgorithm) != 0 || len(stg.S3.ServerSideEncryption.SseCustomerAlgorithm) != 0 {
+			conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
+				SseAlgorithm:         stg.S3.ServerSideEncryption.SseAlgorithm,
+				KmsKeyID:             stg.S3.ServerSideEncryption.KmsKeyID,
+				SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SseCustomerAlgorithm,
+				SseCustomerKey:       stg.S3.ServerSideEncryption.SseCustomerKey,
+			}
 		}
 
 		if len(stg.S3.CredentialsSecret) != 0 {

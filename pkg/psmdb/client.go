@@ -17,12 +17,12 @@ type Credentials struct {
 }
 
 func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, c Credentials) (mongo.Client, error) {
-	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name, false)
+	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
-	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, rs.Name, false, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}

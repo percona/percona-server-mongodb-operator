@@ -191,7 +191,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				},
 			}
 
-			if cr.CompareVersion("1.7.0") >= 0 {
+			if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
+				cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command =
 					append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 						"--ssl", "--sslInsecure",
@@ -236,7 +237,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				},
 			}
 
-			if cr.CompareVersion("1.7.0") >= 0 {
+			if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
+				cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command =
 					append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
 						"--ssl", "--sslInsecure",
@@ -362,7 +364,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 			if cr.CompareVersion("1.6.0") >= 0 {
 				replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
-				if cr.CompareVersion("1.7.0") >= 0 {
+				if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
+					cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
 					replset.LivenessProbe.Probe.Exec.Command =
 						append(replset.LivenessProbe.Probe.Exec.Command,
 							"--ssl", "--sslInsecure",
@@ -399,9 +402,20 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			replset.ReadinessProbe = &corev1.Probe{}
 		}
 
-		if replset.ReadinessProbe.TCPSocket == nil {
-			replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(DefaultMongodPort)),
+		if replset.ReadinessProbe.TCPSocket == nil && replset.ReadinessProbe.Exec == nil {
+			replset.ReadinessProbe.Exec = &corev1.ExecAction{
+				Command: []string{
+					"/opt/percona/mongodb-healthcheck",
+					"k8s", "readiness",
+					"--component", "mongod",
+				},
+			}
+
+			if cr.CompareVersion("1.15.0") < 0 {
+				replset.ReadinessProbe.Exec = nil
+				replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(DefaultMongodPort)),
+				}
 			}
 		}
 
@@ -632,14 +646,14 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	}
 	if nv.LivenessProbe.ProbeHandler.Exec == nil {
 		nv.LivenessProbe.Probe.ProbeHandler.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/data/db/mongodb-healthcheck",
-				"k8s",
-				"liveness",
-				"--ssl", "--sslInsecure",
-				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-				"--sslPEMKeyFile", "/tmp/tls.pem",
-			},
+			Command: []string{"/data/db/mongodb-healthcheck", "k8s", "liveness"},
+		}
+
+		if !cr.Spec.UnsafeConf || cr.CompareVersion("1.15.0") < 0 {
+			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
+				nv.LivenessProbe.Probe.ProbeHandler.Exec.Command,
+				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+			)
 		}
 
 		if cr.CompareVersion("1.14.0") >= 0 {
@@ -653,12 +667,23 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	}
 
 	if nv.ReadinessProbe == nil {
-		nv.ReadinessProbe = &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(DefaultMongodPort)),
-				},
+		nv.ReadinessProbe = &corev1.Probe{}
+	}
+
+	if nv.ReadinessProbe.TCPSocket == nil && nv.ReadinessProbe.Exec == nil {
+		nv.ReadinessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/opt/percona/mongodb-healthcheck",
+				"k8s", "readiness",
+				"--component", "mongod",
 			},
+		}
+
+		if cr.CompareVersion("1.15.0") < 0 {
+			nv.ReadinessProbe.Exec = nil
+			nv.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
+				Port: intstr.FromInt(int(DefaultMongodPort)),
+			}
 		}
 	}
 	if nv.ReadinessProbe.InitialDelaySeconds < 1 {

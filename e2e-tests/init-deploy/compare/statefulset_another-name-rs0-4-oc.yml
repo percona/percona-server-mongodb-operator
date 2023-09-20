@@ -76,12 +76,6 @@ spec:
                 - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
-                - --ssl
-                - --sslInsecure
-                - --sslCAFile
-                - /etc/mongodb-ssl/ca.crt
-                - --sslPEMKeyFile
-                - /tmp/tls.pem
                 - --startupDelaySeconds
                 - "7200"
             failureThreshold: 4
@@ -95,12 +89,17 @@ spec:
               name: mongodb
               protocol: TCP
           readinessProbe:
+            exec:
+              command:
+                - /opt/percona/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongod
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
-            tcpSocket:
-              port: 27017
             timeoutSeconds: 2
           resources:
             limits:

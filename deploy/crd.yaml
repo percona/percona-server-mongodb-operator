@@ -118,6 +118,22 @@ spec:
                     type: string
                   region:
                     type: string
+                  serverSideEncryption:
+                    properties:
+                      kmsKeyID:
+                        type: string
+                      sseAlgorithm:
+                        type: string
+                      sseCustomerAlgorithm:
+                        type: string
+                      sseCustomerKey:
+                        type: string
+                    required:
+                    - kmsKeyID
+                    - sseAlgorithm
+                    - sseCustomerAlgorithm
+                    - sseCustomerKey
+                    type: object
                   storageClass:
                     type: string
                   uploadPartSize:
@@ -231,6 +247,22 @@ spec:
                         type: string
                       region:
                         type: string
+                      serverSideEncryption:
+                        properties:
+                          kmsKeyID:
+                            type: string
+                          sseAlgorithm:
+                            type: string
+                          sseCustomerAlgorithm:
+                            type: string
+                          sseCustomerKey:
+                            type: string
+                        required:
+                        - kmsKeyID
+                        - sseAlgorithm
+                        - sseCustomerAlgorithm
+                        - sseCustomerKey
+                        type: object
                       storageClass:
                         type: string
                       uploadPartSize:
@@ -729,6 +761,8 @@ spec:
                         type: string
                       enabled:
                         type: boolean
+                      oplogOnly:
+                        type: boolean
                       oplogSpanMin:
                         type: number
                     type: object
@@ -861,6 +895,22 @@ spec:
                               type: string
                             region:
                               type: string
+                            serverSideEncryption:
+                              properties:
+                                kmsKeyID:
+                                  type: string
+                                sseAlgorithm:
+                                  type: string
+                                sseCustomerAlgorithm:
+                                  type: string
+                                sseCustomerKey:
+                                  type: string
+                              required:
+                              - kmsKeyID
+                              - sseAlgorithm
+                              - sseCustomerAlgorithm
+                              - sseCustomerKey
+                              type: object
                             storageClass:
                               type: string
                             uploadPartSize:
@@ -7735,6 +7785,12 @@ spec:
                     size:
                       format: int32
                       type: integer
+                    splitHorizons:
+                      additionalProperties:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      type: object
                     storage:
                       properties:
                         directoryPerDB:
@@ -14685,6 +14741,12 @@ spec:
                       size:
                         format: int32
                         type: integer
+                      splitHorizons:
+                        additionalProperties:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        type: object
                       storage:
                         properties:
                           directoryPerDB:

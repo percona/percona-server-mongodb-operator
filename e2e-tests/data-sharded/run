@@ -6,96 +6,138 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-else
-	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-fi
+check_rs_proper_component_deletion() {
+	local cluster="$1"
+	local rs_name="$2"
 
-deploy_cert_manager
-create_infra "$namespace"
+	rs_idx=$(kubectl_bin get psmdb ${cluster} -ojson | jq --arg RS $rs_name '.spec.replsets | map(.name == $RS) | index(true)')
+	kubectl_bin patch psmdb ${cluster} --type=json -p="[{'op': 'remove', 'path': '/spec/replsets/$rs_idx'}]"
 
-desc 'create secrets and start client'
-kubectl_bin apply -f "$conf_dir/secrets.yml"
-kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
+	echo -n "Deleting replset $rs_name"
+	until [[ $(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${rs_name} -ojson | jq '.items | length') -eq 0 ]]; do
+		let retry+=1
+		if [ $retry -ge 70 ]; then
+			sts_count=$(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${rs_name} -ojson | jq '.items | length')
+			echo "Replset $rs_name not properly removed, expected sts count of 0 but got $sts_count. Exiting after $retry tries..."
+			exit 1
+		fi
+		echo -n .
+		sleep 30
+	done
 
-cluster="some-name"
-desc "create first PSMDB cluster $cluster"
-apply_cluster "$test_dir/conf/$cluster.yml"
+	echo "OK"
+}
 
-desc 'check if all Pods started'
-wait_for_running $cluster-cfg 3
-wait_for_running $cluster-rs0 3
-wait_for_running $cluster-rs1 3
-wait_for_running $cluster-rs2 3
-wait_for_running $cluster-mongos 3
-
-desc 'create user'
-run_mongos \
-	'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
-	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 2
-
-desc 'set chunk size to 32 MB'
-run_mongos \
-	"use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
-	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 2
-
-desc 'write data'
-run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-
-desc 'shard collection'
-run_mongos \
-	'sh.enableSharding("app")' \
-	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 2
-
-run_mongos \
-	'sh.shardCollection("app.city", { _id: 1 } )' \
-	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
-sleep 120
-
-desc 'check chunks'
-chunks_param1="ns"
-chunks_param2='"app.city"'
-
-if [[ ${MONGO_VER} == "6.0" || ${MONGO_VER} == "5.0" ]]; then
-	chunks_param1="uuid"
-	chunks_param2=$(run_mongos \
-		"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
-		"user:pass@$cluster-mongos.$namespace" \
-		'' \
-		'' \
-		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
-		| grep "switched to db app" -A 1 | grep -v "switched to db app")
-fi
-
-shards=0
-for i in "rs0" "rs1" "rs2"; do
-	out=$(run_mongos \
-		"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
-		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
-		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
-		| grep "switched to db config" -A 1 | grep -v "switched to db config")
-
-	desc "$i has $out chunks"
-
-	if [[ $out -ne 0 ]]; then
-		((shards = shards + 1))
+main() {
+	if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+		MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+	else
+		MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 	fi
-done
 
-if [[ $shards -lt 3 ]]; then
-	echo "data is only on some of the shards, maybe sharding is not working"
-	exit 1
-fi
+	deploy_cert_manager
+	create_infra "$namespace"
 
-destroy "$namespace"
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "$conf_dir/secrets.yml"
+	kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
 
-desc 'test passed'
+	cluster="some-name"
+	desc "create first PSMDB cluster $cluster"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-cfg 3
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-rs1 3
+	wait_for_running $cluster-rs2 3
+	wait_for_running $cluster-mongos 3
+
+	desc 'create user'
+	run_mongos \
+		'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 2
+
+	desc 'set chunk size to 32 MB'
+	run_mongos \
+		"use config\n db.settings.save( { _id:\"chunksize\", value: 32 } )" \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 2
+
+	desc 'write data'
+	run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+
+	desc 'shard collection'
+	run_mongos \
+		'sh.enableSharding("app")' \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 2
+
+	run_mongos \
+		'sh.shardCollection("app.city", { _id: 1 } )' \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	sleep 120
+
+	desc 'check chunks'
+	chunks_param1="ns"
+	chunks_param2='"app.city"'
+
+	if [[ ${MONGO_VER} == "6.0" || ${MONGO_VER} == "5.0" ]]; then
+		chunks_param1="uuid"
+		chunks_param2=$(run_mongos \
+			"use app\n db.getCollectionInfos({ \"name\": \"city\" })[0].info.uuid" \
+			"user:pass@$cluster-mongos.$namespace" \
+			'' \
+			'' \
+			"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
+			| grep "switched to db app" -A 1 | grep -v "switched to db app")
+	fi
+
+	shards=0
+	for i in "rs0" "rs1" "rs2"; do
+		out=$(run_mongos \
+			"use config\n db.chunks.count({\"${chunks_param1}\": ${chunks_param2}, \"shard\": \"$i\"})" \
+			"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+			"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" \
+			| grep "switched to db config" -A 1 | grep -v "switched to db config")
+
+		desc "$i has $out chunks"
+
+		if [[ $out -ne 0 ]]; then
+			((shards = shards + 1))
+		fi
+	done
+
+	if [[ $shards -lt 3 ]]; then
+		echo "data is only on some of the shards, maybe sharding is not working"
+		exit 1
+	fi
+
+	# Drop non system database so we can remove shards
+	res=$(run_mongos \
+		"use app\n db.dropDatabase()" \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
+		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls")
+	if ! echo $res | grep -q '"ok" : 1'; then
+		echo "app database not dropped. Exiting.."
+		exit 1
+	fi
+
+	desc 'check if rs1 and all its related stateful sets are properly removed'
+	check_rs_proper_component_deletion $cluster rs1
+
+	desc 'check if rs2 and all its related stateful sets are properly removed'
+	check_rs_proper_component_deletion $cluster rs2
+
+	destroy "$namespace"
+
+	desc 'test passed'
+}
+
+main

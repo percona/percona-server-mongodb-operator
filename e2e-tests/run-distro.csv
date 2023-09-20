@@ -20,6 +20,7 @@ pitr-physical
 recover-no-primary
 rs-shard-migration
 scaling
+split-horizon
 tls-issue-cert-manager
 upgrade
 upgrade-sharded

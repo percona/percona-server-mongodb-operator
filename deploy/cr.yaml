@@ -167,6 +167,16 @@ spec:
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
+#    splitHorizons:
+#      my-cluster-name-rs0-0:
+#        external: rs0-0.mycluster.xyz
+#        external-2: rs0-0.mycluster2.xyz
+#      my-cluster-name-rs0-1:
+#        external: rs0-1.mycluster.xyz
+#        external-2: rs0-1.mycluster2.xyz
+#      my-cluster-name-rs0-2:
+#        external: rs0-2.mycluster.xyz
+#        external-2: rs0-2.mycluster2.xyz
     expose:
       enabled: false
       exposeType: ClusterIP
@@ -287,24 +297,13 @@ spec:
 #      nodeSelector:
 #        disktype: ssd
 #    schedulerName: "default"
-    resources:
-      limits:
-        cpu: "300m"
-        memory: "0.5G"
-      requests:
-        cpu: "300m"
-        memory: "0.5G"
-    volumeSpec:
-#      emptyDir: {}
-#      hostPath:
-#        path: /data
-#        type: Directory
-      persistentVolumeClaim:
-#        storageClassName: standard
-#        accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: 3Gi
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
 #    hostAliases:
 #    - ip: "10.10.0.2"
 #      hostnames:
@@ -518,6 +517,11 @@ spec:
 #        s3:
 #          bucket: S3-BACKUP-BUCKET-NAME-HERE
 #          credentialsSecret: my-cluster-name-backup-s3
+#          serverSideEncryption:
+#            kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
+#            sseAlgorithm: AES256
+#            sseCustomerAlgorithm: AES256
+#            sseCustomerKey: Y3VzdG9tZXIta2V5
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760
@@ -541,6 +545,7 @@ spec:
 #          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false
+      oplogOnly: false
 #      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6

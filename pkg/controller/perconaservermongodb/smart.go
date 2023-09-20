@@ -70,7 +70,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		if err != nil {
 			return errors.Wrapf(err, "get config statefulset %s/%s", cr.Namespace, cr.Name+"-"+api.ConfigReplSetName)
 		}
-		cfgList, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName, false)
+		cfgList, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
 		if err != nil {
 			return errors.Wrap(err, "get cfg pod list")
 		}
@@ -184,7 +184,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod, rs *api.ReplsetSpec) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	host, err := psmdb.MongoHost(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, pod)
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get mongo host")
 	}

@@ -50,7 +50,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateReady, nil
 	}
 
-	pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name, false)
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
 	if err != nil {
 		return api.AppStateInit, errors.Wrap(err, "failed to get replset pods")
 	}
@@ -238,7 +238,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	// Primary with a Secondary and an Arbiter (PSA)
 	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
 
-	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name, false)
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
 		return 0, errors.Wrap(err, "get rs pods")
 	}
@@ -255,7 +255,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			break
 		}
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, rs.Name, rs.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
 		if err != nil {
 			return 0, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
@@ -266,6 +266,19 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			BuildIndexes: true,
 			Priority:     mongo.DefaultPriority,
 			Votes:        mongo.DefaultVotes,
+		}
+
+		if len(rs.Horizons) > 0 {
+			horizons := make(map[string]string)
+			for h, domain := range rs.Horizons[pod.Name] {
+				d := domain
+				if !strings.HasSuffix(d, ":27017") {
+					d = d + ":27017"
+				}
+				horizons[h] = d
+			}
+
+			member.Horizons = horizons
 		}
 
 		switch pod.Labels["app.kubernetes.io/component"] {
@@ -365,6 +378,17 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "update external nodes: write mongo config")
+		}
+	}
+
+	if cnf.Members.HorizonsChanged(members) {
+		cnf.Version++
+
+		log.Info("Updating horizons", "replset", rs.Name)
+
+		err = cli.WriteConfig(ctx, cnf)
+		if err != nil {
+			return 0, errors.Wrap(err, "update horizons: write mongo config")
 		}
 	}
 
@@ -489,7 +513,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 		return errors.New("mongos pod is not ready")
 	}
 
-	host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, rspod)
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset.Name, replset.Expose.Enabled, rspod)
 	if err != nil {
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
@@ -540,7 +564,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset.Name, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}

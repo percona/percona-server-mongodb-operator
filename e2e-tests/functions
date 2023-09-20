@@ -693,6 +693,19 @@ run_mongo() {
 
 }
 
+run_mongo_tls() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb+srv}
+	local suffix=${4:-.svc.cluster.local}
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+
+}
+
 run_mongos() {
 	local command="$1"
 	local uri="$2"

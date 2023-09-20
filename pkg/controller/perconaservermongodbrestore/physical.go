@@ -276,7 +276,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		log.V(1).Info("Check restore status", "command", command, "pod", pod.Name)
 
 		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-			return errors.Wrap(err, "describe restore")
+			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
 		return nil
@@ -302,6 +302,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	case pbm.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Err
+	case pbm.StatusPartlyDone:
+		status.State = psmdbv1.RestoreStateError
+		var pbmErr string
+		for _, rs := range meta.Replsets {
+			if rs.Status == pbm.StatusError {
+				pbmErr += fmt.Sprintf("%s %s;", rs.Name, rs.Error)
+			}
+		}
+		status.Error = pbmErr
 	case pbm.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
 	case pbm.StatusDone:
@@ -582,7 +591,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore
 	for _, rs := range replsets {
 		log.Info("Preparing replset for physical restore", "replset", rs.Name)
 
-		podList, err := psmdb.GetRSPods(ctx, r.client, cluster, rs.Name, false)
+		podList, err := psmdb.GetRSPods(ctx, r.client, cluster, rs.Name)
 		if err != nil {
 			return errors.Wrapf(err, "get pods of replset %s", rs.Name)
 		}
