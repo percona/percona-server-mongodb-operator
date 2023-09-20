@@ -966,56 +966,50 @@ get_metric_values() {
 }
 
 get_qan_values() {
-	local instance=$1
-	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
-	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
-	local endpoint=$(get_service_endpoint monitoring-service)
-
-	local uuid=$(
-		curl -s -k "https://$endpoint/qan-api/instances?deleted=no" \
-			| jq '.[] | select(.Subsystem == "mongo" and .Name == "'$instance'") | .UUID' \
-			| sed -e 's/^"//; s/"$//;'
-	)
-
-	curl -s -k "https://$endpoint/qan-api/qan/profile/$uuid?begin=$start&end=$end&offset=0" \
-		| jq '.Query[].Fingerprint'
-}
-
-get_qan20_values() {
-	local instance=$1
+	local service_type=$1
 	local user_pass=$2
-	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
-	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
-	local endpoint=$(get_service_endpoint monitoring-service)
+	local start
+	local end
+	local endpoint
+	start=$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')
+	end=$($date -u '+%Y-%m-%dT%H:%M:%S%:z')
+	endpoint=$(get_service_endpoint monitoring-service)
 
 	cat >payload.json <<EOF
 {
-   "columns":[
-      "load",
-      "num_queries",
-      "query_time"
-   ],
-   "first_seen": false,
-   "group_by": "queryid",
-   "include_only_fields": [],
-   "keyword": "",
-   "labels": [
-       {
-           "key": "cluster",
-           "value": ["monitoring"]
-   }],
-   "limit": 10,
-   "offset": 0,
-   "order_by": "-load",
-   "main_metric": "load",
-   "period_start_from": "$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')",
-   "period_start_to": "$($date -u '+%Y-%m-%dT%H:%M:%S%:z')"
+  "period_start_from": "$start",
+  "period_start_to": "$end",
+  "group_by": "queryid",
+  "labels": [
+    {
+      "key": "service_type",
+      "value": [
+        "All",
+        "$service_type"
+      ]
+    }
+  ],
+  "columns": [
+    "load",
+    "num_queries",
+    "query_time"
+  ],
+  "order_by": "-load",
+  "offset": 0,
+  "limit": 10,
+  "main_metric": "load",
+  "search": ""
 }
 EOF
 
-	curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
-		| jq '.rows[].fingerprint'
+	local response
+	response=$(curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
+		| jq '.rows[].fingerprint')
 	rm -f payload.json
+	if [[ $response == "null" ]]; then
+		echo "No data for $service_type service type in QAN"
+		exit 1
+	fi
 }
 
 cat_config() {

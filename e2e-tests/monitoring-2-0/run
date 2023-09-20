@@ -102,9 +102,7 @@ get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME admin:admin
 sleep 90
 
 desc 'check QAN data'
-get_qan20_values $cluster-rs0-0 admin:admin
-get_qan20_values $cluster-cfg-0 admin:admin
-get_qan20_values $MONGOS_POD_NAME admin:admin
+get_qan_values mongodb admin:admin
 
 if [[ -n ${OPENSHIFT} ]]; then
 	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
