@@ -133,7 +133,7 @@ wait_for_running ${cluster}-rs0 3
 wait_cluster_consistency ${cluster}
 
 echo 'running backups'
-backup_name_minio="backup-minio"
+backup_name_minio="backup-minio-arbiter-nv"
 run_backup minio ${backup_name_minio}
 wait_backup "${backup_name_minio}"
 
