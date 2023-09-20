@@ -142,6 +142,6 @@ run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}
 echo 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
 run_restore ${backup_name_minio}
-run_recovery_check ${backup_name_minio}
+run_recovery_check ${backup_name_minio} "-arbiter-nv"
 
 destroy "$namespace"
