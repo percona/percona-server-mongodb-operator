@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"context"
+	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,9 +56,9 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 	for _, sts := range stsList.Items {
 		lbls := RSLabels(cr, rsName)
 		lbls["app.kubernetes.io/component"] = sts.Labels["app.kubernetes.io/component"]
-		compPods := corev1.PodList{}
+		pods := corev1.PodList{}
 		err := k8sclient.List(ctx,
-			&compPods,
+			&pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(lbls),
@@ -67,7 +68,24 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			return rsPods, errors.Wrap(err, "failed to list pods")
 		}
 
-		rsPods.Items = append(rsPods.Items, compPods.Items...)
+		rs := cr.Spec.Replset(rsName)
+		var podsLen int
+		switch sts.Labels["app.kubernetes.io/component"] {
+		case "arbiter":
+			podsLen = int(rs.Arbiter.Size)
+		case "nonVoting":
+			podsLen = int(rs.NonVoting.Size)
+		default:
+			podsLen = int(rs.Size)
+		}
+		sort.Slice(pods.Items, func(i, j int) bool {
+			return pods.Items[i].Name < pods.Items[j].Name
+		})
+		if len(pods.Items) >= int(podsLen) {
+			pods.Items = pods.Items[:podsLen]
+		}
+
+		rsPods.Items = append(rsPods.Items, pods.Items...)
 	}
 
 	return rsPods, nil
