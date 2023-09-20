@@ -490,9 +490,5 @@ func (p *pbmC) Node() (string, error) {
 		return "", err
 	}
 
-	if len(lock.Node) == 0 {
-		return "", errors.New("node value empty")
-	}
-
 	return strings.Split(lock.Node, ".")[0], nil
 }
