@@ -155,7 +155,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 	if err != nil {
 		return status, nil
 	}
-	status.PBMpod = node
+	status.PBMPod = node
 
 	return status, nil
 }
