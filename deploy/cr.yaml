@@ -517,6 +517,11 @@ spec:
 #        s3:
 #          bucket: S3-BACKUP-BUCKET-NAME-HERE
 #          credentialsSecret: my-cluster-name-backup-s3
+#          serverSideEncryption:
+#            kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
+#            sseAlgorithm: AES256
+#            sseCustomerAlgorithm: AES256
+#            sseCustomerKey: Y3VzdG9tZXIta2V5
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760

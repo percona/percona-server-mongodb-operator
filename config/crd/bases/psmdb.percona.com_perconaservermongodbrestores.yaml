@@ -91,6 +91,22 @@ spec:
                         type: string
                       region:
                         type: string
+                      serverSideEncryption:
+                        properties:
+                          kmsKeyID:
+                            type: string
+                          sseAlgorithm:
+                            type: string
+                          sseCustomerAlgorithm:
+                            type: string
+                          sseCustomerKey:
+                            type: string
+                        required:
+                        - kmsKeyID
+                        - sseAlgorithm
+                        - sseCustomerAlgorithm
+                        - sseCustomerKey
+                        type: object
                       storageClass:
                         type: string
                       uploadPartSize:
