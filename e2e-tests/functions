@@ -1342,7 +1342,8 @@ collect_k8s_logs() {
 			echo "##### START: ${ns}: ${object} #####" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt
 			kubectl_bin get ${object} -n "${ns}" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt || :
 			echo "##### END: ${ns}: ${object} ####\n" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt
-			kubectl_bin get ${object} -n "${ns}" >${logs_dir}/logs_${test_name}_${ns}_${object}.yaml || :
+			kubectl_bin get ${object} -n "${ns}" -oyaml >${logs_dir}/logs_${test_name}_${ns}_${object}.yaml || :
+			kubectl_bin describe ${object} -n "${ns}" >${logs_dir}/logs_${test_name}_${ns}_${object}.dsc || :
 		done
 	fi
 }
