@@ -755,7 +755,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			{
 				Resource: map[string]interface{}{
 					"db":         "",
-					"collection": "",
+					"collection": "system.profile",
 				},
 				Actions: []string{
 					"listIndexes",
@@ -766,24 +766,13 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 					"find",
 				},
 			},
-			{
-				Resource: map[string]interface{}{
-					"db":         "",
-					"collection": "system.profile",
-				},
-				Actions: []string{
-					"indexStats",
-					"dbStats",
-					"collStats",
-				},
-			},
 		}
-		if cr.CompareVersion("1.15.0") < 0 {
+		if cr.CompareVersion("1.15.0") >= 0 {
 			privileges = []mongo.RolePrivilege{
 				{
 					Resource: map[string]interface{}{
 						"db":         "",
-						"collection": "system.profile",
+						"collection": "",
 					},
 					Actions: []string{
 						"listIndexes",
@@ -792,6 +781,17 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 						"dbHash",
 						"collStats",
 						"find",
+					},
+				},
+				{
+					Resource: map[string]interface{}{
+						"db":         "",
+						"collection": "system.profile",
+					},
+					Actions: []string{
+						"indexStats",
+						"dbStats",
+						"collStats",
 					},
 				},
 			}
