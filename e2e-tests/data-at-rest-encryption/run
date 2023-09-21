@@ -59,7 +59,7 @@ desc "check backup and restore -- minio"
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio}/rs0/ \
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
 	| grep myApp.test.gz
 run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster-mongos.$namespace"
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
@@ -70,7 +70,7 @@ compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
 	run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster-mongos.$namespace"
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
 	run_restore "$backup_name_gcp"
