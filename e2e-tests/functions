@@ -3,7 +3,7 @@
 GIT_COMMIT=$(git rev-parse HEAD)
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
 API="psmdb.percona.com/v1"
-OPERATOR_VERSION="$(yq eval '.spec.crVersion' $(realpath $test_dir/../../deploy/cr.yaml))"
+OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod5.0"}
@@ -257,7 +257,7 @@ run_restore_backupsource() {
 	if [ -z "$storageName" ]; then
 		cat $test_dir/conf/restore-backupsource.yml \
 			| $sed -e "s/name:/name: restore-$backupName/" \
-			| $sed -e "s/BACKUP-NAME/$backupDest/" \
+			| $sed -e "s|BACKUP-NAME|$backupDest|" \
 			| $sed -e "/storageName/d" \
 			| kubectl_bin apply -f -
 
@@ -266,7 +266,7 @@ run_restore_backupsource() {
 
 	cat $test_dir/conf/restore-backupsource.yml \
 		| $sed -e "s/name:/name: restore-$backupName/" \
-		| $sed -e "s/BACKUP-NAME/$backupDest/" \
+		| $sed -e "s|BACKUP-NAME|$backupDest|" \
 		| $sed -e "s/storageName:/storageName: $storageName/" \
 		| kubectl_bin apply -f -
 }
@@ -935,7 +935,7 @@ get_backup_dest() {
 	local backup_name=$1
 
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
-		| sed -e 's/.json$//'
+		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||"
 }
 
 get_service_endpoint() {
