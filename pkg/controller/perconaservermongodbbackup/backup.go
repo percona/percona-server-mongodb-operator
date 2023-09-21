@@ -3,6 +3,7 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/percona/percona-backup-mongodb/pbm"
@@ -90,16 +91,28 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	switch stg.Type {
 	case api.BackupStorageS3:
 		status.S3 = &stg.S3
+
+		status.Destination = stg.S3.Bucket
+
 		if stg.S3.Prefix != "" {
-			status.Destination = stg.S3.Prefix + "/"
+			status.Destination = stg.S3.Bucket + "/" + stg.S3.Prefix
+		}
+		if !strings.HasPrefix(stg.S3.Bucket, "s3://") {
+			status.Destination = "s3://" + status.Destination
 		}
 	case api.BackupStorageAzure:
 		status.Azure = &stg.Azure
+
+		status.Destination = stg.Azure.Container
+
 		if stg.Azure.Prefix != "" {
-			status.Destination = stg.Azure.Prefix + "/"
+			status.Destination = stg.Azure.Container + "/" + stg.Azure.Prefix
+		}
+		if !strings.HasPrefix(stg.Azure.Container, "azure://") {
+			status.Destination = "azure://" + status.Destination
 		}
 	}
-	status.Destination += status.PBMname
+	status.Destination += "/" + status.PBMname
 
 	return status, nil
 }
