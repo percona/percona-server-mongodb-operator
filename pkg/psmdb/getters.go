@@ -68,21 +68,14 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			return rsPods, errors.Wrap(err, "failed to list pods")
 		}
 
-		rs := cr.Spec.Replset(rsName)
-		var podsLen int
-		switch sts.Labels["app.kubernetes.io/component"] {
-		case "arbiter":
-			podsLen = int(rs.Arbiter.Size)
-		case "nonVoting":
-			podsLen = int(rs.NonVoting.Size)
-		default:
-			podsLen = int(rs.Size)
-		}
+		// `k8sclient.List` returns unsorted list of pods
+		// We should sort pods to truncate pods that are going to be deleted during resize
+		// More info: https://github.com/percona/percona-server-mongodb-operator/pull/1323#issue-1904904799
 		sort.Slice(pods.Items, func(i, j int) bool {
 			return pods.Items[i].Name < pods.Items[j].Name
 		})
-		if len(pods.Items) >= int(podsLen) {
-			pods.Items = pods.Items[:podsLen]
+		if len(pods.Items) >= int(*sts.Spec.Replicas) {
+			pods.Items = pods.Items[:*sts.Spec.Replicas]
 		}
 
 		rsPods.Items = append(rsPods.Items, pods.Items...)
