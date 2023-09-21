@@ -10,4 +10,4 @@ spec:
     type:
     date:
   backupSource:
-    destination: s3://operator-testing/BACKUP-NAME
+    destination: s3://BACKUP-NAME

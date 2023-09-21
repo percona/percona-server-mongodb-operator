@@ -25,7 +25,7 @@ function stop_cluster() {
 		&& [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.replsets.rs0.ready}') -le 0 ]]; do
 		echo -n .
 		let passed_time="${passed_time}+${sleep_time}"
-		sleep ${passed_time}
+		sleep ${sleep_time}
 		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
 			echo "We've been waiting for cluster stop for too long. Exiting..."
 			exit 1
