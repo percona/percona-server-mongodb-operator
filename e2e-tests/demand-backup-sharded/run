@@ -114,9 +114,9 @@ sleep 5
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
-	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}/rs1/myApp1.test.gz" | gunzip >/dev/null
-	curl -s "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}/rs2/myApp2.test.gz" | gunzip >/dev/null
+	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs1/myApp1.test.gz" | gunzip >/dev/null
+	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs2/myApp2.test.gz" | gunzip >/dev/null
 	insert_data "100501"
 	check_data "-2nd"
 	run_restore "$backup_name_aws"
@@ -125,9 +125,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
-	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs1/myApp1.test.gz" | gunzip >/dev/null
-	curl -s "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}/rs2/myApp2.test.gz" | gunzip >/dev/null
+	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs1/myApp1.test.gz" | gunzip >/dev/null
+	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs2/myApp2.test.gz" | gunzip >/dev/null
 	insert_data "100501"
 	check_data "-2nd"
 	run_restore "$backup_name_gcp"
@@ -136,9 +136,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
-	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs1/myApp1.test.gz" | gunzip >/dev/null
-	curl -s "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}/rs2/myApp2.test.gz" | gunzip >/dev/null
+	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
+	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs1/myApp1.test.gz" | gunzip >/dev/null
+	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs2/myApp2.test.gz" | gunzip >/dev/null
 	insert_data "100501"
 	check_data "-2nd"
 	run_restore "$backup_name_azure"
@@ -150,7 +150,7 @@ desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://operator-testing/${backup_dest_minio}/rs0/" \
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://${backup_dest_minio}/rs0/" \
 	| grep "myApp.test.gz"
 insert_data "100501"
 check_data "-2nd"
@@ -171,9 +171,9 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	check_backup_deletion "https://s3.amazonaws.com/operator-testing/${backup_dest_aws}" "aws-s3"
-	check_backup_deletion "https://storage.googleapis.com/operator-testing/${backup_dest_gcp}" "gcp-cs"
-	check_backup_deletion "https://engk8soperators.blob.core.windows.net/operator-testing/${backup_dest_azure}" "azure-blob"
+	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
+	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp}" "gcp-cs"
+	check_backup_deletion "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}" "azure-blob"
 fi
 
 desc 'check for passwords leak'
