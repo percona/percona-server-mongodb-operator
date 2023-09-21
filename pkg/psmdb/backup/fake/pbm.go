@@ -71,3 +71,7 @@ func (p *fakePBM) GetConfigVar(key string) (any, error) {
 func (p *fakePBM) DeleteConfigVar(key string) error {
 	return nil
 }
+
+func (p *fakePBM) Node() (string, error) {
+	return "", nil
+}
