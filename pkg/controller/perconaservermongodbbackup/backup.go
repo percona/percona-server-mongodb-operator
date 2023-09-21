@@ -164,6 +164,12 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 	}
 	status.Type = cr.Spec.Type
 
+	node, err := b.pbm.Node()
+	if err != nil {
+		return status, nil
+	}
+	status.PBMPod = node
+
 	return status, nil
 }
 

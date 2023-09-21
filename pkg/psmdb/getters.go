@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"context"
+	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,9 +56,9 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 	for _, sts := range stsList.Items {
 		lbls := RSLabels(cr, rsName)
 		lbls["app.kubernetes.io/component"] = sts.Labels["app.kubernetes.io/component"]
-		compPods := corev1.PodList{}
+		pods := corev1.PodList{}
 		err := k8sclient.List(ctx,
-			&compPods,
+			&pods,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(lbls),
@@ -67,7 +68,17 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			return rsPods, errors.Wrap(err, "failed to list pods")
 		}
 
-		rsPods.Items = append(rsPods.Items, compPods.Items...)
+		// `k8sclient.List` returns unsorted list of pods
+		// We should sort pods to truncate pods that are going to be deleted during resize
+		// More info: https://github.com/percona/percona-server-mongodb-operator/pull/1323#issue-1904904799
+		sort.Slice(pods.Items, func(i, j int) bool {
+			return pods.Items[i].Name < pods.Items[j].Name
+		})
+		if len(pods.Items) >= int(*sts.Spec.Replicas) {
+			pods.Items = pods.Items[:*sts.Spec.Replicas]
+		}
+
+		rsPods.Items = append(rsPods.Items, pods.Items...)
 	}
 
 	return rsPods, nil
