@@ -31,6 +31,7 @@ check_cr_config() {
 	if [[ $(kubectl_bin get pod \
 		--selector=statefulset.kubernetes.io/pod-name="${cluster}-arbiter-0" \
 		-o jsonpath='{.items[*].status.containerStatuses[?(@.name == "mongod-arbiter")].restartCount}') -gt 0 ]]; then
+		collect_k8s_logs
 		echo "Something went wrong with arbiter. Exiting..."
 		exit 1
 	fi

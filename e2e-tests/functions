@@ -1330,6 +1330,7 @@ collect_k8s_logs() {
 		for ns in $check_namespaces; do
 			local pods=$(kubectl_bin get pods -o name | awk -F "/" '{print $2}')
 			for p in $pods; do
+				kubectl_bin -n "$ns" describe pod $p >${logs_dir}/logs_${test_name}_$p_.dsc
 				local containers=$(kubectl_bin -n "$ns" get pod $p -o jsonpath='{.spec.containers[*].name}')
 				for c in $containers; do
 					kubectl_bin -n "$ns" logs $p -c $c >${logs_dir}/logs_${test_name}_$p_$c.txt

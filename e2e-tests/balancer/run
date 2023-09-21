@@ -15,6 +15,7 @@ check_balancer() {
 		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye")
 
 	if [[ $balancer_running != "$expected" ]]; then
+		collect_k8s_logs
 		echo "Unexpected output from \"db.adminCommand({balancerStatus: 1}).mode\": $balancer_running"
 		echo "Expected $expected"
 		exit 1

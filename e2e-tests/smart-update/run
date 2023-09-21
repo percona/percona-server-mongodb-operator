@@ -22,6 +22,7 @@ function check_pod_update() {
 			echo "OK: Image ${img} was updated for pod ${pod_name}!"
 			break
 		elif [ ${retry} -ge 60 ]; then
+			collect_k8s_logs
 			echo "Max retry count ${retry} reached."
 			echo "ERROR: Image was not updated for pod ${pod_name}! Image is ${img}, but should be ${IMAGE_MONGOD_TO_UPDATE}."
 			exit 1
@@ -67,6 +68,7 @@ done
 desc "check primary should have old image"
 img=$(kubectl get pod/$initial_primary -o jsonpath='{.spec.containers[0].image}')
 if [ "${img}" != "${IMAGE_MONGOD}" ]; then
+	collect_k8s_logs
 	echo "image should be old on primary pod at that moment"
 	exit 1
 fi
@@ -82,6 +84,7 @@ pods+=("${initial_primary}")
 
 for i in "${!pods[@]}"; do
 	if [ "${pods[i]}" != "${restarted_pods[i]}" ]; then
+		collect_k8s_logs
 		echo "pod ${pods[i]} is not equal to pod ${restarted_pods[i]}"
 		exit 1
 	fi

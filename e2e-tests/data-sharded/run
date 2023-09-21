@@ -17,6 +17,7 @@ check_rs_proper_component_deletion() {
 	until [[ $(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${rs_name} -ojson | jq '.items | length') -eq 0 ]]; do
 		let retry+=1
 		if [ $retry -ge 70 ]; then
+			collect_k8s_logs
 			sts_count=$(kubectl_bin get sts -l app.kubernetes.io/instance=${cluster},app.kubernetes.io/replset=${rs_name} -ojson | jq '.items | length')
 			echo "Replset $rs_name not properly removed, expected sts count of 0 but got $sts_count. Exiting after $retry tries..."
 			exit 1
@@ -115,6 +116,7 @@ main() {
 	done
 
 	if [[ $shards -lt 3 ]]; then
+		collect_k8s_logs
 		echo "data is only on some of the shards, maybe sharding is not working"
 		exit 1
 	fi
@@ -125,6 +127,7 @@ main() {
 		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "mongodb" ".svc.cluster.local" \
 		"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls")
 	if ! echo $res | grep -q '"ok" : 1'; then
+		collect_k8s_logs
 		echo "app database not dropped. Exiting.."
 		exit 1
 	fi

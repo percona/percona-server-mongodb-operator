@@ -37,6 +37,7 @@ until kubectl_bin exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| g
 	sleep 5
 	let retry+=1
 	if [ $retry -ge 20 ]; then
+		collect_k8s_logs
 		echo "Max retry count $retry reached. Pmm-server can't start"
 		exit 1
 	fi
