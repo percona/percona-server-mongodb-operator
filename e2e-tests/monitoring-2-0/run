@@ -99,10 +99,11 @@ get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME admin:admin
 #get_metric_values mongodb_mongos_connections ${cluster%%-rs0}-mongos-0
 
 # wait for QAN
-sleep 90
-
-desc 'check QAN data'
-get_qan_values mongodb admin:admin
+# TODO: uncomment the code below when mongodb data will be available in QAN
+#sleep 90
+#
+#desc 'check QAN data'
+#get_qan_values mongodb admin:admin
 
 if [[ -n ${OPENSHIFT} ]]; then
 	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
