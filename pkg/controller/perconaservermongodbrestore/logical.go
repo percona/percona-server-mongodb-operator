@@ -106,7 +106,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 			return status, nil
 		}
 
-		log.Info("Starting restore")
+		log.Info("Starting restore", "backup", backupName)
 		status.PBMname, err = runRestore(ctx, backupName, pbmc, cr.Spec.PITR)
 		status.State = psmdbv1.RestoreStateRequested
 		return status, err
@@ -188,8 +188,9 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 		cmd = pbm.Cmd{
 			Cmd: pbm.CmdRestore,
 			Restore: &pbm.RestoreCmd{
-				Name:    rName,
-				OplogTS: primitive.Timestamp{T: uint32(ts)},
+				Name:       rName,
+				BackupName: backup,
+				OplogTS:    primitive.Timestamp{T: uint32(ts)},
 			},
 		}
 	case pitr.Type == psmdbv1.PITRestoreTypeLatest:
@@ -201,8 +202,9 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 		cmd = pbm.Cmd{
 			Cmd: pbm.CmdRestore,
 			Restore: &pbm.RestoreCmd{
-				Name:    rName,
-				OplogTS: primitive.Timestamp{T: tl.End},
+				Name:       rName,
+				BackupName: backup,
+				OplogTS:    primitive.Timestamp{T: tl.End},
 			},
 		}
 	}
