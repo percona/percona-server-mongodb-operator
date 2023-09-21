@@ -135,10 +135,12 @@ func main() {
 	}
 
 	if mcs.IsAvailable() {
+		setupLog.Info("Multi Cluster Service is available")
 		if err := mcs.AddToScheme(mgr.GetScheme()); err != nil {
 			setupLog.Error(err, "")
 			os.Exit(1)
 		}
+		setupLog.Info("Multi Cluster Service is registered", "apiGroup", mcs.MCSSchemeGroupVersion.Group, "apiVersion", mcs.MCSSchemeGroupVersion.Version)
 	}
 
 	// Setup all Controllers
