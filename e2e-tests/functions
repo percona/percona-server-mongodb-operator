@@ -1325,24 +1325,24 @@ collect_k8s_logs() {
 	if [[ ${ENABLE_LOGGING} == "true" ]]; then
 		rm -f ${logs_dir}/logs_${test_name}_* || :
 
-		local check_namespaces="$namespace${OPERATOR_NS:+ $OPERATOR_NS}"
+		local check_namespaces="${namespace}${OPERATOR_NS:+ $OPERATOR_NS}"
 
-		for ns in $check_namespaces; do
-			local pods=$(kubectl_bin get pods -o name | awk -F "/" '{print $2}')
-			for p in $pods; do
-				kubectl_bin -n "$ns" describe pod $p >${logs_dir}/logs_${test_name}_$p_.dsc
-				local containers=$(kubectl_bin -n "$ns" get pod $p -o jsonpath='{.spec.containers[*].name}')
-				for c in $containers; do
-					kubectl_bin -n "$ns" logs $p -c $c >${logs_dir}/logs_${test_name}_$p_$c.txt
-					echo logs saved in: ${logs_dir}/logs_${test_name}_$p_$c.txt
+		for ns in ${check_namespaces}; do
+			local pods=$(kubectl_bin get pods -n "${ns}" -o name | awk -F "/" '{print $2}')
+			for p in ${pods}; do
+				kubectl_bin -n "${ns}" describe pod ${p} >${logs_dir}/logs_${test_name}_${ns}_${p}.dsc || :
+				local containers=$(kubectl_bin -n "${ns}" get pod ${p} -o jsonpath='{.spec.containers[*].name}')
+				for c in ${containers}; do
+					kubectl_bin -n "${ns}" logs ${p} -c ${c} >${logs_dir}/logs_${test_name}_${ns}_${p}_${c}.txt || :
+					echo logs saved in: ${logs_dir}/logs_${test_name}_${p}_${c}.txt
 				done
 			done
 		done
-		for object in "psmdb psmdb-backup psmdb-restore pods deployments services events sts"; do
-			echo "##### START: $object #####" >>${logs_dir}/logs_${test_name}_simple.txt
-			kubectl_bin get $object --all-namespaces >>${logs_dir}/logs_${test_name}_simple.txt
-			echo "##### END: $object ####\n" >>${logs_dir}/logs_${test_name}_simple.txt
-			kubectl_bin get $object --all-namespaces >${logs_dir}/logs_${test_name}_$object.yaml
+		for object in psmdb psmdb-backup psmdb-restore pods deployments services events sts; do
+			echo "##### START: ${ns}: ${object} #####" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt
+			kubectl_bin get ${object} -n "${ns}" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt || :
+			echo "##### END: ${ns}: ${object} ####\n" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt
+			kubectl_bin get ${object} -n "${ns}" >${logs_dir}/logs_${test_name}_${ns}_${object}.yaml || :
 		done
 	fi
 }
