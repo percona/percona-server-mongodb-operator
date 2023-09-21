@@ -693,14 +693,6 @@ run_mongo() {
 
 }
 
-run_mongo_local() {
-	local command="$1"
-	local pod_name="$2"
-	local mongo_flag="$3"
-	kubectl_bin exec "$pod_name" -- \
-		bash -c "printf '$command\n' | mongosh $mongo_flag"
-}
-
 run_mongo_tls() {
 	local command="$1"
 	local uri="$2"
@@ -1322,68 +1314,4 @@ check_passwords_leak() {
 		pods=$(kubectl_bin -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
 		collect_logs $OPERATOR_NS
 	fi
-}
-
-stop_cluster() {
-	local cluster_name=$1
-	local max_wait_time=${2:-120}
-
-	local passed_time=0
-	local sleep_time=1
-	kubectl_bin patch psmdb "${cluster_name}" --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
-	set +x
-	echo -n 'Waiting for cluster stop'
-	until [[ $(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.mongos.ready}') -le 0 ]] \
-		&& [[ $(kubectl_bin get sts "${cluster_name}-mongos" -o jsonpath='{.status.replicas}') -le 0 ]] \
-		&& [[ $(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.replsets.cfg.ready}') -le 0 ]] \
-		&& [[ $(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.replsets.rs0.ready}') -le 0 ]]; do
-		echo -n .
-		passed_time=$(("${passed_time}"+"${sleep_time}"))
-		sleep ${passed_time}
-		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
-			echo "We've been waiting for cluster stop for too long. Exiting..."
-			exit 1
-		fi
-	done
-	echo
-	set -x
-}
-
-start_cluster() {
-	local cluster_name=$1
-
-	kubectl_bin patch psmdb "${cluster_name}" --type json -p='[{"op":"add","path":"/spec/pause","value":false}]'
-	wait_cluster_consistency "${cluster_name}"
-}
-
-set_primary() {
-	local expected_primary=$1
-	local timeout=60
-	local count=0
-	local freeze_time=30
-
-	local primary_fqdn
-	local primary
-
-	while [ "$primary" != "$expected_primary" ]; do
-		sleep 1
-
-		count=$((count+1))
-		primary_fqdn=$(get_mongo_primary_endpoint "clusterAdmin:clusterAdmin123456@${cluster}-rs0.${namespace}" | cut -d ':' -f 1)
-		primary=$(echo "$primary_fqdn" | cut -d '.' -f 1)
-		if [ -z "$primary" ] || [ "$primary" == "$expected_primary" ]; then
-			continue
-		fi
-
-		run_mongo_local "rs.stepDown($freeze_time);rs.freeze($freeze_time)" \
-			"$primary" \
-			"-u clusterAdmin -p clusterAdmin123456"
-
-		if [ "$count" -gt "$timeout" ]; then
-			echo "error: set_primary: timeout: got $primary, expected $expected_primary"
-			exit 1
-		fi
-	done
-
-	sleep "$freeze_time"
 }

@@ -6,6 +6,38 @@ set -o xtrace
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 
+function stop_cluster() {
+	local cluster_name=$1
+	local max_wait_time=${2:-120}
+
+	local passed_time=0
+	local sleep_time=1
+	kubectl_bin patch psmdb ${cluster_name} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
+	set +x
+	echo -n 'Waiting for cluster stop'
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.mongos.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get deployment ${cluster_name}-mongos -o jsonpath='{.status.replicas}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.replsets.cfg.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.status.replsets.rs0.ready}') -le 0 ]]; do
+		echo -n .
+		let passed_time="${passed_time}+${sleep_time}"
+		sleep ${passed_time}
+		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
+			echo "We've been waiting for cluster stop for too long. Exiting..."
+			exit 1
+		fi
+	done
+	echo
+	set -x
+}
+
+function start_cluster() {
+	local cluster_name=$1
+
+	kubectl_bin patch psmdb ${cluster_name} --type json -p='[{"op":"add","path":"/spec/pause","value":false}]'
+	wait_cluster_consistency ${cluster_name}
+}
+
 function compare_mongo_config() {
 	cluster=$1
 	namespace=$2
@@ -140,7 +172,6 @@ function main() {
 	sleep 60 # Wait LB ip setup
 
 	desc "Pause Exposed cluster (LoadBalancer)"
-	set_primary "$cluster-rs0-2"
 	stop_cluster ${cluster}
 	start_cluster ${cluster}
 
