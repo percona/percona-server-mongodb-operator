@@ -28,10 +28,14 @@
         },
         "actions": [
           "collStats",
+          "dbHash",
           "dbStats",
+          "find",
           "getDatabaseVersion",
           "getShardVersion",
-          "indexStats"
+          "indexStats",
+          "listCollections",
+          "listIndexes"
         ]
       },
       {
@@ -41,11 +45,9 @@
         },
         "actions": [
           "collStats",
-          "dbHash",
           "dbStats",
           "find",
-          "listCollections",
-          "listIndexes"
+          "indexStats"
         ]
       },
       {
