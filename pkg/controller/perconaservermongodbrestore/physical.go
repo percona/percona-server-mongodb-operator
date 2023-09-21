@@ -58,12 +58,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
 	}
 
-	for _, rs := range replsets {
-		if rs.Arbiter.Enabled {
-			return status, errors.New("physical restores are not supported for deployments with arbiter nodes")
-		}
-	}
-
 	if cr.Status.State == psmdbv1.RestoreStateNew {
 		pbmConf := corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -150,9 +144,21 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 
 		log.V(1).Info("Checking PBM operations for replset", "replset", rs.Name, "pod", rs.PodName(cluster, 0))
 
-		command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
-		log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
-		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+			stdoutBuf.Reset()
+			stderrBuf.Reset()
+
+			command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
+			log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
+
+			err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
+			if err != nil {
+				log.Error(err, "failed to set PBM configuration")
+			}
+
+			return err
+		})
+		if err != nil {
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
@@ -172,9 +178,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 					stdoutBuf.Reset()
 					stderrBuf.Reset()
 
-					command = []string{"/opt/percona/pbm", "status", "--out", "json"}
-					if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-						return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+					command := []string{"/opt/percona/pbm", "status", "--out", "json"}
+					err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
+					if err != nil {
+						log.Error(err, "failed to get PBM status")
+						return err
 					}
 
 					log.V(1).Info("PBM status", "status", stdoutBuf.String())
@@ -182,7 +190,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 					return nil
 				})
 				if err != nil {
-					return status, err
+					return status, errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 				}
 
 				var pbmStatus struct {
@@ -349,9 +357,43 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			if err := r.client.Delete(ctx, &sts); err != nil {
 				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
 			}
+
+			if rs.NonVoting.Enabled {
+				stsName := cluster.Name + "-" + rs.Name + "-nv"
+
+				log.Info("Deleting statefulset", "statefulset", stsName)
+
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				if err := r.client.Delete(ctx, &sts); err != nil {
+					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+				}
+			}
+
+			if rs.Arbiter.Enabled {
+				stsName := cluster.Name + "-" + rs.Name + "-arbiter"
+
+				log.Info("Deleting statefulset", "statefulset", stsName)
+
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				if err := r.client.Delete(ctx, &sts); err != nil {
+					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+				}
+			}
 		}
 
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			c := &psmdbv1.PerconaServerMongoDB{}
 			err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, c)
 			if err != nil {
@@ -502,11 +544,57 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 		log.Info("Preparing statefulset for physical restore", "name", stsName)
 
-		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
 		})
 		if err != nil {
 			return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+		}
+
+		if rs.NonVoting.Enabled {
+			stsName := cluster.Name + "-" + rs.Name + "-nv"
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
+		}
+
+		if rs.Arbiter.Enabled {
+			stsName := cluster.Name + "-" + rs.Name + "-arbiter"
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				err := r.client.Get(ctx, nn, &sts)
+				if err != nil {
+					return err
+				}
+
+				orig := sts.DeepCopy()
+				zero := int32(0)
+
+				sts.Spec.Replicas = &zero
+				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
 		}
 	}
 
