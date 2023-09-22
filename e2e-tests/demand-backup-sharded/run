@@ -7,16 +7,6 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-insert_data() {
-	local data=$1
-
-	for i in $(seq 0 2); do
-		run_mongos \
-			"use myApp${i/0/}\n db.test.insert({ x: ${data} })" \
-			"myApp:myPass@$cluster-mongos.$namespace"
-	done
-}
-
 check_data() {
 	local postfix=$1
 
@@ -78,7 +68,9 @@ run_mongos \
 run_mongos \
 	'sh.enableSharding("myApp2","rs2")' \
 	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace"
-insert_data "100500"
+insert_data_mongos "100500" "myApp"
+insert_data_mongos "100500" "myApp1"
+insert_data_mongos "100500" "myApp2"
 minikube_sleep
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 
@@ -117,7 +109,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
 	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs1/myApp1.test.gz" | gunzip >/dev/null
 	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs2/myApp2.test.gz" | gunzip >/dev/null
-	insert_data "100501"
+	insert_data_mongos "100501" "myApp"
+	insert_data_mongos "100501" "myApp1"
+	insert_data_mongos "100501" "myApp2"
 	check_data "-2nd"
 	run_restore "$backup_name_aws"
 	wait_restore "$backup_name_aws" "$cluster"
@@ -128,7 +122,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
 	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs1/myApp1.test.gz" | gunzip >/dev/null
 	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs2/myApp2.test.gz" | gunzip >/dev/null
-	insert_data "100501"
+	insert_data_mongos "100501" "myApp"
+	insert_data_mongos "100501" "myApp1"
+	insert_data_mongos "100501" "myApp2"
 	check_data "-2nd"
 	run_restore "$backup_name_gcp"
 	wait_restore "$backup_name_gcp" "$cluster"
@@ -139,7 +135,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
 	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs1/myApp1.test.gz" | gunzip >/dev/null
 	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs2/myApp2.test.gz" | gunzip >/dev/null
-	insert_data "100501"
+	insert_data_mongos "100501" "myApp"
+	insert_data_mongos "100501" "myApp1"
+	insert_data_mongos "100501" "myApp2"
 	check_data "-2nd"
 	run_restore "$backup_name_azure"
 	wait_restore "$backup_name_azure" "$cluster"
@@ -152,7 +150,9 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://${backup_dest_minio}/rs0/" \
 	| grep "myApp.test.gz"
-insert_data "100501"
+insert_data_mongos "100501" "myApp"
+insert_data_mongos "100501" "myApp1"
+insert_data_mongos "100501" "myApp2"
 check_data "-2nd"
 run_restore "$backup_name_minio"
 wait_restore "$backup_name_minio" "$cluster"

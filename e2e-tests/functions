@@ -667,9 +667,9 @@ compare_kubectl() {
 			del(.spec.ipFamilyPolicy) |
 			(.. | select(. == "extensions/v1beta1")) = "apps/v1" |
 			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
-	
+
 	yq -i eval 'del(.spec.persistentVolumeClaimRetentionPolicy)' ${new_result}
-	
+
 	if version_gt "1.22"; then
 		yq -i eval 'del(.spec.internalTrafficPolicy)' ${new_result}
 		yq -i eval 'del(.spec.allocateLoadBalancerNodePorts)' ${new_result}
@@ -979,56 +979,50 @@ get_metric_values() {
 }
 
 get_qan_values() {
-	local instance=$1
-	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
-	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
-	local endpoint=$(get_service_endpoint monitoring-service)
-
-	local uuid=$(
-		curl -s -k "https://$endpoint/qan-api/instances?deleted=no" \
-			| jq '.[] | select(.Subsystem == "mongo" and .Name == "'$instance'") | .UUID' \
-			| sed -e 's/^"//; s/"$//;'
-	)
-
-	curl -s -k "https://$endpoint/qan-api/qan/profile/$uuid?begin=$start&end=$end&offset=0" \
-		| jq '.Query[].Fingerprint'
-}
-
-get_qan20_values() {
-	local instance=$1
+	local service_type=$1
 	local user_pass=$2
-	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
-	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
-	local endpoint=$(get_service_endpoint monitoring-service)
+	local start
+	local end
+	local endpoint
+	start=$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')
+	end=$($date -u '+%Y-%m-%dT%H:%M:%S%:z')
+	endpoint=$(get_service_endpoint monitoring-service)
 
 	cat >payload.json <<EOF
 {
-   "columns":[
-      "load",
-      "num_queries",
-      "query_time"
-   ],
-   "first_seen": false,
-   "group_by": "queryid",
-   "include_only_fields": [],
-   "keyword": "",
-   "labels": [
-       {
-           "key": "cluster",
-           "value": ["monitoring"]
-   }],
-   "limit": 10,
-   "offset": 0,
-   "order_by": "-load",
-   "main_metric": "load",
-   "period_start_from": "$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')",
-   "period_start_to": "$($date -u '+%Y-%m-%dT%H:%M:%S%:z')"
+  "period_start_from": "$start",
+  "period_start_to": "$end",
+  "group_by": "queryid",
+  "labels": [
+    {
+      "key": "service_type",
+      "value": [
+        "All",
+        "$service_type"
+      ]
+    }
+  ],
+  "columns": [
+    "load",
+    "num_queries",
+    "query_time"
+  ],
+  "order_by": "-load",
+  "offset": 0,
+  "limit": 10,
+  "main_metric": "load",
+  "search": ""
 }
 EOF
 
-	curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
-		| jq '.rows[].fingerprint'
+	local response
+	response=$(curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
+		| jq '.rows[].fingerprint')
 	rm -f payload.json
+	if [[ $response == "null" ]]; then
+		echo "No data for $service_type service type in QAN"
+		exit 1
+	fi
 }
 
 cat_config() {
@@ -1278,7 +1272,10 @@ check_passwords_leak() {
 	secrets=$(kubectl_bin get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (contains("_PASSWORD"))) | .value')
 	echo secrets=$secrets
 
-	passwords="$(for i in $secrets; do base64 -d <<< $i; echo; done) $secrets"
+	passwords="$(for i in $secrets; do
+		base64 -d <<<$i
+		echo
+	done) $secrets"
 	echo passwords=$passwords
 
 	pods=$(kubectl_bin get pods -o name | awk -F "/" '{print $2}')
@@ -1295,7 +1292,7 @@ check_passwords_leak() {
 				if [[ ${c} =~ "pmm" ]]; then
 					continue
 				fi
-				kubectl_bin -n "$NS" logs $p -c $c > ${TEMP_DIR}/logs_output-$p-$c.txt
+				kubectl_bin -n "$NS" logs $p -c $c >${TEMP_DIR}/logs_output-$p-$c.txt
 				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
 				for pass in $passwords; do
 					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
@@ -1314,4 +1311,15 @@ check_passwords_leak() {
 		pods=$(kubectl_bin -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
 		collect_logs $OPERATOR_NS
 	fi
+}
+
+insert_data_mongos() {
+	local data=$1
+	local db_name=$2
+	local flags=$3
+
+	run_mongos \
+		"use ${db_name}\n db.test.insert({ x: ${data} })" \
+		"myApp:myPass@$cluster-mongos.$namespace" "" "" \
+		"$flags"
 }
