@@ -98,16 +98,21 @@ void pushLogFile(String FILE_NAME) {
 }
 
 void pushK8SLogs(String TEST_NAME) {
-    def LOG_FILE_PATH="e2e-tests/logs/"
-    def FILE_NAMES="logs_${TEST_NAME}_*"
+    def LOG_FILE_PATH="e2e-tests/logs"
     echo "Push k8s logs to S3!"
 
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
-            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/logs/
-            aws s3 ls \$S3_PATH || :
-            aws s3 rm \$S3_PATH --recursive --exclude "*" --include "${FILE_NAMES}" || :
-            aws s3 cp --quiet ${LOG_FILE_PATH} \$S3_PATH --recursive --exclude "*" --include "$FILE_NAMES" || :
+            if [ -d "${LOG_FILE_PATH}/${TEST_NAME}" ]; then
+                zip -r ${TEST_NAME}.zip ${LOG_FILE_PATH}/${TEST_NAME} || :
+                rm -rf ${LOG_FILE_PATH}/${TEST_NAME}
+
+                S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/logs
+                aws s3 ls \$S3_PATH/ || :
+                aws s3 rm \$S3_PATH/${TEST_NAME}.zip || :
+                aws s3 cp --quiet ${TEST_NAME}.zip \$S3_PATH/ || :
+                rm -f ${TEST_NAME}.zip
+            fi
         """
     }
 }
@@ -259,6 +264,7 @@ pipeline {
         CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
         AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
         ENABLE_LOGGING = "true"
+        ENABLE_LOG_COLLECT = "true"
     }
     agent {
         label 'docker'

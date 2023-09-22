@@ -1322,28 +1322,29 @@ function generate_vs_json() {
 }
 
 collect_k8s_logs() {
-	if [[ ${ENABLE_LOGGING} == "true" ]]; then
-		rm -f ${logs_dir}/logs_${test_name}_* || :
-
+	if [[ ${ENABLE_LOG_COLLECT} == "true" ]]; then
 		local check_namespaces="${namespace}${OPERATOR_NS:+ $OPERATOR_NS}"
+		local logs_path="${logs_dir}/${test_name}"
+		rm -rf ${logs_path} || :
+		mkdir -p $logs_path
 
 		for ns in ${check_namespaces}; do
 			local pods=$(kubectl_bin get pods -n "${ns}" -o name | awk -F "/" '{print $2}')
 			for p in ${pods}; do
-				kubectl_bin -n "${ns}" describe pod ${p} >${logs_dir}/logs_${test_name}_${ns}_${p}.dsc || :
+				kubectl_bin -n "${ns}" describe pod ${p} >${logs_path}/pod_${ns}_${p}.dsc || :
 				local containers=$(kubectl_bin -n "${ns}" get pod ${p} -o jsonpath='{.spec.containers[*].name}')
 				for c in ${containers}; do
-					kubectl_bin -n "${ns}" logs ${p} -c ${c} >${logs_dir}/logs_${test_name}_${ns}_${p}_${c}.txt || :
-					echo logs saved in: ${logs_dir}/logs_${test_name}_${p}_${c}.txt
+					kubectl_bin -n "${ns}" logs ${p} -c ${c} >${logs_path}/${ns}_${p}_${c}.log || :
+					echo "logs saved in: ${logs_path}/${ns}_${p}_${c}.log"
 				done
 			done
 		done
 		for object in psmdb psmdb-backup psmdb-restore pods deployments services events sts; do
-			echo "##### START: ${ns}: ${object} #####" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt
-			kubectl_bin get ${object} -n "${ns}" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt || :
-			echo "##### END: ${ns}: ${object} ####\n" >>${logs_dir}/logs_${test_name}_${ns}_simple.txt
-			kubectl_bin get ${object} -n "${ns}" -oyaml >${logs_dir}/logs_${test_name}_${ns}_${object}.yaml || :
-			kubectl_bin describe ${object} -n "${ns}" >${logs_dir}/logs_${test_name}_${ns}_${object}.dsc || :
+			echo "##### START: ${ns}: ${object} #####" >>${logs_path}/_overview_${ns}.txt
+			kubectl_bin get ${object} -n "${ns}" >>${logs_path}/_overview_${ns}.txt || :
+			echo -e "##### END: ${ns}: ${object} ####\n" >>${logs_path}/_overview_${ns}.txt
+			kubectl_bin get ${object} -n "${ns}" -oyaml >${logs_path}/${object}_${ns}.yaml || :
+			kubectl_bin describe ${object} -n "${ns}" >${logs_path}/${object}_${ns}.dsc || :
 		done
 	fi
 }
