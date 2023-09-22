@@ -104,14 +104,14 @@ void pushK8SLogs(String TEST_NAME) {
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
             if [ -d "${LOG_FILE_PATH}/${TEST_NAME}" ]; then
-                zip -r ${TEST_NAME}.zip ${LOG_FILE_PATH}/${TEST_NAME} || :
+                env GZIP=-9 tar -zcvf ${TEST_NAME}.tar.gz -C ${LOG_FILE_PATH} ${TEST_NAME}
                 rm -rf ${LOG_FILE_PATH}/${TEST_NAME}
 
                 S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/logs
                 aws s3 ls \$S3_PATH/ || :
-                aws s3 rm \$S3_PATH/${TEST_NAME}.zip || :
-                aws s3 cp --quiet ${TEST_NAME}.zip \$S3_PATH/ || :
-                rm -f ${TEST_NAME}.zip
+                aws s3 rm \$S3_PATH/${TEST_NAME}.tar.gz || :
+                aws s3 cp --quiet ${TEST_NAME}.tar.gz \$S3_PATH/ || :
+                rm -f ${TEST_NAME}.tar.gz
             fi
         """
     }
