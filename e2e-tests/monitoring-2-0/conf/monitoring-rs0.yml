@@ -20,7 +20,7 @@ spec:
         tls:
           mode: requireTLS
       operationProfiling:
-        mode: slowOp
+        mode: all
         slowOpThresholdMs: 100
         rateLimit: 100
       security:

@@ -980,7 +980,8 @@ get_metric_values() {
 
 get_qan_values() {
 	local service_type=$1
-	local user_pass=$2
+	local environment=$2
+	local user_pass=$3
 	local start
 	local end
 	local endpoint
@@ -997,8 +998,13 @@ get_qan_values() {
     {
       "key": "service_type",
       "value": [
-        "All",
         "$service_type"
+      ]
+    },
+    {
+      "key": "environment",
+      "value": [
+        "$environment"
       ]
     }
   ],
