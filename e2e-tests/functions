@@ -579,6 +579,7 @@ wait_for_running() {
 
 wait_for_delete() {
 	local res="$1"
+	local wait_time=${2:-60}
 
 	set +o xtrace
 	echo -n "$res - "
@@ -587,7 +588,7 @@ wait_for_delete() {
 		sleep 1
 		echo -n .
 		let retry+=1
-		if [ $retry -ge 60 ]; then
+		if [ $retry -ge $wait_time ]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
@@ -805,7 +806,7 @@ get_mongo_primary() {
 	else
 		kubectl_bin get service -o wide \
 			| grep " ${endpoint/:*/} " \
-			| awk '{print$1}'
+			| awk '{print $1}'
 	fi
 }
 
