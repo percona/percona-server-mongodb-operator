@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"sort"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -15,7 +16,10 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-var errWaitingTermination = errors.New("waiting pods to be deleted")
+var (
+	errWaitingTermination  = errors.New("waiting pods to be deleted")
+	errWaitingFirstPrimary = errors.New("waiting first pod to become primary")
+)
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
 	log := logf.FromContext(ctx)
@@ -40,7 +44,6 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 		if err != nil {
 			switch err {
 			case errWaitingTermination:
-				log.Info(err.Error(), "finalizer", f)
 			default:
 				log.Error(err, "failed to run finalizer", "finalizer", f)
 			}
@@ -56,6 +59,8 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
+	log := logf.FromContext(ctx)
+
 	if cr.Spec.Sharding.Enabled {
 		cr.Spec.Sharding.Mongos.Size = 0
 
@@ -82,11 +87,16 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 	replsetsDeleted := true
 	for _, rs := range cr.Spec.Replsets {
 		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
-			if err == errWaitingTermination {
+			if err != nil {
+				switch err {
+				case errWaitingTermination, errWaitingFirstPrimary:
+					log.Info(err.Error(), "rs", rs.Name)
+				default:
+					log.Error(err, "failed to delete rs pods", "rs", rs.Name)
+				}
 				replsetsDeleted = false
 				continue
 			}
-			return err
 		}
 	}
 	if !replsetsDeleted {
@@ -115,7 +125,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		pods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(sts.Spec.Selector.MatchLabels),
+			LabelSelector: labels.SelectorFromSet(sts.Spec.Template.Labels),
 		},
 	)
 	if err != nil {
@@ -125,7 +135,11 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		return errors.Wrap(err, "get rs statefulset")
 	}
 
-	rs.Size = 1
+	// `k8sclient.List` returns unsorted list of pods
+	// We should sort pods to be sure that the first pod is the primary
+	sort.Slice(pods.Items, func(i, j int) bool {
+		return pods.Items[i].Name < pods.Items[j].Name
+	})
 
 	switch *sts.Spec.Replicas {
 	case 0:
@@ -135,6 +149,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		}
 		return errWaitingTermination
 	case 1:
+		rs.Size = 1
 		// If there is one pod left, we should be sure that it's the primary
 		if len(pods.Items) != 1 {
 			return errWaitingTermination
@@ -145,13 +160,32 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 			return errors.Wrap(err, "is pod primary")
 		}
 		if !isPrimary {
-			return errWaitingTermination
+			return errWaitingFirstPrimary
 		}
 
 		// If true, we should resize the replset to 0
 		rs.Size = 0
 		return errWaitingTermination
+	case rs.Size:
+		// If statefulset size is equal to size of replset, that means that we just started the execution of finalizer
+		// and firstly we set the first pod as primary.
+		// After that we can start resizing the statefulset.
+		isPrimary, err := r.isPodPrimary(ctx, cr, pods.Items[0], rs)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
+		}
+		if !isPrimary {
+			err = r.setPrimary(ctx, cr, rs, pods.Items[0])
+			if err != nil {
+				return errors.Wrap(err, "set primary")
+			}
+			return errWaitingFirstPrimary
+		}
+
+		rs.Size = 1
+		return errWaitingTermination
 	default:
+		rs.Size = 1
 		return errWaitingTermination
 	}
 }

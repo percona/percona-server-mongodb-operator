@@ -74,8 +74,23 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 		sort.Slice(pods.Items, func(i, j int) bool {
 			return pods.Items[i].Name < pods.Items[j].Name
 		})
-		if len(pods.Items) >= int(*sts.Spec.Replicas) {
-			pods.Items = pods.Items[:*sts.Spec.Replicas]
+
+		// We can't use `sts.Spec.Replicas` because it can be different from `rs.Size`.
+		// This will lead to inserting pods, which are going to be deleted, to the
+		// `replSetReconfig` call in the `updateConfigMembers` function.
+		rsSize := 0
+
+		rs := cr.Spec.Replset(rsName)
+		switch lbls["app.kubernetes.io/component"] {
+		case "arbiter":
+			rsSize = int(rs.Arbiter.Size)
+		case "nonVoting":
+			rsSize = int(rs.NonVoting.Size)
+		default:
+			rsSize = int(rs.Size)
+		}
+		if len(pods.Items) >= rsSize {
+			pods.Items = pods.Items[:rsSize]
 		}
 
 		rsPods.Items = append(rsPods.Items, pods.Items...)

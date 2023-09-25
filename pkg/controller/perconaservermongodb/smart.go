@@ -181,14 +181,100 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, expectedPrimary corev1.Pod) error {
+	primary, err := r.isPodPrimary(ctx, cr, expectedPrimary, rs)
+	if err != nil {
+		return errors.Wrap(err, "is pod primary")
+	}
+	if primary {
+		return nil
+	}
+
+	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
+	if err != nil {
+		return errors.Wrap(err, "get rs statefulset")
+	}
+	pods := &corev1.PodList{}
+	err = r.client.List(ctx,
+		pods,
+		&k8sclient.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(sts.Spec.Template.Labels),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get rs statefulset")
+	}
+
+	var primaryPod corev1.Pod
+	for _, pod := range pods.Items {
+		if expectedPrimary.Name == pod.Name {
+			continue
+		}
+		primary, err := r.isPodPrimary(ctx, cr, pod, rs)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
+		}
+		// If we found a primary, we need to call `replSetStepDown` on it after calling `replSetFreeze` on all other pods
+		if primary {
+			primaryPod = pod
+			continue
+		}
+		err = r.freezePod(ctx, cr, rs, pod)
+		if err != nil {
+			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
+		}
+	}
+
+	if err := r.stepDownPod(ctx, cr, rs, primaryPod); err != nil {
+		return errors.Wrap(err, "failed to step down primary pod")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod) error {
+	log := logf.FromContext(ctx)
+
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	if err != nil {
+		return errors.Wrap(err, "failed to create standalone client")
+	}
+	defer func() {
+		err := mgoClient.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+	if err := mgoClient.StepDown(ctx, false); err != nil {
+		return errors.Wrap(err, "failed to step down")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod) error {
+	log := logf.FromContext(ctx)
+
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	if err != nil {
+		return errors.Wrap(err, "failed to create standalone client")
+	}
+	defer func() {
+		err := mgoClient.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+	if err := mgoClient.Freeze(ctx, 60); err != nil {
+		return errors.Wrap(err, "failed to freeze")
+	}
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod, rs *api.ReplsetSpec) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get mongo host")
-	}
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, api.RoleClusterAdmin, host)
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create standalone client")
 	}

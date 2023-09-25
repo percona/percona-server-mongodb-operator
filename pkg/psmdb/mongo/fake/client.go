@@ -128,6 +128,10 @@ func (c *fakeMongoClient) StepDown(ctx context.Context, force bool) error {
 	return nil
 }
 
+func (c *fakeMongoClient) Freeze(ctx context.Context, seconds int) error {
+	return nil
+}
+
 func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, error) {
 	return nil, nil
 }
