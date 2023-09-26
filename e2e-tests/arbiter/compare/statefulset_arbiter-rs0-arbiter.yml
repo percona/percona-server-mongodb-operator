@@ -163,7 +163,7 @@ spec:
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: arbiter-mongodb-keyfile
           secret:

@@ -166,7 +166,7 @@ spec:
       runtimeClassName: container-rc
       schedulerName: default-scheduler
       securityContext: {}
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: some-name-mongodb-keyfile
           secret:

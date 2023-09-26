@@ -212,7 +212,7 @@ spec:
       securityContext: {}
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: my-cluster-name-mongodb-keyfile
           secret:
