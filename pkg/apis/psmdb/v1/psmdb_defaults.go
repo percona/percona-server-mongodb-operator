@@ -756,7 +756,7 @@ func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
 
 	if m.TerminationGracePeriodSeconds == nil || (!cr.Spec.UnsafeConf && *m.TerminationGracePeriodSeconds < 30) {
 		m.TerminationGracePeriodSeconds = new(int64)
-		*m.TerminationGracePeriodSeconds = 30
+		*m.TerminationGracePeriodSeconds = 60
 	}
 
 	if m.PodDisruptionBudget == nil {
