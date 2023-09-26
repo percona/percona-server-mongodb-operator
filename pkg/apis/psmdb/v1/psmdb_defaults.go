@@ -754,6 +754,11 @@ func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
 	m.reconcileAffinityOpts()
 	m.reconcileTopologySpreadConstraints(cr)
 
+	if m.TerminationGracePeriodSeconds == nil || (!cr.Spec.UnsafeConf && *m.TerminationGracePeriodSeconds < 30) {
+		m.TerminationGracePeriodSeconds = new(int64)
+		*m.TerminationGracePeriodSeconds = 30
+	}
+
 	if m.PodDisruptionBudget == nil {
 		defaultMaxUnavailable := intstr.FromInt(1)
 		m.PodDisruptionBudget = &PodDisruptionBudgetSpec{MaxUnavailable: &defaultMaxUnavailable}

@@ -165,7 +165,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 			}
 		}()
 
-		err = client.StepDown(ctx, forceStepDown)
+		err = client.StepDown(ctx, 60, forceStepDown)
 		if err != nil {
 			return errors.Wrap(err, "failed to do step down")
 		}
@@ -206,6 +206,8 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 		return errors.Wrap(err, "get rs statefulset")
 	}
 
+	sleepSeconds := int(*rs.TerminationGracePeriodSeconds) * len(pods.Items)
+
 	var primaryPod corev1.Pod
 	for _, pod := range pods.Items {
 		if expectedPrimary.Name == pod.Name {
@@ -220,20 +222,20 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 			primaryPod = pod
 			continue
 		}
-		err = r.freezePod(ctx, cr, rs, pod)
+		err = r.freezePod(ctx, cr, rs, pod, sleepSeconds)
 		if err != nil {
 			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
 		}
 	}
 
-	if err := r.stepDownPod(ctx, cr, rs, primaryPod); err != nil {
+	if err := r.stepDownPod(ctx, cr, rs, primaryPod, sleepSeconds); err != nil {
 		return errors.Wrap(err, "failed to step down primary pod")
 	}
 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod) error {
+func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
 	log := logf.FromContext(ctx)
 
 	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
@@ -246,13 +248,13 @@ func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api
 			log.Error(err, "failed to close connection")
 		}
 	}()
-	if err := mgoClient.StepDown(ctx, false); err != nil {
+	if err := mgoClient.StepDown(ctx, seconds, false); err != nil {
 		return errors.Wrap(err, "failed to step down")
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod) error {
+func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
 	log := logf.FromContext(ctx)
 
 	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
@@ -265,7 +267,7 @@ func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.P
 			log.Error(err, "failed to close connection")
 		}
 	}()
-	if err := mgoClient.Freeze(ctx, 60); err != nil {
+	if err := mgoClient.Freeze(ctx, seconds); err != nil {
 		return errors.Wrap(err, "failed to freeze")
 	}
 	return nil
