@@ -38,6 +38,14 @@ func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 }
 
 func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
+	return getRSPods(ctx, k8sclient, cr, rsName, true)
+}
+
+func GetOutdatedRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
+	return getRSPods(ctx, k8sclient, cr, rsName, false)
+}
+
+func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string, trimOutdated bool) (corev1.PodList, error) {
 	rsPods := corev1.PodList{}
 
 	stsList := appsv1.StatefulSetList{} // All statefulsets related to replset `rsName`
@@ -68,29 +76,31 @@ func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			return rsPods, errors.Wrap(err, "failed to list pods")
 		}
 
-		// `k8sclient.List` returns unsorted list of pods
-		// We should sort pods to truncate pods that are going to be deleted during resize
-		// More info: https://github.com/percona/percona-server-mongodb-operator/pull/1323#issue-1904904799
-		sort.Slice(pods.Items, func(i, j int) bool {
-			return pods.Items[i].Name < pods.Items[j].Name
-		})
-
-		// We can't use `sts.Spec.Replicas` because it can be different from `rs.Size`.
-		// This will lead to inserting pods, which are going to be deleted, to the
-		// `replSetReconfig` call in the `updateConfigMembers` function.
-		rsSize := 0
-
 		rs := cr.Spec.Replset(rsName)
-		switch lbls["app.kubernetes.io/component"] {
-		case "arbiter":
-			rsSize = int(rs.Arbiter.Size)
-		case "nonVoting":
-			rsSize = int(rs.NonVoting.Size)
-		default:
-			rsSize = int(rs.Size)
-		}
-		if len(pods.Items) >= rsSize {
-			pods.Items = pods.Items[:rsSize]
+		if trimOutdated && rs != nil {
+			// `k8sclient.List` returns unsorted list of pods
+			// We should sort pods to truncate pods that are going to be deleted during resize
+			// More info: https://github.com/percona/percona-server-mongodb-operator/pull/1323#issue-1904904799
+			sort.Slice(pods.Items, func(i, j int) bool {
+				return pods.Items[i].Name < pods.Items[j].Name
+			})
+
+			// We can't use `sts.Spec.Replicas` because it can be different from `rs.Size`.
+			// This will lead to inserting pods, which are going to be deleted, to the
+			// `replSetReconfig` call in the `updateConfigMembers` function.
+			rsSize := 0
+
+			switch lbls["app.kubernetes.io/component"] {
+			case "arbiter":
+				rsSize = int(rs.Arbiter.Size)
+			case "nonVoting":
+				rsSize = int(rs.NonVoting.Size)
+			default:
+				rsSize = int(rs.Size)
+			}
+			if len(pods.Items) >= rsSize {
+				pods.Items = pods.Items[:rsSize]
+			}
 		}
 
 		rsPods.Items = append(rsPods.Items, pods.Items...)

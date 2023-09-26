@@ -166,15 +166,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		// If true, we should resize the replset to 0
 		rs.Size = 0
 		return errWaitingTermination
-	case rs.Size:
-		// If statefulset size is equal to size of replset, that means that we just started the execution of finalizer
-		// and firstly we set the first pod as primary.
-		// After that we can start resizing the statefulset.
+	default:
+		// If statefulset size is bigger then 1 we should set the first pod as primary.
+		// After that we can continue the resize of statefulset.
+		rs.Size = *sts.Spec.Replicas
 		isPrimary, err := r.isPodPrimary(ctx, cr, pods.Items[0], rs)
 		if err != nil {
 			return errors.Wrap(err, "is pod primary")
 		}
 		if !isPrimary {
+			if len(pods.Items) != int(*sts.Spec.Replicas) {
+				return errWaitingTermination
+			}
 			err = r.setPrimary(ctx, cr, rs, pods.Items[0])
 			if err != nil {
 				return errors.Wrap(err, "set primary")
@@ -182,9 +185,6 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 			return errWaitingFirstPrimary
 		}
 
-		rs.Size = 1
-		return errWaitingTermination
-	default:
 		rs.Size = 1
 		return errWaitingTermination
 	}

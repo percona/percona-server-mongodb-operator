@@ -22,6 +22,13 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
+	if len(pods.Items) == 0 {
+		pods, err = GetOutdatedRSPods(ctx, k8sclient, cr, rs.Name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get outdated pods list for replset %s", rs.Name)
+		}
+	}
+
 	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
