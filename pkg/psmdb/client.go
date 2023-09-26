@@ -22,6 +22,9 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
 
+	// `GetRSPods` returns truncated list of pods.
+	// If `rs.Size` is 0 or replicaset doesn't exist in the cr the list of pods will be empty.
+	// If there is empty pod list we should use `GetOutdatedRSPods` which returns list of pods without truncating it.
 	if len(pods.Items) == 0 {
 		pods, err = GetOutdatedRSPods(ctx, k8sclient, cr, rs.Name)
 		if err != nil {

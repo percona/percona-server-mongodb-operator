@@ -37,10 +37,12 @@ func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return lbls
 }
 
+// GetRSPods returns truncated list of replicaset pods to the size of `rs.Size`.
 func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	return getRSPods(ctx, k8sclient, cr, rsName, true)
 }
 
+// GetOutdatedRSPods does the same as GetRSPods but doesn't truncate the list of pods
 func GetOutdatedRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	return getRSPods(ctx, k8sclient, cr, rsName, false)
 }
