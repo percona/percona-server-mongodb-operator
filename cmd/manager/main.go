@@ -77,11 +77,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	operatorNamespace, err := k8s.GetOperatorNamespace()
-	if err != nil {
-		setupLog.Error(err, "failed to get operators' namespace")
-		os.Exit(1)
-	}
+	// operatorNamespace, err := k8s.GetOperatorNamespace()
+	// if err != nil {
+	// 	setupLog.Error(err, "failed to get operators' namespace")
+	// 	os.Exit(1)
+	// }
+	operatorNamespace := "default"
 
 	config, err := ctrl.GetConfig()
 	if err != nil {
@@ -90,6 +91,7 @@ func main() {
 	}
 
 	options := ctrl.Options{
+		LeaderElectionNamespace: operatorNamespace,
 		Scheme: scheme,
 		Metrics: metricsServer.Options{
 			BindAddress: metricsAddr,

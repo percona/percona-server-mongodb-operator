@@ -268,13 +268,9 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		}
 	}
 
-	if _, ok := operatorDepl.Labels["helm.sh/chart"]; ok {
-		vm.HelmDeployOperator = true
-	}
+		vm.HelmDeployOperator = false
 
-	if _, ok := cr.Labels["helm.sh/chart"]; ok {
-		vm.HelmDeployCR = true
-	}
+		vm.HelmDeployCR = false
 
 	if len(cr.Spec.Backup.Storages) > 0 && cr.Spec.Backup.Enabled {
 		vm.BackupsEnabled = true
@@ -338,12 +334,12 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return errors.New("cluster is not ready")
 	}
 
-	operatorDepl, err := r.getOperatorDeployment(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to get operator deployment")
-	}
+	// operatorDepl, err := r.getOperatorDeployment(ctx)
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to get operator deployment")
+	// }
 
-	vm, err := r.getVersionMeta(ctx, cr, operatorDepl)
+	vm, err := r.getVersionMeta(ctx, cr, nil)
 	if err != nil {
 		return errors.Wrap(err, "failed to get version meta")
 	}
