@@ -124,7 +124,11 @@ func (c *fakeMongoClient) RSBuildInfo(ctx context.Context) (mongo.BuildInfo, err
 	return mongo.BuildInfo{}, nil
 }
 
-func (c *fakeMongoClient) StepDown(ctx context.Context, force bool) error {
+func (c *fakeMongoClient) StepDown(ctx context.Context, seconds int, force bool) error {
+	return nil
+}
+
+func (c *fakeMongoClient) Freeze(ctx context.Context, seconds int) error {
 	return nil
 }
 

@@ -50,7 +50,8 @@ type Client interface {
 	ListShard(ctx context.Context) (ShardList, error)
 	RemoveShard(ctx context.Context, shard string) (ShardRemoveResp, error)
 	RSBuildInfo(ctx context.Context) (BuildInfo, error)
-	StepDown(ctx context.Context, force bool) error
+	StepDown(ctx context.Context, seconds int, force bool) error
+	Freeze(ctx context.Context, seconds int) error
 	IsMaster(ctx context.Context) (*IsMasterResp, error)
 	GetUserInfo(ctx context.Context, username string) (*User, error)
 	UpdateUserRoles(ctx context.Context, username string, roles []map[string]interface{}) error
@@ -488,10 +489,10 @@ func (client *mongoClient) RSBuildInfo(ctx context.Context) (BuildInfo, error) {
 	return bi, nil
 }
 
-func (client *mongoClient) StepDown(ctx context.Context, force bool) error {
+func (client *mongoClient) StepDown(ctx context.Context, seconds int, force bool) error {
 	resp := OKResponse{}
 
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: 60}, {Key: "force", Value: force}})
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetStepDown", Value: seconds}, {Key: "force", Value: force}})
 	err := res.Err()
 	if err != nil {
 		cErr, ok := err.(mongo.CommandError)
@@ -499,6 +500,26 @@ func (client *mongoClient) StepDown(ctx context.Context, force bool) error {
 			// https://docs.mongodb.com/manual/reference/method/rs.stepDown/#client-connections
 			return nil
 		}
+		return errors.Wrap(err, "replSetStepDown")
+	}
+
+	if err := res.Decode(&resp); err != nil {
+		return errors.Wrap(err, "failed to decode response of replSetStepDown")
+	}
+
+	if resp.OK != 1 {
+		return errors.Errorf("mongo says: %s", resp.Errmsg)
+	}
+
+	return nil
+}
+
+func (client *mongoClient) Freeze(ctx context.Context, seconds int) error {
+	resp := OKResponse{}
+
+	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetFreeze", Value: seconds}})
+	err := res.Err()
+	if err != nil {
 		return errors.Wrap(err, "replSetStepDown")
 	}
 

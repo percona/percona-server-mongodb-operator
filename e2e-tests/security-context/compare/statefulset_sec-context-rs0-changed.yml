@@ -222,7 +222,7 @@ spec:
           - 1003
       serviceAccount: percona-server-mongodb-operator-workload
       serviceAccountName: percona-server-mongodb-operator-workload
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: sec-context-mongodb-keyfile
           secret:

@@ -340,7 +340,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
-				if cond.Status == corev1.ConditionTrue {
+				if cond.Status == corev1.ConditionTrue && pod.DeletionTimestamp == nil {
 					status.Ready++
 				}
 			case corev1.PodScheduled:
@@ -357,7 +357,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size > 0 && status.Size == status.Ready:
+	case status.Size > 0 && status.Size == status.Ready && status.Size == int(cr.Spec.Sharding.Mongos.Size):
 		status.Status = api.AppStateReady
 	}
 

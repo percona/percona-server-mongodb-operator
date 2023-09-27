@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -63,6 +64,10 @@ func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(ctx context.Context
 	return r.MongoClientProvider().Mongos(ctx, cr, role)
 }
 
-func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string) (mongo.Client, error) {
+func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.UserRole, pod corev1.Pod) (mongo.Client, error) {
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get mongo host")
+	}
 	return r.MongoClientProvider().Standalone(ctx, cr, role, host)
 }
