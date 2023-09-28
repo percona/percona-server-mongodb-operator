@@ -108,8 +108,8 @@ wait_service_export
 wait_service_import
 wait_cluster_consistency "${cluster}" 3
 
-desc "delete cluster membership"
-gcloud container fleet memberships delete $k8s_cluster_name --quiet
+# desc "delete cluster membership"
+# gcloud container fleet memberships delete $k8s_cluster_name --quiet
 
-destroy $namespace
-desc 'test passed'
+# destroy $namespace
+# desc 'test passed'
