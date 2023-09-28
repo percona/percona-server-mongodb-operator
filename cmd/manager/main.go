@@ -92,7 +92,7 @@ func main() {
 
 	options := ctrl.Options{
 		LeaderElectionNamespace: operatorNamespace,
-		Scheme: scheme,
+		Scheme:                  scheme,
 		Metrics: metricsServer.Options{
 			BindAddress: metricsAddr,
 		},
