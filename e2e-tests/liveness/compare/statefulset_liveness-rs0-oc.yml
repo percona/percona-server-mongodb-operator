@@ -159,7 +159,7 @@ spec:
       securityContext: {}
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: liveness-mongodb-keyfile
           secret:

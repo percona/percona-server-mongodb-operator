@@ -158,7 +158,7 @@ spec:
         fsGroup: 1001
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
       - name: arbiter-clusterip-mongodb-keyfile
         secret:

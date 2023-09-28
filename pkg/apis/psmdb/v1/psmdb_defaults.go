@@ -753,7 +753,12 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
 	m.reconcileAffinityOpts()
 	m.reconcileTopologySpreadConstraints(cr)
-
+	if cr.CompareVersion("1.15.0") >= 0 {
+		if m.TerminationGracePeriodSeconds == nil || (!cr.Spec.UnsafeConf && *m.TerminationGracePeriodSeconds < 30) {
+			m.TerminationGracePeriodSeconds = new(int64)
+			*m.TerminationGracePeriodSeconds = 60
+		}
+	}
 	if m.PodDisruptionBudget == nil {
 		defaultMaxUnavailable := intstr.FromInt(1)
 		m.PodDisruptionBudget = &PodDisruptionBudgetSpec{MaxUnavailable: &defaultMaxUnavailable}
