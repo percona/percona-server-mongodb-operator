@@ -268,7 +268,7 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		}
 	}
 
-		vm.HelmDeployOperator = false
+	vm.HelmDeployOperator = false
 
 		vm.HelmDeployCR = false
 
