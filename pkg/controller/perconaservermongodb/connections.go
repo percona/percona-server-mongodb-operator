@@ -7,7 +7,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -34,7 +33,7 @@ func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMo
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.MongoClient(ctx, p.k8sclient, cr, rs, c)
+	return mongo.NewMongoClientExec(ctx, p.k8sclient, &rs, cr, c.Username, c.Password)
 }
 
 func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (mongo.Client, error) {
@@ -43,7 +42,7 @@ func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerM
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.MongosClient(ctx, p.k8sclient, cr, c)
+	return mongo.NewMongosClientExec(ctx, p.k8sclient, cr, c.Username, c.Password)
 }
 
 func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string) (mongo.Client, error) {
@@ -52,7 +51,7 @@ func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaSer
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.StandaloneClient(ctx, p.k8sclient, cr, c, host)
+	return mongo.NewStandaloneClientExec(ctx, p.k8sclient, cr, host, c.Username, c.Password)
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
