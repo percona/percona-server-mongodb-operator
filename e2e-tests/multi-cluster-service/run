@@ -22,7 +22,7 @@ wait_mcs_api() {
 	echo -n 'waiting for MCS APIs are registered'
 	until [[ $(kubectl_bin api-resources | grep ServiceExport | wc -l) -eq 1 ]]; do
 		let retry+=1
-		if [ $retry -ge 32 ]; then
+		if [ $retry -ge 64 ]; then
 			echo max retry count $retry reached. Something went wrong with MCS, probably a problem on GCP side.
 			exit 1
 		fi
@@ -57,7 +57,7 @@ wait_service_export() {
 	echo -n 'waiting for cluster services to be exported'
 	until [[ "$(kubectl_bin get serviceexport --ignore-not-found | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
 		let retry+=1
-		if [ $retry -ge 32 ]; then
+		if [ $retry -ge 64 ]; then
 			echo max retry count $retry reached. Something went wrong with MCS, probably a problem in gke-mcs-exporter.
 			exit 1
 		fi

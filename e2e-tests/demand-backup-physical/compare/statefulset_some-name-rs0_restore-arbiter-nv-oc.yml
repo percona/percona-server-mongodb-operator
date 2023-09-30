@@ -1,84 +1,90 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  annotations: {}
-  generation: 1
+  annotations:
+    percona.com/restore-in-progress: "true"
+  generation: 3
   labels:
-    app.kubernetes.io/component: cfg
-    app.kubernetes.io/instance: minimal-cluster
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: cfg
-  name: minimal-cluster-cfg
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: minimal-cluster
+      name: some-name
 spec:
   podManagementPolicy: OrderedReady
-  replicas: 1
+  replicas: 4
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: cfg
-      app.kubernetes.io/instance: minimal-cluster
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: cfg
-  serviceName: minimal-cluster-cfg
+      app.kubernetes.io/replset: rs0
+  serviceName: some-name-rs0
   template:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: cfg
-        app.kubernetes.io/instance: minimal-cluster
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: cfg
+        app.kubernetes.io/replset: rs0
     spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app.kubernetes.io/component: cfg
-                  app.kubernetes.io/instance: minimal-cluster
-                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
-                  app.kubernetes.io/name: percona-server-mongodb
-                  app.kubernetes.io/part-of: percona-server-mongodb
-                  app.kubernetes.io/replset: cfg
-              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=cfg
+            - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --clusterAuthMode=keyFile
-            - --keyFile=/etc/mongodb-secrets/mongodb-key
-            - --configsvr
+            - --clusterAuthMode=x509
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+            - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
           command:
-            - /opt/percona/ps-entry.sh
+            - /opt/percona/physical-restore-ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: minimal-cluster
+              value: some-name
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: cfg
+              value: rs0
+            - name: PBM_AGENT_MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_USER
+                  name: some-users
+            - name: PBM_AGENT_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_PASSWORD
+                  name: some-users
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: PBM_MONGODB_URI
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
           envFrom:
             - secretRef:
-                name: internal-minimal-cluster-users
+                name: internal-some-name-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -87,6 +93,12 @@ spec:
                 - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
                 - --startupDelaySeconds
                 - "7200"
             failureThreshold: 4
@@ -107,12 +119,18 @@ spec:
                 - readiness
                 - --component
                 - mongod
-            failureThreshold: 3
+            failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
             timeoutSeconds: 2
-          resources: {}
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 100M
           securityContext:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
@@ -121,7 +139,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: minimal-cluster-mongodb-keyfile
+              name: some-name-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -129,13 +147,18 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongodb-config
+              name: config
             - mountPath: /opt/percona
               name: bin
             - mountPath: /etc/mongodb-encryption
-              name: minimal-cluster-mongodb-encryption-key
+              name: some-name-mongodb-encryption-key
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
+            - mountPath: /etc/pbm/
+              name: pbm-config
+              readOnly: true
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -143,6 +166,26 @@ spec:
             - /init-entrypoint.sh
           imagePullPolicy: Always
           name: mongo-init
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 100M
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
+        - command:
+            - bash
+            - -c
+            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent
+          imagePullPolicy: Always
+          name: pbm-init
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
@@ -158,32 +201,41 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: minimal-cluster-mongodb-keyfile
+        - name: some-name-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: minimal-cluster-mongodb-keyfile
+            secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
-        - name: minimal-cluster-mongodb-encryption-key
+        - configMap:
+            defaultMode: 420
+            name: some-name-rs0-mongod
+            optional: true
+          name: config
+        - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: minimal-cluster-mongodb-encryption-key
+            secretName: some-name-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
-            optional: true
-            secretName: minimal-cluster-ssl
+            optional: false
+            secretName: some-name-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: minimal-cluster-ssl-internal
+            secretName: some-name-ssl-internal
         - name: users-secret-file
           secret:
             defaultMode: 420
-            secretName: internal-minimal-cluster-users
+            secretName: internal-some-name-users
+        - name: pbm-config
+          secret:
+            defaultMode: 420
+            secretName: pbm-config
   updateStrategy:
     rollingUpdate:
       partition: 0

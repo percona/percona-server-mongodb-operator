@@ -15,7 +15,9 @@ kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/
 cluster="some-name"
 
 desc 'create first PSMDB cluster'
-apply_cluster $test_dir/conf/${cluster}.yml
+sc=$(kubectl get storageclass -o custom-columns=NAME:.metadata.name --no-headers=true | tail -n1)
+yq eval '(.. | select(has("storageClassName")).storageClassName) = "'$sc'"' $test_dir/conf/$cluster.yml >${tmp_dir}/$cluster.yml
+apply_cluster ${tmp_dir}/$cluster.yml
 wait_cluster_consistency $cluster
 
 desc 'write data, read from all'
