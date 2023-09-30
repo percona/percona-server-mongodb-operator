@@ -300,7 +300,7 @@ pipeline {
 
                     sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.34.1/yq_linux_amd64 > /usr/local/bin/yq"
                     sudo chmod +x /usr/local/bin/yq
-                    sudo sh -c "curl -s -L https://github.com/stedolan/jq/releases/download/jq-1.7/jq-linux64 > /usr/local/bin/jq"
+                    sudo sh -c "curl -s -L https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 > /usr/local/bin/jq"
                     sudo chmod +x /usr/local/bin/jq
                 '''
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
