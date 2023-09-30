@@ -39,7 +39,7 @@ function start_cluster() {
 	local cluster_name=$1
 
 	kubectl_bin patch psmdb ${cluster_name} --type json -p='[{"op":"add","path":"/spec/pause","value":false}]'
-	wait_cluster_consistency ${cluster_name}
+	wait_cluster_consistency ${cluster_name} 60
 }
 
 function main() {
@@ -70,7 +70,7 @@ function main() {
 		| kubectl_bin apply -f -
 
 	desc 'check if all 3 Pods started'
-	wait_cluster_consistency $cluster
+	wait_cluster_consistency $cluster 60
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-rs0
