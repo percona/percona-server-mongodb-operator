@@ -47,6 +47,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
@@ -64,6 +65,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
@@ -76,13 +78,16 @@
           "changeStream",
           "collStats",
           "createIndex",
+          "createSearchIndexes",
           "dbHash",
           "dbStats",
           "dropIndex",
+          "dropSearchIndex",
           "find",
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
@@ -95,13 +100,16 @@
           "changeStream",
           "collStats",
           "createIndex",
+          "createSearchIndexes",
           "dbHash",
           "dbStats",
           "dropIndex",
+          "dropSearchIndex",
           "find",
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
@@ -119,6 +127,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
