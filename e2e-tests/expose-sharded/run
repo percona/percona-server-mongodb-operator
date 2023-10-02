@@ -112,7 +112,7 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
-	wait_cluster_consistency "${cluster}" 3
+	wait_cluster_consistency "${cluster}"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-rs0
@@ -141,7 +141,7 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
-	wait_cluster_consistency "${cluster}" 3
+	wait_cluster_consistency "${cluster}"
 
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100501 })' \
@@ -159,7 +159,7 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
-	wait_cluster_consistency "${cluster}" 3
+	wait_cluster_consistency "${cluster}"
 
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100502 })' \
@@ -190,7 +190,7 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
-	wait_cluster_consistency "${cluster}" 3
+	wait_cluster_consistency "${cluster}"
 
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100504 })' \
@@ -207,7 +207,7 @@ function main() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
-	wait_cluster_consistency "${cluster}" 3
+	wait_cluster_consistency "${cluster}"
 
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100505 })' \

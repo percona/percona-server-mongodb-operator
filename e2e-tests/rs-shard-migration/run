@@ -35,7 +35,7 @@ function main() {
 	sleep 10
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
-	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}"
 
 	if [[ $(kubectl_bin get statefulset/${cluster}-mongos -o jsonpath='{.status.readyReplicas}') -lt 1 ]]; then
 		echo "Mongos hasn't been properly started. Exiting..."
@@ -62,7 +62,7 @@ function main() {
 	kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
 	sleep 20
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "true"
-	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}"
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
 	if [[ -n "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \

@@ -69,7 +69,7 @@ check_recovery() {
 		| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
 		| kubectl_bin apply -f -
 
-	wait_restore "$backup_name" "$cluster_name"
+	wait_restore "$backup_name" "$cluster_name" "ready" "1" "1000"
 	echo
 	set -o xtrace
 
