@@ -6,6 +6,11 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+if [ -n "${OPENSHIFT}" ]; then
+	echo "This test is not supported on OpenShift because hostpath is not allowed by default"
+	exit 0
+fi
+
 check_cr_config() {
 	local cluster="$1"
 
