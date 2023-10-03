@@ -45,7 +45,7 @@ main() {
 	run_mongo \
 		'db.serverCmdLineOpts()' \
 		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye' \
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|bye' \
 		| $sed -re 's/((Timestamp|BinData|NumberLong)\((.+?\)))/{}/g' \
 		| jq '.parsed.systemLog' \
 			>$tmp_dir/parsed_systemLog.json
@@ -61,7 +61,7 @@ main() {
 	run_mongo \
 		'db.serverCmdLineOpts()' \
 		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye' \
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|bye' \
 		| $sed -re 's/((Timestamp|BinData|NumberLong)\((.+?\)))/{}/g' \
 		| jq '.parsed.systemLog' \
 			>$tmp_dir/parsed_systemLog_secret.json
@@ -74,7 +74,7 @@ main() {
 	run_mongo \
 		'db.serverCmdLineOpts()' \
 		"clusterAdmin:clusterAdmin123456@$cluster.$namespace" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye' \
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|bye' \
 		| $sed -re 's/((Timestamp|BinData|NumberLong)\((.+?\)))/{}/g' \
 		| jq '.parsed.systemLog' \
 			>$tmp_dir/parsed_systemLog_secret-2.json

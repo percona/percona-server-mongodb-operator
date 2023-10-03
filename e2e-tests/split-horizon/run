@@ -45,10 +45,10 @@ set -o xtrace
 
 run_mongo "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
 	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-	mongodb "" "--quiet" >${tmp_dir}/horizons-3.json
+	mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' >${tmp_dir}/horizons-3.json
 diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
 
-isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -v certificateNames)
+isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' | grep -v certificateNames)
 if [ "${isMaster}" != "true" ]; then
     echo "mongo client should've redirect the connection to primary"
     exit 1
@@ -61,7 +61,7 @@ run_mongo_tls "rs.stepDown()" \
 
 sleep 10 # give some time for re-election
 
-isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -v certificateNames)
+isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' | grep -v certificateNames)
 if [ "${isMaster}" != "true" ]; then
     echo "mongo client should've redirect the connection to primary"
     exit 1
@@ -80,7 +80,7 @@ wait_cluster_consistency ${cluster}
 
 run_mongo "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
 	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-	mongodb "" "--quiet" >${tmp_dir}/horizons-5.json
+	mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' >${tmp_dir}/horizons-5.json
 diff $test_dir/compare/horizons-5.json $tmp_dir/horizons-5.json
 
 kubectl_bin patch psmdb ${cluster} \
@@ -91,7 +91,7 @@ wait_cluster_consistency ${cluster}
 
 run_mongo "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
 	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-	mongodb "" "--quiet" >${tmp_dir}/horizons.json
+	mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' >${tmp_dir}/horizons.json
 diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
 
 apply_cluster ${test_dir}/conf/${cluster}.yml
