@@ -17464,10 +17464,13 @@ rules:
   resources:
   - perconaservermongodbs
   - perconaservermongodbs/status
+  - perconaservermongodbs/finalizers
   - perconaservermongodbbackups
   - perconaservermongodbbackups/status
+  - perconaservermongodbbackups/finalizers
   - perconaservermongodbrestores
   - perconaservermongodbrestores/status
+  - perconaservermongodbrestores/finalizers
   verbs:
   - get
   - list
