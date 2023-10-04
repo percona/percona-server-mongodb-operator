@@ -252,10 +252,6 @@ func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, cus
 			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
 			Value: customAdminParams,
 		},
-		{
-			Name:  "PMM_AGENT_PATHS_TEMPDIR",
-			Value: "/tmp",
-		},
 	}
 
 	if customLogin {
@@ -374,6 +370,17 @@ func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *
 			{
 				Name:  "PMM_AGENT_SIDECAR_SLEEP",
 				Value: "5",
+			},
+		}
+		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
+	}
+	if cr.CompareVersion("1.15.0") >= 0 {
+		// PMM team moved temp directory to /usr/local/percona/pmm2/tmp
+		// but it doesn't work on OpenShift so we set it back to /tmp
+		sidecarEnvs := []corev1.EnvVar{
+			{
+				Name:  "PMM_AGENT_PATHS_TEMPDIR",
+				Value: "/tmp",
 			},
 		}
 		pmmC.Env = append(pmmC.Env, sidecarEnvs...)

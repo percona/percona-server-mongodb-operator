@@ -215,8 +215,6 @@ spec:
               value: push
             - name: PMM_ADMIN_CUSTOM_PARAMS
               value: --environment=dev-mongos
-            - name: PMM_AGENT_PATHS_TEMPDIR
-              value: /tmp
             - name: PMM_AGENT_SERVER_USERNAME
               value: api_key
             - name: PMM_AGENT_SERVER_PASSWORD
@@ -236,6 +234,8 @@ spec:
               value: "true"
             - name: PMM_AGENT_SIDECAR_SLEEP
               value: "5"
+            - name: PMM_AGENT_PATHS_TEMPDIR
+              value: /tmp
           imagePullPolicy: Always
           lifecycle:
             preStop:
