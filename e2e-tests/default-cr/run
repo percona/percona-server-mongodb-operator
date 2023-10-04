@@ -110,7 +110,17 @@ function main() {
 			"spec": {"pmm":{"enabled":false}}
 		}'
 	sleep 120
+
+	if [[ -n ${OPENSHIFT} ]]; then
+		oc adm policy remove-scc-from-user privileged -z pmm-server
+		if [ -n "$OPERATOR_NS" ]; then
+			oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
+		else
+			oc delete rolebinding pmm-psmdb-operator-namespace-only
+		fi
+	fi
 	helm uninstall monitoring
+
 	wait_cluster_consistency $cluster
 
 	desc 'enabling arbiter'
