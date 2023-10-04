@@ -252,6 +252,10 @@ func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, cus
 			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
 			Value: customAdminParams,
 		},
+		{
+			Name:  "PMM_AGENT_PATHS_TEMPDIR",
+			Value: "/tmp/pmm-agent",
+		},
 	}
 
 	if customLogin {
