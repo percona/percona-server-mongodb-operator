@@ -215,6 +215,8 @@ spec:
               value: push
             - name: PMM_ADMIN_CUSTOM_PARAMS
               value: --environment=dev-mongos
+            - name: PMM_AGENT_PATHS_TEMPDIR
+              value: /data/db/pmm2/tmp
             - name: PMM_AGENT_SERVER_USERNAME
               value: api_key
             - name: PMM_AGENT_SERVER_PASSWORD
