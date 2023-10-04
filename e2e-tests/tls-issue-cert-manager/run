@@ -17,7 +17,7 @@ renew-certificate() {
 	local revision
 	revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
 
-	kubectl_bin exec "$pod_name" -- ./cmctl renew "$certificate"
+	kubectl_bin exec "$pod_name" -- /tmp/cmctl renew "$certificate"
 
 	# wait for new revision
 	for i in {1..10}; do

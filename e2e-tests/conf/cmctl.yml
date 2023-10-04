@@ -15,14 +15,13 @@ spec:
       serviceAccountName: cmctl
       containers:
         - name: cmctl
-          image: debian
+          image: curlimages/curl
           imagePullPolicy: Always
           command:
-          - /bin/bash
+          - /bin/sh
           - -c
           - |
-            apt-get update && apt-get install -y curl \
-            && curl -fsSL -o cmctl.tar.gz https://github.com/cert-manager/cert-manager/releases/latest/download/cmctl-linux-amd64.tar.gz \
-            && tar xzf cmctl.tar.gz \
+            curl -fsSL -o /tmp/cmctl.tar.gz https://github.com/cert-manager/cert-manager/releases/latest/download/cmctl-linux-amd64.tar.gz \
+            && tar -C /tmp -xzf /tmp/cmctl.tar.gz \
             && sleep 100500
       restartPolicy: Always
