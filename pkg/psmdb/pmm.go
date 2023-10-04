@@ -254,7 +254,7 @@ func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, cus
 		},
 		{
 			Name:  "PMM_AGENT_PATHS_TEMPDIR",
-			Value: "/data/db/pmm2/tmp",
+			Value: "/tmp",
 		},
 	}
 

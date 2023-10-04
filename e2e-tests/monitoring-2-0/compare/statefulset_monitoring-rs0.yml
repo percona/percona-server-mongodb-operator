@@ -203,7 +203,7 @@ spec:
             - name: PMM_ADMIN_CUSTOM_PARAMS
               value: --enable-all-collectors --environment=dev-mongod
             - name: PMM_AGENT_PATHS_TEMPDIR
-              value: /data/db/pmm2/tmp
+              value: /tmp
             - name: PMM_AGENT_SERVER_USERNAME
               value: api_key
             - name: PMM_AGENT_SERVER_PASSWORD
