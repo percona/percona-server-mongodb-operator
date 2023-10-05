@@ -10,7 +10,6 @@ import (
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -713,17 +712,31 @@ func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s-backup-%s-%s", cr.Name, task.Name, cr.Namespace)
 }
 
+type S3ServiceSideEncryption struct {
+	// Used to specify the SSE algorithm used when keys are managed by the server
+	SSEAlgorithm string `json:"sseAlgorithm,omitempty"`
+	KMSKeyID     string `json:"kmsKeyID,omitempty"`
+
+	// Used to specify SSE-C style encryption. For Amazon S3 SSECustomerAlgorithm must be 'AES256'
+	// see https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html
+	SSECustomerAlgorithm string `json:"sseCustomerAlgorithm,omitempty"`
+
+	// If SSECustomerAlgorithm is set, this must be a base64 encoded key compatible with the algorithm
+	// specified in the SseCustomerAlgorithm field.
+	SSECustomerKey string `json:"sseCustomerKey,omitempty"`
+}
+
 type BackupStorageS3Spec struct {
-	Bucket                string    `json:"bucket"`
-	Prefix                string    `json:"prefix,omitempty"`
-	Region                string    `json:"region,omitempty"`
-	EndpointURL           string    `json:"endpointUrl,omitempty"`
-	CredentialsSecret     string    `json:"credentialsSecret,omitempty"`
-	ServerSideEncryption  s3.AWSsse `json:"serverSideEncryption,omitempty"`
-	UploadPartSize        int       `json:"uploadPartSize,omitempty"`
-	MaxUploadParts        int       `json:"maxUploadParts,omitempty"`
-	StorageClass          string    `json:"storageClass,omitempty"`
-	InsecureSkipTLSVerify bool      `json:"insecureSkipTLSVerify,omitempty"`
+	Bucket                string                  `json:"bucket"`
+	Prefix                string                  `json:"prefix,omitempty"`
+	Region                string                  `json:"region,omitempty"`
+	EndpointURL           string                  `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string                  `json:"credentialsSecret,omitempty"`
+	UploadPartSize        int                     `json:"uploadPartSize,omitempty"`
+	MaxUploadParts        int                     `json:"maxUploadParts,omitempty"`
+	StorageClass          string                  `json:"storageClass,omitempty"`
+	InsecureSkipTLSVerify bool                    `json:"insecureSkipTLSVerify,omitempty"`
+	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
 }
 
 type BackupStorageAzureSpec struct {
