@@ -273,12 +273,17 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			return nil, errors.Wrap(err, "getting s3 credentials secret name")
 		}
 
-		if len(cr.Status.S3.ServerSideEncryption.SseAlgorithm) != 0 || len(cr.Status.S3.ServerSideEncryption.SseCustomerAlgorithm) != 0 {
+		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 && len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0 {
 			s3Conf.ServerSideEncryption = &s3.AWSsse{
-				SseAlgorithm:         cr.Status.S3.ServerSideEncryption.SseAlgorithm,
-				KmsKeyID:             cr.Status.S3.ServerSideEncryption.KmsKeyID,
-				SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SseCustomerAlgorithm,
-				SseCustomerKey:       cr.Status.S3.ServerSideEncryption.SseCustomerKey,
+				SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
+				SseCustomerKey:       cr.Status.S3.ServerSideEncryption.SSECustomerKey,
+			}
+		}
+
+		if len(cr.Status.S3.ServerSideEncryption.SSEAlgorithm) != 0 && len(cr.Status.S3.ServerSideEncryption.KMSKeyID) != 0 {
+			s3Conf.ServerSideEncryption = &s3.AWSsse{
+				SseAlgorithm: cr.Status.S3.ServerSideEncryption.SSEAlgorithm,
+				KmsKeyID:     cr.Status.S3.ServerSideEncryption.KMSKeyID,
 			}
 		}
 
