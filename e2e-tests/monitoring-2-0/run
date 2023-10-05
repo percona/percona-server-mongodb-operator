@@ -114,7 +114,12 @@ get_qan_values mongodb "dev-mongod" admin:admin
 get_qan_values mongodb "dev-mongos" admin:admin
 
 if [[ -n ${OPENSHIFT} ]]; then
-	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
+	oc adm policy remove-scc-from-user privileged -z pmm-server
+	if [ -n "$OPERATOR_NS" ]; then
+		oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
+	else
+		oc delete rolebinding pmm-psmdb-operator-namespace-only
+	fi
 fi
 
 if [[ $(kubectl_bin logs monitoring-rs0-0 pmm-client | grep -c 'cannot auto discover databases and collections') != 0 ]]; then
