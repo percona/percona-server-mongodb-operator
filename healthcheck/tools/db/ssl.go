@@ -20,7 +20,7 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var lastSSLErr error
@@ -48,6 +48,8 @@ func LastSSLError() error {
 }
 
 func (cnf *Config) configureTLS() error {
+	log := logf.Log
+
 	if !cnf.SSL.Enabled {
 		return nil
 	}
@@ -62,7 +64,7 @@ func (cnf *Config) configureTLS() error {
 			return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.PEMKeyFile)
 		}
 
-		log.Debugf("Loading SSL/TLS PEM certificate: %s", cnf.SSL.PEMKeyFile)
+		log.V(1).Info("Loading SSL/TLS PEM certificate", "certificate", cnf.SSL.PEMKeyFile)
 		certificates, err := tls.LoadX509KeyPair(cnf.SSL.PEMKeyFile, cnf.SSL.PEMKeyFile)
 		if err != nil {
 			return errors.Wrapf(err, "load key pair from '%s' to connect to server '%s'", cnf.SSL.PEMKeyFile, cnf.Hosts)
@@ -77,7 +79,7 @@ func (cnf *Config) configureTLS() error {
 			return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.CAFile)
 		}
 
-		log.Debugf("Loading SSL/TLS Certificate Authority: %s", cnf.SSL.CAFile)
+		log.V(1).Info("Loading SSL/TLS Certificate Authority: %s", "ca", cnf.SSL.CAFile)
 		ca, err := cnf.SSL.loadCaCertificate()
 		if err != nil {
 			return errors.Wrapf(err, "load client CAs from %s", cnf.SSL.CAFile)
