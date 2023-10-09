@@ -180,13 +180,6 @@ spec:
     expose:
       enabled: false
       exposeType: ClusterIP
-#    splitHorizons:
-#      my-cluster-name-rs0-0:
-#        external: my-cluster-name-rs0-0.clouddemo.xyz
-#      my-cluster-name-rs0-1:
-#        external: my-cluster-name-rs0-1.clouddemo.xyz
-#      my-cluster-name-rs0-2:
-#        external: my-cluster-name-rs0-2.clouddemo.xyz
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
