@@ -69,7 +69,10 @@ check_recovery() {
 		| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
 		| kubectl_bin apply -f -
 
-	wait_restore "$backup_name" "$cluster_name"
+	# fail faster if we don't reach requested status until some time
+	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
+	echo
+	wait_restore "$backup_name" "$cluster_name" "ready" "0" "900"
 	echo
 	set -o xtrace
 
@@ -119,7 +122,7 @@ main() {
 	write_document "-2nd"
 	sleep 2
 
-	time_now=$(run_mongos 'new Date().toISOString()' "myApp:myPass@$cluster-mongos.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
+	time_now=$(run_mongos 'new Date().toISOString()' "myApp:myPass@$cluster-mongos.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' | cut -c1-19 | tr T " ")
 
 	check_recovery $backup_name_minio-1 date "$time_now" "-2nd" "$cluster"
 
