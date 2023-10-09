@@ -17,7 +17,7 @@ function check_pod_update() {
 		sleep 1
 		echo -n .
 		let retry+=1
-		img=$(kubectl get pod/${pod_name} -o jsonpath='{.spec.containers[0].image}')
+		img=$(kubectl get pod/${pod_name} -o jsonpath='{.spec.containers[0].image}' || echo "ERROR_GETTING_POD")
 		if [ "${img}" == "${IMAGE_MONGOD_TO_UPDATE}" ]; then
 			echo "OK: Image ${img} was updated for pod ${pod_name}!"
 			break

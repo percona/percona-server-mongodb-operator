@@ -86,7 +86,7 @@ function check_applied_images() {
 
 	case "${updated_image}" in
 		"operator")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
 			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
 			${IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
 			${IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
@@ -97,7 +97,7 @@ function check_applied_images() {
 			fi
 			;;
 		"all")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
 			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
 			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
 			${TARGET_IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
@@ -179,7 +179,7 @@ function main() {
 	desc 'check if all Pods started'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
-	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}"
 
 	desc 'create user myApp'
 	run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
@@ -223,7 +223,7 @@ function main() {
 	desc 'check images and generation after operator upgrade'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
-	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}"
 
 	check_applied_images "operator"
 	compare_generation "1" "statefulset" "${cluster}-rs0"
@@ -244,7 +244,7 @@ function main() {
 	desc 'check cluster after full upgrade'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
-	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}"
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 	check_applied_images "all"
 	compare_generation "2" "statefulset" "${cluster}-rs0"

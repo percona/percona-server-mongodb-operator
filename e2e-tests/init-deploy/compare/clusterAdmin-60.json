@@ -78,6 +78,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "moveChunk",
           "planCacheRead",
           "refineCollectionShardKey",
@@ -102,6 +103,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
@@ -138,6 +140,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "moveChunk",
           "planCacheRead",
           "refineCollectionShardKey",
@@ -186,6 +189,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
@@ -203,6 +207,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },
@@ -220,6 +225,7 @@
           "killCursors",
           "listCollections",
           "listIndexes",
+          "listSearchIndexes",
           "planCacheRead"
         ]
       },

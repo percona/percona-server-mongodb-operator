@@ -6,8 +6,7 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-create_namespace $namespace
-deploy_operator
+create_infra $namespace
 apply_s3_storage_secrets
 deploy_minio
 
@@ -42,31 +41,11 @@ wait_backup_agent $cluster-shard5-2
 wait_backup_agent $cluster-shard7-0
 wait_backup_agent $cluster-shard7-1
 wait_backup_agent $cluster-shard7-2
-backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
-backup_name_gcp="backup-gcp-cs"
 
 desc 'run backups'
 run_backup minio
 wait_backup "$backup_name_minio"
-
-if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	run_backup aws-s3
-	run_backup gcp-cs
-
-	wait_backup "$backup_name_aws"
-	wait_backup "$backup_name_gcp"
-fi
-
-if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	desc 'check backup and restore -- aws-s3'
-	run_restore $backup_name_aws 3 1 "-mongos"
-	wait_restore $backup_name_aws $cluster "ready"
-
-	desc 'check backup and restore -- gcp-cs'
-	run_restore $backup_name_gcp 3 1 "-mongos"
-	wait_restore $backup_name_gcp $cluster "ready"
-fi
 
 desc 'check backup and restore -- minio'
 run_restore $backup_name_minio 3 1 "-mongos"

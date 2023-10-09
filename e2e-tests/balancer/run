@@ -12,7 +12,7 @@ check_balancer() {
 
 	local balancer_running
 	balancer_running=$(run_mongos 'db.adminCommand({balancerStatus: 1}).mode' "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
-		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|bye")
+		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye")
 
 	if [[ $balancer_running != "$expected" ]]; then
 		echo "Unexpected output from \"db.adminCommand({balancerStatus: 1}).mode\": $balancer_running"
