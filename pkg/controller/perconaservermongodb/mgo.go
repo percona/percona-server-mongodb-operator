@@ -19,6 +19,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
@@ -261,6 +262,22 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			return 0, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
 		}
 
+		nodeLabels := mongo.ReplsetTags{
+			"nodeName":    pod.Spec.NodeName,
+			"podName":     pod.Name,
+			"serviceName": cr.Name,
+		}
+
+		labels, err := psmdb.GetNodeLabels(ctx, r.client, cr, pod)
+		if err != nil {
+			log.Info("failed to get node labels, continue without node labels", "pod", pod.Name, "error", err.Error())
+		} else {
+			nodeLabels = util.MapMerge(nodeLabels, mongo.ReplsetTags{
+				"region": labels[corev1.LabelTopologyRegion],
+				"zone":   labels[corev1.LabelTopologyZone],
+			})
+		}
+
 		member := mongo.ConfigMember{
 			ID:           key,
 			Host:         host,
@@ -287,16 +304,11 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			member.ArbiterOnly = true
 			member.Priority = 0
 		case "mongod", "cfg":
-			member.Tags = mongo.ReplsetTags{
-				"podName":     pod.Name,
-				"serviceName": cr.Name,
-			}
+			member.Tags = nodeLabels
 		case "nonVoting":
-			member.Tags = mongo.ReplsetTags{
-				"podName":     pod.Name,
-				"serviceName": cr.Name,
-				"nonVoting":   "true",
-			}
+			member.Tags = util.MapMerge(mongo.ReplsetTags{
+				"nonVoting": "true",
+			}, nodeLabels)
 			member.Priority = 0
 			member.Votes = 0
 		}
@@ -590,7 +602,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			"sh", "-c",
 			fmt.Sprintf(
 				`
-				cat <<-EOF | %s 
+				cat <<-EOF | %s
 				rs.initiate(
 					{
 						_id: '%s',
