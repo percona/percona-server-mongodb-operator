@@ -88,7 +88,7 @@ function check_applied_images() {
 
 	case "${updated_image}" in
 		"operator")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
 			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
 			${IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
 			${IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
@@ -99,7 +99,7 @@ function check_applied_images() {
 			fi
 			;;
 		"all")
-			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
+			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
 			${TARGET_IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
 			${TARGET_IMAGE_PMM} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
 			${TARGET_IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
@@ -184,7 +184,7 @@ function main() {
 	kubectl_bin rollout status deployment/"${OPERATOR_NAME}" ${OPERATOR_NS:+-n $OPERATOR_NS}
 
 	desc 'wait for operator upgrade'
-	until [[ $(kubectl_bin get pods --selector=name="${OPERATOR_NAME}" \
+	until [[ $(kubectl_bin get pods ${OPERATOR_NS:+-n $OPERATOR_NS} --selector=name="${OPERATOR_NAME}" \
 		-o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image' \
 		| grep -vc 'NAME' | awk '{print $1}') -eq 1 ]]; do
 		sleep 5
@@ -209,7 +209,7 @@ function main() {
 
 	desc 'check cluster after full upgrade'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}"
-	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}"
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 	check_applied_images "all"
 	compare_generation "2" "statefulset" "${cluster}-rs0"
@@ -221,7 +221,7 @@ function main() {
 	backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/${backup_dest_minio}/rs0/ \
+		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
 		| grep myApp.test.gz
 
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}-rs0.${namespace}"

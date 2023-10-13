@@ -374,6 +374,17 @@ func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *
 		}
 		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
 	}
+	if cr.CompareVersion("1.15.0") >= 0 {
+		// PMM team moved temp directory to /usr/local/percona/pmm2/tmp
+		// but it doesn't work on OpenShift so we set it back to /tmp
+		sidecarEnvs := []corev1.EnvVar{
+			{
+				Name:  "PMM_AGENT_PATHS_TEMPDIR",
+				Value: "/tmp",
+			},
+		}
+		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
+	}
 
 	return &pmmC
 }

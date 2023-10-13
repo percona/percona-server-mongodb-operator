@@ -98,7 +98,7 @@ desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
-wait_cluster_consistency "${cluster}" 3
+wait_cluster_consistency "${cluster}"
 
 desc "enable MCS"
 kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/multiCluster/enabled","value":true}]'
@@ -106,7 +106,7 @@ kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/mu
 desc "check if ServiceExport objects are created"
 wait_service_export
 wait_service_import
-wait_cluster_consistency "${cluster}" 3
+wait_cluster_consistency "${cluster}"
 
 desc "delete cluster membership"
 gcloud container fleet memberships delete $k8s_cluster_name --quiet

@@ -11,8 +11,8 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.15.0
-  image: percona/percona-server-mongodb:6.0.4-3
+  crVersion: 1.16.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod6.0
   imagePullPolicy: Always
 #  tls:
 #    # 90 days in hours
@@ -41,7 +41,7 @@ spec:
 #    vault: my-cluster-name-vault
   pmm:
     enabled: false
-    image: percona/pmm-client:2.35.0
+    image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -519,7 +519,7 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-s3
 #          serverSideEncryption:
 #            kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
-#            sseAlgorithm: AES256
+#            sseAlgorithm: aws:kms
 #            sseCustomerAlgorithm: AES256
 #            sseCustomerKey: Y3VzdG9tZXIta2V5
 #          region: us-west-2

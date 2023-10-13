@@ -130,11 +130,6 @@ spec:
                         type: string
                       sseCustomerKey:
                         type: string
-                    required:
-                    - kmsKeyID
-                    - sseAlgorithm
-                    - sseCustomerAlgorithm
-                    - sseCustomerKey
                     type: object
                   storageClass:
                     type: string
@@ -261,11 +256,6 @@ spec:
                             type: string
                           sseCustomerKey:
                             type: string
-                        required:
-                        - kmsKeyID
-                        - sseAlgorithm
-                        - sseCustomerAlgorithm
-                        - sseCustomerKey
                         type: object
                       storageClass:
                         type: string
@@ -909,11 +899,6 @@ spec:
                                   type: string
                                 sseCustomerKey:
                                   type: string
-                              required:
-                              - kmsKeyID
-                              - sseAlgorithm
-                              - sseCustomerAlgorithm
-                              - sseCustomerKey
                               type: object
                             storageClass:
                               type: string
@@ -17464,10 +17449,13 @@ rules:
   resources:
   - perconaservermongodbs
   - perconaservermongodbs/status
+  - perconaservermongodbs/finalizers
   - perconaservermongodbbackups
   - perconaservermongodbbackups/status
+  - perconaservermongodbbackups/finalizers
   - perconaservermongodbrestores
   - perconaservermongodbrestores/status
+  - perconaservermongodbrestores/finalizers
   verbs:
   - get
   - list

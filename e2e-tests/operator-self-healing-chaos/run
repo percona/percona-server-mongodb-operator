@@ -18,7 +18,7 @@ setup_cluster() {
 
 	# check if all 3 Pods started
 	wait_for_running "$cluster" 3
-	wait_cluster_consistency "${cluster/-rs0/}" 3
+	wait_cluster_consistency "${cluster/-rs0/}"
 }
 
 fail_pod() {
@@ -61,7 +61,7 @@ fail_pod() {
 	# check scale down
 	wait_for_delete pod/$cluster-3
 	wait_for_running "$cluster" 3
-	wait_cluster_consistency "${cluster/-rs0/}" 3
+	wait_cluster_consistency "${cluster/-rs0/}"
 }
 
 kill_pod() {
@@ -87,7 +87,7 @@ kill_pod() {
 
 	# check scale up
 	wait_for_running "$cluster" 5
-	wait_cluster_consistency "${cluster/-rs0/}" 5
+	wait_cluster_consistency "${cluster/-rs0/}"
 }
 
 network_loss() {
@@ -108,7 +108,7 @@ network_loss() {
 
 	# check scale up
 	wait_for_running "$cluster" 5
-	wait_cluster_consistency "${cluster/-rs0/}" 5
+	wait_cluster_consistency "${cluster/-rs0/}"
 }
 
 main() {
