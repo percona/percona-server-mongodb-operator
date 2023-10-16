@@ -150,6 +150,7 @@ wait_pod() {
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
+			collect_k8s_logs
 			kubectl_bin describe pod/$pod
 			kubectl_bin logs $pod
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
@@ -158,6 +159,7 @@ wait_pod() {
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
+
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -177,12 +179,14 @@ wait_cron() {
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
+			collect_k8s_logs
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
+
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -201,8 +205,10 @@ wait_backup_agent() {
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
+			collect_k8s_logs
 			kubectl_bin logs $agent_pod -c backup-agent \
 				| tail -100
+
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -224,12 +230,14 @@ wait_backup() {
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
 		if [[ $retry -ge 360 || ${current_status} == 'error' ]]; then
+			collect_k8s_logs
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
+
 			echo "Backup object psmdb-backup/${backup_name} is in ${current_state} state."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
@@ -283,12 +291,14 @@ wait_deployment() {
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
+			collect_k8s_logs
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
+
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -329,6 +339,7 @@ wait_restore() {
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
 		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
+			collect_k8s_logs
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
@@ -542,6 +553,7 @@ retry() {
 
 	until "$@"; do
 		if [[ $n -ge $max ]]; then
+			collect_k8s_logs
 			echo "The command '$@' has failed after $n attempts."
 			exit 1
 		fi
@@ -581,6 +593,7 @@ wait_for_running() {
 			timeout=$((timeout + 1))
 			echo -n '.'
 			if [[ ${timeout} -gt 1500 ]]; then
+				collect_k8s_logs
 				echo
 				echo "Waiting timeout has been reached. Exiting..."
 				exit 1
@@ -603,12 +616,14 @@ wait_for_delete() {
 		echo -n .
 		let retry+=1
 		if [ $retry -ge $wait_time ]; then
+			collect_k8s_logs
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
+
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -624,6 +639,8 @@ compare_generation() {
 
 	current_generation="$(kubectl_bin get ${resource_type} "${resource_name}" -o jsonpath='{.metadata.generation}')"
 	if [[ ${generation} != "${current_generation}" ]]; then
+		collect_k8s_logs
+
 		echo "Generation for ${resource_type}/${resource_name} is: ${current_generation}, but should be: ${generation}"
 		exit 1
 	fi
@@ -984,6 +1001,7 @@ get_service_endpoint() {
 		return
 	fi
 
+	collect_k8s_logs
 	exit 1
 }
 
@@ -1160,6 +1178,7 @@ wait_cluster_consistency() {
 	until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		let retry+=1
 		if [ $retry -ge $wait_time ]; then
+			collect_k8s_logs
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -1186,6 +1205,7 @@ check_backup_deletion() {
 	retry=0
 	until [[ $(curl -sw '%{http_code}' -o /dev/null $path) -eq 403 ]] || [[ $(curl -sw '%{http_code}' -o /dev/null $path) -eq 404 ]]; do
 		if [ $retry -ge 10 ]; then
+			collect_k8s_logs
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			echo "Backup was not removed from bucket -- $storage_name"
 			exit 1
@@ -1247,6 +1267,7 @@ function get_mongod_ver_from_image() {
 	version_info=$(run_simple_cli_inside_image ${image} 'mongod --version' | $sed -r 's/^.*db version v(([0-9]+\.){2}[0-9]+-[0-9]+).*$/\1/g')
 
 	if [[ ! ${version_info} =~ ^([0-9]+\.){2}[0-9]+-[0-9]+$ ]]; then
+		collect_k8s_logs
 		printf "No mongod version obtained from %s. Exiting" ${image}
 		exit 1
 	fi
@@ -1259,6 +1280,7 @@ function get_pbm_version() {
 	local version_info=$(run_simple_cli_inside_image ${image} 'pbm-agent version' | $sed -r 's/^Version:\ (([0-9]+\.){2}[0-9]+)\ .*/\1/g')
 
 	if [[ ! ${version_info} =~ ^([0-9]+\.){2}[0-9]+$ ]]; then
+		collect_k8s_logs
 		printf "No pbm version obtained from %s. Exiting" ${image}
 		exit 1
 	fi
@@ -1297,6 +1319,31 @@ function generate_vs_json() {
 		| jq '.versions[0].matrix.operator += {"'${OPERATOR_VERSION}'": {"image_path":"'${IMAGE}'","status":"recommended"}}')
 
 	echo ${version_service_source} | jq '.' >${target_path}
+}
+
+collect_k8s_logs() {
+	if [[ ${ENABLE_LOGGING} == "true" ]]; then
+		rm -f ${logs_dir}/logs_${test_name}_* || :
+
+		local check_namespaces="$namespace${OPERATOR_NS:+ $OPERATOR_NS}"
+
+		for ns in $check_namespaces; do
+			local pods=$(kubectl_bin get pods -o name | awk -F "/" '{print $2}')
+			for p in $pods; do
+				local containers=$(kubectl_bin -n "$ns" get pod $p -o jsonpath='{.spec.containers[*].name}')
+				for c in $containers; do
+					kubectl_bin -n "$ns" logs $p -c $c >${logs_dir}/logs_${test_name}_$p_$c.txt
+					echo logs saved in: ${logs_dir}/logs_${test_name}_$p_$c.txt
+				done
+			done
+		done
+		for object in "psmdb psmdb-backup psmdb-restore pods deployments services events sts"; do
+			echo "##### START: $object #####" >>${logs_dir}/logs_${test_name}_simple.txt
+			kubectl_bin get $object --all-namespaces >>${logs_dir}/logs_${test_name}_simple.txt
+			echo "##### END: $object ####\n" >>${logs_dir}/logs_${test_name}_simple.txt
+			kubectl_bin get $object --all-namespaces >${logs_dir}/logs_${test_name}_$object.yaml
+		done
+	fi
 }
 
 check_passwords_leak() {

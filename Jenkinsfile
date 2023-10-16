@@ -97,6 +97,21 @@ void pushLogFile(String FILE_NAME) {
     }
 }
 
+void pushK8SLogs(String TEST_NAME) {
+    def LOG_FILE_PATH="e2e-tests/logs/"
+    def FILE_NAMES="logs_${TEST_NAME}_*"
+    echo "Push k8s logs to S3!"
+
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/logs/
+            aws s3 ls \$S3_PATH || :
+            aws s3 rm \$S3_PATH --recursive --exclude "*" --include "${FILE_NAMES}" || :
+            aws s3 cp --quiet ${LOG_FILE_PATH} \$S3_PATH --recursive --exclude "*" --include "$FILE_NAMES" || :
+        """
+    }
+}
+
 void popArtifactFile(String FILE_NAME) {
     echo "Try to get $FILE_NAME file from S3!"
 
@@ -211,6 +226,7 @@ void runTest(Integer TEST_ID) {
             return true
         }
         catch (exc) {
+            pushK8SLogs("$testName")
             if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
                 return true
