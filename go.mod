@@ -22,7 +22,7 @@ require (
 	go.mongodb.org/mongo-driver v1.12.1
 	go.uber.org/zap v1.25.0
 	golang.org/x/sync v0.3.0
-	google.golang.org/grpc v1.58.0
+	google.golang.org/grpc v1.58.3
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.28.1
