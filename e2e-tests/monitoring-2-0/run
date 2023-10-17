@@ -13,8 +13,7 @@ desc 'install PMM Server'
 
 deploy_pmm_server
 sleep 20
-SERVICE="postgres"
-until kubectl_bin exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; do
+until kubectl_bin exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
 	echo "Retry $retry"
 	sleep 5
 	let retry+=1
