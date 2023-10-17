@@ -1340,13 +1340,14 @@ collect_k8s_logs() {
 				done
 			done
 		done
-		for object in psmdb psmdb-backup psmdb-restore pods deployments services events sts; do
+		for object in psmdb psmdb-backup psmdb-restore pods deployments replicasets services sts configmaps persistentvolumeclaims persistentvolumes secrets jobs cronjobs clusterroles roles; do
 			echo "##### START: NS: ${namespace} - OBJ: ${object} #####" >>${logs_path}/_overview_${namespace}.txt
 			kubectl_bin get ${object} -n "${namespace}" >>${logs_path}/_overview_${namespace}.txt || :
 			echo -e "##### END: NS: ${namespace} - OBJ: ${object} ####\n" >>${logs_path}/_overview_${namespace}.txt
 			kubectl_bin get ${object} -n "${namespace}" -oyaml >${logs_path}/${object}_${namespace}.yaml || :
 			kubectl_bin describe ${object} -n "${namespace}" >${logs_path}/${object}_${namespace}.dsc || :
 		done
+		kubectl_bin get events --all-namespaces >${logs_path}/events.yaml || :
 	fi
 }
 
