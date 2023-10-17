@@ -151,6 +151,7 @@ if [[ -n ${OPENSHIFT} ]]; then
 fi
 
 if [[ $(kubectl_bin logs monitoring-rs0-0 pmm-client | grep -c 'cannot auto discover databases and collections') != 0 ]]; then
+	collect_k8s_logs
 	echo "error: cannot auto discover databases and collections"
 	exit 1
 fi

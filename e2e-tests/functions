@@ -1325,8 +1325,9 @@ collect_k8s_logs() {
 	if [[ ${ENABLE_LOG_COLLECT} == "true" ]]; then
 		local check_namespaces="${namespace}${OPERATOR_NS:+ $OPERATOR_NS}"
 		local logs_path="${logs_dir}/${test_name}"
+
 		rm -rf ${logs_path} || :
-		mkdir -p $logs_path
+		mkdir -p ${logs_path}
 
 		for ns in ${check_namespaces}; do
 			local pods=$(kubectl_bin get pods -n "${ns}" -o name | awk -F "/" '{print $2}')
@@ -1340,11 +1341,11 @@ collect_k8s_logs() {
 			done
 		done
 		for object in psmdb psmdb-backup psmdb-restore pods deployments services events sts; do
-			echo "##### START: ${ns}: ${object} #####" >>${logs_path}/_overview_${ns}.txt
-			kubectl_bin get ${object} -n "${ns}" >>${logs_path}/_overview_${ns}.txt || :
-			echo -e "##### END: ${ns}: ${object} ####\n" >>${logs_path}/_overview_${ns}.txt
-			kubectl_bin get ${object} -n "${ns}" -oyaml >${logs_path}/${object}_${ns}.yaml || :
-			kubectl_bin describe ${object} -n "${ns}" >${logs_path}/${object}_${ns}.dsc || :
+			echo "##### START: NS: ${namespace} - OBJ: ${object} #####" >>${logs_path}/_overview_${namespace}.txt
+			kubectl_bin get ${object} -n "${namespace}" >>${logs_path}/_overview_${namespace}.txt || :
+			echo -e "##### END: NS: ${namespace} - OBJ: ${object} ####\n" >>${logs_path}/_overview_${namespace}.txt
+			kubectl_bin get ${object} -n "${namespace}" -oyaml >${logs_path}/${object}_${namespace}.yaml || :
+			kubectl_bin describe ${object} -n "${namespace}" >${logs_path}/${object}_${namespace}.dsc || :
 		done
 	fi
 }
