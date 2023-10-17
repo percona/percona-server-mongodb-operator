@@ -1278,6 +1278,10 @@ function generate_vs_json() {
 }
 
 check_passwords_leak() {
+	local secrets
+	local passwords
+	local pods
+
 	secrets=$(kubectl_bin get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (contains("_PASSWORD"))) | .value')
 	echo secrets=$secrets
 
@@ -1290,9 +1294,10 @@ check_passwords_leak() {
 	pods=$(kubectl_bin get pods -o name | awk -F "/" '{print $2}')
 	echo pods=$pods
 
-	TEMP_DIR=$(mktemp -d)
-
 	collect_logs() {
+		local containers
+		local count
+
 		NS=$1
 		for p in $pods; do
 			containers=$(kubectl_bin -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
@@ -1301,12 +1306,12 @@ check_passwords_leak() {
 				if [[ ${c} =~ "pmm" ]]; then
 					continue
 				fi
-				kubectl_bin -n "$NS" logs $p -c $c >${TEMP_DIR}/logs_output-$p-$c.txt
-				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
+				kubectl_bin -n "$NS" logs $p -c $c >${tmp_dir}/logs_output-$p-$c.txt
+				echo logs saved in: ${tmp_dir}/logs_output-$p-$c.txt
 				for pass in $passwords; do
-					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					count=$(grep -c --fixed-strings -- "$pass" ${tmp_dir}/logs_output-$p-$c.txt || :)
 					if [[ $count != 0 ]]; then
-						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
+						echo leaked passwords are found in log ${tmp_dir}/logs_output-$p-$c.txt
 						false
 					fi
 				done
