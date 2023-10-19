@@ -720,7 +720,7 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	local replica_set=$(echo "$uri" | sed -r 's/.*\-(rs[0-9]|cfg)\..*/\1/')
+	local replica_set=$(echo "$uri" | sed -r 's/.*\-(rs[0-9]|cfg)(\.|-).*/\1/')
 
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
@@ -734,7 +734,7 @@ run_mongo_tls() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	local replica_set=$(echo "$uri" | sed -r 's/.*\-(rs[0-9]|cfg)\..*/\1/')
+	local replica_set=$(echo "$uri" | sed -r 's/.*\-(rs[0-9]|cfg)(\.|-).*/\1/')
 
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
@@ -1142,6 +1142,9 @@ kubectl_bin() {
 	cat "$LAST_OUT"
 	cat "$LAST_ERR" >&2
 	rm "$LAST_OUT" "$LAST_ERR"
+	if [ ${exit_status} != 0 ]; then
+		collect_k8s_logs
+	fi
 	return ${exit_status}
 }
 
