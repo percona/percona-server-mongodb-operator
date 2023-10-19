@@ -720,7 +720,8 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	local replica_set=$(echo "$uri" | sed -r 's/.*\-(rs[0-9]|cfg)\..*/\1/')
+
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 
@@ -733,7 +734,8 @@ run_mongo_tls() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	local replica_set=$(echo "$uri" | sed -r 's/.*\-(rs[0-9]|cfg)\..*/\1/')
+
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 
@@ -1322,7 +1324,7 @@ function generate_vs_json() {
 }
 
 collect_k8s_logs() {
-	if [[ ${ENABLE_LOG_COLLECT} == "true" ]]; then
+	if [[ ${ENABLE_K8S_LOGGING} == "true" ]]; then
 		local check_namespaces="${namespace}${OPERATOR_NS:+ $OPERATOR_NS}"
 		local logs_path="${logs_dir}/${test_name}"
 
@@ -1335,19 +1337,42 @@ collect_k8s_logs() {
 				kubectl_bin -n "${ns}" describe pod ${p} >${logs_path}/pod_${ns}_${p}.dsc || :
 				local containers=$(kubectl_bin -n "${ns}" get pod ${p} -o jsonpath='{.spec.containers[*].name}')
 				for c in ${containers}; do
-					kubectl_bin -n "${ns}" logs ${p} -c ${c} >${logs_path}/${ns}_${p}_${c}.log || :
+					kubectl_bin -n "${ns}" logs ${p} -c ${c} >${logs_path}/container_${p}_${c}.log || :
 					echo "logs saved in: ${logs_path}/${ns}_${p}_${c}.log"
 				done
 			done
 		done
-		for object in psmdb psmdb-backup psmdb-restore pods deployments replicasets services sts configmaps persistentvolumeclaims persistentvolumes secrets jobs cronjobs clusterroles roles; do
-			echo "##### START: NS: ${namespace} - OBJ: ${object} #####" >>${logs_path}/_overview_${namespace}.txt
+		for object in psmdb psmdb-backup psmdb-restore pods deployments replicasets services sts configmaps persistentvolumeclaims persistentvolumes secrets roles issuer certificate; do
+			echo "##### START: ${object} NS: ${namespace} #####" >>${logs_path}/_overview_${namespace}.txt
 			kubectl_bin get ${object} -n "${namespace}" >>${logs_path}/_overview_${namespace}.txt || :
-			echo -e "##### END: NS: ${namespace} - OBJ: ${object} ####\n" >>${logs_path}/_overview_${namespace}.txt
+			echo -e "##### END: ${object} NS: ${namespace} #####\n" >>${logs_path}/_overview_${namespace}.txt
 			kubectl_bin get ${object} -n "${namespace}" -oyaml >${logs_path}/${object}_${namespace}.yaml || :
 			kubectl_bin describe ${object} -n "${namespace}" >${logs_path}/${object}_${namespace}.dsc || :
 		done
-		kubectl_bin get events --all-namespaces >${logs_path}/events.yaml || :
+		kubectl_bin get events --all-namespaces >${logs_path}/_events.log || :
+		kubectl_bin get nodes >${logs_path}/_nodes.log || :
+		kubectl_bin get clusterroles >${logs_path}/_clusterroles.log || :
+
+		local secret psmdb_secret psmdb_user psmdb_pass
+		for psmdb_name in "$(kubectl_bin get psmdb -n ${namespace} -o custom-columns=NAME:.metadata.name --no-headers=true)"; do
+			psmdb_secret="$(kubectl_bin get psmdb ${psmdb_name} -n ${namespace} -ojsonpath='{.spec.secrets.users}')"
+			if [[ ${psmdb_secret} ]]; then secret="${psmdb_secret}"; else secret="${psmdb_name}-secrets"; fi
+			psmdb_user="$(kubectl_bin get secrets ${psmdb_secret} -ojsonpath='{.data.MONGODB_BACKUP_USER}' | base64 --decode)"
+			psmdb_pass="$(kubectl_bin get secrets ${psmdb_secret} -ojsonpath='{.data.MONGODB_BACKUP_PASSWORD}' | base64 --decode)"
+			if [[ "$(kubectl_bin get psmdb ${psmdb_name} -n ${namespace} -ojsonpath='{.spec.sharding.enabled}')" == "true" ]]; then
+				local cfg_replica="cfg"
+				echo "##### sh.status() #####" >${logs_path}/mongos_${psmdb_name}.mongo
+				run_mongos 'sh.status()' "${psmdb_user}:${psmdb_pass}@${psmdb_name}-mongos.${namespace}" >>${logs_path}/mongos_${psmdb_name}.mongo
+			fi
+			for psmdb_replset in $(kubectl_bin get psmdb ${psmdb_name} -n ${namespace} -ojsonpath='{.spec.replsets[*].name}' | awk '{print $0" '${cfg_replica}'"}'); do
+				local command=("rs.status()" "rs.config()" "db.printSlaveReplicationInfo()" "db.serverCmdLineOpts()" "db.getRoles()" "db.getUsers()")
+				for com in "${command[@]}"; do
+					echo "##### START: ${com} #####" >>${logs_path}/mongodb_${psmdb_name}_${psmdb_replset}.mongo
+					run_mongo "${com}" "${psmdb_user}:${psmdb_pass}@${psmdb_name}-${psmdb_replset}.${namespace}" >>${logs_path}/mongodb_${psmdb_name}_${psmdb_replset}.mongo
+					echo -e "##### END: ${com}  #####\n" >>${logs_path}/mongodb_${psmdb_name}_${psmdb_replset}.mongo
+				done
+			done
+		done
 	fi
 }
 
