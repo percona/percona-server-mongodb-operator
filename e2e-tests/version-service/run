@@ -24,7 +24,7 @@ function check_telemetry_transfer() {
 		.spec.initImage = "'$IMAGE'" |
 		.spec.crVersion = "9.9.9" |
 		.spec.image = "'$IMAGE_MONGOD'" |
-		.spec.pmm.image = "'$IMAGE_PMM'" |
+		.spec.pmm.image = "'$IMAGE_PMM_CLIENT'" |
 		.spec.backup.enabled = false |
 		.spec.backup.image = "'$IMAGE_BACKUP'"' ${src_dir}/deploy/cr-minimal.yaml \
 		| kubectl_bin apply -f -
@@ -162,7 +162,7 @@ for i in "${!cases[@]}"; do
 		.spec.backup.enabled = false |
 		del(.spec.backup.tasks) |
 		.spec.image = "'$IMAGE_MONGOD'" |
-		.spec.pmm.image = "'$IMAGE_PMM'" |
+		.spec.pmm.image = "'$IMAGE_PMM_CLIENT'" |
 		.spec.backup.image = "'$IMAGE_BACKUP'"' "$tmp_file" \
 		| kubectl_bin apply -f -
 

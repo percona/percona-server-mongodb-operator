@@ -5,7 +5,6 @@ GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]
 API="psmdb.percona.com/v1"
 OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod5.0"}
 IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod4.4
@@ -14,8 +13,8 @@ perconalab/percona-server-mongodb-operator:main-mongod6.0'}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
-IMAGE_PMM_SERVER_REPO=${IMAGE_PMM_SERVER_REPO:-"perconalab/pmm-server"}
-IMAGE_PMM_SERVER_TAG=${IMAGE_PMM_SERVER_TAG:-"dev-latest"}
+IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
+IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 CERT_MANAGER_VER="1.12.4"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
@@ -1036,7 +1035,7 @@ EOF
 cat_config() {
 	cat "$1" \
 		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
-		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM"'"' \
+		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
@@ -1278,6 +1277,10 @@ function generate_vs_json() {
 }
 
 check_passwords_leak() {
+	local secrets
+	local passwords
+	local pods
+
 	secrets=$(kubectl_bin get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (contains("_PASSWORD"))) | .value')
 	echo secrets=$secrets
 
@@ -1290,9 +1293,10 @@ check_passwords_leak() {
 	pods=$(kubectl_bin get pods -o name | awk -F "/" '{print $2}')
 	echo pods=$pods
 
-	TEMP_DIR=$(mktemp -d)
-
 	collect_logs() {
+		local containers
+		local count
+
 		NS=$1
 		for p in $pods; do
 			containers=$(kubectl_bin -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
@@ -1301,12 +1305,12 @@ check_passwords_leak() {
 				if [[ ${c} =~ "pmm" ]]; then
 					continue
 				fi
-				kubectl_bin -n "$NS" logs $p -c $c >${TEMP_DIR}/logs_output-$p-$c.txt
-				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
+				kubectl_bin -n "$NS" logs $p -c $c >${tmp_dir}/logs_output-$p-$c.txt
+				echo logs saved in: ${tmp_dir}/logs_output-$p-$c.txt
 				for pass in $passwords; do
-					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					count=$(grep -c --fixed-strings -- "$pass" ${tmp_dir}/logs_output-$p-$c.txt || :)
 					if [[ $count != 0 ]]; then
-						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
+						echo leaked passwords are found in log ${tmp_dir}/logs_output-$p-$c.txt
 						false
 					fi
 				done
@@ -1331,4 +1335,25 @@ insert_data_mongos() {
 		"use ${db_name}\n db.test.insert({ x: ${data} })" \
 		"myApp:myPass@$cluster-mongos.$namespace" "" "" \
 		"$flags"
+}
+
+deploy_pmm_server() {
+	helm uninstall monitoring || :
+	helm repo remove stable || :
+	helm repo add stable https://charts.helm.sh/stable
+	if [[ $OPENSHIFT ]]; then
+		oc create sa pmm-server
+		oc adm policy add-scc-to-user privileged -z pmm-server
+		if [[ $OPERATOR_NS ]]; then
+			timeout 30 oc delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'pmm-psmdb-operator-' | awk '{print $1}') || :
+			oc create clusterrolebinding pmm-psmdb-operator-cluster-wide --clusterrole=percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
+			oc patch clusterrole/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n $OPERATOR_NS
+		else
+			oc create rolebinding pmm-psmdb-operator-namespace-only --role percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
+			oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
+		fi
+		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
+	fi
+
+	retry 10 60 helm install monitoring --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VER.tgz
 }
