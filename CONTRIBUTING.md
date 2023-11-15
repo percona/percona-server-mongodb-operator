@@ -48,12 +48,19 @@ Contributions to the source tree should follow the workflow described below:
 
 ### 2. Contributing to documentation
 
-The workflow for documentation is similar. Please take into account a few things:
+The workflow for documentation is similar, but we store source code for the Percona Operator for MongoDB documentation in a [separate repository](https://github.com/percona/k8spsmdb-docs). See the [Documentation Contribution Guide](https://github.com/percona/k8spsmdb-docs/blob/main/CONTRIBUTING.md) for more information.
 
-1. All documentation is written using the [Sphinx engine markup language](https://www.sphinx-doc.org/). Sphinx allows easy publishing of various output formats such as HTML, LaTeX (for PDF), ePub, Texinfo, etc.
-2. We store the documentation as *.rst files in the [K8s-PSMDB-docs](https://github.com/percona/percona-server-mongodb-operator/tree/K8s-PSMDB-docs) branch of the Operator GitHub repository. The documentation is licensed under the [Attribution 4.0 International license (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+### 3. Container images 
 
-After [installing Sphinx](https://www.sphinx-doc.org/en/master/usage/installation.html) you can use `make html` or `make latexpdf` commands having the documentation branch as your current directory to build HTML and PDF versions of the documentation respectively.
+Find Operator Dockerfile in [build folder](build).
+
+Our Operator uses various container images - databases, proxies, other. You can find the Dockerfiles in [percona-docker](https://github.com/percona/percona-docker) repository.
+
+* Percona Server for MongoDB has various versions. Each version sits in its own folder. For example PSMDB v6 can be found here: [Dockerfiles for Percona Server for MongoDB v6](https://github.com/percona/percona-docker/tree/main/percona-server-mongodb-6.0)
+
+Please note that `mongos` also uses PSMDB image.
+
+* Percona Backup for MongoDB can be found here: [Dockerfiles for Percona Backup for MongoDB](https://github.com/percona/percona-docker/tree/main/percona-backup-mongodb)
 
 ## Code review
 
