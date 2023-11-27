@@ -8,7 +8,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
@@ -17,29 +16,16 @@ type Client struct {
 	restconfig *restclient.Config
 }
 
-func NewClient() (*Client, error) {
-	// Instantiate loader for kubeconfig file.
-	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(),
-		&clientcmd.ConfigOverrides{},
-	)
-
-	// Get a rest.Config from the kubeconfig file.  This will be passed into all
-	// the client objects we create.
-	restconfig, err := kubeconfig.ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-
+func NewClient(config *restclient.Config) (*Client, error) {
 	// Create a Kubernetes core/v1 client.
-	cl, err := corev1client.NewForConfig(restconfig)
+	cl, err := corev1client.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
 		client:     cl,
-		restconfig: restconfig,
+		restconfig: config,
 	}, nil
 }
 

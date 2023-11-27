@@ -8,7 +8,6 @@ import (
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -31,9 +30,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 		},
 		&secretInternalObj,
 	)
-	if errSecret == nil && errInternalSecret == nil {
-		return nil
-	} else if errSecret == nil && k8serr.IsNotFound(errInternalSecret) && !metav1.IsControlledBy(&secretObj, cr) {
+	if errSecret == nil && k8serr.IsNotFound(errInternalSecret) && !metav1.IsControlledBy(&secretObj, cr) {
 		// don't create secret ssl-internal if secret ssl is not created by operator
 		return nil
 	} else if errSecret != nil && !k8serr.IsNotFound(errSecret) {
@@ -42,28 +39,52 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 		return errors.Wrap(errInternalSecret, "get internal SSL secret")
 	}
 
-	err := r.createSSLByCertManager(ctx, cr)
+	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace)
 	if err != nil {
-		logf.FromContext(ctx).Error(err, "issue cert with cert-manager")
+		return errors.Wrap(err, "check cert-manager")
+	}
+	if !ok {
+		if errSecret == nil && errInternalSecret == nil {
+			return nil
+		}
 		err = r.createSSLManually(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "create ssl manually")
 		}
+		return nil
+	}
+	err = r.createSSLByCertManager(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "create ssl by cert-manager")
 	}
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
+	c := tls.NewCertManagerController(r.client, r.scheme)
+	err := c.Check(ctx, r.restConfig, ns)
+	switch {
+	case errors.Is(err, tls.ErrCertManagerNotFound):
+		return false, nil
+	case errors.Is(err, tls.ErrCertManagerNotReady):
+		return true, nil
+	case err != nil:
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	c := tls.NewCertManagerController(r.client, r.scheme)
 
 	if cr.CompareVersion("1.15.0") >= 0 {
-		err := c.CreateCAIssuer(ctx, cr)
-		if err != nil && !k8serr.IsAlreadyExists(err) {
+		err := c.ApplyCAIssuer(ctx, cr)
+		if err != nil {
 			return errors.Wrap(err, "create ca issuer")
 		}
 
-		err = c.CreateCACertificate(ctx, cr)
-		if err != nil && !k8serr.IsAlreadyExists(err) {
+		err = c.ApplyCACertificate(ctx, cr)
+		if err != nil {
 			return errors.Wrap(err, "create ca certificate")
 		}
 
@@ -73,26 +94,39 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		}
 	}
 
-	err := c.CreateIssuer(ctx, cr)
-	if err != nil && !k8serr.IsAlreadyExists(err) {
+	err := c.ApplyIssuer(ctx, cr)
+	if err != nil {
 		return errors.Wrap(err, "create issuer")
 	}
 
-	err = c.CreateCertificate(ctx, cr, false)
-	if err != nil && !k8serr.IsAlreadyExists(err) {
+	err = c.ApplyCertificate(ctx, cr, false)
+	if err != nil {
 		return errors.Wrap(err, "create certificate")
 	}
 
-	if tls.CertificateSecretName(cr, false) == tls.CertificateSecretName(cr, true) {
-		return c.WaitForCerts(ctx, cr, tls.CertificateSecretName(cr, false))
+	secretNames := []string{tls.CertificateSecretName(cr, false)}
+
+	if tls.CertificateSecretName(cr, false) != tls.CertificateSecretName(cr, true) {
+		err = c.ApplyCertificate(ctx, cr, true)
+		if err != nil && !k8serr.IsAlreadyExists(err) {
+			return errors.Wrap(err, "create certificate")
+		}
+		secretNames = append(secretNames, tls.CertificateSecretName(cr, true))
 	}
 
-	err = c.CreateCertificate(ctx, cr, true)
-	if err != nil && !k8serr.IsAlreadyExists(err) {
-		return errors.Wrap(err, "create certificate")
+	err = c.WaitForCerts(ctx, cr, secretNames...)
+	if err != nil {
+		return errors.Wrap(err, "failed to wait for certs")
 	}
 
-	return c.WaitForCerts(ctx, cr, tls.CertificateSecretName(cr, false), tls.CertificateSecretName(cr, true))
+	if cr.CompareVersion("1.15.0") >= 0 {
+		err = c.DeleteDeprecatedIssuerIfExists(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "delete deprecated issuer")
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, cr *api.PerconaServerMongoDB) error {

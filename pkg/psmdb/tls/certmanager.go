@@ -6,16 +6,19 @@ import (
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	"github.com/cert-manager/cert-manager/pkg/util/cmapichecker"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 type CertManagerController struct {
@@ -45,9 +48,13 @@ func CertificateSecretName(cr *api.PerconaServerMongoDB, internal bool) string {
 	return cr.Spec.Secrets.SSL
 }
 
+func deprecatedIssuerName(cr *api.PerconaServerMongoDB) string {
+	return cr.Name + "-psmdb-ca"
+}
+
 func issuerName(cr *api.PerconaServerMongoDB) string {
 	if cr.CompareVersion("1.15.0") < 0 {
-		return cr.Name + "-psmdb-ca"
+		return deprecatedIssuerName(cr)
 	}
 	return cr.Name + "-psmdb-issuer"
 }
@@ -60,14 +67,33 @@ func CACertificateSecretName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-ca-cert"
 }
 
-func (c *CertManagerController) create(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) error {
+func (c *CertManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	issuer := new(cm.Issuer)
+	err := c.cl.Get(ctx, types.NamespacedName{
+		Name:      deprecatedIssuerName(cr),
+		Namespace: cr.Namespace,
+	}, issuer)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	return c.cl.Delete(ctx, issuer)
+}
+
+func (c *CertManagerController) createOrUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) error {
 	if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
 		return errors.Wrap(err, "set controller reference")
 	}
-	return c.cl.Create(ctx, obj)
+
+	if err := util.CreateOrUpdate(ctx, c.cl, obj); err != nil {
+		return errors.Wrap(err, "create or update")
+	}
+	return nil
 }
 
-func (c *CertManagerController) CreateIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+func (c *CertManagerController) ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	issuer := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      issuerName(cr),
@@ -90,10 +116,10 @@ func (c *CertManagerController) CreateIssuer(ctx context.Context, cr *api.Percon
 		}
 	}
 
-	return c.create(ctx, cr, issuer)
+	return c.createOrUpdate(ctx, cr, issuer)
 }
 
-func (c *CertManagerController) CreateCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+func (c *CertManagerController) ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	issuer := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      caIssuerName(cr),
@@ -106,10 +132,10 @@ func (c *CertManagerController) CreateCAIssuer(ctx context.Context, cr *api.Perc
 		},
 	}
 
-	return c.create(ctx, cr, issuer)
+	return c.createOrUpdate(ctx, cr, issuer)
 }
 
-func (c *CertManagerController) CreateCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) error {
+func (c *CertManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) error {
 	isCA := false
 	if cr.CompareVersion("1.15.0") < 0 {
 		isCA = true
@@ -136,10 +162,33 @@ func (c *CertManagerController) CreateCertificate(ctx context.Context, cr *api.P
 		},
 	}
 
-	return c.create(ctx, cr, certificate)
+	return c.createOrUpdate(ctx, cr, certificate)
 }
 
-func (c *CertManagerController) CreateCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+var (
+	ErrCertManagerNotFound = errors.New("cert-manager not found")
+	ErrCertManagerNotReady = errors.New("cert-manager not ready")
+)
+
+func (c *CertManagerController) Check(ctx context.Context, config *rest.Config, ns string) error {
+	checker, err := cmapichecker.New(config, c.scheme, ns)
+	if err != nil {
+		return err
+	}
+	err = checker.Check(ctx)
+	if err != nil {
+		switch err {
+		case cmapichecker.ErrCertManagerCRDsNotFound:
+			return ErrCertManagerNotFound
+		case cmapichecker.ErrWebhookCertificateFailure, cmapichecker.ErrWebhookServiceFailure, cmapichecker.ErrWebhookDeploymentFailure:
+			return ErrCertManagerNotReady
+		}
+		return err
+	}
+	return nil
+}
+
+func (c *CertManagerController) ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	cert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CACertificateSecretName(cr),
@@ -158,7 +207,7 @@ func (c *CertManagerController) CreateCACertificate(ctx context.Context, cr *api
 		},
 	}
 
-	return c.create(ctx, cr, cert)
+	return c.createOrUpdate(ctx, cr, cert)
 }
 
 func (c *CertManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error {

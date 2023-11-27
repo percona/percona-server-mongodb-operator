@@ -44,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, errors.New("cluster is unmanaged")
 	}
 
-	svr, err := version.Server()
+	svr, err := version.Server(r.clientcmd)
 	if err != nil {
 		return status, errors.Wrapf(err, "fetch server version")
 	}

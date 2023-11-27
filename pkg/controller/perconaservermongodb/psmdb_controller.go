@@ -3,11 +3,8 @@ package perconaservermongodb
 import (
 	"context"
 	"crypto/md5"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -59,17 +57,17 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	sv, err := version.Server()
+	cli, err := clientcmd.NewClient(mgr.GetConfig())
+	if err != nil {
+		return nil, errors.Wrap(err, "create clientcmd")
+	}
+
+	sv, err := version.Server(cli)
 	if err != nil {
 		return nil, errors.Wrap(err, "get server version")
 	}
 
 	mgr.GetLogger().Info("server version", "platform", sv.Platform, "version", sv.Info)
-
-	cli, err := clientcmd.NewClient()
-	if err != nil {
-		return nil, errors.Wrap(err, "create clientcmd")
-	}
 
 	initImage, err := getOperatorPodImage(context.TODO())
 	if err != nil {
@@ -84,6 +82,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		crons:         NewCronRegistry(),
 		lockers:       newLockStore(),
 		newPBM:        backup.NewPBM,
+		restConfig:    mgr.GetConfig(),
 
 		initImage: initImage,
 
@@ -164,8 +163,9 @@ var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDB{}
 type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client     client.Client
+	scheme     *runtime.Scheme
+	restConfig *rest.Config
 
 	crons               CronRegistry
 	clientcmd           *clientcmd.Client
@@ -1722,55 +1722,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, spec *
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj client.Object) error {
-	if obj.GetAnnotations() == nil {
-		obj.SetAnnotations(make(map[string]string))
-	}
-
-	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "percona.com/last-config-hash")
-	obj.SetAnnotations(objAnnotations)
-
-	hash, err := getObjectHash(obj)
-	if err != nil {
-		return errors.Wrap(err, "calculate object hash")
-	}
-
-	objAnnotations = obj.GetAnnotations()
-	objAnnotations["percona.com/last-config-hash"] = hash
-	obj.SetAnnotations(objAnnotations)
-
-	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Ptr {
-		val = reflect.Indirect(val)
-	}
-	oldObject := reflect.New(val.Type()).Interface().(client.Object)
-
-	err = r.client.Get(ctx, types.NamespacedName{
-		Name:      obj.GetName(),
-		Namespace: obj.GetNamespace(),
-	}, oldObject)
-
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "get object")
-	}
-
-	if k8serrors.IsNotFound(err) {
-		return r.client.Create(ctx, obj)
-	}
-
-	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!util.MapEqual(oldObject.GetLabels(), obj.GetLabels()) ||
-		!util.MapEqual(oldObject.GetAnnotations(), obj.GetAnnotations()) {
-		obj.SetResourceVersion(oldObject.GetResourceVersion())
-		switch object := obj.(type) {
-		case *corev1.Service:
-			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
-		}
-
-		return r.client.Update(ctx, obj)
-	}
-
-	return nil
+	return util.CreateOrUpdate(ctx, r.client, obj)
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSvc(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service, saveOldMeta bool) error {
@@ -1820,27 +1772,6 @@ func setIgnoredLabels(cr *api.PerconaServerMongoDB, obj, oldObject client.Object
 
 	labels := util.MapMerge(obj.GetLabels(), ignoredLabels)
 	obj.SetLabels(labels)
-}
-
-func getObjectHash(obj client.Object) (string, error) {
-	var dataToMarshall interface{}
-	switch object := obj.(type) {
-	case *appsv1.StatefulSet:
-		dataToMarshall = object.Spec
-	case *appsv1.Deployment:
-		dataToMarshall = object.Spec
-	case *corev1.Service:
-		dataToMarshall = object.Spec
-	case *corev1.Secret:
-		dataToMarshall = object.Data
-	default:
-		dataToMarshall = obj
-	}
-	data, err := json.Marshal(dataToMarshall)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(data), nil
 }
 
 func setControllerReference(owner client.Object, obj metav1.Object, scheme *runtime.Scheme) error {
