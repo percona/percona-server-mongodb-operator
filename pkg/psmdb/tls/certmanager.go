@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -171,16 +172,18 @@ var (
 )
 
 func (c *CertManagerController) Check(ctx context.Context, config *rest.Config, ns string) error {
+	log := logf.FromContext(ctx)
 	checker, err := cmapichecker.New(config, c.scheme, ns)
 	if err != nil {
 		return err
 	}
 	err = checker.Check(ctx)
 	if err != nil {
-		switch err {
+		switch cmapichecker.TranslateToSimpleError(err) {
 		case cmapichecker.ErrCertManagerCRDsNotFound:
 			return ErrCertManagerNotFound
 		case cmapichecker.ErrWebhookCertificateFailure, cmapichecker.ErrWebhookServiceFailure, cmapichecker.ErrWebhookDeploymentFailure:
+			log.Info("cert-manager is not ready", "error", cmapichecker.TranslateToSimpleError(err))
 			return ErrCertManagerNotReady
 		}
 		return err

@@ -63,12 +63,13 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
 	c := tls.NewCertManagerController(r.client, r.scheme)
 	err := c.Check(ctx, r.restConfig, ns)
-	switch {
-	case errors.Is(err, tls.ErrCertManagerNotFound):
-		return false, nil
-	case errors.Is(err, tls.ErrCertManagerNotReady):
-		return true, nil
-	case err != nil:
+	if err != nil {
+		switch err {
+		case tls.ErrCertManagerNotFound:
+			return false, nil
+		case tls.ErrCertManagerNotReady:
+			return true, nil
+		}
 		return false, err
 	}
 	return true, nil
