@@ -15,5 +15,6 @@ self-healing-chaos
 smart-update
 upgrade-consistency
 upgrade-consistency-sharded
+upgrade-consistency-sharded-tls
 users
 version-service

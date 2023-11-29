@@ -6,30 +6,6 @@ test_dir=$(realpath $(dirname $0))
 . "${test_dir}/../functions"
 set_debug
 
-renew-certificate() {
-	certificate="$1"
-
-	desc "renew $certificate"
-
-	local pod_name
-	pod_name=$(kubectl_bin get pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
-
-	local revision
-	revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
-
-	kubectl_bin exec "$pod_name" -- /tmp/cmctl renew "$certificate"
-
-	# wait for new revision
-	for i in {1..10}; do
-		local new_revision
-		new_revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
-		if [ "$((revision + 1))" == "$new_revision" ]; then
-			break
-		fi
-		sleep 1
-	done
-}
-
 check_tls_secret() {
 	local secret_name=$1
 	check_secret_data_key "$secret_name" 'ca.crt'
@@ -46,15 +22,6 @@ check_secret_data_key() {
 	if [ -z "$secret_data" ]; then
 		exit 1
 	fi
-}
-
-deploy_cmctl() {
-	local service_account="cmctl"
-
-	$sed -e "s/percona-server-mongodb-operator/$service_account/g" "${src_dir}/deploy/rbac.yaml" \
-		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
-		| kubectl_bin apply -f -
-	kubectl_bin apply -f "$conf_dir/cmctl.yml"
 }
 
 main() {
